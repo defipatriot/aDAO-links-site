@@ -1,0 +1,1165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>aDAO Lore - Galaxy Map</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #18181B;
+            color: #EAEAEA;
+            overflow: hidden;
+        }
+        main.galaxy-bg { position: relative; }
+        .background-circle-large { width: 100%; height: 100%; background-color: rgba(60, 62, 88, 0.7); z-index: 1; }
+        .background-circle-small { width: 53%; height: 53%; background-color: rgba(48, 48, 69, 0.85); z-index: 2; }
+        .background-circle-large, .background-circle-small { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); border-radius: 50%;}
+        .galaxy-container { position: relative; width: 95vmin; height: 95vmin; max-width: 900px; max-height: 900px; aspect-ratio: 1 / 1; z-index: 5; }
+        .central-sun { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 79px; height: 79px; z-index: 10; }
+        .central-sun img { border-radius: 50%; }
+        .sun-name { position: absolute; bottom: -22px; left: 50%; transform: translateX(-50%); color: #d1d5db; font-size: 0.8rem; font-weight: 600; white-space: nowrap; text-shadow: 0 0 5px #000; }
+        .orbit-svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 8; }
+        .orbit-path {
+            pointer-events: stroke;
+            cursor: pointer;
+            transition: stroke 0.3s ease-in-out;
+        }
+        .orbit-path.glowing {
+            stroke: #22d3ee; /* cyan-400 */
+        }
+        
+        .planet { 
+            position: absolute; 
+            border-radius: 50%; 
+            background-size: cover; 
+            background-position: center; 
+            z-index: 15; 
+            transform: translate(-50%, -50%); 
+            cursor: pointer;
+            transition: transform 0.3s ease;
+        }
+
+        .planet:hover,
+        .planet.ring-hover-scale {
+            transform: translate(-50%, -50%) scale(1.15);
+            z-index: 20;
+        }
+        .planet-name { 
+            position: absolute; 
+            bottom: -22px; 
+            left: 50%; 
+            transform: translateX(-50%); 
+            color: #d1d5db; 
+            font-size: 0.8rem; 
+            font-weight: 600; 
+            white-space: nowrap; 
+            text-shadow: 0 0 5px #000;
+            transition: color 0.3s ease-in-out, transform 0.3s ease-in-out, bottom 0.3s ease-in-out, top 0.3s ease-in-out;
+            cursor: pointer;
+        }
+        .planet-name.on-top {
+            bottom: auto;
+            top: -22px;
+        }
+
+        .planet:hover .planet-name,
+        .planet.ring-hover-scale .planet-name {
+            transform: translateX(-50%) scale(1.2);
+            bottom: -28px;
+        }
+
+        .planet:hover .planet-name.on-top,
+        .planet.ring-hover-scale .planet-name.on-top {
+            bottom: auto; 
+            top: -28px;
+        }
+        
+        .distant-galaxy-bnb { position: fixed; top: 25%; right: 12%; width: 90px; height: 90px; background-image: url('https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/BNB%20logo.png?v=2'); background-size: contain; background-repeat: no-repeat; opacity: 0.45; z-index: 0; animation: slow-pulse 7s ease-in-out infinite; }
+        @keyframes slow-pulse { 0%, 100% { transform: scale(1); opacity: 0.5; } 50% { transform: scale(1.05); opacity: 0.6; } }
+        .star { position: fixed; background-color: white; border-radius: 50%; box-shadow: 0 0 4px white; animation: twinkle linear infinite; z-index: 0; }
+        @keyframes twinkle { 0%, 100% { opacity: 0.1; transform: scale(0.8); } 50% { opacity: 0.8; transform: scale(1.1); } }
+        
+        .galaxy-lore-trigger { cursor: pointer; }
+
+        .ring-label-group {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 7;
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out;
+            pointer-events: none;
+        }
+        .ring-label {
+            position: absolute;
+            color: #e5e7eb; /* gray-200 */
+            font-size: 1.1rem;
+            font-weight: 700;
+            text-shadow: 0 0 8px black;
+            transition: color 0.3s ease-in-out;
+        }
+
+        /* Modal specific styles */
+        .modal.hidden .modal-content {
+            transform: scale(0.95) translateY(20px);
+            opacity: 0;
+        }
+        .modal-content {
+            transition: transform 0.3s ease-out, opacity 0.3s ease-out;
+        }
+        .clickable-image {
+            cursor: pointer;
+            transition: opacity 0.2s ease-in-out;
+        }
+        .clickable-image:hover {
+            opacity: 0.85;
+        }
+        
+        /* Ring Details Panel */
+        #ring-details-panel {
+            position: fixed;
+            top: 50%;
+            right: 20px;
+            transform: translate(110%, -50%);
+            width: 240px; 
+            background-color: rgba(39, 39, 42, 0.9);
+            backdrop-filter: blur(5px);
+            border: 1px solid #52525b;
+            border-radius: 12px;
+            padding: 1.25rem; 
+            z-index: 40;
+            color: #e5e7eb;
+            transition: transform 0.4s ease-in-out;
+            opacity: 0;
+            display: flex;
+            flex-direction: column;
+        }
+        #ring-details-panel.visible {
+            transform: translate(0, -50%);
+            opacity: 1;
+        }
+        #ring-details-content {
+            flex-grow: 1;
+        }
+
+        /* Compare Planets Table Styles */
+        .compare-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.875rem;
+        }
+        .compare-table th, .compare-table td {
+            padding: 0.75rem 0.5rem;
+            text-align: left;
+            border-bottom: 1px solid #3f3f46; /* neutral-700 */
+        }
+        .compare-table th {
+            font-weight: 600;
+            color: #a1a1aa; /* neutral-400 */
+            position: sticky;
+            top: 0;
+            background-color: #27272A; /* Match modal bg */
+        }
+        .compare-table th.sortable {
+            cursor: pointer;
+            transition: color 0.2s ease-in-out;
+        }
+        .compare-table th.sortable:hover {
+            color: #e5e7eb;
+        }
+        .compare-table th.sortable.sort-active {
+            color: #4ade80; /* green-400 */
+        }
+        .compare-table th.sortable.sort-inactive {
+            color: #f87171; /* red-400 */
+        }
+        .compare-table tbody tr:hover {
+            background-color: #3f3f46; /* neutral-700 */
+        }
+
+    </style>
+</head>
+<body class="antialiased flex flex-col h-screen">
+
+    <header class="py-4 bg-neutral-800 relative z-30">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative flex justify-between items-center">
+            <a href="#" class="text-cyan-400 hover:text-white transition-colors duration-300 font-semibold"> &larr; Back to Dashboard </a>
+            <div class="absolute left-1/2 -translate-x-1/2">
+                <h1 class="text-4xl font-bold text-gray-400">The Alliance DAO</h1>
+            </div>
+            <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/aDAO%20Logo%20No%20Background.png" alt="Alliance DAO Logo" class="h-16">
+        </div>
+    </header>
+
+    <main class="w-full flex-1 flex justify-center items-center galaxy-bg">
+        <div class="distant-galaxy-bnb"></div>
+        <div class="galaxy-container">
+            <div class="background-circle-large"></div>
+            <div class="background-circle-small"></div>
+            <div class="central-sun">
+                <a href="https://Phoenix.money" target="_blank" rel="noopener noreferrer">
+                    <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/terra-luna-logo.svg" alt="Terra Luna Logo" class="rounded-full">
+                </a>
+                <div class="sun-name">Phoenix Sun</div>
+            </div>
+            <svg class="orbit-svg" viewbox="0 0 100 100" preserveAspectRatio="none">
+                 <ellipse id="inner-ring-orbit" class="orbit-path" cx="50" cy="50" rx="12.5" ry="43.375" fill="transparent" stroke="#6b7280" stroke-width="6" vector-effect="non-scaling-stroke"/>
+                 <ellipse id="mid-ring-orbit" class="orbit-path" cx="50" cy="50" rx="12.5" ry="43.375" fill="transparent" stroke="#6b7280" stroke-width="6" vector-effect="non-scaling-stroke" transform="rotate(55 50 50)"/>
+                 <ellipse id="outer-ring-orbit" class="orbit-path" cx="50" cy="50" rx="12.5" ry="43.375" fill="transparent" stroke="#6b7280" stroke-width="6" vector-effect="non-scaling-stroke" transform="rotate(-55 50 50)"/>
+            </svg>
+            <div id="ring-labels-wrapper">
+                <div id="inner-ring-labels" class="ring-label-group">
+                    <div class="ring-label" style="top: 2%; left: 50%; transform: translateX(-50%);">Inner Ring</div>
+                </div>
+                <div id="mid-ring-labels" class="ring-label-group">
+                    <div class="ring-label" style="bottom: 35%; left: 32%; transform: translateX(-50%);">Mid Ring</div>
+                </div>
+                <div id="outer-ring-labels" class="ring-label-group">
+                    <div class="ring-label" style="bottom: 34%; right: 20%; transform: translateX(50%);">Outer Ring</div>
+                </div>
+            </div>
+            <div id="planets-wrapper"></div>
+        </div>
+    </main>
+    
+    <!-- Ring Details Panel -->
+    <div id="ring-details-panel">
+        <h3 id="ring-details-title" class="text-xl font-bold mb-4 border-b border-gray-600 pb-2 text-center">Ring Details</h3>
+        <div id="ring-details-content" class="space-y-4">
+            <!-- Planet info will be injected here by JS -->
+        </div>
+        <div id="ring-details-legend" class="mt-4 pt-3 border-t border-gray-600 text-xs text-gray-400">
+            <!-- Legend will be injected here by JS -->
+        </div>
+    </div>
+
+    <div id="galaxyLoreTrigger" class="fixed bottom-6 left-6 z-20 text-center group galaxy-lore-trigger">
+        <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Terra.PNG?v=1" alt="Terra Galaxy" class="h-12 w-12 mx-auto">
+        <p class="font-bold text-gray-400 mt-1 text-sm">Galaxy Lore</p>
+    </div>
+     <div id="comparePlanetsTrigger" class="fixed bottom-6 right-6 z-20 bg-neutral-800 text-gray-400 font-bold py-2 px-4 rounded-lg cursor-pointer hover:bg-neutral-700 transition-colors">
+        Compare Planets
+    </div>
+
+    <!-- Planet Details Modal (Simple) -->
+    <div id="planetModal" class="modal fixed inset-0 bg-black bg-opacity-75 flex justify-center items-center z-50 hidden transition-opacity duration-300 ease-in-out">
+        <div id="modalContent" class="modal-content bg-[#27272A] border border-gray-700 rounded-2xl shadow-xl p-8 w-full max-w-3xl relative text-white transition-all duration-300 ease-in-out transform scale-95 opacity-0">
+            <button id="closeModal" class="absolute top-4 right-4 text-gray-400 hover:text-white text-3xl leading-none font-bold focus:outline-none">&times;</button>
+            <div class="flex flex-col md:flex-row items-center md:items-start gap-8">
+                <div class="text-center flex-shrink-0">
+                    <img id="modalImage" src="" alt="Planet Image" class="w-48 h-48 rounded-full border-4 border-gray-600 object-cover shadow-lg shadow-cyan-500/10">
+                    <h2 id="modalName" class="text-3xl font-bold text-cyan-400 mt-4">Planet Name</h2>
+                </div>
+                <div class="flex-1 text-center w-full">
+                    <h3 class="text-xl font-semibold text-gray-400 border-b border-gray-600 pb-2 mb-4">Core Concept</h3>
+                    <p id="modalDescription" class="text-gray-300 mb-6 max-h-40 overflow-y-auto pr-2 text-left">Planet description...</p>
+                    <h3 class="text-xl font-semibold text-gray-400 border-b border-gray-600 pb-2 mb-4">Planetary Data</h3>
+                    <ul id="modalStats" class="space-y-2 text-gray-300 inline-block text-left">
+                        <!-- Stats will be populated by JS -->
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Galaxy Lore Modal -->
+    <div id="loreModal" class="modal fixed inset-0 bg-black bg-opacity-75 flex justify-center items-center z-50 hidden transition-opacity duration-300 ease-in-out">
+        <div class="modal-content bg-[#27272A] border border-gray-700 rounded-2xl shadow-xl p-8 w-full max-w-4xl relative text-white transition-all duration-300 ease-in-out transform scale-95 opacity-0">
+            <button id="closeLoreModal" class="absolute top-4 right-4 text-gray-400 hover:text-white text-3xl leading-none font-bold focus:outline-none z-10">&times;</button>
+            <div class="max-h-[80vh] overflow-y-auto pr-4">
+                <h2 class="text-4xl font-bold text-white mb-2 text-center underline">The Terra Galaxy</h2>
+                <p class="text-xl text-gray-400 mb-6 text-center italic">Echoes of the Alliance - The Expanded Narrative Overview</p>
+
+                <p class="italic text-center font-serif text-blue-300 underline decoration-blue-400/75">"Seven million years is enough time for a species to forget its origins. It is enough time for a single populace to diverge into ten distinct evolutionary paths. And it is enough time for the most advanced technology ever created to decay into a galaxy-spanning threat."</p>
+
+                <h3 class="text-2xl font-semibold text-gray-200 mt-8 border-b border-gray-600 pb-2 mb-4">I. The Genesis and the Exodus</h3>
+                <p>Eons ago, on a world now forgotten, humanity faced its end. Earth was dying, choked by war and depleted of life. In a final, desperate act of unity, the ten remaining nations forged the Alliance Coalition. Their greatest minds achieved the impossible: they discovered The Lattice.</p>
+                <p>The Lattice is a fundamental network woven into the fabric of reality, capable of bridging billions of light-years instantaneously. They constructed ten colossal 'Alliance Devices'-nodes designed to access this network. Fueled by a synthesized energy source that cost the planet its last resources, the Devices were activated.</p>
+                <p>This was the Last Journey, a one-way exodus that scattered the ten tribes of humanity across the distant Terra Galaxy, seeding life on ten barren worlds. The mission carried a singular hope: that humanity, in whatever form it took, would survive.</p>
+                
+                <h3 class="text-2xl font-semibold text-gray-200 mt-8 border-b border-gray-600 pb-2 mb-4">II. The Long Silence and the Divergence</h3>
+                <p>Seven million years passed. An epoch of silence stretched across the galaxy. The technology of Earth crumbled, the data archives failed, and the origins of the ten tribes faded into myth. This was the Great Forgetting.</p>
+                <p>Isolation and extreme environments relentlessly sculpted the descendants of Earth. On the high-gravity mountains of Crutha, they became dense and powerful. In the oceans of Lusa, they adapted to the pressures of the deep. In the toxic fields of Gredica, they retreated into technology to survive the very air. Humanity diverged into ten distinct post-human species.</p>
+                <p>The Terra Galaxy developed unevenly. In the Inner Ring, the worlds of Cristall, Minas, and Gredica clawed their way back to technological supremacy, forming the Triad Alliance and rediscovering localized space travel. Yet, even they remained unaware of their seven sister worlds lost in the vastness of the Mid-Ring and Outer Rim.</p>
+                
+                <h3 class="text-2xl font-semibold text-gray-200 mt-8 border-b border-gray-600 pb-2 mb-4">III. The Warp - The Shattered Reunion</h3>
+                <p>The ancient Alliance Devices were never meant to remain dormant. Embedded within them was the Protocol of Reunion-a directive to reconnect humanity once the colonies reached technological maturity.</p>
+                <p>The advanced energy experiments of the Triad Alliance inadvertently triggered the ancient, degraded network. The Protocol activated, but the network was broken, and the inhabitants' biology no longer matched the original human parameters. The Lattice spasmed.</p>
+                <p>In an instant, 10,000 individuals vanished from their homes and reappeared randomly across the ten worlds. This was The Warp-not a calculated reunion, but a catastrophic system failure. These Travelers arrived confused, terrified, and often in immediate danger. The seven million years of isolation ended in chaos.</p>
+                
+                <h3 class="text-2xl font-semibold text-gray-200 mt-8 border-b border-gray-600 pb-2 mb-4">IV. The Living Keys</h3>
+                <p>The Travelers did not arrive empty-handed. They carried objects from their home worlds, ranging from primitive tools to advanced technology. But the most significant artifacts are the rarest, intrinsically linked to the Warp itself.</p>
+                
+                <div class="flex flex-col sm:flex-row items-center gap-6 mt-6">
+                    <div class="flex-shrink-0">
+                        <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Phoenix%20Example.png" alt="Phoenix Navigator" class="w-32 h-32 object-contain rounded-lg bg-black/20 p-1 clickable-image">
+                    </div>
+                    <div>
+                        <h4 class="text-lg font-semibold text-gray-300 mb-2">The Navigators (The Phoenix Rising)</h4>
+                        <p>The most coveted of all treasures. These magnificent creatures are not mere birds; they are bio-engineered marvels created by the original Earth Alliance, designed to be the living navigation system for the Lattice. The Warp bonded 25 Phoenixes to specific Travelers. These individuals are the Navigators, the only ones capable of sensing and stabilizing the chaotic Warp energy.</p>
+                    </div>
+                </div>
+
+                <div class="flex flex-col sm:flex-row items-center gap-6 mt-6">
+                    <div class="flex-shrink-0">
+                         <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Sindarin%20Fire%20Saber.png" alt="Sindarin Fire Saber" class="w-32 h-32 object-contain clickable-image">
+                    </div>
+                    <div>
+                        <h4 class="text-lg font-semibold text-gray-300 mb-2">The Catalysts (The Sindarin Fire Saber)</h4>
+                        <p>The statistically rarest items. Forged on the volcanic world of Sindari, these six blades are potent energy conductors that mimic the signature of the original Warp fuel. They are the Catalysts, capable of recharging the Alliance Devices-or detonating them. The journey home requires both a Navigator and a Catalyst.</p>
+                    </div>
+                </div>
+
+                <h3 class="text-2xl font-semibold text-gray-200 mt-8 border-b border-gray-600 pb-2 mb-4">V. A Galaxy in Chaos</h3>
+                <p>The Warp has destabilized the entire Terra Galaxy. The Lattice is active but uncontrolled, causing random "Warp Echoes" that threaten all ten worlds. The sudden forced interaction between vastly different civilizations has ignited conflict and desperate alliances.</p>
+                <p>A race against time has begun. The Seekers-a coalition of Travelers and locals-strive to locate the Navigators and Catalysts to stabilize the network and bring everyone home. Meanwhile, The Ascendants-powerful factions within the Triad Alliance-seek to seize control of the Lattice to launch an era of interstellar conquest. The Purists reject their shared origin and and seek to eliminate the Travelers.</p>
+                <p>The fate of the ten worlds rests on the shoulders of the 10,000 Travelers. They must survive, unite, and unlock the secrets of their ancient past before the Echoes of the Alliance tear their galaxy apart.</p>
+                
+                <div class="mt-8 pt-6 border-t border-gray-700 flex justify-center">
+                    <button id="openRoadmapModalBtn" class="bg-cyan-500 hover:bg-cyan-400 text-black font-bold py-2 px-6 rounded-lg transition-colors duration-300">
+                        Alliance Lore Roadmap
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Roadmap Modal -->
+    <div id="roadmapModal" class="modal fixed inset-0 bg-black bg-opacity-75 flex justify-center items-center z-50 hidden transition-opacity duration-300 ease-in-out">
+        <div class="modal-content bg-[#27272A] border border-gray-700 rounded-2xl shadow-xl p-8 w-full max-w-4xl relative text-white transition-all duration-300 ease-in-out transform scale-95 opacity-0">
+            <button id="closeRoadmapModal" class="absolute top-4 right-4 text-gray-400 hover:text-white text-3xl leading-none font-bold focus:outline-none z-10">&times;</button>
+            <div class="max-h-[80vh] overflow-y-auto pr-4 text-left">
+                <h2 class="text-3xl font-bold text-cyan-400 mb-4 text-center">Alliance Lore Roadmap</h2>
+                <p class="text-center text-gray-400 italic mb-6">This document outlines the strategic framework for forging alliances with real-world blockchain projects by mapping their core functions and ethos to the thematic lore of the planets and inhabitants within the Terra Galaxy. This serves as an internal guide for the council to direct partnership and community engagement efforts.</p>
+
+                <h3 class="text-2xl font-semibold text-gray-200 mt-8 border-b border-gray-600 pb-2 mb-4">Core Galactic Concepts</h3>
+                <ul class="list-disc list-inside space-y-3 text-gray-300">
+                    <li><strong class="text-cyan-400">The Cosmos Protocol:</strong> The fundamental, in-universe law that allows for Interchain Communication. It is not a place, but the network itself.</li>
+                    <li><strong class="text-cyan-400">The Phoenix Sun:</strong> The central Hub of the Terra Galaxy. It provides the security, validation, and consensus for the entire local network, analogous to the Cosmos Hub (ATOM).</li>
+                    <li><strong class="text-cyan-400">The Terra Galaxy:</strong> Our home ecosystem of ten planets, natively connected via the Cosmos Protocol broadcast from the Phoenix Hub.</li>
+                    <li><strong class="text-cyan-400">Other Galaxies:</strong> External blockchain ecosystems (e.g., Ethereum Hegemony, Solana Archipelago) that we aim to connect with via future "bridge" building initiatives.</li>
+                </ul>
+
+                <h3 class="text-2xl font-semibold text-gray-200 mt-8 border-b border-gray-600 pb-2 mb-4">Planet-to-Blockchain Strategic Mapping</h3>
+                
+                <div class="mt-6">
+                    <h4 class="text-xl font-bold text-cyan-400">Inner Ring: The Triad Alliance (Core Infrastructure & DeFi)</h4>
+                    <div class="pl-4 mt-4 space-y-6">
+                        <div>
+                            <p><strong class="text-lg text-gray-200">Planet: Crystall</strong></p>
+                            <p class="ml-4 mt-1"><strong class="text-gray-400">Public Lore Theme:</strong> Keepers of knowledge, scholars of the Cosmos Protocol.</p>
+                            <p class="ml-4 mt-3"><strong class="text-gray-400">Strategic Target:</strong> Cosmos Hub (ATOM) Community & Tooling. The Crystallians represent the core developers, educators, and infrastructure providers (wallets, explorers, documentation) of the Cosmos ecosystem. An alliance here means deeper integration with the core community and supporting public goods.</p>
+                        </div>
+                        <div>
+                            <p><strong class="text-lg text-gray-200">Planet: Gredica</strong></p>
+                            <p class="ml-4 mt-1"><strong class="text-gray-400">Public Lore Theme:</strong> Master traders, liquidity experts, synthesizers of new assets.</p>
+                            <p class="ml-4 mt-3"><strong class="text-gray-400">Strategic Target:</strong> Osmosis (OSMO) & DEXs. The Gredicans' entire culture is built around exchange and creating value from diverse assets. They are the perfect thematic home for the premier DEX in the Cosmos ecosystem. An alliance involves LPs, governance participation, and cross-promotion.</p>
+                        </div>
+                        <div>
+                            <p><strong class="text-lg text-gray-200">Planet: Minas</strong></p>
+                            <p class="ml-4 mt-1"><strong class="text-gray-400">Public Lore Theme:</strong> Master miners of energy and physical resources.</p>
+                            <p class="ml-4 mt-3"><strong class="text-gray-400">Minas North Strategic Target:</strong> Bitcoin (BTC) & Proof-of-Work Chains. The Solar Forge is a direct allegory for PoW mining. An alliance could involve wrapped BTC assets, educational content, or partnerships with PoW-focused communities.</p>
+                            <p class="ml-4 mt-3"><strong class="text-gray-400">Minas South Strategic Target:</strong> Real-World Asset (RWA) Tokenization (e.g., Tokenized Gold/Silver). The Treasure Vaults represent the tangible backing of digital assets. Partnerships here would involve projects bringing physical assets on-chain.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-8">
+                    <h4 class="text-xl font-bold text-cyan-400">Mid-Ring: The Terrestrial Worlds (Application Layer & Unique Economies)</h4>
+                    <div class="pl-4 mt-4 space-y-6">
+                        <div>
+                            <p><strong class="text-lg text-gray-200">Planet: Pampas</strong></p>
+                            <p class="ml-4 mt-1"><strong class="text-gray-400">Public Lore Theme:</strong> Stewardship of land, complex systems of property and usage rights.</p>
+                            <p class="ml-4 mt-3"><strong class="text-gray-400">Strategic Target:</strong> Real Estate Tokenization Projects. The lore of "Hearth-Ledgers" and "Seasonal Entitlements" is a direct narrative setup for projects tokenizing real estate, timeshares, or land-use agreements.</p>
+                        </div>
+                         <div>
+                            <p><strong class="text-lg text-gray-200">Planet: Zando</strong></p>
+                            <p class="ml-4 mt-1"><strong class="text-gray-400">Public Lore Theme:</strong> Decentralized, symbiotic systems and resource sharing.</p>
+                            <p class="ml-4 mt-3"><strong class="text-gray-400">Strategic Target:</strong> Decentralized Autonomous Organizations (DAOs) & Governance Platforms. The Zandoans' society is a DAO. This is a perfect place for meta-governance alliances, cross-DAO collaborations, or partnerships with projects building better DAO tooling.</p>
+                        </div>
+                        <div>
+                            <p><strong class="text-lg text-gray-200">Planet: Ozara</strong></p>
+                            <p class="ml-4 mt-1"><strong class="text-gray-400">Public Lore Theme:</strong> Duality of public alliances and deep privacy.</p>
+                            <p class="ml-4 mt-3"><strong class="text-gray-400">Ozara North Strategic Target:</strong> Lion DAO & Pixel Lions (Established). The established alliance in the defensible canyons. This serves as our model for future partnerships.</p>
+                            <p class="ml-4 mt-3"><strong class="text-gray-400">Ozara South Strategic Target:</strong> Secret Network (SCRT) & Privacy Protocols. The Veiled Nomads and their culture of anonymity are the narrative hook for an alliance with a privacy-focused blockchain.</p>
+                        </div>
+                    </div>
+                </div>
+
+                 <div class="mt-8">
+                    <h4 class="text-xl font-bold text-cyan-400">Outer Rim: The Harsh Worlds (Specialized & Frontier Technologies)</h4>
+                    <div class="pl-4 mt-4 space-y-6">
+                        <div>
+                            <p><strong class="text-lg text-gray-200">Planet: Crutha</strong></p>
+                            <p class="ml-4 mt-1"><strong class="text-gray-400">Public Lore Theme:</strong> High-gravity engineers building a new financial order.</p>
+                            <p class="ml-4 mt-3"><strong class="text-gray-400">Strategic Target:</strong> Injective (INJ) & DeFi Derivatives. The Architects creating complex financial instruments from their mountain spires are a perfect match for Injective's mission to tokenize real-world assets and create a new financial system.</p>
+                        </div>
+                         <div>
+                            <p><strong class="text-lg text-gray-200">Planet: Kita</strong></p>
+                            <p class="ml-4 mt-1"><strong class="text-gray-400">Public Lore Theme:</strong> Absolute privacy, encryption, and secure data networks.</p>
+                            <p class="ml-4 mt-3"><strong class="text-gray-400">Strategic Target:</strong> Privacy Coins & Secure Messaging dApps. While Ozara South has a privacy theme, Kita is all about privacy tech. The Cryptographers in the Labyrinth are a direct allegory for developers of privacy protocols and anonymous systems.</p>
+                        </div>
+                        <div>
+                            <p><strong class="text-lg text-gray-200">Planet: Lusa</strong></p>
+                            <p class="ml-4 mt-1"><strong class="text-gray-400">Public Lore Theme:</strong> Architects of order and logic in a chaotic environment.</p>
+                            <p class="ml-4 mt-3"><strong class="text-gray-400">Strategic Target:</strong> Neutron (NTRN) & Secure Smart Contract Platforms. The Lusans building stable cities in the deep abyss represent the creation of a secure, foundational smart contract layer (CosmWasm) that allows complex applications to run safely.</p>
+                        </div>
+                         <div>
+                            <p><strong class="text-lg text-gray-200">Planet: Sindari</strong></p>
+                            <p class="ml-4 mt-1"><strong class="text-gray-400">Public Lore Theme:</strong> Resilient community rebuilding from a cataclysm.</p>
+                            <p class="ml-4 mt-3"><strong class="text-gray-400">Strategic Target:</strong> Terra Classic (LUNC). This is a direct and powerful allegory for the LUNC community. An alliance here is about recognizing shared history, resilience, and the power of a passionate community to build from the ashes.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Compare Planets Modal -->
+    <div id="compareModal" class="modal fixed inset-0 bg-black bg-opacity-75 flex justify-center items-center z-50 hidden transition-opacity duration-300 ease-in-out">
+        <div class="modal-content bg-[#27272A] border border-gray-700 rounded-2xl shadow-xl p-8 w-full max-w-7xl relative text-white transition-all duration-300 ease-in-out transform scale-95 opacity-0">
+            <button id="closeCompareModal" class="absolute top-4 right-4 text-gray-400 hover:text-white text-3xl leading-none font-bold focus:outline-none z-10">&times;</button>
+            <div class="max-h-[80vh] overflow-y-auto">
+                 <h2 class="text-3xl font-bold text-cyan-400 mb-6 text-center">Planetary Comparison Chart</h2>
+                 <table id="compare-planets-table" class="compare-table">
+                    <thead>
+                        <!-- Headers will be here -->
+                    </thead>
+                    <tbody>
+                        <!-- Rows will be populated by JS -->
+                    </tbody>
+                 </table>
+                 <div class="mt-4 pt-3 border-t border-gray-700 text-xs text-gray-400 text-left">
+                    <p><strong>LY:</strong> Light-Years</p>
+                    <p><strong>AU:</strong> Astronomical Unit</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Planet Profile Modal (Detailed) -->
+    <div id="planetProfileModal" class="modal fixed inset-0 bg-black bg-opacity-75 flex justify-center items-center z-50 hidden transition-opacity duration-300 ease-in-out p-4">
+        <div class="modal-content bg-[#27272A] border border-gray-700 rounded-2xl shadow-xl p-8 w-full max-w-6xl relative text-white transition-all duration-300 ease-in-out transform scale-95 opacity-0">
+            <button id="closeProfileModal" class="absolute top-4 right-4 text-gray-400 hover:text-white text-3xl leading-none font-bold focus:outline-none z-10">&times;</button>
+            <div id="profileModalContent" class="max-h-[85vh] overflow-y-auto pr-4 text-left">
+                <!-- Content injected by JS -->
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Full Size Image Modal -->
+    <div id="imageModal" class="modal fixed inset-0 bg-black bg-opacity-85 flex justify-center items-center z-[60] hidden transition-opacity duration-300 ease-in-out p-4">
+        <span id="closeImageModal" class="absolute top-4 right-6 text-white text-5xl font-bold hover:text-gray-300 cursor-pointer">&times;</span>
+        <img id="fullSizeImage" src="" alt="Full size view" class="max-w-full max-h-full object-contain">
+    </div>
+
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const body = document.querySelector('body');
+            const planetsWrapper = document.getElementById('planets-wrapper');
+
+            const createStars = (count) => {
+                for (let i = 0; i < count; i++) {
+                    const star = document.createElement('div');
+                    star.classList.add('star');
+                    const size = Math.random() * 2 + 1;
+                    star.style.width = `${size}px`;
+                    star.style.height = `${size}px`;
+                    star.style.left = `${Math.random() * 100}%`;
+                    star.style.top = `${Math.random() * 100}%`;
+                    star.style.animationDuration = `${Math.random() * 3 + 2}s`;
+                    star.style.animationDelay = `${Math.random() * 3}s`;
+                    body.appendChild(star);
+                }
+            };
+            createStars(200);
+
+            const allPlanetsData = [
+                { 
+                    name: "Crystall", sizeCategory: "Large", ring: 1, position: { top: '14%', left: '49%' }, image: "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Crystall.png?v=17",
+                    description: "Technologically Advanced Crystal World",
+                    stats: { "Circumference": "40,075", "Distance from Sun": "2.5", "Alliance Status": "Triad Alliance (Seat of Governance)" },
+                    astroData: { size: "40,075 AU", distance: "2.5 LY", faction: "Triad Alliance" },
+                    circumferenceRaw: 40075,
+                    distanceRaw: 2.5,
+                    profile: {
+                        text: "Crystall is the crown jewel of the Triad Alliance, a world of breathtaking beauty where mountains of amethyst and quartz crystals grow like ancient forests. Its environment is a fusion of natural geological wonder and advanced technology. The Crystallians are the intellectual and philosophical leaders of the galaxy, the foremost scholars of the ancient Lattice network that connects all worlds. Their entire society is dedicated to understanding, restoring, and perfecting this fundamental network of reality.",
+                        alliances: "As the seat of the Triad Alliance, Crystall actively manages the diplomatic and technological relationships with Minas and Gredica. Since the Warp, they have become the de facto leaders in the effort to understand the Lattice, reaching out to the newly discovered worlds with offers of knowledge and integration, though some view their guidance as control.",
+                        regions: [
+                            {
+                                name: "The Archives (North)",
+                                image: "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Cristall%20North.png",
+                                environment: "Crystall North is a valley of giant, perfectly formed quartz crystals. The landscape is serene and ordered, with crystalline structures that have been meticulously integrated with advanced technology, serving as massive data storage and transmission hubs. The air itself seems to hum with information.",
+                                culture: "The North is home to the 'Archivists,' the galaxy's keepers of knowledge. They are a society of scholars, historians, and data scientists who dedicate their lives to studying the history of the Lattice. They maintain the 'Great Crystalline Archive,' a decentralized network that stores the galaxy's most important historical and scientific data. They are the authors of the 'Amethyst Principles,' a set of foundational guidelines for ethical and stable network development."
+                            },
+                            {
+                                name: "The Resonators (South)",
+                                image: "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Cristall%20South.png",
+                                environment: "The southern hemisphere is a wild, untamed landscape of vibrant, purple amethyst formations. These crystals are not inert; they resonate with the energy of the Lattice, creating strange and beautiful light displays in the sky. The environment is more chaotic and experimental than the orderly North.",
+                                culture: "The South is inhabited by the 'Resonators,' the visionary engineers and explorers of Crystallian society. They live in experimental bio-domes nestled among the amethyst peaks. They are the ones who build the tools that allow others to navigate the Lattice. While the Archivists study the past, the Resonators build the future, constantly pushing the boundaries of what is possible."
+                            }
+                        ]
+                    }
+                },
+                { 
+                    name: "Minas", sizeCategory: "Small", ring: 1, position: { top: '65%', left: '58%' }, image: "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Minas.png?v=17",
+                    description: "Mining Dwarf Planet",
+                    stats: { "Circumference": "4,777", "Distance from Sun": "3.0", "Alliance Status": "Triad Alliance" },
+                    astroData: { size: "4,777 AU", distance: "3.0 LY", faction: "Triad Alliance" },
+                    circumferenceRaw: 4777,
+                    distanceRaw: 3.0,
+                    profile: {
+                        text: "Minas is a dwarf planet of stark, raw beauty, its surface a cratered landscape of rock and dust under a sky teeming with celestial bodies. The low gravity and thin atmosphere make life on the surface impossible without support. The Minasans are a people of unparalleled resilience and technical ingenuity, their society forged by the relentless demands of their environment. They are the master miners and engineers of the Triad Alliance, a civilization that thrives not by conquering their world, but by working in perfect, pragmatic harmony with it.",
+                        alliances: "Minas provides the raw materials and computational power that fuel the Triad Alliance. Their focus remains intensely practical. They are open to new alliances only if they provide tangible benefits—new technologies for extraction or access to untapped resources.",
+                        regions: [
+                            {
+                                name: "The Solar Forge (North)",
+                                image: "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Minas%20North.png",
+                                environment: "Minas North is a landscape of sharp, metallic rock formations and deep canyons, perpetually bathed in the unfiltered radiation of the Phoenix sun. The ground itself hums with energy. This hemisphere is dominated by massive, decentralized arrays of solar collectors and colossal communication towers that reach from the canyon floors into the void.",
+                                culture: "The North is home to the 'Forgemasters,' a society of engineers and data-miners who live in shielded, subterranean habitats. They have mastered the art of harnessing raw solar energy, channeling it to power vast computational engines. They are the galaxy's premier providers of raw processing power. Their culture is one of relentless optimization and provable work, believing that value must be earned through the expenditure of pure energy."
+                            },
+                            {
+                                name: "The Treasure Vaults (South)",
+                                image: "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Minas%20South.png",
+                                environment: "Sheltered from the most intense solar radiation by the planet's curvature, Minas South is a network of deep, stable cave systems and vast, open-pit mines. The rocks here are rich with precious metals and rare earth minerals, which glitter under the light of distant stars. The landscape is a testament to generations of careful, methodical excavation.",
+                                culture: "The South is inhabited by the 'Geode-Clans,' master metallurgists and artisans. They have turned the act of physical mining into a science and an art form. They create perfectly refined, physically scarce assets that are valued across the galaxy for their purity and rarity. Their culture is built on trust, verifiable scarcity, and the tangible value of the assets they pull from the heart of their world."
+                            }
+                        ]
+                    }
+                },
+                { 
+                    name: "Gredica", sizeCategory: "Giant", ring: 1, position: { top: '85%', left: '47%' }, image: "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Gredica.png?v=17",
+                    description: "Hazardous Flower World",
+                    stats: { "Circumference": "102,099", "Distance from Sun": "3.8", "Alliance Status": "Triad Alliance" },
+                    astroData: { size: "102,099 AU", distance: "3.8 LY", faction: "Triad Alliance" },
+                    circumferenceRaw: 102099,
+                    distanceRaw: 3.8,
+                    profile: {
+                        text: "Gredica is a world of deceptive beauty, a planet of vibrant flora and shimmering pink mists. This beauty, however, conceals a deadly secret: the planet's dominant life form is a single, clonal flower organism whose spores are lethal to unprotected humanoids. This constant environmental threat has forged the Gredicans into unparalleled masters of bio-engineering, atmospheric science, and synthesis. They are the premier traders and liquidity providers of the Triad Alliance, driven by a deep-seated need to explore and exchange, forever seeking new assets to integrate and new solutions for survival.",
+                        alliances: "Gredica is the economic engine of the Triad, facilitating trade and synthesis. The Warp has supercharged their ambitions, providing access to seven new biological systems and economies. They are eager to form alliances that promote the free flow of assets and information across the galaxy.",
+                        regions: [
+                            {
+                                name: "The Conservatory Domes (North)",
+                                image: "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Gredica%20North.png",
+                                environment: "The northern hemisphere is home to vast, elegant conservatory domes built along the shores of serene lakes. Outside the domes, the landscape is a riot of colorful, deadly flowers. Inside, the Gredicans have cultivated a paradise of non-native, harmless flora. These domes are centers of intense biological research and trade.",
+                                culture: "The North is the domain of the 'Synthesizers,' the diplomats, traders, and scientists of Gredica. They manage the inter-planetary exchanges, operating the bustling trade hubs within their domes. They have perfected the art of creating new value by combining disparate assets, whether biological or economic. Their society is open, collaborative, and centered on the principle of mutual benefit through exchange."
+                            },
+                            {
+                                name: "The Spore-Fields (South)",
+                                image: "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Gredica%20South.png",
+                                environment: "The southern hemisphere is a wild and untamed wilderness of toxic flower fields, shrouded in a permanent, thick pink haze of deadly spores. The mountains here are the only safe havens, rising like islands from a pink sea. Ancient, mysterious structures can be seen deep within the mists.",
+                                culture: "The South is inhabited by the 'Reclaimers,' the rugged explorers and atmospheric engineers of Gredica. They live in fortified research outposts high in the mountains. They are not content to hide from their world's danger; they seek to understand and master it. They study the spore network, learning to harness it for communication and data transfer."
+                            }
+                        ]
+                    }
+                },
+                { 
+                    name: "Pampas", sizeCategory: "Giant", ring: 2, position: { top: '25%', left: '75%' }, image: "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Pampas.png?v=17",
+                    description: "Pastoral Grassland World",
+                    stats: { "Circumference": "100,766", "Distance from Sun": "6.2", "Alliance Status": "Independent" },
+                    astroData: { size: "100,766 AU", distance: "6.2 LY", faction: "Independent" },
+                    circumferenceRaw: 100766,
+                    distanceRaw: 6.2,
+                    profile: {
+                        text: "Pampas is a world of gentle hills, lush meadows, and a serene, Earth-like climate. It is a planet defined by its deep connection to the concept of 'home' and 'land.' The Pampans are a good-natured and community-focused people who have rejected complex technology in favor of a society built on tradition, stability, and a shared sense of belonging. Their world is the agricultural heart of the Mid-Ring, a symbol of stability and enduring value in a chaotic galaxy.",
+                        alliances: "The Pampans are generally wary of outsiders. The Warp has disrupted their peaceful existence, and they are primarily concerned with preserving their way of life. Alliances are only considered with groups that respect their traditions of stewardship and tangible value.",
+                        regions: [
+                             {
+                                name: "The Homesteads (North)",
+                                image: "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Pampas%20North.png",
+                                environment: "The northern hemisphere is a vast expanse of rolling green hills, fertile river valleys, and small, family-run homesteads. The landscape is dotted with ancient, venerable trees and fields of golden grain. The climate is mild and predictable, perfect for agriculture.",
+                                culture: "The North is home to the 'Land-Keepers,' communities built around the concept of ancestral stewardship. They believe that land is not something to be owned, but a trust to be cared for. Each family maintains a 'Hearth-Ledger,' a physical and cultural record of their land's history, yields, and lineage. They prefer to deal in tangible goods and trusted relationships."
+                            },
+                            {
+                                name: "The Commons (South)",
+                                image: "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Pampas%20South.png",
+                                environment: "The southern hemisphere features wide-open plains and communal riverlands. The settlements here are larger, more centralized villages. The land is managed collectively, with vast fields and pastures shared by the entire community.",
+                                culture: "The South is inhabited by the 'Commoners,' a society that has evolved stewardship into a system of collective use and governance. They have developed a unique system of 'Seasonal Entitlements,' complex social contracts that grant the right to use specific plots of land for a set period. These rights can be traded, leased, or bundled, creating a fluid and efficient system of land management."
+                            }
+                        ]
+                    }
+                },
+                { 
+                    name: "Ozara", sizeCategory: "Large", ring: 2, position: { top: '65%', left: '17%' }, image: "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Ozara.png?v=17",
+                    description: "Desert World",
+                    stats: { "Circumference": "40,075", "Distance from Sun": "7.0", "Alliance Status": "Alliance with Lion DAO (North)" },
+                    astroData: { size: "40,075 AU", distance: "7.0 LY", faction: "Alliance with Lion DAO" },
+                    circumferenceRaw: 40075,
+                    distanceRaw: 7.0,
+                    profile: {
+                        text: "Ozara is a desert world of breathtaking scale and stark beauty. Life here is a constant struggle against the oppressive sun and the scarcity of water. The Ozarans are a people of immense resilience and deep secrets. Their culture is shaped by the dual necessities of survival: the outward need for community and collaboration, and the inward need for privacy and the protection of precious resources. This duality has made them a complex and powerful force in the Mid-Ring.",
+                        alliances: "Ozara has a history of strategic partnerships. The most significant is the established alliance in the North with the Lion DAO, which has bolstered their defenses and resources. The South remains fiercely independent, offering their unique services of information privacy only to those who can meet their high standards of trust.",
+                         regions: [
+                             {
+                                name: "The Canyons of the Pride (North)",
+                                image: "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Ozara%20North.png",
+                                environment: "The northern hemisphere is a rugged landscape of deep, multi-colored canyons and high mesas. The rock formations provide shelter from the relentless sun. This is where the great underground mycelium network reaches closest to the surface, providing a source of sustenance.",
+                                culture: "The North is home to the 'Canyon-Clans,' the established heart of Ozaran society. They live in permanent settlements carved into the canyon walls. Their society is structured, hierarchical, and deeply traditional. The historic alliance with the powerful Lion DAO was forged here, bringing a new and formidable pride to the people of the North."
+                            },
+                            {
+                                name: "The Shifting Sands (South)",
+                                image: "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Ozara%20South.png",
+                                environment: "The southern hemisphere is a vast, open desert of endless, shifting sand dunes. There is no shelter here save for what one can carry. The landscape is fluid and ever-changing. Secrets and treasures are often buried and uncovered by the ceaseless winds.",
+                                culture: "The South is the domain of the 'Veiled Nomads,' mysterious tribes who reject the static life of the canyons. They live in mobile communities. Their garments, which completely conceal their identity, are a cultural cornerstone of privacy and anonymity. They are the keepers of secrets, masters of misdirection and encrypted communication, trading in pure, untraceable information."
+                            }
+                        ]
+                    }
+                },
+                { 
+                    name: "Zando", sizeCategory: "Medium", ring: 2, position: { top: '39%', left: '44%' }, image: "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Zando.png?v=17",
+                    description: "Lush Rainforest World",
+                    stats: { "Circumference": "14,775", "Distance from Sun": "8.5", "Alliance Status": "Independent (Loose Collective)" },
+                    astroData: { size: "14,775 AU", distance: "8.5 LY", faction: "Independent" },
+                    circumferenceRaw: 14775,
+                    distanceRaw: 8.5,
+                    profile: {
+                        text: "Zando is a world teeming with life, a planet-spanning rainforest of towering trees, lush canopies, and vibrant ecosystems. It has no saltwater oceans, only a network of mighty rivers and breathtaking waterfalls. The Zandoans live in perfect harmony with their environment. While not technologically advanced in a traditional sense, they possess a deep, instinctual understanding of the complex, interconnected systems of their world. Their society is a reflection of the jungle itself: decentralized, resilient, and deeply collaborative.",
+                        alliances: "The Zandoans do not form traditional alliances. Their society is already a decentralized collective. They welcome outsiders who respect the balance of their ecosystem and understand the principles of symbiotic relationships and decentralized governance.",
+                        regions: [
+                             {
+                                name: "The Canopy Cities (North)",
+                                image: "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Zando%20North.png",
+                                environment: "The northern hemisphere is dominated by the 'Great Canopy,' a continent-spanning network of colossal, intertwined trees. The jungle floor is a world of deep shadow, while the canopy is a vibrant city of sunlight, life, and movement.",
+                                culture: "The North is home to the 'Canopy-Dwellers,' who live in intricate settlements built high in the branches. Their society is highly decentralized, with each settlement operating as an independent but interconnected node. They are masters of foraging and resource sharing. Their wisdom lies in their understanding of decentralized, symbiotic systems."
+                            },
+                            {
+                                name: "The Riverlands (South)",
+                                image: "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Zando%20South.png",
+                                environment: "The southern hemisphere is defined by its massive river systems. The jungle here is more open, with vast, sun-dappled clearings and gallery forests lining the banks of the powerful rivers. The waterfalls are larger and more numerous, their immense power shaping the landscape.",
+                                culture: "The South is inhabited by the 'River-Folk,' who build their communities along the fertile riverbanks and behind the thundering curtains of waterfalls. Their culture revolves around the flow of the rivers, which they see as a metaphor for the flow of life, resources, and information. They are traders and communicators, possessing a deep understanding of cycles and flow."
+                            }
+                        ]
+                    }
+                },
+                { 
+                    name: "Lusa", sizeCategory: "Large", ring: 3, position: { top: '21%', left: '27%' }, image: "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Lusa.png?v=17",
+                    description: "Stormy Ocean World",
+                    stats: { "Circumference": "40,075", "Distance from Sun": "11.0", "Alliance Status": "Independent" },
+                    astroData: { size: "40,075 AU", distance: "11.0 LY", faction: "Independent" },
+                    circumferenceRaw: 40075,
+                    distanceRaw: 11.0,
+                    profile: {
+                        text: "Lusa is a world of endless, turbulent oceans, a planet almost entirely covered in water and wracked by colossal, unending storms. Located in the Outer Rim, its surface is a maelstrom of towering waves and chaotic weather. To survive here, the semi-aquatic Lusans have been forced to become masters of engineering and infallible logic. Their society is built on a foundation of absolute precision, understanding that in an environment of pure chaos, unwavering rules are the only guarantee of survival. They are the galaxy's quiet architects, the builders of order in the heart of the storm.",
+                        alliances: "The Lusans are highly selective in their partnerships. They value logic, security, and foundational stability above all else. They are willing to share their expertise in building secure systems with those who demonstrate a commitment to these principles.",
+                        regions: [
+                             {
+                                name: "The Shallows (North)",
+                                image: "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Lusa%20North.png",
+                                environment: "The northern hemisphere is a vast, planet-spanning network of shallow marshes and temporary archipelagos. The landscape is in constant flux. Unique, semi-aquatic flora thrives here, including massive, turtle-like mangrove trees that serve as mobile foundations for Lusan settlements.",
+                                culture: "The North is home to the 'Wayfinders,' the adaptable and resilient surface-dwellers of Lusa. They live in nomadic communities, building their homes on the backs of the great mangroves. They are master navigators and ecologists, experts at reading the chaotic patterns of the weather. They represent the flexible, application-layer of Lusan society, constantly adapting to their chaotic world."
+                            },
+                            {
+                                name: "The Abyss (South)",
+                                image: "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Lusa%20South.png",
+                                environment: "The southern hemisphere is a deep, dark, and surprisingly calm ocean. Beneath the raging storms of the surface lies the Abyss, a world of immense pressure, absolute silence, and unchanging stability. Here, the Lusans have built their magnificent, permanent cities, marvels of engineering designed to withstand the crushing pressures.",
+                                culture: "The South is the domain of the 'Architects,' the logical and systematic core of Lusan civilization. They are the creators of the 'Deep Code'—the foundational set of unbreakable physical and social laws that govern their sub-aquatic cities. They are the galaxy's foremost experts in creating secure, foundational systems that can operate flawlessly in the most hostile environments."
+                            }
+                        ]
+                    }
+                },
+                { 
+                    name: "Crutha", sizeCategory: "Giant", ring: 3, position: { top: '37%', left: '14%' }, image: "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Crutha.png?v=17",
+                    description: "Harsh High-Gravity Mountain World",
+                    stats: { "Circumference": "100,075", "Distance from Sun": "12.5", "Alliance Status": "Independent" },
+                    astroData: { size: "100,075 AU", distance: "12.5 LY", faction: "Independent" },
+                    circumferenceRaw: 100075,
+                    distanceRaw: 12.5,
+                    profile: {
+                        text: "Crutha is a world of immense pressure and ambition, a planet of harsh, high-gravity mountains and deep, mist-filled chasms. The sky is a perpetual, dusty orange. Life on Crutha is a constant struggle against the crushing force of gravity, a reality that has forged the Cruthans into a serious, resilient, and relentlessly driven people. Unable to physically dominate, they have turned their focus to intellectual and economic conquest, aiming to build a new financial order from the top of their world.",
+                        alliances: "The Cruthans view the galaxy through the lens of economics and power. They are aggressively seeking alliances that will allow them to expand their influence and integrate new assets into their complex financial systems. They respect strength and ambition.",
+                        regions: [
+                             {
+                                name: "The Spires (North)",
+                                image: "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Crutha%20North.png",
+                                environment: "The northern hemisphere is a breathtaking landscape of impossibly tall, needle-like mountain spires that pierce the orange clouds. The air is thin, and the winds are fierce. The Cruthans have built their primary cities, the 'Aeries,' clinging to the sides of these spires, high above the dense atmosphere of the lowlands.",
+                                culture: "The North is the domain of the 'Architects,' the ruling class of Cruthan society. They are master engineers, economists, and strategists. From their high Aeries, they design the complex financial instruments and asset-backed derivatives that form the foundation of Cruthan economic power. Their culture is one of ruthless efficiency, logic, and long-term strategic planning."
+                            },
+                            {
+                                name: "The Great Chasms (South)",
+                                image: "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Crutha%20South.png",
+                                environment: "The southern hemisphere is dominated by the Great Chasms, a network of canyons so deep that their bottoms are lost in perpetual twilight and crushing atmospheric pressure. This is where Crutha's most valuable and difficult-to-extract mineral resources are found.",
+                                culture: "The South is home to the 'Baseworkers,' the industrial heart of Crutha. They are a hardy and stoic people who operate the massive mining and refining facilities built into the terraced walls of the chasms. They are the engine of the Cruthan economy, providing the raw physical assets that the Architects in the North leverage and trade."
+                            }
+                        ]
+                    }
+                },
+                { 
+                    name: "Kita", sizeCategory: "Large", ring: 3, position: { top: '58%', left: '83%' }, image: "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Kita.png?v=17",
+                    description: "Frozen Ice World",
+                    stats: { "Circumference": "40,075", "Distance from Sun": "14.0", "Alliance Status": "Independent (Secretive)" },
+                    astroData: { size: "40,075 AU", distance: "14.0 LY", faction: "Independent" },
+                    circumferenceRaw: 40075,
+                    distanceRaw: 14.0,
+                    profile: {
+                        text: "Kita is a world of eternal, silent winter, a planet locked in a permanent ice age. Its position in the far Outer Rim leaves it perpetually cold. The Kitans are a technologically advanced and deeply private people. Their harsh environment has forced them to become master builders and information architects, creating a society that thrives not on the surface, but within the ice itself. Their entire culture is built around the fundamental principle of privacy—the understanding that true knowledge is the most valuable and dangerous asset.",
+                        alliances: "The Kitans are the most isolationist of the ten worlds. They view the Warp as a massive security breach. They rarely initiate contact, but their unparalleled expertise in encryption and privacy technology makes them highly sought after by those who require absolute secrecy.",
+                        regions: [
+                             {
+                                name: "The Spires (North)",
+                                image: "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Kita%20North.png",
+                                environment: "The northern hemisphere is a landscape of monumental ice spires and crystalline citadels that rise from the frozen plains. The world glitters with a cold, pale blue light. The surface is a network of carefully maintained ice roads and communication arrays. This is the public face of Kita, a symbol of their order and technological prowess.",
+                                culture: "The North is governed by the 'Wardens,' the engineers and public administrators of Kitan society. They build and maintain the massive ice structures that serve as habitations and nodes in a galactic data network. They manage the 'public layer' of Kitan communications, offering secure data transfer services to outsiders while ensuring the true nature of the data remains hidden."
+                            },
+                            {
+                                name: "The Labyrinth (South)",
+                                image: "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Kita%20South.png",
+                                environment: "The southern hemisphere appears as an unbroken, featureless expanse of ancient ice. Beneath the surface lies the true heart of Kita: the Labyrinth, a massive network of deep ice caves. This subterranean world is dark, silent, and illuminated only by faint bioluminescence and the cool glow of Kitan technology.",
+                                culture: "The South is the exclusive domain of the 'Cryptographers,' the secretive core of Kitan society. They are the architects of Kitan privacy, the keepers of the complex encryption protocols that secure their entire civilization. They live in total seclusion, dedicating their lives to the mastery of information security, creating unbreakable privacy tools and anonymous ledgers."
+                            }
+                        ]
+                    }
+                },
+                { 
+                    name: "Sindari", sizeCategory: "Giant", ring: 3, position: { top: '81%', left: '88%' }, image: "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Sindari.png?v=17",
+                    description: "Dark Volcanic World",
+                    stats: { "Circumference": "94,675", "Distance from Sun": "15.5", "Alliance Status": "Independent" },
+                    astroData: { size: "94,675 AU", distance: "15.5 LY", faction: "Independent" },
+                    circumferenceRaw: 94675,
+                    distanceRaw: 15.5,
+                    profile: {
+                        text: "Sindari is a world of fire and shadow, a planet in the far Outer Rim forever scarred by a cataclysmic event that shattered its crust and choked its skies with ash. The sun is a pale ghost, and the landscape is dominated by vast volcanic plains and rivers of molten lava. The Sindarins are a people forged in fire and adversity, embodying the spirit of resilience. They are warriors and innovators, a passionate community that has not only survived the apocalypse that reshaped their world but continues to build a powerful, independent civilization from its ashes.",
+                        alliances: "The Sindarins are fiercely independent and proud of their resilience. They are skeptical of the established powers in the Inner Ring, viewing them with suspicion. They are most likely to form alliances with other independent worlds that share their values of strength, passion, and the determination to rebuild from an apocalyptic past.",
+                        regions: [
+                             {
+                                name: "The Ashen Frontier (North)",
+                                image: "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Sindari%20North.png",
+                                environment: "The northern hemisphere is a vast, desolate landscape of cracked obsidian plains, charred, petrified forests, and skies thick with swirling ash. It is a land of echoes and ruins, littered with the remnants of a more ancient and prosperous era, before the great cataclysm.",
+                                culture: "The North is home to the 'Ash-Walkers,' scattered clans of scavengers, explorers, and pioneers. They are masters of survival, possessing an encyclopedic knowledge of the ruins and the valuable technologies buried within them. They are the keepers of Sindari's history, a resilient people who find value and opportunity where others see only destruction."
+                            },
+                            {
+                                name: "The Obsidian Heart (South)",
+                                image: "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Sindari%20South.png",
+                                environment: "The southern hemisphere is the violent, molten heart of Sindari. This is a land of towering active volcanoes, vast lava fields, and glowing rivers of magma. The air is thick with heat and energy, and the sky glows with a permanent, fiery red twilight. This is a place of immense, raw power.",
+                                culture: "The South is the domain of the 'Forge-Lords,' the powerful and technologically advanced core of Sindarin society. They have not just survived their world's cataclysm; they have mastered it. They have built immense cities of black obsidian, powered by geothermal energy. They are a proud, fiercely independent community, dedicated to harnessing the raw power of their world to forge their own destiny."
+                            }
+                        ]
+                    }
+                }
+            ];
+            
+            const sizeMap = { "Giant": 80, "Large": 60, "Medium": 50, "Small": 40 };
+
+            // Generic Modal open/close logic
+            const setupModal = (triggerId, modalId, closeBtnId) => {
+                const trigger = document.getElementById(triggerId);
+                const modal = document.getElementById(modalId);
+                if (!trigger || !modal) return;
+
+                const modalContent = modal.querySelector('.modal-content');
+                const closeBtn = document.getElementById(closeBtnId);
+
+                const open = () => {
+                    modal.classList.remove('hidden');
+                    setTimeout(() => {
+                        modalContent.classList.remove('scale-95', 'opacity-0');
+                    }, 10);
+                };
+
+                const close = () => {
+                    modalContent.classList.add('scale-95', 'opacity-0');
+                    setTimeout(() => {
+                        modal.classList.add('hidden');
+                    }, 300);
+                };
+
+                trigger.addEventListener('click', open);
+                closeBtn.addEventListener('click', close);
+                modal.addEventListener('click', (event) => {
+                    if (event.target === modal) close();
+                });
+            };
+
+            // Setup all modals
+            setupModal('galaxyLoreTrigger', 'loreModal', 'closeLoreModal');
+            setupModal('openRoadmapModalBtn', 'roadmapModal', 'closeRoadmapModal');
+            setupModal('comparePlanetsTrigger', 'compareModal', 'closeCompareModal');
+            setupModal('planetProfileModal', 'planetProfileModal', 'closeProfileModal');
+            
+            // Simple Planet Modal
+            const planetModal = document.getElementById('planetModal');
+            const planetModalContent = document.getElementById('modalContent');
+            const closePlanetModalBtn = document.getElementById('closeModal');
+            const modalImage = document.getElementById('modalImage');
+            const modalName = document.getElementById('modalName');
+            const modalDescription = document.getElementById('modalDescription');
+            const modalStats = document.getElementById('modalStats');
+            const openPlanetModal = (planet) => {
+                modalImage.src = planet.image;
+                modalImage.alt = planet.name;
+                modalName.textContent = planet.name;
+                modalDescription.textContent = planet.description;
+                modalStats.innerHTML = '';
+                for (const [key, value] of Object.entries(planet.stats)) {
+                    const li = document.createElement('li');
+                    li.innerHTML = `<span class="font-semibold text-gray-400">${key}:</span> ${value}`;
+                    modalStats.appendChild(li);
+                }
+                planetModal.classList.remove('hidden');
+                setTimeout(() => planetModalContent.classList.remove('scale-95', 'opacity-0'), 10); 
+            };
+            const closePlanetModal = () => {
+                planetModalContent.classList.add('scale-95', 'opacity-0');
+                setTimeout(() => planetModal.classList.add('hidden'), 300);
+            };
+            closePlanetModalBtn.addEventListener('click', closePlanetModal);
+            planetModal.addEventListener('click', (event) => { if (event.target === planetModal) closePlanetModal(); });
+
+            // Detailed Planet Profile Modal
+            const planetProfileModal = document.getElementById('planetProfileModal');
+            const profileModalContent = document.getElementById('profileModalContent');
+            const openPlanetProfileModal = (planet) => {
+                if (!planet.profile) {
+                    openPlanetModal(planet); // Fallback to simple modal if no profile exists
+                    return;
+                }
+                
+                let ringName = '';
+                if (planet.ring === 1) ringName = 'Inner Ring (Triad)';
+                else if (planet.ring === 2) ringName = 'Mid-Ring (Terrestrial)';
+                else if (planet.ring === 3) ringName = 'Outer Rim (Harsh)';
+
+                // Generate comparative size description
+                let sizeDescription = '';
+                if (planet.name === 'Crystall') {
+                     sizeDescription = `(Mid-sized within the Inner Ring, average for the galaxy)`;
+                } else if (planet.name === 'Minas') {
+                    sizeDescription = `(Smallest within the Inner Ring, smallest in the galaxy)`;
+                }
+
+                let regionsHTML = '';
+                planet.profile.regions.forEach(region => {
+                    regionsHTML += `
+                        <div class="py-8 border-b border-gray-700 grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
+                            <div class="md:col-span-1">
+                                <img src="${region.image}" alt="${region.name}" class="rounded-lg w-full h-auto object-cover clickable-image">
+                            </div>
+                            <div class="md:col-span-2">
+                                <h4 class="text-2xl font-bold text-cyan-400 mb-3">${region.name}</h4>
+                                <p class="mt-2"><strong class="text-gray-400">Environment:</strong> ${region.environment}</p>
+                                <p class="mt-3"><strong class="text-gray-400">Culture & Society:</strong> ${region.culture}</p>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                let ringLinksHTML = '';
+                const otherPlanetsInRing = allPlanetsData.filter(p => p.ring === planet.ring && p.name !== planet.name);
+                if (otherPlanetsInRing.length > 0) {
+                    ringLinksHTML += '<div class="mt-10 pt-6 border-t border-gray-700 text-center">';
+                    ringLinksHTML += `<h4 class="text-lg font-semibold text-gray-400 mb-4">Explore the ${ringName}</h4><div class="flex justify-center gap-4">`;
+                    otherPlanetsInRing.forEach(p => {
+                        ringLinksHTML += `<button data-planet-name="${p.name}" class="ring-link-btn bg-neutral-700 hover:bg-neutral-600 text-cyan-400 font-bold py-2 px-4 rounded-lg transition-colors">${p.name}</button>`;
+                    });
+                    ringLinksHTML += '</div></div>';
+                }
+
+
+                const profileHTML = `
+                    <!-- Section 1: Title, Planet Info -->
+                    <div class="pb-8 border-b border-gray-700">
+                        <div class="bg-black/20 p-4 rounded-lg mb-6">
+                            <h2 class="text-4xl font-bold text-cyan-400 text-center">${planet.name}</h2>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-8 items-center">
+                            <div class="md:col-span-1">
+                                <img src="${planet.image}" alt="${planet.name}" class="rounded-lg w-full h-auto object-cover clickable-image">
+                            </div>
+                            <div class="md:col-span-2">
+                                <ul class="text-gray-300 text-lg">
+                                    <li class="py-3 flex items-center border-b border-gray-700"><strong class="text-gray-500 w-48 inline-block">Galactic Ring:</strong> <span>${ringName}</span></li>
+                                    <li class="py-3 flex items-center border-b border-gray-700"><strong class="text-gray-500 w-48 inline-block">Size Category:</strong> <span>${planet.sizeCategory} <em class="text-sm text-gray-400">${sizeDescription}</em></span></li>
+                                    <li class="py-3 flex items-center border-b border-gray-700"><strong class="text-gray-500 w-48 inline-block">Circumference:</strong> <span>${planet.stats['Circumference']} Astronomical Units</span></li>
+                                    <li class="py-3 flex items-center border-b border-gray-700"><strong class="text-gray-500 w-48 inline-block">Distance from Phoenix:</strong> <span>${planet.stats['Distance from Sun']} Light-Years</span></li>
+                                    <li class="py-3 flex items-center border-b border-gray-700"><strong class="text-gray-500 w-48 inline-block">Core Concept:</strong> <span>${planet.description}</span></li>
+                                    <li class="py-3 flex items-center"><strong class="text-gray-500 w-48 inline-block">Alliance Status:</strong> <span>${planet.stats['Alliance Status']}</span></li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Section 2: Planetary Profile -->
+                    <div class="py-8 border-b border-gray-700">
+                        <h3 class="text-2xl font-semibold text-gray-200 mb-3">Planetary Profile</h3>
+                        <p class="text-gray-300">${planet.profile.text}</p>
+                    </div>
+
+                    <!-- Sections 3 & 4: Regions -->
+                    ${regionsHTML}
+
+                    <!-- Section 5: Alliances -->
+                    <div class="py-8">
+                        <h3 class="text-2xl font-semibold text-gray-200 mb-3">Alliances and Galactic Relations</h3>
+                        <p class="text-gray-300">${planet.profile.alliances}</p>
+                    </div>
+                    
+                    <!-- Bottom Links -->
+                    ${ringLinksHTML}
+                `;
+
+                profileModalContent.innerHTML = profileHTML;
+
+                // Re-attach click listeners for newly created images
+                profileModalContent.querySelectorAll('.clickable-image').forEach(img => {
+                    img.addEventListener('click', (e) => {
+                        openImageModal(e.target.src);
+                    });
+                });
+
+                // Add click listeners for ring links
+                profileModalContent.querySelectorAll('.ring-link-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const planetName = btn.dataset.planetName;
+                        const targetPlanet = allPlanetsData.find(p => p.name === planetName);
+                        if (targetPlanet) {
+                            const modal = document.getElementById('planetProfileModal');
+                            const modalContent = modal.querySelector('.modal-content');
+                            modalContent.classList.add('scale-95', 'opacity-0');
+                            setTimeout(() => {
+                               openPlanetProfileModal(targetPlanet);
+                            }, 300);
+                        }
+                    });
+                });
+
+                planetProfileModal.classList.remove('hidden');
+                setTimeout(() => planetProfileModal.querySelector('.modal-content').classList.remove('scale-95', 'opacity-0'), 10);
+            };
+
+            // Full Size Image Modal
+            const imageModal = document.getElementById('imageModal');
+            const closeImageModalBtn = document.getElementById('closeImageModal');
+            const fullSizeImage = document.getElementById('fullSizeImage');
+            const openImageModal = (src) => {
+                fullSizeImage.src = src;
+                imageModal.classList.remove('hidden');
+            };
+            const closeImageModal = () => imageModal.classList.add('hidden');
+            closeImageModalBtn.addEventListener('click', closeImageModal);
+            imageModal.addEventListener('click', (event) => { if (event.target === imageModal) closeImageModal(); });
+            
+             // Attach initial listeners for lore modal images
+            document.querySelectorAll('#loreModal .clickable-image').forEach(img => {
+                img.addEventListener('click', (e) => {
+                    openImageModal(e.target.src);
+                });
+            });
+
+
+            // Create Planets on Map
+            allPlanetsData.forEach(planetData => {
+                const size = sizeMap[planetData.sizeCategory] || 60;
+                const planetEl = document.createElement('div');
+                planetEl.classList.add('planet');
+                planetEl.dataset.ring = planetData.ring;
+                planetEl.style.width = `${size}px`;
+                planetEl.style.height = `${size}px`;
+                planetEl.style.left = planetData.position.left;
+                planetEl.style.top = planetData.position.top;
+                planetEl.style.backgroundImage = `url('${planetData.image}')`;
+                
+                const planetNameEl = document.createElement('div');
+                planetNameEl.classList.add('planet-name');
+                planetNameEl.textContent = planetData.name;
+
+                if ((planetData.ring === 3 && !['Sindari', 'Crutha'].includes(planetData.name)) || ['Gredica', 'Ozara', 'Zando', 'Pampas'].includes(planetData.name)) {
+                    planetNameEl.classList.add('on-top');
+                }
+                planetEl.appendChild(planetNameEl);
+                planetsWrapper.appendChild(planetEl);
+
+                planetEl.addEventListener('click', () => {
+                    if (planetData.profile) {
+                        openPlanetProfileModal(planetData);
+                    } else {
+                        openPlanetModal(planetData);
+                    }
+                });
+            });
+            
+            // Ring Details Panel elements
+            const ringDetailsPanel = document.getElementById('ring-details-panel');
+            const ringDetailsTitle = document.getElementById('ring-details-title');
+            const ringDetailsContent = document.getElementById('ring-details-content');
+            const ringDetailsLegend = document.getElementById('ring-details-legend');
+
+            // Ring hover interactions
+            const ringInteractions = [
+                {
+                    id: 'inner-ring',
+                    orbit: document.getElementById('inner-ring-orbit'),
+                    labels: document.getElementById('inner-ring-labels'),
+                    name: 'Inner Ring',
+                    fullName: 'Inner Ring (Triad)'
+                },
+                {
+                    id: 'mid-ring',
+                    orbit: document.getElementById('mid-ring-orbit'),
+                    labels: document.getElementById('mid-ring-labels'),
+                    name: 'Mid Ring',
+                    fullName: 'Mid Ring (Terrestrial)'
+                },
+                {
+                    id: 'outer-ring',
+                    orbit: document.getElementById('outer-ring-orbit'),
+                    labels: document.getElementById('outer-ring-labels'),
+                    name: 'Outer Ring',
+                    fullName: 'Outer Ring (Harsh)'
+                }
+            ];
+            
+            const updateRingDetailsPanel = (title, ringNumber) => {
+                ringDetailsTitle.textContent = title;
+                ringDetailsContent.innerHTML = '';
+                
+                const ringPlanets = allPlanetsData.filter(p => p.ring === ringNumber);
+                
+                ringPlanets.forEach(planet => {
+                    const planetCard = `
+                        <div class="bg-black/20 p-3 rounded-lg">
+                            <h4 class="font-bold text-lg text-cyan-400">${planet.name}</h4>
+                            <ul class="text-sm mt-1 text-gray-300">
+                                <li><strong>Size:</strong> ${planet.astroData.size}</li>
+                                <li><strong>Distance:</strong> ${planet.astroData.distance}</li>
+                                <li><strong>Faction:</strong> ${planet.astroData.faction}</li>
+                            </ul>
+                        </div>
+                    `;
+                    ringDetailsContent.innerHTML += planetCard;
+                });
+                
+                ringDetailsLegend.innerHTML = `
+                    <p><strong>LY:</strong> Light-Years</p>
+                    <p><strong>AU:</strong> Astronomical Unit</p>
+                `;
+            };
+
+            ringInteractions.forEach((ring, index) => {
+                const ringNumber = index + 1;
+                
+                const handleMouseEnter = () => {
+                    ring.labels.style.opacity = '1';
+                    updateRingDetailsPanel(ring.fullName, ringNumber);
+                    ringDetailsPanel.classList.add('visible');
+                    
+                    ring.orbit.classList.add('glowing');
+                    ring.labels.querySelectorAll('.ring-label').forEach(label => label.style.color = '#22d3ee');
+
+                    const ringPlanets = document.querySelectorAll(`.planet[data-ring="${ringNumber}"]`);
+                    ringPlanets.forEach(p => {
+                        p.classList.add('ring-hover-scale');
+                        const nameEl = p.querySelector('.planet-name');
+                        if (nameEl) nameEl.style.color = '#22d3ee';
+                    });
+                };
+                
+                const handleMouseLeave = () => {
+                    ring.labels.style.opacity = '0';
+                    ringDetailsPanel.classList.remove('visible');
+
+                    ring.orbit.classList.remove('glowing');
+                    ring.labels.querySelectorAll('.ring-label').forEach(label => label.style.color = '');
+                    
+                    const ringPlanets = document.querySelectorAll(`.planet[data-ring="${ringNumber}"]`);
+                    ringPlanets.forEach(p => {
+                        p.classList.remove('ring-hover-scale');
+                        const nameEl = p.querySelector('.planet-name');
+                        if (nameEl) nameEl.style.color = '';
+                    });
+                };
+
+                ring.orbit.addEventListener('mouseenter', handleMouseEnter);
+                ring.orbit.addEventListener('mouseleave', handleMouseLeave);
+            });
+            
+            // Compare Planets Table Logic
+            const compareTable = document.getElementById('compare-planets-table');
+            const tableHead = compareTable.querySelector('thead');
+            const tableBody = compareTable.querySelector('tbody');
+
+            const renderCompareTable = () => {
+                let bodyHTML = '';
+                allPlanetsData.forEach(p => {
+                    let ringName = '';
+                    if (p.ring === 1) ringName = 'Inner Ring (Triad)';
+                    else if (p.ring === 2) ringName = 'Mid-Ring (Terrestrial)';
+                    else if (p.ring === 3) ringName = 'Outer Rim (Harsh)';
+
+                    bodyHTML += `
+                        <tr>
+                            <td class="font-semibold text-cyan-400">${p.name}</td>
+                            <td>${p.sizeCategory}</td>
+                            <td>${p.stats['Circumference']} AU</td>
+                            <td>${p.stats['Distance from Sun']} LY</td>
+                            <td>${p.description}</td>
+                            <td>${ringName}</td>
+                            <td>${p.stats['Alliance Status']}</td>
+                        </tr>
+                    `;
+                });
+                tableBody.innerHTML = bodyHTML;
+            };
+
+            const sortTable = (key) => {
+                allPlanetsData.sort((a, b) => a[key] - b[key]);
+                renderCompareTable();
+
+                const allSortableHeaders = tableHead.querySelectorAll('th.sortable');
+                allSortableHeaders.forEach(th => {
+                    th.classList.remove('sort-active', 'sort-inactive');
+                     th.querySelector('span')?.remove();
+
+                    if(th.dataset.sortKey === key) {
+                        th.classList.add('sort-active');
+                        th.innerHTML += ' <span>&uarr;</span>';
+                    } else {
+                        th.classList.add('sort-inactive');
+                    }
+                });
+            };
+
+            const headers = [
+                { name: 'Planet Name', key: null },
+                { name: 'Size', key: null },
+                { name: 'Circumference', key: 'circumferenceRaw' },
+                { name: 'Distance from Sun (LY)', key: 'distanceRaw' },
+                { name: 'Core Concept', key: null },
+                { name: 'Galactic Ring', key: null },
+                { name: 'Alliance Status', key: null }
+            ];
+            
+            let headerHTML = '<tr>';
+            headers.forEach(h => {
+                if (h.key) {
+                    headerHTML += `<th class="sortable" data-sort-key="${h.key}">${h.name}</th>`;
+                } else {
+                    headerHTML += `<th>${h.name}</th>`;
+                }
+            });
+            headerHTML += '</tr>';
+            tableHead.innerHTML = headerHTML;
+
+            // Add click listeners for sorting
+            tableHead.querySelectorAll('.sortable').forEach(th => {
+                th.addEventListener('click', () => {
+                    sortTable(th.dataset.sortKey);
+                });
+            });
+
+            // Initial render
+            sortTable('distanceRaw'); // Default sort by distance
+        });
+    </script>
+</body>
+</html>
+
