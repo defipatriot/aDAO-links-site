@@ -154,6 +154,14 @@
             70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(74, 222, 128, 0); }
             100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
         }
+
+        /* --- Red Static Dot for No Proposals --- */
+        .static-dot-red {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: #ef4444; /* red-500 */
+        }
     </style>
 </head>
 <body class="antialiased">
@@ -287,7 +295,7 @@
             <div class="stat-card p-6 rounded-xl text-center flex flex-col justify-between h-full">
                 <div>
                     <h3 id="live-proposals-title" class="text-md font-medium text-gray-400 flex justify-center items-center gap-2">Live Proposals</h3>
-                    <p id="live-proposals-count" class="text-3xl font-bold text-white mt-2">3</p>
+                    <p id="live-proposals-count" class="text-3xl font-bold text-white mt-2">0</p>
                 </div>
                 <a href="https://daodao.zone/dao/terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm/proposals" target="_blank" rel="noopener noreferrer" class="text-sm font-semibold mt-1 text-cyan-400 hover:underline">Vote on DAODAO</a>
             </div>
@@ -463,13 +471,13 @@
                 </div>
                 <div>
                     <h4 class="font-bold text-gray-300 mb-2">Data Source</h4>
-                    <p>On-chain data is updated via an automated script that queries the Terra blockchain. Manual data is updated periodically.</p>
-                    <p class="mt-2">Last Manual Update: <span id="last-updated" class="font-semibold">08/01/25 08:00 UTC</span></p>
+                    <p>All data on this site is from a manual snapshot and is not live. The plan is to automate this process in the future.</p>
+                    <p class="mt-2">Last Manual Update: <span id="last-updated" class="font-semibold">09/01/25 08:00 UTC</span></p>
                 </div>
                 <div>
                     <h4 class="font-bold text-gray-300 mb-2">Transparency</h4>
-                    <p>The script used to retrieve on-chain data is open-source. You can view the public repository to see how information is retrieved.</p>
-                    <a href="#" target="_blank" rel="noopener noreferrer" class="text-cyan-400 hover:underline mt-2 inline-block">View on GitHub</a>
+                    <p>The plan is for the script used to retrieve on-chain data to be open-source. You will be able to view the public repository to see how information is retrieved.</p>
+                    <a href="https://github.com/defipatriot" target="_blank" rel="noopener noreferrer" class="text-cyan-400 hover:underline mt-2 inline-block">View on GitHub</a>
                 </div>
             </div>
         </div>
@@ -486,7 +494,7 @@
             const thirtyDaysAgoDaoDaoStaked = currentDaoDaoStaked - 61; // Calculated for change
             const currentEnterpriseStaked = 434;
             const thirtyDaysAgoEnterpriseStaked = currentEnterpriseStaked + 1; // Calculated for change
-            const liveProposalsCount = 3; // Example value
+            const liveProposalsCount = 0; // Updated to 0
             const daoMembersCount = 158;
 
             // Tokenomics
@@ -514,12 +522,20 @@
 
             if (liveProposalsCountElement && liveProposalsTitleElement) {
                 liveProposalsCountElement.textContent = liveProposalsCount;
+                // --- Live Proposals Indicator Logic ---
+                const existingDot = liveProposalsTitleElement.querySelector('.pulse-dot, .static-dot-red');
+                if (existingDot) {
+                    existingDot.remove(); // Remove any existing dot before adding a new one
+                }
+
                 if (liveProposalsCount > 0) {
-                    if (!liveProposalsTitleElement.querySelector('.pulse-dot')) {
-                        const pulseDot = document.createElement('span');
-                        pulseDot.className = 'pulse-dot';
-                        liveProposalsTitleElement.appendChild(pulseDot);
-                    }
+                    const pulseDot = document.createElement('span');
+                    pulseDot.className = 'pulse-dot';
+                    liveProposalsTitleElement.appendChild(pulseDot);
+                } else {
+                    const staticDot = document.createElement('span');
+                    staticDot.className = 'static-dot-red';
+                    liveProposalsTitleElement.appendChild(staticDot);
                 }
             }
 
