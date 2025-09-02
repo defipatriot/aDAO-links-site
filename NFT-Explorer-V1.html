@@ -1,0 +1,981 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alliance DAO NFT Explorer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #121212;
+            color: #e5e7eb; /* gray-200 */
+        }
+        .nft-card {
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            cursor: pointer;
+        }
+        .nft-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 255, 255, 0.1), 0 6px 6px rgba(0, 255, 255, 0.09);
+        }
+        .pagination-btn, .control-btn {
+            background-color: #374151; /* gray-700 */
+            color: #e5e7eb; /* gray-200 */
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            border: 1px solid #4b5563; /* gray-600 */
+            transition: background-color 0.2s;
+            font-weight: 500;
+        }
+        .pagination-btn:hover:not(:disabled), .control-btn:hover:not(:disabled) {
+            background-color: #4b5563; /* gray-600 */
+        }
+        .pagination-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .form-input, .form-select {
+            background-color: #1f2937; /* gray-800 */
+            border: 1px solid #4b5563; /* gray-600 */
+            border-radius: 0.5rem;
+            color: #e5e7eb;
+            padding: 0.5rem 0.75rem;
+        }
+        .form-select {
+            -webkit-appearance: none; -moz-appearance: none; appearance: none;
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+            background-position: right 0.5rem center; background-repeat: no-repeat; background-size: 1.5em 1.5em; padding-right: 2.5rem;
+        }
+        .aspect-w-1-aspect-h-1 { position: relative; width: 100%; padding-bottom: 100%; }
+        .aspect-w-1-aspect-h-1 > img { position: absolute; height: 100%; width: 100%; top: 0; right: 0; bottom: 0; left: 0; object-fit: cover; }
+        
+        .toggle-label { display: flex; align-items: center; cursor: pointer; color: #d1d5db; }
+        .toggle-checkbox { opacity: 0; width: 0; height: 0; }
+        .toggle-switch { position: relative; display: inline-block; width: 36px; height: 20px; background-color: #4b5563; border-radius: 20px; transition: background-color 0.2s; }
+        .toggle-switch::before { content: ''; position: absolute; width: 16px; height: 16px; border-radius: 50%; background-color: white; top: 2px; left: 2px; transition: transform 0.2s; }
+        .toggle-checkbox:checked + .toggle-switch { background-color: #2dd4bf; }
+        .toggle-checkbox:checked + .toggle-switch::before { transform: translateX(16px); }
+
+        .direction-slider-container { display: flex; align-items: center; gap: 0.5rem; }
+        input[type="range"].direction-slider { -webkit-appearance: none; appearance: none; width: 60px; height: 16px; background: #374151; border-radius: 8px; outline: none; transition: background 0.2s; }
+        input[type="range"].direction-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 20px; height: 20px; background: #9ca3af; border-radius: 50%; border: 2px solid #1f2937; cursor: pointer; margin-top: -2px; }
+        input[type="range"].direction-slider:disabled { opacity: 0.4; }
+        input[type="range"].direction-slider:disabled::-webkit-slider-thumb { background: #4b5563; }
+
+        .multi-select-container { position: relative; }
+        .multi-select-button {
+            background-color: #1f2937; border: 1px solid #4b5563; border-radius: 0.5rem;
+            color: #e5e7eb; padding: 0.5rem 0.75rem; width: 100%; text-align: left;
+            display: flex; justify-content: space-between; align-items: center;
+            height: 42px;
+        }
+        .multi-select-button span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .multi-select-dropdown {
+            position: absolute; top: 100%; left: 0; right: 0; z-index: 10;
+            background-color: #1f2937; border: 1px solid #4b5563; border-radius: 0.5rem;
+            max-height: 200px; overflow-y: auto; margin-top: 4px;
+        }
+        .multi-select-dropdown label {
+            display: block; padding: 0.5rem 0.75rem; cursor: pointer;
+            border-bottom: 1px solid #374151;
+        }
+        .multi-select-dropdown label:hover { background-color: #374151; }
+        .multi-select-dropdown label:last-child { border-bottom: none; }
+        .multi-select-dropdown input { margin-right: 0.5rem; }
+
+        .modal-backdrop {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 50; backdrop-filter: blur(4px);
+        }
+        .modal-content {
+            background-color: #1f2937; border: 1px solid #4b5563;
+            border-radius: 0.75rem; padding: 1.5rem;
+            max-width: 90vw; max-height: 90vh;
+            width: 800px;
+            overflow-y: auto;
+            position: relative;
+        }
+        .modal-close-btn {
+            position: absolute; top: 1rem; right: 1rem;
+            color: #9ca3af; cursor: pointer;
+        }
+        .modal-close-btn:hover { color: #e5e7eb; }
+    </style>
+</head>
+<body class="bg-gray-900 p-4 sm:p-8">
+
+    <header class="text-center mb-8">
+        <h1 class="text-4xl sm:text-5xl font-bold text-white">Alliance DAO NFT Explorer</h1>
+        <p class="text-cyan-400 mt-2">Explore the entire collection with advanced search and filtering.</p>
+    </header>
+
+    <div class="max-w-screen-2xl mx-auto">
+        <div id="controls" class="p-4 bg-gray-800/50 rounded-lg border border-gray-700">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+                <div>
+                    <label for="search-id" class="block text-sm font-medium text-gray-300 mb-1">Search by ID</label>
+                    <input type="number" id="search-id" placeholder="Enter NFT ID..." class="form-input w-full">
+                </div>
+                <div>
+                    <label for="sort-rank" class="block text-sm font-medium text-gray-300 mb-1">Sort By</label>
+                    <select id="sort-rank" class="form-select w-full">
+                        <option value="asc" selected>Rank: Low to High</option>
+                        <option value="desc">Rank: High to Low</option>
+                        <option value="id">ID</option>
+                    </select>
+                </div>
+                <div id="rarity-filter-placeholder"></div>
+                <div class="flex justify-end items-end gap-4">
+                    <div class="text-center">
+                        <label class="block text-sm font-medium text-gray-300 mb-1">AMOUNT</label>
+                        <div id="results-count" class="h-10 bg-gray-900/50 rounded-lg flex items-center justify-center border border-gray-700 text-lg font-semibold text-cyan-400 whitespace-nowrap px-4"></div>
+                    </div>
+                    <div class="self-end">
+                       <button id="reset-filters" class="control-btn h-10">Reset</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="trait-filters-container" class="mt-4 pt-4 border-t border-gray-700 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+            
+            <div class="mt-6 pt-4 border-t border-gray-700">
+                <label class="block text-sm font-medium text-gray-300 mb-2">Inhabitant Filters</label>
+                <div id="inhabitant-filters-container" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-y-4 gap-x-6"></div>
+            </div>
+
+            <div class="mt-6 pt-4 border-t border-gray-700">
+                <label class="block text-sm font-medium text-gray-300 mb-2">Planet Filters</label>
+                <div id="planet-filters-container" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-y-4 gap-x-6"></div>
+            </div>
+    
+            <div class="mt-6 pt-4 border-t border-gray-700">
+                <label class="block text-sm font-medium text-gray-300 mb-2">Display Options</label>
+                <div id="trait-toggles-container" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-x-4 gap-y-2"></div>
+            </div>
+        </div>
+        
+        <div id="nft-gallery" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6 min-h-[500px] mt-8"></div>
+        <div id="pagination-controls" class="flex justify-center items-center mt-8 space-x-4"></div>
+    </div>
+
+    <footer class="text-center mt-12">
+        <button id="rarity-explained-btn" class="text-red-500 font-bold hover:text-red-400 transition-colors underline">Rarity Explained</button>
+    </footer>
+
+    <div id="preview-tile" class="hidden fixed bg-gray-800 border border-cyan-400 rounded-lg shadow-lg p-2 z-20 pointer-events-none">
+        <div class="flex gap-2">
+            <div id="preview-container-1">
+                <img id="preview-image-1" src="" class="w-32 h-auto rounded-md" alt="Preview 1">
+                <p id="preview-name-1" class="text-xs text-center mt-1 truncate text-white"></p>
+            </div>
+            <div id="preview-container-2" class="hidden">
+                <img id="preview-image-2" src="" class="w-32 h-auto rounded-md" alt="Preview 2">
+                <p id="preview-name-2" class="text-xs text-center mt-1 truncate text-white"></p>
+            </div>
+        </div>
+    </div>
+
+    <div id="nft-modal" class="modal-backdrop hidden">
+        <div class="modal-content" style="width: 500px;">
+            <svg id="modal-close" class="modal-close-btn w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            <div class="flex flex-col items-center text-center">
+                <h2 id="modal-title" class="text-2xl font-bold text-white mb-4"></h2>
+                <img id="modal-image" src="" class="w-full max-w-sm h-auto rounded-lg border border-gray-600 mb-4" alt="NFT Image">
+                <div class="w-full max-w-sm">
+                    <div id="modal-traits" class="space-y-2 mb-4 text-left"></div>
+                    <div class="flex items-center justify-center gap-4 mb-4">
+                        <a id="modal-link" href="#" target="_blank" class="inline-block text-cyan-400 hover:text-cyan-300 transition-colors">View on IPFS &rarr;</a>
+                        <button id="download-post-btn" class="control-btn">Download Post</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="rarity-modal" class="modal-backdrop hidden">
+        <div class="modal-content text-gray-300">
+            <svg id="rarity-modal-close" class="modal-close-btn w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            <h2 class="text-2xl font-bold text-white mb-4">AllianceDAO NFT Rarity: The Official Guide</h2>
+            <div class="space-y-6 text-sm leading-relaxed">
+                <div>
+                    <p>This guide provides a complete overview of the rarity system for the AllianceDAO NFT collection, covering the initial design and the final mint results.</p>
+                </div>
+                
+                <div>
+                    <h3 class="text-lg font-semibold text-white mb-2">Part 1: NFT Generation Process</h3>
+                    <p>The image combinations for the AllianceDAO NFTs were created using the open-source <strong>Hashlips Art Engine</strong>. Each of the 10,000 unique NFTs consists of 5 distinct image layers:</p>
+                    <ul class="list-disc list-inside pl-4 mt-2 space-y-1">
+                        <li><b>Background:</b> 20 options (10 planets, with a "North" and "South" variation for each).</li>
+                        <li><b>Object:</b> 40 options with weighted rarity.</li>
+                        <li><b>Inhabitant:</b> 20 options (a male and female version for each of the 10 planetary races).</li>
+                        <li><b>Light:</b> A unique lighting overlay for each planet.</li>
+                        <li><b>Weather:</b> Several different weather options for each planet.</li>
+                    </ul>
+                    <p class="mt-2">To ensure every NFT is unique, the program checks the DNA sequence of each new combination against all previously created images. If a duplicate is found, it is discarded, and the process repeats.</p>
+                </div>
+
+                <div>
+                    <h3 class="text-lg font-semibold text-white mb-2">Part 2: Rarity Design</h3>
+                    <p>Although the generation process is random, certain traits were designed to be rarer than others.</p>
+                    <div class="mt-4 pl-4 border-l-2 border-cyan-500">
+                        <h4 class="font-semibold text-white">Planet & Inhabitant Rarity</h4>
+                        <p class="mt-1">The <strong>Planet</strong> (background) and <strong>Inhabitant</strong> layers were designed for an equal distribution. Each of the 20 options in both categories was intended to have a 5% chance of being selected, resulting in a planned count of 500 for each. The final mint achieved a very even distribution.</p>
+                    </div>
+                     <div class="mt-4 pl-4 border-l-2 border-cyan-500">
+                        <h4 class="font-semibold text-white">Object Rarity</h4>
+                        <p class="mt-1">The <strong>Object</strong> layer is where true weighted rarity was implemented. Each of the 40 objects was assigned a different rarity weight. Imagine a game-show wheel where an object with a weight of 1 appears once, while an object with a weight of 40 appears 40 times. The probability of choosing the rarest object was ~0.12%, while the most common was ~4.88%.</p>
+                    </div>
+                </div>
+
+                <p class="pt-4 text-xs text-gray-400 italic">Note: The "Weather" and "Light" layers do not factor into the collection's rarity scores, as their options were generally unique to each planet.</p>
+            </div>
+        </div>
+    </div>
+
+    <canvas id="share-canvas" class="hidden"></canvas>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const gallery = document.getElementById('nft-gallery');
+            const paginationControls = document.getElementById('pagination-controls');
+            const searchInput = document.getElementById('search-id');
+            const sortSelect = document.getElementById('sort-rank');
+            const rarityFilterPlaceholder = document.getElementById('rarity-filter-placeholder');
+            const traitFiltersContainer = document.getElementById('trait-filters-container');
+            const inhabitantFiltersContainer = document.getElementById('inhabitant-filters-container');
+            const planetFiltersContainer = document.getElementById('planet-filters-container');
+            const traitTogglesContainer = document.getElementById('trait-toggles-container');
+            const resetButton = document.getElementById('reset-filters');
+            const resultsCount = document.getElementById('results-count');
+            const nftModal = document.getElementById('nft-modal');
+            const modalCloseBtn = document.getElementById('modal-close');
+            const rarityModal = document.getElementById('rarity-modal');
+            const rarityExplainedBtn = document.getElementById('rarity-explained-btn');
+            const rarityModalCloseBtn = document.getElementById('rarity-modal-close');
+
+            const METADATA_URL = "https://cdn.jsdelivr.net/gh/defipatriot/nft-metadata/all_nfts_metadata.json";
+            const itemsPerPage = 20;
+            const traitOrder = ["Rank", "Rarity", "Planet", "Inhabitant", "Object", "Weather", "Light"];
+            const filterLayoutOrder = ["Object", "Weather", "Light"];
+            const multiSelectTraits = ["Rarity", "Object", "Weather", "Light"];
+            const defaultTraitsOn = ["Rank", "Planet", "Inhabitant", "Object"];
+
+            let allNfts = [];
+            let filteredNfts = [];
+            let currentPage = 1;
+            let traitCounts = {};
+            let inhabitantCounts = {};
+            let planetCounts = {};
+
+            const debounce = (func, delay) => { let timeout; return function(...args) { clearTimeout(timeout); timeout = setTimeout(() => func.apply(this, args), delay); }; };
+            const showLoading = (container, message) => { container.innerHTML = `<p class="text-center col-span-full text-cyan-400 text-lg">${message}</p>`; };
+            const showError = (container, message) => { container.innerHTML = `<div class="text-center col-span-full bg-red-900/50 border border-red-700 text-white p-6 rounded-lg"><h3 class="font-bold text-xl">Error</h3><p class="mt-2 text-red-300">${message}</p></div>`; };
+            function convertIpfsUrl(ipfsUrl) { if (!ipfsUrl || !ipfsUrl.startsWith('ipfs://')) return ''; return `https://ipfs.io/ipfs/${ipfsUrl.replace('ipfs://', '')}`; }
+
+            const initializeExplorer = async () => {
+                showLoading(gallery, 'Loading collection metadata...');
+                try {
+                    const response = await fetch(METADATA_URL);
+                    if (!response.ok) throw new Error(`Network response was not ok: ${response.status}`);
+                    allNfts = await response.json();
+                    if (!Array.isArray(allNfts) || allNfts.length === 0) { showError(gallery, "Metadata is empty or in the wrong format."); return; }
+                    
+                    calculateRanks();
+
+                    populateTraitFilters();
+                    populateInhabitantFilters();
+                    populatePlanetFilters();
+                    populateTraitToggles();
+                    
+                    updateFilterCounts(allNfts);
+                    
+                    applyStateFromUrl();
+                    applyFiltersAndSort();
+                } catch (error) {
+                    console.error("Failed to initialize explorer:", error);
+                    showError(gallery, `Could not load or process NFT data. Error: ${error.message}`);
+                }
+            };
+
+            const calculateRanks = () => {
+                traitCounts = {};
+                inhabitantCounts = {};
+                planetCounts = {};
+                allNfts.forEach(nft => {
+                    if (nft.attributes) {
+                        nft.attributes.forEach(attr => {
+                            if (!traitCounts[attr.trait_type]) traitCounts[attr.trait_type] = {};
+                            traitCounts[attr.trait_type][attr.value] = (traitCounts[attr.trait_type][attr.value] || 0) + 1;
+                            
+                            if (attr.trait_type === 'Inhabitant') {
+                                const baseName = attr.value.replace(/ (M|F)$/, '');
+                                if (!inhabitantCounts[baseName]) inhabitantCounts[baseName] = { total: 0, male: 0, female: 0 };
+                                inhabitantCounts[baseName].total++;
+                                if (attr.value.endsWith(' M')) inhabitantCounts[baseName].male++;
+                                if (attr.value.endsWith(' F')) inhabitantCounts[baseName].female++;
+                            }
+                            if (attr.trait_type === 'Planet') {
+                                const baseName = attr.value.replace(/ (North|South)$/, '');
+                                if (!planetCounts[baseName]) planetCounts[baseName] = { total: 0, north: 0, south: 0 };
+                                planetCounts[baseName].total++;
+                                if (attr.value.endsWith(' North')) planetCounts[baseName].north++;
+                                if (attr.value.endsWith(' South')) planetCounts[baseName].south++;
+                            }
+                        });
+                    }
+                });
+
+                allNfts.forEach(nft => {
+                    let totalScore = 0;
+                    if (nft.attributes) {
+                        nft.attributes.forEach(attr => {
+                            if (attr.trait_type !== 'Weather' && attr.trait_type !== 'Light') {
+                                const count = traitCounts[attr.trait_type][attr.value];
+                                totalScore += 1 / (count / allNfts.length);
+                            }
+                        });
+                    }
+                    nft.rarityScore = totalScore;
+                });
+
+                allNfts.sort((a, b) => b.rarityScore - a.rarityScore);
+
+                allNfts.forEach((nft, index) => {
+                    nft.rank = index + 1;
+                });
+            };
+            
+            const populateInhabitantFilters = () => {
+                inhabitantFiltersContainer.innerHTML = '';
+                const uniqueInhabitants = Object.keys(inhabitantCounts).sort();
+                
+                uniqueInhabitants.forEach(inhabitantName => {
+                    const counts = inhabitantCounts[inhabitantName];
+                    const container = document.createElement('div');
+                    container.className = 'flex items-center justify-between';
+                    
+                    const toggleLabel = document.createElement('label');
+                    toggleLabel.className = 'toggle-label';
+                    toggleLabel.innerHTML = `<input type="checkbox" class="toggle-checkbox inhabitant-toggle-cb" data-inhabitant="${inhabitantName}"><span class="toggle-switch mr-2"></span><span class="font-medium">${inhabitantName}</span>`;
+                    
+                    const sliderContainer = document.createElement('div');
+                    sliderContainer.className = 'flex flex-col items-center';
+                    sliderContainer.innerHTML = `<span class="text-xs text-gray-400 h-4 inhabitant-count" data-inhabitant-count="${inhabitantName}">${counts.total}</span><div class="direction-slider-container"><span class="text-xs text-gray-400">M</span><input type="range" min="0" max="2" value="1" class="direction-slider gender-slider" data-inhabitant-gender="${inhabitantName}" disabled><span class="text-xs text-gray-400">F</span></div>`;
+                    
+                    container.appendChild(toggleLabel);
+                    container.appendChild(sliderContainer);
+                    inhabitantFiltersContainer.appendChild(container);
+
+                    container.addEventListener('mouseenter', (e) => showPreviewTile(e, 'Inhabitant', inhabitantName));
+                    container.addEventListener('mouseleave', hidePreviewTile);
+                });
+
+                document.querySelectorAll('.inhabitant-toggle-cb').forEach(toggle => {
+                    toggle.addEventListener('change', (e) => {
+                        const slider = e.target.closest('.flex').querySelector('.gender-slider');
+                        slider.disabled = !e.target.checked;
+                        handleFilterChange();
+                    });
+                });
+
+                document.querySelectorAll('.gender-slider').forEach(slider => {
+                    slider.addEventListener('input', (e) => {
+                        updateFilterCounts(filteredNfts);
+                        handleFilterChange();
+                    });
+                });
+            };
+
+            const populatePlanetFilters = () => {
+                const planetNames = Object.keys(planetCounts).sort();
+                planetFiltersContainer.innerHTML = '';
+                planetNames.forEach(planetName => {
+                    const counts = planetCounts[planetName];
+                    const container = document.createElement('div');
+                    container.className = 'flex items-center justify-between';
+                    
+                    const toggleLabel = document.createElement('label');
+                    toggleLabel.className = 'toggle-label';
+                    toggleLabel.innerHTML = `<input type="checkbox" class="toggle-checkbox planet-toggle-cb" data-planet="${planetName}"><span class="toggle-switch mr-2"></span><span class="font-medium">${planetName}</span>`;
+                    
+                    const sliderContainer = document.createElement('div');
+                    sliderContainer.className = 'flex flex-col items-center';
+                    const hasDirections = counts.north > 0 || counts.south > 0;
+                    sliderContainer.innerHTML = `<span class="text-xs text-gray-400 h-4 planet-count" data-planet-count="${planetName}">${counts.total}</span><div class="direction-slider-container"><span class="text-xs ${hasDirections ? 'text-gray-400' : 'text-gray-600'}">N</span><input type="range" min="0" max="2" value="1" class="direction-slider" data-planet-direction="${planetName}" ${!hasDirections ? 'disabled' : ''}><span class="text-xs ${hasDirections ? 'text-gray-400' : 'text-gray-600'}">S</span></div>`;
+                    
+                    container.appendChild(toggleLabel);
+                    container.appendChild(sliderContainer);
+                    planetFiltersContainer.appendChild(container);
+
+                    container.addEventListener('mouseenter', (e) => showPreviewTile(e, 'Planet', planetName));
+                    container.addEventListener('mouseleave', hidePreviewTile);
+                });
+                document.querySelectorAll('.planet-toggle-cb, .direction-slider').forEach(el => {
+                    el.addEventListener('change', handleFilterChange);
+                    if (el.classList.contains('direction-slider')) {
+                        el.addEventListener('input', () => updateFilterCounts(filteredNfts));
+                    }
+                });
+            };
+            
+            const populateTraitFilters = () => {
+                traitFiltersContainer.innerHTML = '';
+                rarityFilterPlaceholder.innerHTML = '';
+
+                const createMultiSelect = (traitType, values) => {
+                    const container = document.createElement('div');
+                    container.className = 'multi-select-container';
+                    let optionsHtml = '';
+                    values.forEach(value => {
+                        const style = value === 'Phoenix Rising' ? 'style="color: #f97316; font-weight: bold;"' : '';
+                        optionsHtml += `<label ${style}><input type="checkbox" class="multi-select-checkbox" data-trait="${traitType}" value="${value}"> <span class="trait-value">${value}</span> (<span class="trait-count">0</span>)</label>`;
+                    });
+                    container.innerHTML = `<label class="block text-sm font-medium text-gray-300 mb-1">${traitType}</label><button type="button" class="multi-select-button"><span>All ${traitType}s</span><svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg></button><div class="multi-select-dropdown hidden">${optionsHtml}</div>`;
+                    const button = container.querySelector('.multi-select-button');
+                    const dropdown = container.querySelector('.multi-select-dropdown');
+                    button.addEventListener('click', (e) => { e.stopPropagation(); closeAllDropdowns(dropdown); dropdown.classList.toggle('hidden'); });
+                    dropdown.addEventListener('change', () => { updateMultiSelectButtonText(container); handleFilterChange(); });
+
+                    if (traitType === 'Object') {
+                        dropdown.querySelectorAll('label').forEach(label => {
+                            const checkbox = label.querySelector('input');
+                            label.addEventListener('mouseenter', (e) => showPreviewTile(e, 'Object', checkbox.value));
+                            label.addEventListener('mouseleave', hidePreviewTile);
+                        });
+                    }
+                    return container;
+                };
+
+                const allTraitElements = {};
+                const rarityValues = Object.keys(traitCounts['Rarity'] || {}).sort((a, b) => Number(b) - Number(a));
+                allTraitElements['Rarity'] = createMultiSelect('Rarity', rarityValues);
+                rarityFilterPlaceholder.appendChild(allTraitElements['Rarity']);
+
+                filterLayoutOrder.forEach(traitType => {
+                    let values = Object.keys(traitCounts[traitType] || {}).sort();
+                    if (traitType === 'Object' || traitType === 'Weather' || traitType === 'Light') {
+                        values.sort((a, b) => traitCounts[traitType][a] - traitCounts[traitType][b]);
+                    }
+                    if (traitType === 'Object') {
+                        const phoenixIndex = values.indexOf('Phoenix Rising');
+                        if (phoenixIndex > -1) { const [phoenixRising] = values.splice(phoenixIndex, 1); values.unshift(phoenixRising); }
+                    }
+                    traitFiltersContainer.appendChild(createMultiSelect(traitType, values));
+                });
+                
+                document.querySelectorAll('.multi-select-checkbox').forEach(el => el.addEventListener('change', handleFilterChange));
+            };
+
+            const populateTraitToggles = () => {
+                traitTogglesContainer.innerHTML = '';
+                traitOrder.forEach(traitType => {
+                    const label = document.createElement('label');
+                    label.className = 'toggle-label';
+                    label.innerHTML = `<input type="checkbox" class="toggle-checkbox trait-toggle" data-trait="${traitType}" ${defaultTraitsOn.includes(traitType) ? 'checked' : ''}><span class="toggle-switch mr-2"></span><span>${traitType}</span>`;
+                    traitTogglesContainer.appendChild(label);
+                });
+                document.querySelectorAll('.trait-toggle').forEach(el => el.addEventListener('change', () => displayPage(currentPage)));
+            };
+
+            const applyFiltersAndSort = () => {
+                let tempNfts = [...allNfts];
+                
+                const activePlanetFilters = [];
+                document.querySelectorAll('.planet-toggle-cb:checked').forEach(cb => {
+                    const planetName = cb.dataset.planet;
+                    const slider = document.querySelector(`.direction-slider[data-planet-direction="${planetName}"]`);
+                    activePlanetFilters.push({ name: planetName, direction: slider.value });
+                });
+                if (activePlanetFilters.length > 0) {
+                    tempNfts = tempNfts.filter(nft => {
+                        if (!nft.attributes) return false;
+                        const planetAttr = nft.attributes.find(a => a.trait_type === 'Planet');
+                        if (!planetAttr) return false;
+                        return activePlanetFilters.some(filter => {
+                            const planetValue = planetAttr.value;
+                            if (filter.direction === '1') return planetValue.startsWith(filter.name);
+                            if (filter.direction === '0') return planetValue === `${filter.name} North`;
+                            if (filter.direction === '2') return planetValue === `${filter.name} South`;
+                            return false;
+                        });
+                    });
+                }
+
+                const activeInhabitantFilters = [];
+                document.querySelectorAll('.inhabitant-toggle-cb:checked').forEach(cb => {
+                    const inhabitantName = cb.dataset.inhabitant;
+                    const slider = document.querySelector(`.gender-slider[data-inhabitant-gender="${inhabitantName}"]`);
+                    activeInhabitantFilters.push({ name: inhabitantName, gender: slider.value });
+                });
+                if (activeInhabitantFilters.length > 0) {
+                    tempNfts = tempNfts.filter(nft => {
+                        if (!nft.attributes) return false;
+                        const inhabitantAttr = nft.attributes.find(a => a.trait_type === 'Inhabitant');
+                        if (!inhabitantAttr) return false;
+                        return activeInhabitantFilters.some(filter => {
+                            if (!inhabitantAttr.value.startsWith(filter.name)) return false;
+                            if (filter.gender === '1') return true;
+                            if (filter.gender === '0') return inhabitantAttr.value.endsWith(' M');
+                            if (filter.gender === '2') return inhabitantAttr.value.endsWith(' F');
+                            return false;
+                        });
+                    });
+                }
+                
+                const searchTerm = searchInput.value;
+                if (searchTerm) tempNfts = tempNfts.filter(nft => nft.id.toString() === searchTerm);
+                
+                document.querySelectorAll('.multi-select-container').forEach(container => {
+                    const traitElement = container.querySelector('[data-trait]');
+                    if (!traitElement) return;
+                    const trait = traitElement.dataset.trait;
+                    let selectedValues = [];
+                    container.querySelectorAll('.multi-select-checkbox:checked').forEach(cb => selectedValues.push(cb.value));
+                    if (selectedValues.length === 0) return;
+                    tempNfts = tempNfts.filter(nft => nft.attributes && nft.attributes.some(attr => attr.trait_type === trait && selectedValues.includes(attr.value.toString())));
+                });
+
+                const sortValue = sortSelect.value;
+                if (sortValue === 'asc') {
+                    tempNfts.sort((a, b) => a.rank - b.rank);
+                } else if (sortValue === 'desc') {
+                    tempNfts.sort((a, b) => b.rank - a.rank);
+                } else if (sortValue === 'id') {
+                    tempNfts.sort((a, b) => a.id - b.id);
+                }
+
+                filteredNfts = tempNfts;
+                resultsCount.textContent = filteredNfts.length;
+                updateFilterCounts(filteredNfts);
+                displayPage(1);
+            };
+            
+            const handleFilterChange = () => { applyFiltersAndSort(); updateUrlState(); };
+
+            const updateUrlState = () => {
+                const params = new URLSearchParams();
+                if (searchInput.value) params.set('id', searchInput.value);
+                if (sortSelect.value !== 'asc') params.set('sort', sortSelect.value);
+
+                document.querySelectorAll('.multi-select-container').forEach(container => {
+                    const traitElement = container.querySelector('[data-trait]');
+                    if (!traitElement) return;
+                    const trait = traitElement.dataset.trait;
+                    let selectedValues = [];
+                    container.querySelectorAll('.multi-select-checkbox:checked').forEach(cb => selectedValues.push(cb.value));
+                    if (selectedValues.length > 0) params.set(trait.toLowerCase(), selectedValues.join(','));
+                });
+
+                const activeInhabitants = [];
+                document.querySelectorAll('.inhabitant-toggle-cb:checked').forEach(cb => {
+                    const name = cb.dataset.inhabitant;
+                    const slider = document.querySelector(`.gender-slider[data-inhabitant-gender="${name}"]`);
+                    activeInhabitants.push(`${name}:${slider.value}`);
+                });
+                if (activeInhabitants.length > 0) params.set('inhabitants', activeInhabitants.join(','));
+
+                const activePlanets = [];
+                document.querySelectorAll('.planet-toggle-cb:checked').forEach(cb => {
+                    const planetName = cb.dataset.planet;
+                    const slider = document.querySelector(`.direction-slider[data-planet-direction="${planetName}"]`);
+                    activePlanets.push(`${planetName}:${slider.value}`);
+                });
+                if (activePlanets.length > 0) params.set('planets', activePlanets.join(','));
+                
+                try {
+                    const newUrl = `${window.location.pathname}?${params.toString()}`;
+                    history.pushState({}, '', newUrl);
+                } catch (e) {
+                    console.warn("Could not update URL state.");
+                }
+            };
+
+            const applyStateFromUrl = () => {
+                const params = new URLSearchParams(window.location.search);
+                searchInput.value = params.get('id') || '';
+                sortSelect.value = params.get('sort') || 'asc';
+                
+                document.querySelectorAll('.multi-select-container').forEach(container => {
+                    const traitElement = container.querySelector('[data-trait]');
+                    if (!traitElement) return;
+                    const trait = traitElement.dataset.trait.toLowerCase();
+                    if (!params.has(trait)) return;
+                    const values = params.get(trait).split(',');
+                    container.querySelectorAll('.multi-select-checkbox').forEach(cb => {
+                        if (values.includes(cb.value)) cb.checked = true;
+                    });
+                    updateMultiSelectButtonText(container);
+                });
+
+                if (params.has('inhabitants')) {
+                    const inhabitants = params.get('inhabitants').split(',');
+                    inhabitants.forEach(p => {
+                        const [name, gender] = p.split(':');
+                        const checkbox = document.querySelector(`.inhabitant-toggle-cb[data-inhabitant="${name}"]`);
+                        const slider = document.querySelector(`.gender-slider[data-inhabitant-gender="${name}"]`);
+                        if (checkbox) { checkbox.checked = true; slider.disabled = false; }
+                        if (slider) { slider.value = gender; }
+                    });
+                }
+
+                if (params.has('planets')) {
+                    const planets = params.get('planets').split(',');
+                    planets.forEach(p => {
+                        const [name, direction] = p.split(':');
+                        const checkbox = document.querySelector(`.planet-toggle-cb[data-planet="${name}"]`);
+                        const slider = document.querySelector(`.direction-slider[data-planet-direction="${name}"]`);
+                        if (checkbox) checkbox.checked = true;
+                        if (slider) slider.value = direction;
+                    });
+                }
+            };
+            
+            const updateMultiSelectButtonText = (container) => {
+                const buttonSpan = container.querySelector('.multi-select-button span');
+                const traitType = container.querySelector('.multi-select-checkbox').dataset.trait;
+                const checkedCount = container.querySelectorAll('.multi-select-checkbox:checked').length;
+                if (checkedCount === 0) { buttonSpan.textContent = `All ${traitType}s`; } 
+                else { buttonSpan.textContent = `${checkedCount} ${traitType}(s) selected`; }
+            };
+
+            const closeAllDropdowns = (exceptThisOne = null) => {
+                document.querySelectorAll('.multi-select-dropdown').forEach(d => {
+                    if (d !== exceptThisOne) d.classList.add('hidden');
+                });
+            };
+            document.addEventListener('click', () => closeAllDropdowns());
+
+            const displayPage = (page) => {
+                currentPage = page;
+                gallery.innerHTML = '';
+                if (filteredNfts.length === 0) { showLoading(gallery, 'No NFTs match the current filters.'); updatePaginationControls(0); return; }
+                const totalPages = Math.ceil(filteredNfts.length / itemsPerPage);
+                const pageItems = filteredNfts.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+                pageItems.forEach(nft => gallery.appendChild(createNftCard(nft)));
+                updatePaginationControls(totalPages);
+            };
+
+            const createNftCard = (nft) => {
+                const card = document.createElement('div');
+                card.className = 'nft-card bg-gray-800 border border-gray-700 rounded-xl overflow-hidden flex flex-col';
+                card.addEventListener('click', () => showNftDetails(nft));
+                const imageUrl = convertIpfsUrl(nft.thumbnail_image || nft.image); 
+                const newTitle = nft.name.replace('The AllianceDAO NFT', 'AllianceDAO NFT');
+                
+                let traitsHtml = '';
+                const visibleTraits = traitOrder.filter(t => document.querySelector(`.trait-toggle[data-trait="${t}"]`)?.checked);
+
+                visibleTraits.forEach(traitType => {
+                    let value;
+                    if (traitType === 'Rank') {
+                        value = `#${nft.rank}`;
+                    } else {
+                        value = nft.attributes.find(attr => attr.trait_type === traitType)?.value || 'N/A';
+                    }
+                    traitsHtml += `<li class="flex justify-between items-center py-2 px-1 border-b border-gray-700 last:border-b-0"><span class="text-xs font-medium text-cyan-400 uppercase">${traitType}</span><span class="text-sm font-semibold text-white">${value}</span></li>`;
+                });
+
+                card.innerHTML = `<div class="aspect-w-1-aspect-h-1 w-full"><img src="${imageUrl}" alt="${nft.name}" class="w-full h-full" loading="lazy" onerror="this.onerror=null; this.src='https://placehold.co/300x300/1f2937/e5e7eb?text=Image+Error';"></div><div class="p-4 flex-grow flex flex-col"><h2 class="text-lg font-bold text-white mb-3 truncate" title="${newTitle}">${newTitle}</h2><ul class="text-sm flex-grow">${traitsHtml}</ul></div>`;
+                return card;
+            };
+
+            const updatePaginationControls = (totalPages) => {
+                paginationControls.innerHTML = '';
+                if (totalPages <= 1) return;
+                const prevButton = document.createElement('button');
+                prevButton.textContent = 'Previous';
+                prevButton.className = 'pagination-btn';
+                prevButton.disabled = currentPage === 1;
+                prevButton.onclick = () => displayPage(currentPage - 1);
+                paginationControls.appendChild(prevButton);
+                const pageInfo = document.createElement('span');
+                pageInfo.className = 'text-gray-400';
+                pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+                paginationControls.appendChild(pageInfo);
+                const nextButton = document.createElement('button');
+                nextButton.textContent = 'Next';
+                nextButton.className = 'pagination-btn';
+                nextButton.disabled = currentPage === totalPages;
+                nextButton.onclick = () => displayPage(currentPage + 1);
+                paginationControls.appendChild(nextButton);
+            };
+
+            const resetAll = () => {
+                searchInput.value = '';
+                sortSelect.value = 'asc';
+                document.querySelectorAll('.multi-select-container').forEach(container => {
+                    container.querySelectorAll('.multi-select-checkbox').forEach(cb => cb.checked = false);
+                    updateMultiSelectButtonText(container);
+                });
+                document.querySelectorAll('.inhabitant-toggle-cb').forEach(cb => {
+                    cb.checked = false;
+                    const slider = document.querySelector(`.gender-slider[data-inhabitant-gender="${cb.dataset.inhabitant}"]`);
+                    slider.disabled = true;
+                    slider.value = 1;
+                });
+                document.querySelectorAll('.trait-toggle').forEach(toggle => { toggle.checked = defaultTraitsOn.includes(toggle.dataset.trait); });
+                document.querySelectorAll('.planet-toggle-cb').forEach(cb => cb.checked = false);
+                document.querySelectorAll('.direction-slider').forEach(slider => slider.value = 1);
+                handleFilterChange();
+            };
+
+            const updateFilterCounts = (currentNfts) => {
+                const newCounts = {};
+                currentNfts.forEach(nft => {
+                    if (nft.attributes) {
+                        nft.attributes.forEach(attr => {
+                            if (!newCounts[attr.trait_type]) newCounts[attr.trait_type] = {};
+                            newCounts[attr.trait_type][attr.value] = (newCounts[attr.trait_type][attr.value] || 0) + 1;
+                        });
+                    }
+                });
+
+                document.querySelectorAll('.multi-select-container').forEach(container => {
+                    const traitType = container.querySelector('[data-trait]').dataset.trait;
+                    container.querySelectorAll('label').forEach(label => {
+                        const checkbox = label.querySelector('input');
+                        if (!checkbox) return;
+                        const value = checkbox.value;
+                        const countSpan = label.querySelector('.trait-count');
+                        const count = newCounts[traitType]?.[value] || 0;
+                        
+                        countSpan.textContent = count;
+                        
+                        if (count === 0 && !checkbox.checked) {
+                            label.style.opacity = '0.5';
+                            label.style.cursor = 'not-allowed';
+                            checkbox.disabled = true;
+                        } else {
+                            label.style.opacity = '1';
+                            label.style.cursor = 'pointer';
+                            checkbox.disabled = false;
+                        }
+                    });
+                });
+
+                document.querySelectorAll('.inhabitant-count').forEach(countSpan => {
+                    const name = countSpan.dataset.inhabitantCount;
+                    const slider = document.querySelector(`.gender-slider[data-inhabitant-gender="${name}"]`);
+                    const maleCount = currentNfts.filter(nft => nft.attributes && nft.attributes.some(a => a.trait_type === 'Inhabitant' && a.value === `${name} M`)).length;
+                    const femaleCount = currentNfts.filter(nft => nft.attributes && nft.attributes.some(a => a.trait_type === 'Inhabitant' && a.value === `${name} F`)).length;
+                    const totalCount = maleCount + femaleCount;
+
+                    if (slider.value === '0') countSpan.textContent = maleCount;
+                    else if (slider.value === '1') countSpan.textContent = totalCount;
+                    else if (slider.value === '2') countSpan.textContent = femaleCount;
+                });
+
+                document.querySelectorAll('.planet-count').forEach(countSpan => {
+                    const name = countSpan.dataset.planetCount;
+                    const slider = document.querySelector(`.direction-slider[data-planet-direction="${name}"]`);
+                    const northCount = currentNfts.filter(nft => nft.attributes && nft.attributes.some(a => a.trait_type === 'Planet' && a.value === `${name} North`)).length;
+                    const southCount = currentNfts.filter(nft => nft.attributes && nft.attributes.some(a => a.trait_type === 'Planet' && a.value === `${name} South`)).length;
+                    const totalCount = currentNfts.filter(nft => nft.attributes && nft.attributes.some(a => a.trait_type === 'Planet' && a.value.startsWith(name))).length;
+
+                    if (slider.value === '0') countSpan.textContent = northCount;
+                    else if (slider.value === '1') countSpan.textContent = totalCount;
+                    else if (slider.value === '2') countSpan.textContent = southCount;
+                });
+            };
+
+            const findHighestRaritySample = (filterFn) => {
+                return allNfts.filter(filterFn).sort((a, b) => b.rarityScore - a.rarityScore)[0];
+            };
+
+            const showPreviewTile = (event, traitType, value) => {
+                const previewTile = document.getElementById('preview-tile');
+                const container1 = document.getElementById('preview-container-1');
+                const image1 = document.getElementById('preview-image-1');
+                const name1 = document.getElementById('preview-name-1');
+                const container2 = document.getElementById('preview-container-2');
+                const image2 = document.getElementById('preview-image-2');
+                const name2 = document.getElementById('preview-name-2');
+
+                let sample1 = null, sample2 = null;
+
+                if (traitType === 'Object') {
+                    sample1 = findHighestRaritySample(nft => nft.attributes && nft.attributes.some(a => a.trait_type === 'Object' && a.value === value));
+                } else if (traitType === 'Inhabitant' || traitType === 'Planet') {
+                    const slider = event.currentTarget.querySelector('input[type="range"]');
+                    const sliderValue = slider ? slider.value : '1';
+
+                    if (sliderValue === '1') { // Both
+                        const suffix1 = traitType === 'Inhabitant' ? ' M' : ' North';
+                        const suffix2 = traitType === 'Inhabitant' ? ' F' : ' South';
+                        sample1 = findHighestRaritySample(nft => nft.attributes && nft.attributes.some(a => a.trait_type === traitType && a.value === value + suffix1));
+                        sample2 = findHighestRaritySample(nft => nft.attributes && nft.attributes.some(a => a.trait_type === traitType && a.value === value + suffix2));
+                        if (!sample1) sample1 = findHighestRaritySample(nft => nft.attributes && nft.attributes.some(a => a.trait_type === traitType && a.value.startsWith(value)));
+                    } else { // Single selection
+                        const suffix = (traitType === 'Inhabitant' ? (sliderValue === '0' ? ' M' : ' F') : (sliderValue === '0' ? ' North' : ' South'));
+                        sample1 = findHighestRaritySample(nft => nft.attributes && nft.attributes.some(a => a.trait_type === traitType && a.value === value + suffix));
+                    }
+                }
+                
+                if (sample1) {
+                    image1.src = convertIpfsUrl(sample1.thumbnail_image || sample1.image);
+                    name1.textContent = sample1.attributes.find(a => a.trait_type === traitType)?.value || value;
+                    container1.classList.remove('hidden');
+                } else {
+                    container1.classList.add('hidden');
+                }
+
+                if (sample2) {
+                    image2.src = convertIpfsUrl(sample2.thumbnail_image || sample2.image);
+                    name2.textContent = sample2.attributes.find(a => a.trait_type === traitType)?.value || value;
+                    container2.classList.remove('hidden');
+                } else {
+                    container2.classList.add('hidden');
+                }
+
+                if (sample1 || sample2) {
+                    const tileWidth = sample2 ? 330 : 160;
+                    const xOffset = 20;
+                    const yOffset = 10;
+                    let x = event.clientX + xOffset;
+                    let y = event.clientY + yOffset;
+
+                    if (x + tileWidth > window.innerWidth) { x = event.clientX - tileWidth - xOffset; }
+
+                    previewTile.style.left = `${x}px`;
+                    previewTile.style.top = `${y}px`;
+                    previewTile.classList.remove('hidden');
+                }
+            };
+
+            const hidePreviewTile = () => {
+                document.getElementById('preview-tile').classList.add('hidden');
+            };
+
+            const showNftDetails = (nft) => {
+                document.getElementById('modal-image').src = convertIpfsUrl(nft.image);
+                document.getElementById('modal-title').textContent = nft.name.replace('The AllianceDAO NFT', 'AllianceDAO NFT');
+                
+                let traitsHtml = `<div class="flex justify-between text-sm"><span class="text-gray-400">Rank:</span><span class="font-semibold text-white">#${nft.rank}</span></div>`;
+                traitsHtml += nft.attributes
+                    .sort((a, b) => traitOrder.indexOf(a.trait_type) - traitOrder.indexOf(b.trait_type))
+                    .map(attr => `<div class="flex justify-between text-sm"><span class="text-gray-400">${attr.trait_type}:</span><span class="font-semibold text-white">${attr.value}</span></div>`).join('');
+                document.getElementById('modal-traits').innerHTML = traitsHtml;
+                document.getElementById('modal-link').href = convertIpfsUrl(nft.image);
+                
+                const downloadBtn = document.getElementById('download-post-btn');
+                downloadBtn.textContent = 'Download Post';
+                downloadBtn.onclick = () => generateShareImage(nft, downloadBtn);
+
+                nftModal.classList.remove('hidden');
+            };
+
+            const hideNftDetails = () => {
+                nftModal.classList.add('hidden');
+            };
+
+            modalCloseBtn.addEventListener('click', hideNftDetails);
+            nftModal.addEventListener('click', (e) => {
+                if (e.target === nftModal) hideNftDetails();
+            });
+
+            const findRarestTrait = (nft) => {
+                let rarestTrait = null;
+                let minPercentage = 101;
+
+                nft.attributes.forEach(attr => {
+                    if (attr.trait_type === 'Rarity' || attr.trait_type === 'Weather' || attr.trait_type === 'Light') return;
+                    const category = traitCounts[attr.trait_type];
+                    const totalInCategory = Object.values(category).reduce((sum, count) => sum + count, 0);
+                    const percentage = (category[attr.value] / totalInCategory) * 100;
+
+                    if (percentage < minPercentage) {
+                        minPercentage = percentage;
+                        rarestTrait = attr;
+                    }
+                });
+                return rarestTrait;
+            };
+
+            const generateShareImage = (nft, button) => {
+                button.textContent = 'Generating...';
+                const canvas = document.getElementById('share-canvas');
+                const ctx = canvas.getContext('2d');
+                const img = new Image();
+                img.crossOrigin = "anonymous";
+                img.src = convertIpfsUrl(nft.image);
+
+                img.onload = () => {
+                    canvas.width = 1080;
+                    canvas.height = 1080;
+                    ctx.drawImage(img, 0, 0, 1080, 1080);
+
+                    const getTrait = (type) => nft.attributes.find(a => a.trait_type === type)?.value || 'N/A';
+                    
+                    ctx.fillStyle = 'white';
+                    ctx.strokeStyle = 'black';
+                    ctx.lineWidth = 8;
+                    ctx.font = 'bold 48px Inter, sans-serif';
+                    ctx.textAlign = 'left';
+                    
+                    const margin = 40;
+                    ctx.strokeText(`NFT #${nft.id}`, margin, margin + 48);
+                    ctx.fillText(`NFT #${nft.id}`, margin, margin + 48);
+                    
+                    ctx.textAlign = 'right';
+                    ctx.strokeText(`Rank #${nft.rank}`, canvas.width - margin, margin + 48);
+                    ctx.fillText(`Rank #${nft.rank}`, canvas.width - margin, margin + 48);
+
+                    ctx.textAlign = 'left';
+                    ctx.strokeText(getTrait('Planet'), margin, canvas.height - margin);
+                    ctx.fillText(getTrait('Planet'), margin, canvas.height - margin);
+
+                    ctx.textAlign = 'right';
+                    let inhabitantText = getTrait('Inhabitant');
+                    if (inhabitantText.endsWith(' M')) {
+                        inhabitantText = inhabitantText.replace(' M', ' Male');
+                    } else if (inhabitantText.endsWith(' F')) {
+                        inhabitantText = inhabitantText.replace(' F', ' Female');
+                    }
+                    ctx.strokeText(inhabitantText, canvas.width - margin, canvas.height - margin);
+                    ctx.fillText(inhabitantText, canvas.width - margin, canvas.height - margin);
+                    
+                    const bannerHeight = 120;
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+                    ctx.fillRect(0, canvas.height - bannerHeight - 80, canvas.width, bannerHeight);
+
+                    const strength = findRarestTrait(nft);
+                    ctx.fillStyle = 'white';
+                    ctx.textAlign = 'center';
+                    ctx.font = 'bold 40px Inter, sans-serif';
+                    ctx.fillText(`Strength: ${strength.value}`, canvas.width / 2, canvas.height - bannerHeight - 80 + 75);
+
+                    const link = document.createElement('a');
+                    link.download = `AllianceDAO_NFT_${nft.id}.png`;
+                    link.href = canvas.toDataURL('image/png');
+                    link.click();
+                    button.textContent = 'Download Post';
+                };
+                img.onerror = () => {
+                    console.error("Could not load image to generate post for download.");
+                    button.textContent = 'Error';
+                    setTimeout(() => { button.textContent = 'Download Post'; }, 2000);
+                }
+            };
+
+            rarityExplainedBtn.addEventListener('click', () => rarityModal.classList.remove('hidden'));
+            rarityModalCloseBtn.addEventListener('click', () => rarityModal.classList.add('hidden'));
+            rarityModal.addEventListener('click', (e) => {
+                if (e.target === rarityModal) rarityModal.classList.add('hidden');
+            });
+
+            const debouncedFilter = debounce(handleFilterChange, 300);
+            searchInput.addEventListener('input', debouncedFilter);
+            sortSelect.addEventListener('change', handleFilterChange);
+            resetButton.addEventListener('click', resetAll);
+            
+            initializeExplorer();
+        });
+    </script>
+
+</body>
+</html>
+
