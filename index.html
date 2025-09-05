@@ -83,12 +83,13 @@
              transition: all 0.3s ease;
              position: relative;
              overflow: hidden;
+             cursor: pointer;
         }
         .activity-card:hover {
             transform: translateY(-5px);
             border-color: #2dd4bf;
         }
-        .marketplace-link:hover {
+        .marketplace-link:hover .marketplace-text {
             color: #2dd4bf;
         }
         .status-bar {
@@ -135,6 +136,7 @@
             cursor: pointer;
             color: #9ca3af;
             transition: color 0.2s;
+            pointer-events: all; /* Make sure eye icon is clickable */
         }
         .toggle-broken-btn:hover {
             color: white;
@@ -162,23 +164,45 @@
             border-radius: 50%;
             background-color: #ef4444; /* red-500 */
         }
+        
+        /* --- NFT Detail Modal --- */
+        #nftDetailModal {
+            transition: opacity 0.3s ease;
+        }
+        #nftDetailModal.hidden {
+            pointer-events: none;
+        }
+        #nftDetailModal .modal-content {
+            transition: transform 0.3s ease, opacity 0.3s ease;
+        }
+        #nftDetailModal.hidden .modal-content {
+            transform: scale(0.95);
+            opacity: 0;
+        }
     </style>
 </head>
 <body class="antialiased">
 
     <!-- Header Section -->
-    <header class="py-6">
+    <header class="py-4">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
-             <a href="Tutorials.html" class="bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition-transform transform hover:scale-105 w-48 text-center">
-                Tutorials
-            </a>
-            <div class="flex items-center">
-                <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/aDAO%20Logo.svg" alt="Alliance DAO Logo" class="h-10 w-10 mr-4">
-                <span class="text-3xl font-bold text-blue-400">The AllianceDAO</span>
+            <!-- Left: Logo (Not a link on the dashboard page) -->
+            <div class="flex-shrink-0 w-32">
+                <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Alliance%20DAO%20Logo.png" alt="Alliance DAO Logo" class="h-16 w-auto">
             </div>
-            <a href="nft-explorer.html" class="bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white font-bold py-3 px-6 rounded-lg shadow-lg transition-transform transform hover:scale-105 w-48 text-center">
-                NFT Explorer
-            </a>
+            <!-- Center: Navigation Tiles -->
+            <nav class="flex-1 flex justify-center items-center space-x-6">
+                <a href="nft-explorer.html" class="bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-3 px-8 rounded-lg shadow-lg transition-all transform hover:scale-105">
+                    NFT Explorer
+                </a>
+                <a href="Planet-Map.html" class="bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-3 px-8 rounded-lg shadow-lg transition-all transform hover:scale-105">
+                    Galaxy Map
+                </a>
+            </nav>
+            <!-- Right: Terra Logo -->
+            <div class="w-32 flex-shrink-0 flex justify-end">
+                <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Terra.PNG" alt="Terra Logo" class="h-16 w-auto">
+            </div>
         </div>
     </header>
 
@@ -188,7 +212,7 @@
         <!-- Disclaimer Banner -->
         <div id="disclaimer-banner" class="bg-yellow-500/10 border border-yellow-400/30 text-yellow-300 px-4 py-3 rounded-lg relative mb-8 text-center" role="alert">
             <strong class="font-bold">Please Note:</strong>
-            <span class="block sm:inline">This is a static demonstration site. The data shown is from a snapshot taken on September 1, 2025, and is not live.</span>
+            <span class="block sm:inline">This is a static demonstration site. The data shown is from a snapshot taken on <span id="snapshot-date">...</span>, and is not live.</span>
             <span id="close-banner" class="absolute top-0 bottom-0 right-0 px-4 py-3 cursor-pointer">
                 <svg class="fill-current h-6 w-6 text-yellow-400" role="button" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><title>Close</title><path d="M14.348 14.849a1.2 1.2 0 0 1-1.697 0L10 11.819l-2.651 3.029a1.2 1.2 0 1 1-1.697-1.697l2.758-3.15-2.759-3.152a1.2 1.2 0 1 1 1.697-1.697L10 8.183l2.651-3.031a1.2 1.2 0 1 1 1.697 1.697l-2.758 3.152 2.758 3.15a1.2 1.2 0 0 1 0 1.698z"/></svg>
             </span>
@@ -202,11 +226,16 @@
                 <p>A pioneering collection backed by LUNA staking rewards. Your share of the pool grows as others claim theirs.</p>
                 <span class="link-text link-group">Learn More &rarr;</span>
             </a>
-            <a href="Planet-Map.html" class="stat-card info-card rounded-xl group">
-                <i class="fas fa-globe-americas icon"></i>
-                <h3 class="group-hover:text-teal-400">Galaxy Map / Lore</h3>
-                <p>After The Warp scattered them across the galaxy, each NFT captures a traveler's first moments on an unknown world.</p>
-            </a>
+            <div class="flex flex-col gap-4">
+                 <a href="Tutorials.html" class="stat-card info-card rounded-xl group flex-1">
+                     <i class="fas fa-video icon !mb-2"></i>
+                     <h3 class="group-hover:text-teal-400 !mb-0">Tutorials & Guides</h3>
+                </a>
+                <a href="news.html" class="stat-card info-card rounded-xl group flex-1">
+                     <i class="fas fa-newspaper icon !mb-2"></i>
+                     <h3 class="group-hover:text-teal-400 !mb-0">Ecosystem News</h3>
+                </a>
+            </div>
              <div class="flex flex-col gap-4">
                 <a href="Rarity-Explained.html" class="stat-card info-card rounded-xl group flex-1">
                      <i class="fas fa-gem icon !mb-2"></i>
@@ -238,14 +267,13 @@
                     <h3 class="text-base font-semibold text-gray-400">Mint Status</h3>
                     <span>Minted</span>
                 </div>
-                <div class="slider-bar mt-2">
-                    <div class="slider-fill-blue" style="width: 58.28%;"></div>
-                    <div class="slider-fill-gray" style="width: 41.72%;"></div>
+                <div id="mint-slider" class="slider-bar mt-2">
+                    <!-- Slider will be generated by JS -->
                 </div>
                 <div class="flex justify-between text-sm font-bold text-white mt-2">
-                    <span>5,828</span>
-                    <span class="text-center text-cyan-400">41.72% Minted</span>
-                    <span>4,172</span>
+                    <span id="unminted-count">...</span>
+                    <span id="minted-percent" class="text-center text-cyan-400">...</span>
+                    <span id="minted-count">...</span>
                 </div>
             </div>
             <!-- Broken Status -->
@@ -255,16 +283,15 @@
                      <h3 class="text-base font-semibold text-gray-400">Broken Status</h3>
                     <span>Broken</span>
                 </div>
-                <div class="slider-bar mt-2">
-                     <div class="slider-fill-blue" style="width: 89.24%;"></div>
-                    <div class="slider-fill-gray" style="width: 10.76%;"></div>
+                <div id="broken-slider" class="slider-bar mt-2">
+                    <!-- Slider will be generated by JS -->
                 </div>
                 <div class="flex justify-between text-sm font-bold text-white mt-2">
-                    <span>8,924</span>
+                    <span id="unbroken-count">...</span>
                     <div class="text-center">
-                        <p class="text-cyan-400 text-xs">10.76% Broken</p>
+                        <p id="broken-percent" class="text-cyan-400 text-xs">...</p>
                     </div>
-                    <span>1,076</span>
+                    <span id="broken-count">...</span>
                 </div>
             </div>
         </div>
@@ -283,56 +310,56 @@
             <div class="stat-card p-6 rounded-xl text-center flex flex-col justify-between h-full bg-green-500/10 border-green-500/30">
                 <div>
                     <h3 class="text-md font-medium text-green-300">DAODAO Staked</h3>
-                    <p class="text-3xl font-bold text-white mt-2">1,468</p>
+                    <p id="daodao-staked" class="text-3xl font-bold text-white mt-2">...</p>
                 </div>
-                <p id="daodao-change" class="text-sm font-semibold mt-1 text-green-400">+61 (30d)</p>
+                <p id="daodao-change" class="text-sm font-semibold mt-1 text-green-400">...</p>
             </div>
             <a href="https://daodao.zone/dao/terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm/members" target="_blank" rel="noopener noreferrer" class="stat-card p-6 rounded-xl text-center group flex flex-col justify-between h-full bg-green-500/10 border-green-500/30">
                 <div>
                     <h3 class="text-md font-medium text-green-300">DAO Members</h3>
-                    <p id="dao-members" class="text-3xl font-bold text-white mt-2">158</p>
+                    <p id="dao-members" class="text-3xl font-bold text-white mt-2">...</p>
                 </div>
-                 <p id="dao-members-change" class="text-sm font-semibold mt-1 text-green-400">+2 (30d)</p>
+                 <p id="dao-members-change" class="text-sm font-semibold mt-1 text-green-400">...</p>
             </a>
             <div class="stat-card p-6 rounded-xl text-center flex flex-col justify-between h-full bg-green-500/10 border-green-500/30">
                 <div>
                     <h3 class="text-md font-medium text-green-300">Enterprise Staked</h3>
-                    <p class="text-3xl font-bold text-white mt-2">434</p>
+                    <p id="enterprise-staked" class="text-3xl font-bold text-white mt-2">...</p>
                 </div>
-                <p id="enterprise-change" class="text-sm font-semibold mt-1 text-green-400">-1 (30d)</p>
+                <p id="enterprise-change" class="text-sm font-semibold mt-1 text-green-400">...</p>
             </div>
             <div class="stat-card p-6 rounded-xl text-center flex flex-col justify-between h-full">
                 <div>
                     <h3 id="live-proposals-title" class="text-md font-medium text-gray-400 flex justify-center items-center gap-2">Live Proposals</h3>
-                    <p id="live-proposals-count" class="text-3xl font-bold text-white mt-2">1</p>
+                    <p id="live-proposals-count" class="text-3xl font-bold text-white mt-2">...</p>
                 </div>
                 <a href="https://daodao.zone/dao/terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm/proposals" target="_blank" rel="noopener noreferrer" class="text-sm font-semibold mt-1 text-cyan-400 hover:underline">Vote on DAODAO</a>
             </div>
             <div class="stat-card p-6 rounded-xl text-center flex flex-col justify-between h-full bg-green-500/10 border-green-500/30">
                 <div>
                     <h3 class="text-md font-medium text-green-300">Backing in LUNA</h3>
-                    <p id="backing-per-nft" class="text-3xl font-bold text-white mt-2">109.97</p>
+                    <p id="backing-per-nft" class="text-3xl font-bold text-white mt-2">...</p>
                 </div>
-                 <p id="backing-per-nft-change" class="text-xs font-semibold mt-1 text-green-400">Avg. Daily Gain / NFT: +0.21 LUNA</p>
+                 <p id="backing-per-nft-change" class="text-xs font-semibold mt-1 text-green-400">...</p>
             </div>
             <a href="https://daodao.zone/dao/terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm/apps?url=https%3A%2F%2Fwww.erisprotocol.com" target="_blank" rel="noopener noreferrer" class="stat-card p-6 rounded-xl text-center group flex flex-col justify-between h-full">
                 <div>
                     <h3 class="text-md font-medium text-gray-400 group-hover:text-teal-400">DAO TLA VP</h3>
-                    <p class="text-3xl font-bold text-white mt-2">508,000</p>
+                    <p id="dao-tla-vp" class="text-3xl font-bold text-white mt-2">...</p>
                 </div>
                 <p class="text-xs font-semibold mt-1 text-gray-500 invisible">placeholder</p>
             </a>
             <div class="stat-card p-6 rounded-xl text-center flex flex-col justify-between h-full">
                 <div>
                     <h3 class="text-md font-medium text-gray-400">DAO Treasury</h3>
-                    <p class="text-3xl font-bold text-white mt-2">$149,579</p>
+                    <p id="dao-treasury" class="text-3xl font-bold text-white mt-2">...</p>
                 </div>
                 <p class="text-xs font-semibold mt-1 text-gray-500">Un-minted Backing (@ Avg Price)</p>
             </div>
             <div class="stat-card p-6 rounded-xl text-center flex flex-col justify-between h-full">
                 <div>
                     <h3 class="text-md font-medium text-gray-400">LUNA Holdings</h3>
-                    <p class="text-3xl font-bold text-white mt-2">955,163</p>
+                    <p id="luna-holdings" class="text-3xl font-bold text-white mt-2">...</p>
                 </div>
                  <p class="text-xs font-semibold mt-1 text-gray-500">Un-minted Backing Only</p>
             </div>
@@ -342,74 +369,43 @@
         <div class="mt-12">
             <div class="stat-card rounded-xl p-6 mb-8">
                  <h2 class="text-3xl font-bold text-white text-center">Marketplace Activity</h2>
-                 <p class="text-lg text-cyan-400 font-semibold text-center">Listed NFTs: ~47</p>
+                 <p id="listed-nfts" class="text-lg text-cyan-400 font-semibold text-center">...</p>
                  <div class="mt-4 grid grid-cols-2 md:grid-cols-4 gap-6 text-center border-t border-gray-700 pt-4">
                     <div>
                         <p class="text-md font-medium text-gray-400">Last 30 Days Sales (BBL)</p>
-                        <p class="text-2xl font-bold text-white">18</p>
+                        <p id="bbl-sales-30d" class="text-2xl font-bold text-white">...</p>
                     </div>
                      <div>
                         <p class="text-md font-medium text-gray-400">All Time Sales Volume (BBL)</p>
-                        <p class="text-2xl font-bold text-white">211,153 bLUNA</p>
+                        <p id="bbl-volume" class="text-2xl font-bold text-white">...</p>
                     </div>
                     <div>
                         <p class="text-md font-medium text-gray-400">Last 30 Days Sales (Boost)</p>
-                        <p class="text-2xl font-bold text-white">6</p>
+                        <p id="boost-sales-30d" class="text-2xl font-bold text-white">...</p>
                     </div>
                      <div>
                         <p class="text-md font-medium text-gray-400">All Time Sales (Boost)</p>
-                        <p class="text-2xl font-bold text-white">Unknown</p>
+                        <p id="boost-volume" class="text-2xl font-bold text-white">...</p>
                     </div>
                 </div>
             </div>
 
             <!-- BBL Marketplace -->
             <div class="mb-12">
-                <h3 class="text-2xl font-bold text-white mb-6 text-center">
-                    <a href="https://app.backbonelabs.io/nfts/marketplace/collections/terra1phr9fngjv7a8an4dhmhd0u0f98wazxfnzccqtyheq4zqrrp4fpuqw3apw9" target="_blank" rel="noopener noreferrer" class="marketplace-link">
-                        app.Backbonelabs.io
-                        <span class="text-sm text-gray-400 block">(Click to Visit)</span>
-                    </a>
-                </h3>
+                 <a href="https://app.backbonelabs.io/nfts/marketplace/collections/terra1phr9fngjv7a8an4dhmhd0u0f98wazxfnzccqtyheq4zqrrp4fpuqw3apw9" target="_blank" rel="noopener noreferrer" class="marketplace-link flex items-center justify-center mb-6 group">
+                    <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/BBL%20Logo.png" alt="BackBone Labs Logo" class="h-10 w-auto">
+                </a>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div>
                         <h4 class="text-lg font-semibold text-gray-300 mb-4 text-center">Recently Sold</h4>
-                        <div class="grid grid-cols-2 gap-4">
-                            <div class="activity-card rounded-lg">
-                                <img src="https://dweb.link/ipfs/bafybeiek4cv2w6ot767nriveyzagejnvzpw3qr2b7iyc6ccddid6jj77za/1473.png" alt="NFT #1473" class="w-full h-auto">
-                                <div class="status-bar p-2 flex justify-between items-center"><span class="font-bold text-md text-white">NFT #1473</span><span class="status-text status-liquid">Liquid</span></div>
-                                <div class="p-3 text-center"><p class="text-sm text-cyan-400 font-semibold">249 bLUNA</p></div>
-                            </div>
-                            <div class="activity-card rounded-lg">
-                                <img src="https://dweb.link/ipfs/bafybeiek4cv2w6ot767nriveyzagejnvzpw3qr2b7iyc6ccddid6jj77za/3353.png" alt="NFT #3353" class="w-full h-auto">
-                                <div class="status-bar p-2 flex justify-between items-center"><span class="font-bold text-md text-white">NFT #3353</span><span class="status-text status-liquid">Liquid</span></div>
-                                <div class="p-3 text-center"><p class="text-sm text-cyan-400 font-semibold">299 bLUNA</p></div>
-                            </div>
+                        <div id="bbl-sold-container" class="grid grid-cols-2 gap-4">
+                            <!-- BBL Sold Cards Generated by JS -->
                         </div>
                     </div>
                     <div>
                         <h4 class="text-lg font-semibold text-gray-300 mb-4 text-center">Recently Listed</h4>
-                        <div class="grid grid-cols-2 gap-4">
-                            <div class="activity-card rounded-lg">
-                                <img src="https://dweb.link/ipfs/bafybeiek4cv2w6ot767nriveyzagejnvzpw3qr2b7iyc6ccddid6jj77za/2633.png" alt="NFT #2633" class="w-full h-auto">
-                                <div class="status-bar p-2 flex justify-between items-center"><span class="font-bold text-md text-white">NFT #2633</span><span class="status-text status-bbl">BBL</span></div>
-                                <div class="p-3 text-center"><p class="text-sm text-cyan-400 font-semibold">56,000 bLUNA</p></div>
-                            </div>
-                            <div class="activity-card rounded-lg">
-                                <div class="relative">
-                                    <img src="https://dweb.link/ipfs/bafybeiek4cv2w6ot767nriveyzagejnvzpw3qr2b7iyc6ccddid6jj77za/615.png" alt="NFT #615" class="w-full h-auto">
-                                    <div class="broken-overlay"><div class="broken-banner">Broken</div></div>
-                                </div>
-                                <div class="status-bar p-2 flex justify-between items-center">
-                                    <span class="font-bold text-md text-white">NFT #615</span>
-                                    <span class="status-text status-bbl flex items-center gap-2">BBL 
-                                        <span class="toggle-broken-btn" title="Show Original Image">
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-eye" viewBox="0 0 16 16"><path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8zM1.173 8a13.133 13.133 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13.133 13.133 0 0 1 14.828 8c-.816 1.097-2.28 2.48-4.232 3.489C8.68 12.83 7.12 13.5 5 13.5 2.88 13.5 1.321 12.83.172 11.489A13.133 13.133 0 0 1 1.172 8z"/><path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0z"/></svg>
-                                        </span>
-                                    </span>
-                                </div>
-                                <div class="p-3 text-center"><p class="text-sm text-cyan-400 font-semibold">199 bLUNA</p></div>
-                            </div>
+                        <div id="bbl-listed-container" class="grid grid-cols-2 gap-4">
+                            <!-- BBL Listed Cards Generated by JS -->
                         </div>
                     </div>
                 </div>
@@ -417,55 +413,53 @@
 
             <!-- Boost Marketplace -->
             <div>
-                 <h3 class="text-2xl font-bold text-white mb-6 text-center">
-                     <a href="https://www.boostdao.io/ignite/permissionless-terra" target="_blank" rel="noopener noreferrer" class="marketplace-link">
-                         BoostDAO.io
-                         <span class="text-sm text-gray-400 block">(Click to Visit)</span>
-                     </a>
-                 </h3>
+                 <a href="https://www.boostdao.io/ignite/permissionless-terra" target="_blank" rel="noopener noreferrer" class="marketplace-link flex items-center justify-center mb-6 group">
+                    <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Boost%20Logo.png" alt="Boost Logo" class="h-10 w-auto mr-4">
+                    <h3 class="text-2xl font-bold text-white group-hover:text-cyan-400 transition-colors marketplace-text">Boost Ignite</h3>
+                 </a>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div>
                         <h4 class="text-lg font-semibold text-gray-300 mb-4 text-center">Recently Sold</h4>
-                        <div class="grid grid-cols-2 gap-4">
-                            <div class="activity-card rounded-lg">
-                                <img src="https://dweb.link/ipfs/bafybeiek4cv2w6ot767nriveyzagejnvzpw3qr2b7iyc6ccddid6jj77za/4781.png" alt="NFT #4781" class="w-full h-auto">
-                                <div class="status-bar p-2 flex justify-between items-center"><span class="font-bold text-md text-white">NFT #4781</span><span class="status-text status-liquid">Liquid</span></div>
-                                <div class="p-3 text-center"><p class="text-sm text-cyan-400 font-semibold">20 SOLID</p></div>
-                            </div>
-                            <div class="activity-card rounded-lg">
-                                <div class="relative">
-                                    <img src="https://dweb.link/ipfs/bafybeiek4cv2w6ot767nriveyzagejnvzpw3qr2b7iyc6ccddid6jj77za/615.png" alt="NFT #615" class="w-full h-auto">
-                                    <div class="broken-overlay"><div class="broken-banner">Broken</div></div>
-                                </div>
-                                <div class="status-bar p-2 flex justify-between items-center">
-                                    <span class="font-bold text-md text-white">NFT #615</span>
-                                    <span class="status-text status-liquid flex items-center gap-2">LIQUID
-                                         <span class="toggle-broken-btn" title="Show Original Image">
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-eye" viewBox="0 0 16 16"><path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8zM1.173 8a13.133 13.133 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13.133 13.133 0 0 1 14.828 8c-.816 1.097-2.28 2.48-4.232 3.489C8.68 12.83 7.12 13.5 5 13.5 2.88 13.5 1.321 12.83.172 11.489A13.133 13.133 0 0 1 1.172 8z"/><path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0z"/></svg>
-                                        </span>
-                                    </span>
-                                </div>
-                                <div class="p-3 text-center"><p class="text-sm text-cyan-400 font-semibold">10 SOLID</p></div>
-                            </div>
+                        <div id="boost-sold-container" class="grid grid-cols-2 gap-4">
+                            <!-- Boost Sold Cards Generated by JS -->
                         </div>
                     </div>
                     <div>
                         <h4 class="text-lg font-semibold text-gray-300 mb-4 text-center">Recently Listed</h4>
-                        <div class="grid grid-cols-2 gap-4">
-                            <div class="activity-card rounded-lg">
-                                <img src="https://dweb.link/ipfs/bafybeiek4cv2w6ot767nriveyzagejnvzpw3qr2b7iyc6ccddid6jj77za/5258.png" alt="NFT #5258" class="w-full h-auto">
-                                <div class="status-bar p-2 flex justify-between items-center"><span class="font-bold text-md text-white">NFT #5258</span><span class="status-text status-boost">Boost</span></div>
-                                <div class="p-3 text-center"><p class="text-sm text-cyan-400 font-semibold">60 SOLID</p></div></div>
-                            <div class="activity-card rounded-lg">
-                                <img src="https://dweb.link/ipfs/bafybeiek4cv2w6ot767nriveyzagejnvzpw3qr2b7iyc6ccddid6jj77za/3826.png" alt="NFT #3826" class="w-full h-auto">
-                                <div class="status-bar p-2 flex justify-between items-center"><span class="font-bold text-md text-white">NFT #3826</span><span class="status-text status-boost">Boost</span></div>
-                                <div class="p-3 text-center"><p class="text-sm text-cyan-400 font-semibold">70 SOLID</p></div></div>
+                        <div id="boost-listed-container" class="grid grid-cols-2 gap-4">
+                            <!-- Boost Listed Cards Generated by JS -->
                         </div>
                     </div>
                 </div>
             </div>
         </div>
     </main>
+    
+    <!-- NFT Detail Modal -->
+    <div id="nftDetailModal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50 hidden opacity-0">
+        <div class="modal-content bg-[#1a1a1a] border border-gray-700 rounded-xl shadow-xl w-full max-w-4xl relative text-white opacity-0 scale-95">
+            <button id="closeNftDetailModal" class="absolute top-4 right-4 text-gray-400 hover:text-white text-3xl">&times;</button>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 p-8">
+                <div>
+                    <img id="modalNftImage" src="" alt="NFT Image" class="w-full h-auto rounded-lg">
+                </div>
+                <div>
+                    <div class="flex items-center gap-4 mb-2">
+                        <h3 id="modalNftTitle" class="text-3xl font-bold text-cyan-400"></h3>
+                        <span id="modalNftRank" class="bg-cyan-500 text-white text-sm font-bold px-3 py-1 rounded-full"></span>
+                    </div>
+                    <p id="modalNftPrice" class="text-xl text-gray-300 mb-6"></p>
+                    <div class="space-y-3 text-left">
+                         <h4 class="text-xl font-semibold border-b border-gray-600 pb-2 mb-2">Traits</h4>
+                         <div id="modalNftTraits" class="space-y-2">
+                            <!-- Traits will be injected here by JS -->
+                         </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
 
     <footer class="border-t border-gray-800 mt-12 py-8">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-gray-500 text-sm">
@@ -481,7 +475,7 @@
                 <div>
                     <h4 class="font-bold text-gray-300 mb-2">Data Source</h4>
                     <p>All data on this site is from a manual snapshot and is not live. The plan is to automate this process in the future.</p>
-                    <p class="mt-2">Last Manual Update: <span id="last-updated" class="font-semibold">09/01/25 08:00 UTC</span></p>
+                    <p class="mt-2">Last Manual Update: <span id="last-updated">...</span></p>
                 </div>
                 <div>
                     <h4 class="font-bold text-gray-300 mb-2">Transparency</h4>
@@ -491,89 +485,259 @@
             </div>
         </div>
     </footer>
+    
+    <!-- New Quick Links Footer -->
+    <footer class="py-6">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-gray-400">
+            <div class="flex justify-center items-center space-x-6 mb-4">
+                <a href="https://t.me/The_AllianceDAO" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors">
+                    <i class="fab fa-telegram-plane text-3xl"></i>
+                </a>
+                <a href="https://x.com/The_AllianceDAO" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors">
+                    <i class="fab fa-twitter text-3xl"></i>
+                </a>
+            </div>
+            <div class="flex justify-center items-center space-x-6 text-sm">
+                <a href="Tutorials.html" class="hover:text-white hover:underline transition-colors">Tutorials</a>
+                <a href="Links.html" class="hover:text-white hover:underline transition-colors">Official Links</a>
+            </div>
+        </div>
+    </footer>
+
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            // --- DATA SNAPSHOT ---
-            // This data is a hardcoded snapshot and is NOT live.
-            // When the backend is built, this data will be loaded from a JSON file.
-            
-            // Key Metrics
-            const currentDaoDaoStaked = 1468;
-            const thirtyDaysAgoDaoDaoStaked = currentDaoDaoStaked - 61; // Calculated for change
-            const currentEnterpriseStaked = 434;
-            const thirtyDaysAgoEnterpriseStaked = currentEnterpriseStaked + 1; // Calculated for change
-            const liveProposalsCount = 1; // Updated to 1
-            const daoMembersCount = 158;
-            const daoMembersChange = 2; // New members in the last 30 days
-
-            // Tokenomics
-            const backingPerNft = 109.97;
-            const backingChange24h = 0.21;
-            
-            // --- Perform Calculations ---
-            const daodaoChange = currentDaoDaoStaked - thirtyDaysAgoDaoDaoStaked;
-            const enterpriseChange = currentEnterpriseStaked - thirtyDaysAgoEnterpriseStaked;
-
-            // --- Helper function to format positive/negative numbers ---
-            const formatChange = (value) => {
-                const roundedValue = Math.round(value);
-                return roundedValue > 0 ? `+${roundedValue}` : roundedValue;
+            // --- CENTRAL DATA OBJECT ---
+            // To update the site, you only need to change the values in this object.
+            const dashboardData = {
+              "lastUpdated": "2025-09-01T08:00:00Z",
+              "statusSliders": {
+                "mint": { "unMinted": 5828, "minted": 4172, "percentMinted": "41.72%" },
+                "broken": { "unBroken": 8924, "broken": 1076, "percentBroken": "10.76%" }
+              },
+              "keyMetrics": {
+                "daodaoStaked": 1468, "daodaoChange30d": 61,
+                "daoMembers": 158, "daoMembersChange30d": 2,
+                "enterpriseStaked": 434, "enterpriseChange30d": -1,
+                "liveProposals": 1,
+                "backingInLuna": 109.97, "avgDailyGain": 0.21,
+                "daoTlaVp": "508,000",
+                "daoTreasuryUSD": "$149,579",
+                "lunaHoldings": "955,163"
+              },
+              "marketplace": {
+                "listedNfts": "~47",
+                "bblSales30d": 18, "bblVolumeAllTime": "211,153 bLUNA",
+                "boostSales30d": 6, "boostVolumeAllTime": "Unknown",
+                // --- NFT METADATA ---
+                // To update marketplace NFTs, change the id, price, broken status, and rank here.
+                "bbl": {
+                  "sold": [ { "id": "1473", "price": "249 bLUNA", "broken": false }, { "id": "3353", "price": "299 bLUNA", "broken": false } ],
+                  "listed": [ { "id": "2633", "price": "56,000 bLUNA", "broken": false }, { "id": "615", "price": "199 bLUNA", "broken": true } ]
+                },
+                "boost": {
+                  "sold": [ { "id": "4781", "price": "20 SOLID", "broken": false }, { "id": "615", "price": "10 SOLID", "broken": true } ],
+                  "listed": [ { "id": "5258", "price": "60 SOLID", "broken": false }, { "id": "3826", "price": "70 SOLID", "broken": false } ]
+                },
+                "nftTraits": {
+                    "1473": { "rank": 3456, "Background": "Lusa North", "Light": "Lusa", "Weather": "Lusa Rain", "Object": "Kitan Ice Staff", "Inhabitant": "Ozaran M" },
+                    "3353": { "rank": 7890, "Background": "Crutha North", "Light": "Crutha", "Weather": "Crutha Smog", "Object": "Pampan Grass Sword", "Inhabitant": "Ozaran F" },
+                    "2633": { "rank": 456, "Background": "Kita South", "Light": "Kita", "Weather": "Kita Snow", "Object": "Cristallian Sword", "Inhabitant": "Pampan M" },
+                    "615": { "rank": 123, "Background": "Ozara South", "Light": "Ozara", "Weather": "Ozara Sandstorm", "Object": "Pampan Grass Staff", "Inhabitant": "Gredican M" },
+                    "4781": { "rank": 1234, "Background": "Crutha South", "Light": "Crutha", "Weather": "Crutha Smog", "Object": "Ice Cleaver", "Inhabitant": "Lusan F" },
+                    "5258": { "rank": 8123, "Background": "Pampas North", "Light": "Pampas", "Weather": "Pampas Rain", "Object": "Minasan Bow", "Inhabitant": "Zandoan M" },
+                    "3826": { "rank": 2345, "Background": "Sindari South", "Light": "Sindari", "Weather": "Sindari Ash", "Object": "Lusan Water Staff", "Inhabitant": "Cruthan M" }
+                }
+              }
             };
 
-            // --- Update UI Elements ---
-            document.getElementById('daodao-change').textContent = `${formatChange(daodaoChange)} (30d)`;
-            document.getElementById('enterprise-change').textContent = `${formatChange(enterpriseChange)} (30d)`;
-            document.getElementById('backing-per-nft').textContent = backingPerNft.toFixed(2);
-            document.getElementById('backing-per-nft-change').textContent = `Avg. Daily Gain / NFT: +${backingChange24h.toFixed(2)} LUNA`;
-            document.getElementById('dao-members').textContent = daoMembersCount;
-            document.getElementById('dao-members-change').textContent = `${formatChange(daoMembersChange)} (30d)`;
+            // --- UI UPDATE FUNCTION ---
+            function updateUI(data) {
+                const formatNumber = (num) => {
+                    if (typeof num === 'string' && num.startsWith('$')) {
+                        const numberPart = parseFloat(num.replace(/[^0-9.-]+/g,""));
+                        return '$' + numberPart.toLocaleString('en-US');
+                    }
+                    return Number(num).toLocaleString('en-US');
+                };
+                const formatChange = (value) => {
+                    const num = Number(value);
+                    return num > 0 ? `+${num}` : num;
+                };
 
-            const liveProposalsCountElement = document.getElementById('live-proposals-count');
-            const liveProposalsTitleElement = document.getElementById('live-proposals-title');
+                // Timestamps
+                const lastUpdatedDate = new Date(data.lastUpdated).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+                document.getElementById('snapshot-date').textContent = lastUpdatedDate;
+                document.getElementById('last-updated').textContent = new Date(data.lastUpdated).toUTCString();
 
-            if (liveProposalsCountElement && liveProposalsTitleElement) {
+                // Sliders
+                document.getElementById('mint-slider').innerHTML = `<div class="slider-fill-blue" style="width: ${100 - parseFloat(data.statusSliders.mint.percentMinted)}%;"></div><div class="slider-fill-gray" style="width: ${data.statusSliders.mint.percentMinted};"></div>`;
+                document.getElementById('unminted-count').textContent = formatNumber(data.statusSliders.mint.unMinted);
+                document.getElementById('minted-count').textContent = formatNumber(data.statusSliders.mint.minted);
+                document.getElementById('minted-percent').textContent = `${data.statusSliders.mint.percentMinted} Minted`;
+
+                document.getElementById('broken-slider').innerHTML = `<div class="slider-fill-blue" style="width: ${100 - parseFloat(data.statusSliders.broken.percentBroken)}%;"></div><div class="slider-fill-gray" style="width: ${data.statusSliders.broken.percentBroken};"></div>`;
+                document.getElementById('unbroken-count').textContent = formatNumber(data.statusSliders.broken.unBroken);
+                document.getElementById('broken-count').textContent = formatNumber(data.statusSliders.broken.broken);
+                document.getElementById('broken-percent').textContent = `${data.statusSliders.broken.percentBroken} Broken`;
+
+                // Key Metrics
+                document.getElementById('daodao-staked').textContent = formatNumber(data.keyMetrics.daodaoStaked);
+                document.getElementById('daodao-change').textContent = `${formatChange(data.keyMetrics.daodaoChange30d)} (30d)`;
+                document.getElementById('dao-members').textContent = formatNumber(data.keyMetrics.daoMembers);
+                document.getElementById('dao-members-change').textContent = `${formatChange(data.keyMetrics.daoMembersChange30d)} (30d)`;
+                document.getElementById('enterprise-staked').textContent = formatNumber(data.keyMetrics.enterpriseStaked);
+                document.getElementById('enterprise-change').textContent = `${formatChange(data.keyMetrics.enterpriseChange30d)} (30d)`;
+                document.getElementById('backing-per-nft').textContent = data.keyMetrics.backingInLuna.toFixed(2);
+                document.getElementById('backing-per-nft-change').textContent = `Avg. Daily Gain / NFT: +${data.keyMetrics.avgDailyGain.toFixed(2)} LUNA`;
+                document.getElementById('dao-tla-vp').textContent = formatNumber(data.keyMetrics.daoTlaVp);
+                document.getElementById('dao-treasury').textContent = formatNumber(data.keyMetrics.daoTreasuryUSD);
+                document.getElementById('luna-holdings').textContent = formatNumber(data.keyMetrics.lunaHoldings);
+                
+                // Live Proposals
+                const liveProposalsCount = data.keyMetrics.liveProposals;
+                const liveProposalsCountElement = document.getElementById('live-proposals-count');
+                const liveProposalsTitleElement = document.getElementById('live-proposals-title');
                 liveProposalsCountElement.textContent = liveProposalsCount;
-                // --- Live Proposals Indicator Logic ---
                 const existingDot = liveProposalsTitleElement.querySelector('.pulse-dot, .static-dot-red');
-                if (existingDot) {
-                    existingDot.remove(); // Remove any existing dot before adding a new one
-                }
+                if (existingDot) existingDot.remove();
+                const newDot = document.createElement('span');
+                newDot.className = liveProposalsCount > 0 ? 'pulse-dot' : 'static-dot-red';
+                liveProposalsTitleElement.appendChild(newDot);
 
-                if (liveProposalsCount > 0) {
-                    const pulseDot = document.createElement('span');
-                    pulseDot.className = 'pulse-dot';
-                    liveProposalsTitleElement.appendChild(pulseDot);
-                } else {
-                    const staticDot = document.createElement('span');
-                    staticDot.className = 'static-dot-red';
-                    liveProposalsTitleElement.appendChild(staticDot);
-                }
+                // Marketplace Summary
+                document.getElementById('listed-nfts').textContent = `Listed NFTs: ${data.marketplace.listedNfts}`;
+                document.getElementById('bbl-sales-30d').textContent = formatNumber(data.marketplace.bblSales30d);
+                document.getElementById('bbl-volume').textContent = data.marketplace.bblVolumeAllTime;
+                document.getElementById('boost-sales-30d').textContent = formatNumber(data.marketplace.boostSales30d);
+                document.getElementById('boost-volume').textContent = data.marketplace.boostVolumeAllTime;
+
+                // Marketplace NFT Cards
+                const createNftCard = (nft, marketplace, type) => {
+                    const card = document.createElement('div');
+                    card.className = 'activity-card rounded-lg';
+                    let statusClass = '', statusText = '';
+                    if (type === 'listed') {
+                        statusClass = marketplace === 'bbl' ? 'status-bbl' : 'status-boost';
+                        statusText = marketplace.toUpperCase();
+                    } else { // sold
+                        statusClass = 'status-liquid';
+                        statusText = '&nbsp;';
+                    }
+                    
+                    card.innerHTML = `
+                        <div class="relative">
+                            <img src="https://dweb.link/ipfs/bafybeiek4cv2w6ot767nriveyzagejnvzpw3qr2b7iyc6ccddid6jj77za/${nft.id}.png" alt="NFT #${nft.id}" class="w-full h-auto">
+                            <div class="broken-overlay ${!nft.broken ? 'hidden' : ''}"><div class="broken-banner">Broken</div></div>
+                        </div>
+                        <div class="status-bar p-2 flex justify-between items-center">
+                            <span class="font-bold text-md text-white">NFT #${nft.id}</span>
+                            <span class="status-text ${statusClass} flex items-center gap-2">${statusText}
+                                ${nft.broken ? `<span class="toggle-broken-btn" title="Show Original Image"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-eye" viewBox="0 0 16 16"><path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8zM1.173 8a13.133 13.133 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13.133 13.133 0 0 1 14.828 8c-.816 1.097-2.28 2.48-4.232 3.489C8.68 12.83 7.12 13.5 5 13.5 2.88 13.5 1.321 12.83.172 11.489A13.133 13.133 0 0 1 1.172 8z"/><path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0z"/></svg></span>` : ''}
+                            </span>
+                        </div>
+                        <div class="p-3 text-center"><p class="text-sm text-cyan-400 font-semibold">${nft.price}</p></div>
+                    `;
+                    card.addEventListener('click', (e) => {
+                        // Prevent the eye icon click from triggering the modal
+                        if (!e.target.closest('.toggle-broken-btn')) {
+                            showNftDetails(nft);
+                        }
+                    });
+                    return card;
+                };
+
+                const bblSoldContainer = document.getElementById('bbl-sold-container');
+                bblSoldContainer.innerHTML = ''; // Clear existing
+                data.marketplace.bbl.sold.forEach(nft => bblSoldContainer.appendChild(createNftCard(nft, 'bbl', 'sold')));
+
+                const bblListedContainer = document.getElementById('bbl-listed-container');
+                bblListedContainer.innerHTML = '';
+                data.marketplace.bbl.listed.forEach(nft => bblListedContainer.appendChild(createNftCard(nft, 'bbl', 'listed')));
+                
+                const boostSoldContainer = document.getElementById('boost-sold-container');
+                boostSoldContainer.innerHTML = '';
+                data.marketplace.boost.sold.forEach(nft => boostSoldContainer.appendChild(createNftCard(nft, 'boost', 'sold')));
+                
+                const boostListedContainer = document.getElementById('boost-listed-container');
+                boostListedContainer.innerHTML = '';
+                data.marketplace.boost.listed.forEach(nft => boostListedContainer.appendChild(createNftCard(nft, 'boost', 'listed')));
+                
+                attachToggleListeners();
             }
 
-             // --- Disclaimer Banner Logic ---
+             // --- NFT Detail Modal Logic ---
+            const nftDetailModal = document.getElementById('nftDetailModal');
+            const closeNftDetailModalBtn = document.getElementById('closeNftDetailModal');
+            
+            function showNftDetails(nft) {
+                const nftData = dashboardData.marketplace.nftTraits[nft.id];
+                if (!nftData) return; // Don't open if no data
+
+                document.getElementById('modalNftImage').src = `https://dweb.link/ipfs/bafybeiek4cv2w6ot767nriveyzagejnvzpw3qr2b7iyc6ccddid6jj77za/${nft.id}.png`;
+                document.getElementById('modalNftTitle').textContent = `NFT #${nft.id}`;
+                document.getElementById('modalNftPrice').textContent = nft.price;
+                document.getElementById('modalNftRank').textContent = `Rank: #${nftData.rank}`;
+
+                const traitsContainer = document.getElementById('modalNftTraits');
+                traitsContainer.innerHTML = '';
+                // The order of traits you want to display
+                const traitOrder = ["Background", "Light", "Weather", "Object", "Inhabitant"];
+                traitOrder.forEach(trait => {
+                    if (nftData[trait]) {
+                        traitsContainer.innerHTML += `
+                            <div class="flex justify-between items-center text-sm bg-gray-800/50 p-2 rounded">
+                                <span class="font-semibold text-gray-400">${trait}</span>
+                                <span class="text-white">${nftData[trait]}</span>
+                            </div>
+                        `;
+                    }
+                });
+                
+                nftDetailModal.classList.remove('hidden', 'opacity-0');
+                setTimeout(() => nftDetailModal.querySelector('.modal-content').classList.remove('scale-95', 'opacity-0'), 10);
+            }
+
+            function closeNftDetails() {
+                nftDetailModal.classList.add('opacity-0');
+                nftDetailModal.querySelector('.modal-content').classList.add('scale-95', 'opacity-0');
+                setTimeout(() => nftDetailModal.classList.add('hidden'), 300);
+            }
+
+            closeNftDetailModalBtn.addEventListener('click', closeNftDetails);
+            nftDetailModal.addEventListener('click', (e) => {
+                if(e.target === nftDetailModal) closeNftDetails();
+            });
+
+
+            // Function to attach listeners to "eye" icons
+            function attachToggleListeners() {
+                const toggleButtons = document.querySelectorAll('.toggle-broken-btn');
+                toggleButtons.forEach(button => {
+                    button.addEventListener('click', function(e) {
+                        e.stopPropagation(); // Stop click from bubbling up to the card
+                        const card = this.closest('.activity-card');
+                        if (card) {
+                            const overlay = card.querySelector('.broken-overlay');
+                            if (overlay) {
+                                overlay.classList.toggle('hidden');
+                            }
+                        }
+                    });
+                });
+            }
+
+            // --- Initial Page Load ---
+            updateUI(dashboardData);
+
+            // --- Disclaimer Banner Logic ---
             const banner = document.getElementById('disclaimer-banner');
             const closeButton = document.getElementById('close-banner');
-
             if (banner && closeButton) {
                 closeButton.addEventListener('click', () => {
                     banner.style.display = 'none';
                 });
             }
-            
-            // --- Attach Event Listeners for Broken NFT Toggles ---
-            const toggleButtons = document.querySelectorAll('.toggle-broken-btn');
-            toggleButtons.forEach(button => {
-                button.addEventListener('click', function() {
-                    const card = this.closest('.activity-card');
-                    if (card) {
-                        const overlay = card.querySelector('.broken-overlay');
-                        if (overlay) {
-                            overlay.classList.toggle('hidden');
-                        }
-                    }
-                });
-            });
         });
     </script>
 </body>
