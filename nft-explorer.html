@@ -244,7 +244,7 @@
         }
         .leaderboard-header, .leaderboard-row {
             display: grid;
-            gap: 1rem;
+            gap: 0.5rem;
             padding: 0.75rem 1rem;
             align-items: center;
         }
@@ -265,7 +265,7 @@
          .leaderboard-header > span.text-center {
             justify-content: center;
          }
-         .leaderboard-header > span.sort-active {
+        .leaderboard-header > span.sort-active {
             color: #ffffff;
             background-color: #4b5563;
             border-radius: 0.375rem;
@@ -302,18 +302,6 @@
             border-radius: 0.5rem;
             border: 1px solid #374151;
             cursor: grab;
-        }
-        .address-tooltip {
-            position: fixed;
-            background-color: #1f2937;
-            color: #e5e7eb;
-            padding: 0.5rem 0.75rem;
-            border-radius: 0.375rem;
-            font-family: monospace;
-            font-size: 0.875rem;
-            z-index: 1000;
-            pointer-events: none;
-            border: 1px solid #4b5563;
         }
     </style>
 </head>
@@ -434,10 +422,8 @@
                     <div id="leaderboard-pagination" class="flex justify-center items-center mt-4 space-x-4"></div>
                 </div>
                 <div>
-                    <div class="flex justify-between items-center mb-4">
-                        <h2 id="wallet-gallery-title" class="text-2xl font-bold text-white">Wallet NFTs</h2>
-                        <div id="wallet-trait-toggles" class="flex items-center gap-x-4"></div>
-                    </div>
+                    <div id="wallet-trait-toggles-container" class="flex flex-wrap gap-x-4 gap-y-2 justify-center mb-4 p-4 bg-gray-800/50 rounded-lg border border-gray-700"></div>
+                     <h2 id="wallet-gallery-title" class="text-2xl font-bold text-white mb-4">Wallet NFTs</h2>
                     <div id="wallet-gallery" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6 min-h-[200px]"></div>
                 </div>
             </div>
@@ -449,18 +435,18 @@
         </div>
     </main>
 
-    <footer class="text-center mt-12 space-y-4">
-        <div class="flex justify-center items-center gap-x-6">
-            <button id="rarity-explained-btn" class="text-red-500 font-bold hover:text-red-400 transition-colors underline">Rarity Explained</button>
-            <button id="badge-key-btn" class="text-cyan-400 font-bold hover:text-cyan-300 transition-colors underline">Badge Key</button>
-        </div>
-        <div class="text-xs text-gray-500 max-w-2xl mx-auto">
-             <p>Data provided by <a href="https://deving.zone/" target="_blank" rel="noopener noreferrer" class="underline hover:text-gray-400">deving.zone</a>. We are grateful for their contribution to the community.</p>
-             <p class="mt-1">This data is not live and is updated periodically. Information is provided "as is" and without warranties of any kind. Please verify all data independently.</p>
-        </div>
+    <footer class="text-center mt-12 space-x-6">
+        <button id="rarity-explained-btn" class="text-red-500 font-bold hover:text-red-400 transition-colors underline">Rarity Explained</button>
+        <button id="badges-explained-btn" class="text-cyan-400 font-bold hover:text-cyan-300 transition-colors underline">Badges Explained</button>
     </footer>
-    
-    <div id="address-tooltip" class="address-tooltip hidden"></div>
+    <div class="mt-6 text-xs text-gray-500 max-w-3xl mx-auto text-center">
+        <p>
+            NFT status and ownership data is generously provided by <a href="https://deving.zone/" target="_blank" rel="noopener noreferrer" class="underline hover:text-gray-300">deving.zone</a>. We are incredibly grateful for their contribution to the community.
+        </p>
+        <p class="mt-2">
+            Disclaimer: This data is updated periodically and may not reflect live market conditions. While we strive for accuracy, all information is provided "as is" without warranty of any kind. Please verify data independently before making any financial decisions.
+        </p>
+    </div>
 
     <div id="copy-toast">Copied!</div>
 
@@ -485,7 +471,6 @@
                 <img id="modal-image" src="" class="w-full max-w-sm h-auto rounded-lg border border-gray-600 mb-4" alt="NFT Image">
                 <div class="w-full max-w-sm">
                     <div id="modal-traits" class="space-y-2 mb-4 text-left"></div>
-                    <div id="modal-owner-info" class="text-sm mb-4"></div>
                     <div class="flex items-center justify-center gap-4 mb-4">
                         <a id="modal-link" href="#" target="_blank" class="inline-block text-cyan-400 hover:text-cyan-300 transition-colors">View on IPFS &rarr;</a>
                         <button id="download-post-btn" class="control-btn">Download Post</button>
@@ -534,7 +519,54 @@
             </div>
         </div>
     </div>
-    
+     <!-- Badge Legend Modal -->
+    <div id="badge-modal" class="modal-backdrop hidden">
+        <div class="modal-content text-gray-300" style="width: 600px;">
+            <svg id="badge-modal-close" class="modal-close-btn w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            <h2 class="text-2xl font-bold text-white mb-6 text-center">Badge & Status Key</h2>
+            <div class="space-y-4">
+                <div class="flex items-center gap-4 p-3 bg-gray-800 rounded-lg">
+                    <div class="w-24 flex-shrink-0 flex items-center justify-center">
+                         <div class="h-10 w-full flex items-center justify-center" style="background-color: rgba(220, 38, 38, 0.85); color: white; font-size: 1rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;">
+                            BROKEN
+                        </div>
+                    </div>
+                    <p class="text-sm">Indicates the NFT's metadata is 'broken,' making it eligible for rewards.</p>
+                </div>
+                <div class="flex items-center gap-4 p-3 bg-gray-800 rounded-lg">
+                    <div class="w-24 flex-shrink-0 flex items-center justify-center">
+                        <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/DAODAO.png" alt="DAODAO Logo" class="w-12 h-12 object-contain">
+                    </div>
+                    <p class="text-sm">Staked on the DAODAO platform.</p>
+                </div>
+                <div class="flex items-center gap-4 p-3 bg-gray-800 rounded-lg">
+                    <div class="w-24 flex-shrink-0 flex items-center justify-center">
+                        <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Enterprise.jpg" alt="Enterprise Logo" class="w-12 h-12 object-contain rounded-full">
+                    </div>
+                    <p class="text-sm">Staked on the legacy Enterprise protocol.</p>
+                </div>
+                 <div class="flex items-center gap-4 p-3 bg-gray-800 rounded-lg">
+                    <div class="w-24 flex-shrink-0 flex items-center justify-center">
+                        <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/BBL%20No%20Background.png" alt="BBL Logo" class="w-12 h-12 object-contain">
+                    </div>
+                    <p class="text-sm">Listed for sale on the BackBone Labs marketplace.</p>
+                </div>
+                 <div class="flex items-center gap-4 p-3 bg-gray-800 rounded-lg">
+                    <div class="w-24 flex-shrink-0 flex items-center justify-center">
+                        <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Boost%20Logo.png" alt="Boost Logo" class="w-12 h-12 object-contain">
+                    </div>
+                    <p class="text-sm">Listed for sale on the Boost marketplace.</p>
+                </div>
+                 <div class="flex items-center gap-4 p-3 bg-gray-800 rounded-lg">
+                    <div class="w-24 flex-shrink-0 flex items-center justify-center">
+                        <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Alliance%20DAO%20Logo.png" alt="Alliance DAO Logo" class="w-12 h-12 object-contain">
+                    </div>
+                    <p class="text-sm">Owned by the Alliance DAO wallet (currently un-minted).</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Wallet Explorer Modal -->
     <div id="wallet-explorer-modal" class="modal-backdrop hidden">
         <div class="modal-content" style="width: 900px;">
@@ -555,42 +587,7 @@
             <div id="system-modal-pagination" class="flex justify-center items-center space-x-4"></div>
         </div>
     </div>
-    
-    <!-- Badge Key Modal -->
-    <div id="badge-key-modal" class="modal-backdrop hidden">
-        <div class="modal-content" style="width: 500px;">
-            <svg id="badge-key-modal-close" class="modal-close-btn w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-            <h2 class="text-2xl font-bold text-white mb-6 text-center">Badge Key</h2>
-            <div class="space-y-4">
-                <div class="flex items-center gap-4">
-                    <div class="w-12 flex-shrink-0 flex justify-center"><img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/DAODAO.png" alt="DAODAO Logo" class="overlay-icon"></div>
-                    <span>Staked on DAODAO</span>
-                </div>
-                <div class="flex items-center gap-4">
-                    <div class="w-12 flex-shrink-0 flex justify-center"><img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Enterprise.jpg" alt="Enterprise Logo" class="overlay-icon"></div>
-                    <span>Staked on Enterprise (Legacy)</span>
-                </div>
-                <div class="flex items-center gap-4">
-                    <div class="w-12 flex-shrink-0 flex justify-center"><img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Boost%20Logo.png" alt="Boost Logo" class="overlay-icon"></div>
-                    <span>Listed on Boost Marketplace</span>
-                </div>
-                <div class="flex items-center gap-4">
-                    <div class="w-12 flex-shrink-0 flex justify-center"><img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/BBL%20No%20Background.png" alt="BBL Logo" class="overlay-icon"></div>
-                    <span>Listed on BackBone Labs</span>
-                </div>
-                 <div class="flex items-center gap-4">
-                    <div class="w-12 flex-shrink-0 flex justify-center"><img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Alliance%20DAO%20Logo.png" alt="Alliance DAO Logo" class="overlay-icon"></div>
-                    <span>Un-minted / Owned by DAO Wallet</span>
-                </div>
-                <div class="flex items-center gap-4">
-                     <div class="w-12 flex-shrink-0 flex justify-center">
-                        <div class="relative w-10 h-10 bg-red-600 flex items-center justify-center text-white font-bold text-xs rounded-sm">BROKEN</div>
-                     </div>
-                    <span>Broken NFT (No longer receives rewards)</span>
-                </div>
-            </div>
-        </div>
-    </div>
+
 
     <canvas id="share-canvas" class="hidden"></canvas>
 
@@ -616,6 +613,9 @@
             const rarityModal = document.getElementById('rarity-modal');
             const rarityExplainedBtn = document.getElementById('rarity-explained-btn');
             const rarityModalCloseBtn = document.getElementById('rarity-modal-close');
+            const badgeModal = document.getElementById('badge-modal');
+            const badgesExplainedBtn = document.getElementById('badges-explained-btn');
+            const badgeModalCloseBtn = document.getElementById('badge-modal-close');
             const collectionViewBtn = document.getElementById('collection-view-btn');
             const walletViewBtn = document.getElementById('wallet-view-btn');
             const mapViewBtn = document.getElementById('map-view-btn');
@@ -628,9 +628,9 @@
             const walletResetBtn = document.getElementById('wallet-reset-btn');
             const leaderboardTable = document.getElementById('leaderboard-table');
             const leaderboardPagination = document.getElementById('leaderboard-pagination');
+            const walletTraitTogglesContainer = document.getElementById('wallet-trait-toggles-container');
             const walletGallery = document.getElementById('wallet-gallery');
             const walletGalleryTitle = document.getElementById('wallet-gallery-title');
-            const walletTraitToggles = document.getElementById('wallet-trait-toggles');
             const addressSuggestions = document.getElementById('address-suggestions');
             const copyAddressBtn = document.getElementById('copy-address-btn');
             const copyToast = document.getElementById('copy-toast');
@@ -638,17 +638,14 @@
             const walletModalCloseBtn = document.getElementById('wallet-modal-close');
             const systemLeaderboardModal = document.getElementById('system-leaderboard-modal');
             const systemModalCloseBtn = document.getElementById('system-modal-close');
-            const badgeKeyBtn = document.getElementById('badge-key-btn');
-            const badgeKeyModal = document.getElementById('badge-key-modal');
-            const badgeKeyModalCloseBtn = document.getElementById('badge-key-modal-close');
 
 
             // --- Config ---
             const METADATA_URL = "https://cdn.jsdelivr.net/gh/defipatriot/nft-metadata/all_nfts_metadata.json";
-            const STATUS_DATA_URL = "https://deving.zone/en/nfts/alliance_daos.json";
+            const STATUS_DATA_URL = "https://raw.githubusercontent.com/defipatriot/aDAO-links-site/main/dashboard-data.json";
             const DAO_WALLET_ADDRESS = "terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm";
             const itemsPerPage = 20;
-            const traitOrder = ["Rank", "Planet", "Inhabitant", "Object", "Weather", "Light"];
+            const traitOrder = ["Rank", "Rarity", "Planet", "Inhabitant", "Object", "Weather", "Light"];
             const filterLayoutOrder = ["Rarity", "Object", "Weather", "Light"];
             const defaultTraitsOn = ["Rank", "Planet", "Inhabitant", "Object"];
             
@@ -673,27 +670,11 @@
 
             // --- Data Fetching and Processing ---
             const mergeNftData = (metadata, statusData) => {
-                console.log("Starting data merge...");
-
-                let nftsArray = null;
-                if (Array.isArray(statusData)) {
-                    nftsArray = statusData;
-                }
-
-                if (!nftsArray) {
-                    console.error("Could not find an array of NFTs in the status data from deving.zone.", statusData);
-                    return metadata;
-                }
-                
-                console.log(`Merging ${metadata.length} metadata records with ${nftsArray.length} status records.`);
-
-                const statusMap = new Map(nftsArray.map(nft => [String(nft.id), nft]));
-                
-                let mergedCount = 0;
-                const mergedNfts = metadata.map(nft => {
+                const statusMap = new Map(statusData.nfts.map(nft => [String(nft.id), nft]));
+                return metadata.map(nft => {
                     const status = statusMap.get(String(nft.id));
                     if (status) {
-                        mergedCount++;
+                        // Map new data structure to the one used throughout the app
                         return {
                             ...nft,
                             owner: status.owner,
@@ -705,14 +686,8 @@
                             liquid: status.liquid
                         };
                     }
-                    return { ...nft, owner: null, broken: false, staked_daodao: false, staked_enterprise_legacy: false, bbl_market: false, boost_market: false, liquid: true };
+                    return nft;
                 });
-
-                console.log(`Successfully merged ${mergedCount} records.`);
-                if (mergedCount < metadata.length) {
-                    console.warn(`Could not find status for ${metadata.length - mergedCount} NFTs.`);
-                }
-                return mergedNfts;
             };
 
             const initializeExplorer = async () => {
@@ -735,24 +710,20 @@
                     
                     allNfts = mergeNftData(metadata, statusData);
 
-                    // Collection View Setup
                     calculateRanks();
                     populateTraitFilters();
                     populateInhabitantFilters();
                     populatePlanetFilters();
                     populateStatusFilters();
                     populateTraitToggles();
+                    populateWalletTraitToggles();
                     setupAddressFeatures();
                     updateFilterCounts(allNfts);
                     addAllEventListeners();
                     applyStateFromUrl();
                     applyFiltersAndSort();
-
-                    // Wallet View Setup
-                    populateWalletTraitToggles();
                     calculateAndDisplayLeaderboard();
 
-                    // Map View Setup is triggered by tab click
                 } catch (error) {
                     console.error("Failed to initialize explorer:", error);
                     showError(gallery, `Could not load or process NFT data. Error: ${error.message}`);
@@ -938,16 +909,26 @@
                     traitTogglesContainer.appendChild(label);
                 });
             };
+
+            const populateWalletTraitToggles = () => {
+                walletTraitTogglesContainer.innerHTML = '';
+                const walletTraits = ["Rank", "Planet", "Inhabitant", "Object"];
+                walletTraits.forEach(traitType => {
+                    const label = document.createElement('label');
+                    label.className = 'toggle-label';
+                    label.innerHTML = `<input type="checkbox" class="toggle-checkbox wallet-trait-toggle" data-trait="${traitType}" checked><span class="toggle-switch mr-2"></span><span>${traitType}</span>`;
+                    walletTraitTogglesContainer.appendChild(label);
+                });
+            };
             
             const addAllEventListeners = () => {
                  document.querySelectorAll('.toggle-checkbox').forEach(toggle => {
                       toggle.addEventListener('change', (e) => {
                         const parent = e.target.closest('.justify-between');
-                        if (parent) {
-                            const slider = parent.querySelector('.direction-slider');
-                            if (slider) {
-                                slider.disabled = !e.target.checked;
-                            }
+                        if (!parent) return;
+                        const slider = parent.querySelector('.direction-slider');
+                        if (slider) {
+                            slider.disabled = !e.target.checked;
                         }
                         handleFilterChange();
                     });
@@ -959,6 +940,12 @@
                 addressDropdown.addEventListener('change', () => {
                     searchAddressInput.value = addressDropdown.value;
                     handleFilterChange();
+                });
+                
+                walletTraitTogglesContainer.addEventListener('change', (e) => {
+                    if (e.target.classList.contains('wallet-trait-toggle')) {
+                        searchWallet(); // Re-render gallery with new toggle settings
+                    }
                 });
             };
 
@@ -1173,11 +1160,11 @@
                 }
                 const totalPages = Math.ceil(filteredNfts.length / itemsPerPage);
                 const pageItems = filteredNfts.slice((page - 1) * itemsPerPage, page * itemsPerPage);
-                pageItems.forEach(nft => gallery.appendChild(createNftCard(nft)));
+                pageItems.forEach(nft => gallery.appendChild(createNftCard(nft, '.trait-toggle')));
                 updatePaginationControls(totalPages);
             };
 
-            const createNftCard = (nft, showStatus = false, fromWallet = false) => {
+            const createNftCard = (nft, toggleSelector) => {
                 const card = document.createElement('div');
                 card.className = 'nft-card bg-gray-800 border border-gray-700 rounded-xl overflow-hidden flex flex-col';
                 card.addEventListener('click', () => showNftDetails(nft));
@@ -1185,26 +1172,11 @@
                 const newTitle = nft.name.replace('The AllianceDAO NFT', 'AllianceDAO NFT');
 
                 let traitsHtml = '';
-                let toggleSource = fromWallet ? document.getElementById('wallet-trait-toggles') : document;
-                if (showStatus) {
-                    const isStaked = nft.staked_daodao || nft.staked_enterprise_legacy;
-                    const isListed = nft.bbl_market || nft.boost_market;
-                    const statusText = nft.liquid ? 'Liquid' : (isStaked ? 'Staked' : 'In Wallet');
-                    
-                    const visibleTraits = ['Rank', 'Planet', 'Inhabitant', 'Object'].filter(t => toggleSource.querySelector(`.trait-toggle[data-trait="${t}"]`)?.checked);
-                    
-                    visibleTraits.forEach(traitType => {
-                        let value = traitType === 'Rank' ? `#${nft.rank}` : nft.attributes?.find(attr => attr.trait_type === traitType)?.value || 'N/A';
-                        traitsHtml += `<li class="flex justify-between items-center py-2 px-1 border-b border-gray-700 last:border-b-0"><span class="text-xs font-medium text-cyan-400 uppercase">${traitType}</span><span class="text-sm font-semibold text-white truncate">${value}</span></li>`;
-                    });
-
-                } else {
-                    const visibleTraits = traitOrder.filter(t => toggleSource.querySelector(`.trait-toggle[data-trait="${t}"]`)?.checked);
-                    visibleTraits.forEach(traitType => {
-                        let value = traitType === 'Rank' ? `#${nft.rank}` : nft.attributes?.find(attr => attr.trait_type === traitType)?.value || 'N/A';
-                        traitsHtml += `<li class="flex justify-between items-center py-2 px-1 border-b border-gray-700 last:border-b-0"><span class="text-xs font-medium text-cyan-400 uppercase">${traitType}</span><span class="text-sm font-semibold text-white truncate">${value}</span></li>`;
-                    });
-                }
+                const visibleTraits = traitOrder.filter(t => document.querySelector(`${toggleSelector}[data-trait="${t}"]`)?.checked);
+                visibleTraits.forEach(traitType => {
+                    let value = traitType === 'Rank' ? `#${nft.rank}` : nft.attributes?.find(attr => attr.trait_type === traitType)?.value || 'N/A';
+                    traitsHtml += `<li class="flex justify-between items-center py-2 px-1 border-b border-gray-700 last:border-b-0"><span class="text-xs font-medium text-cyan-400 uppercase">${traitType}</span><span class="text-sm font-semibold text-white">${value}</span></li>`;
+                });
                 
                 card.innerHTML = `<div class="image-container aspect-w-1-aspect-h-1 w-full"><img src="${imageUrl}" alt="${nft.name}" class="w-full h-full" loading="lazy" onerror="this.onerror=null; this.src='https://placehold.co/300x300/1f2937/eb?text=Image+Error';"></div><div class="p-4 flex-grow flex flex-col"><h2 class="text-lg font-bold text-white mb-3 truncate" title="${newTitle}">${newTitle}</h2><ul class="text-sm flex-grow">${traitsHtml}</ul></div>`;
                 
@@ -1214,17 +1186,20 @@
                 const hasBadges = nft.broken || nft.staked_daodao || nft.boost_market || nft.bbl_market || nft.staked_enterprise_legacy || isDaoOwned;
 
                 if (hasBadges) {
+                    // --- Add Badge Visibility Toggle ---
                     const toggleButton = document.createElement('button');
                     toggleButton.className = 'top-left-toggle';
                     toggleButton.title = 'Toggle badge visibility';
-                    toggleButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
+                    toggleButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`; // Eye icon
 
                     toggleButton.addEventListener('click', (e) => {
-                        e.stopPropagation();
+                        e.stopPropagation(); // IMPORTANT: Prevents the modal from opening
                         const isHidden = imageContainer.classList.toggle('badges-hidden');
-                        toggleButton.innerHTML = isHidden ? 
-                            `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>` : 
-                            `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
+                        if (isHidden) {
+                            toggleButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>`; // Eye-off icon
+                        } else {
+                            toggleButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`; // Eye icon
+                        }
                     });
                     imageContainer.appendChild(toggleButton);
                 }
@@ -1475,6 +1450,25 @@
             };
 
             const hidePreviewTile = () => document.getElementById('preview-tile').classList.add('hidden');
+            
+            const showCopyToast = (text) => {
+                copyToast.textContent = text;
+                copyToast.classList.add('show');
+                setTimeout(() => { copyToast.classList.remove('show'); }, 2000);
+            }
+
+            const copyToClipboard = (textToCopy, typeName = 'Address') => {
+                if (!textToCopy) return;
+                const tempInput = document.createElement('input');
+                tempInput.value = textToCopy;
+                document.body.appendChild(tempInput);
+                tempInput.select();
+                document.execCommand('copy');
+                document.body.removeChild(tempInput);
+                const shortText = `${textToCopy.substring(0, 5)}...${textToCopy.substring(textToCopy.length - 5)}`;
+                showCopyToast(`Copied ${typeName}: ${shortText}`);
+            };
+
 
             const showNftDetails = (nft) => {
                 document.getElementById('modal-image').src = convertIpfsUrl(nft.image);
@@ -1491,22 +1485,12 @@
                 traitsHtml += `<div class="flex justify-between text-sm"><span class="text-gray-400">Status:</span><span class="font-semibold text-white">${nft.liquid ? 'Liquid' : (isStaked ? 'Staked' : 'In Wallet')}</span></div>`;
                 traitsHtml += `<div class="flex justify-between text-sm"><span class="text-gray-400">Listed:</span><span class="font-semibold text-white">${isListed ? 'Yes' : 'No'}</span></div>`;
                 traitsHtml += `<div class="flex justify-between text-sm"><span class="text-gray-400">Broken:</span><span class="font-semibold text-white">${nft.broken ? 'Yes' : 'No'}</span></div>`;
+                traitsHtml += `<div class="pt-2 mt-2 border-t border-gray-600"></div>`;
+                traitsHtml += `<div class="flex justify-between text-sm items-center"><span class="text-gray-400">Owner:</span><span class="owner-address font-mono text-sm font-semibold text-white truncate cursor-pointer" title="Click to copy">${nft.owner}</span></div>`;
 
-                document.getElementById('modal-traits').innerHTML = traitsHtml;
-                
-                const ownerInfoEl = document.getElementById('modal-owner-info');
-                if (nft.owner) {
-                    ownerInfoEl.innerHTML = `
-                        <div class="pt-2 mt-2 border-t border-gray-600">
-                           <div class="flex justify-between text-sm">
-                             <span class="text-gray-400">Owner:</span>
-                             <span class="font-mono text-xs text-white truncate cursor-pointer" title="Click to copy">${nft.owner}</span>
-                           </div>
-                        </div>`;
-                    ownerInfoEl.querySelector('span.font-mono').addEventListener('click', () => copyText(nft.owner, 'Owner address'));
-                } else {
-                    ownerInfoEl.innerHTML = '';
-                }
+                const modalTraits = document.getElementById('modal-traits');
+                modalTraits.innerHTML = traitsHtml;
+                modalTraits.querySelector('.owner-address').addEventListener('click', () => copyToClipboard(nft.owner, 'Owner Address'));
 
                 document.getElementById('modal-link').href = convertIpfsUrl(nft.image);
                 
@@ -1587,18 +1571,6 @@
             };
             
             // --- Wallet View Logic ---
-            const populateWalletTraitToggles = () => {
-                walletTraitToggles.innerHTML = '';
-                const traitsToShow = ['Rank', 'Planet', 'Inhabitant', 'Object'];
-                traitsToShow.forEach(traitType => {
-                     const label = document.createElement('label');
-                    label.className = 'toggle-label text-sm';
-                    label.innerHTML = `<input type="checkbox" class="toggle-checkbox trait-toggle" data-trait="${traitType}" checked><span class="toggle-switch mr-2"></span><span>${traitType}</span>`;
-                    walletTraitToggles.appendChild(label);
-                });
-                walletTraitToggles.querySelectorAll('.trait-toggle').forEach(el => el.addEventListener('change', searchWallet));
-            };
-
             const calculateAndDisplayLeaderboard = () => {
                 if (allNfts.length === 0) return;
 
@@ -1606,7 +1578,7 @@
                 allNfts.forEach(nft => {
                     if (nft.owner) {
                         if (!ownerStats[nft.owner]) {
-                            ownerStats[nft.owner] = { total: 0, liquid: 0, daodaoStaked: 0, enterpriseStaked: 0, broken: 0, bblListed: 0, boostListed: 0 };
+                             ownerStats[nft.owner] = { address: nft.owner, total: 0, daodaoStaked: 0, enterpriseStaked: 0, broken: 0, unbroken: 0, bblListed: 0, boostListed: 0 };
                         }
                         const stats = ownerStats[nft.owner];
                         stats.total++;
@@ -1614,23 +1586,24 @@
                         if (nft.staked_enterprise_legacy) stats.enterpriseStaked++;
                         if (nft.bbl_market) stats.bblListed++;
                         if (nft.boost_market) stats.boostListed++;
-                        if (nft.liquid) stats.liquid++;
                         if (nft.broken) stats.broken++;
+                        else stats.unbroken++;
                     }
                 });
 
-                allHolderStats = Object.values(ownerStats).map(stats => ({...stats, unbroken: stats.total - stats.broken}));
-                
+                allHolderStats = Object.values(ownerStats).map(stats => {
+                        const liquid = stats.total - (stats.daodaoStaked + stats.enterpriseStaked + stats.bblListed + stats.boostListed);
+                        return { ...stats, liquid };
+                    });
+
                 sortAndDisplayHolders();
             };
             
             const sortAndDisplayHolders = () => {
                 const { column, direction } = holderSort;
-
                 allHolderStats.sort((a, b) => {
                     const valA = a[column];
                     const valB = b[column];
-                    
                     if (column === 'address') {
                         return direction === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
                     } else {
@@ -1663,22 +1636,23 @@
                                    createHeaderCell('Enterprise', 'enterpriseStaked') +
                                    createHeaderCell('Broken', 'broken') +
                                    createHeaderCell('Unbroken', 'unbroken') +
-                                   createHeaderCell('BBL', 'bblListed') +
-                                   createHeaderCell('Boost', 'boostListed') +
+                                   createHeaderCell('BBL Listed', 'bblListed') +
+                                   createHeaderCell('Boost Listed', 'boostListed') +
                                    createHeaderCell('Total', 'total');
 
                 leaderboardTable.appendChild(header);
 
                 const pageItems = allHolderStats.slice((page - 1) * holdersPerPage, page * holdersPerPage);
 
-                pageItems.forEach(stats => {
+                pageItems.forEach(({ address, ...stats }) => {
                     const item = document.createElement('div');
                     item.className = 'leaderboard-row';
                     item.style.gridTemplateColumns = '2.5fr repeat(8, 1fr)';
-                    item.dataset.address = stats.address;
+                    item.dataset.address = address;
+                    const shortAddress = `terra...${address.substring(address.length - 4)}`;
 
                     item.innerHTML = `
-                        <span class="font-mono text-sm truncate" data-full-address="${stats.address}">terra...${stats.address.slice(-4)}</span>
+                        <span class="font-mono text-sm truncate" title="${address}">${shortAddress}</span>
                         <span class="text-center">${stats.liquid}</span>
                         <span class="text-center text-green-400">${stats.daodaoStaked}</span>
                         <span class="text-center text-red-400">${stats.enterpriseStaked}</span>
@@ -1689,26 +1663,9 @@
                         <span class="font-bold text-center">${stats.total}</span>
                     `;
                     item.addEventListener('click', () => {
-                        walletSearchAddressInput.value = stats.address;
+                        walletSearchAddressInput.value = address;
                         searchWallet();
                     });
-                    
-                    const addressSpan = item.querySelector('span[data-full-address]');
-                    const tooltip = document.getElementById('address-tooltip');
-                    addressSpan.addEventListener('mouseenter', (e) => {
-                        tooltip.textContent = addressSpan.dataset.fullAddress;
-                        tooltip.classList.remove('hidden');
-                        tooltip.style.left = `${e.clientX + 10}px`;
-                        tooltip.style.top = `${e.clientY + 10}px`;
-                    });
-                     addressSpan.addEventListener('mouseleave', () => {
-                        tooltip.classList.add('hidden');
-                    });
-                     addressSpan.addEventListener('mousemove', (e) => {
-                         tooltip.style.left = `${e.clientX + 10}px`;
-                         tooltip.style.top = `${e.clientY + 10}px`;
-                     });
-
                     leaderboardTable.appendChild(item);
                 });
                 updateHolderPaginationControls();
@@ -1827,7 +1784,7 @@
                         
                         ctx.save();
                         ctx.translate(obj.x, obj.y);
-                        if(obj.id !== 'terra') ctx.rotate(obj.rotation || 0);
+                        ctx.rotate(obj.rotation || 0);
                         ctx.drawImage(obj.img, -displayWidth / 2, -displayHeight / 2, displayWidth, displayHeight);
                         ctx.restore();
 
@@ -2028,7 +1985,7 @@
                         
                         const topStakers = Object.entries(holderStats)
                             .filter(([, stats]) => stats.enterpriseStaked > 0)
-                            .sort(([, a], [, b]) => b.enterpriseStaked - a[statKey])
+                            .sort(([, a], [, b]) => b.enterpriseStaked - a.enterpriseStaked)
                             .slice(0, 10)
                             .map(([address, stats]) => ({ address, ...stats }));
                         
@@ -2114,16 +2071,7 @@
                             if (!obj.width) return;
                             const displayWidth = obj.width * obj.scale;
                             const displayHeight = obj.height * obj.scale;
-                            
-                            // Adjust for object's own rotation
-                            const sinObjR = Math.sin(-(obj.rotation || 0));
-                            const cosObjR = Math.cos(-(obj.rotation || 0));
-                            const relativeX = rotatedX - obj.x;
-                            const relativeY = rotatedY - obj.y;
-                            const objSpaceX = relativeX * cosObjR - relativeY * sinObjR;
-                            const objSpaceY = relativeX * sinObjR + relativeY * cosObjR;
-
-                            const isHovered = (objSpaceX >= -displayWidth / 2 && objSpaceX <= displayWidth / 2 && objSpaceY >= -displayHeight / 2 && objSpaceY <= displayHeight / 2);
+                            const isHovered = ( rotatedX >= obj.x - displayWidth / 2 && rotatedX <= obj.x + displayWidth / 2 && rotatedY >= obj.y - displayHeight / 2 && rotatedY <= obj.y + displayHeight / 2);
 
                             obj.isFrozen = isHovered;
 
@@ -2171,16 +2119,8 @@
                         if (!obj.width) continue;
                         const displayWidth = obj.width * obj.scale;
                         const displayHeight = obj.height * obj.scale;
-                        
-                        const sinObjR = Math.sin(-(obj.rotation || 0));
-                        const cosObjR = Math.cos(-(obj.rotation || 0));
-                        const relativeX = rotatedX - obj.x;
-                        const relativeY = rotatedY - obj.y;
-                        const objSpaceX = relativeX * cosObjR - relativeY * sinObjR;
-                        const objSpaceY = relativeX * sinObjR + relativeY * cosObjR;
-
-                        if (objSpaceX >= -displayWidth / 2 && objSpaceX <= displayWidth / 2 && objSpaceY >= -displayHeight / 2 && objSpaceY <= displayHeight / 2) {
-                             clickedObject = obj;
+                        if (rotatedX >= obj.x - displayWidth / 2 && rotatedX <= obj.x + displayWidth / 2 && rotatedY >= obj.y - displayHeight / 2 && rotatedY <= obj.y + displayHeight / 2) {
+                            clickedObject = obj;
                             break; 
                         }
                     }
@@ -2296,7 +2236,7 @@
                 });
 
                 walletNfts.sort((a,b) => a.rank - b.rank).forEach(nft => {
-                    galleryEl.appendChild(createNftCard(nft, true));
+                    galleryEl.appendChild(createNftCard(nft, '.wallet-trait-toggle'));
                 });
 
                 walletExplorerModal.classList.remove('hidden');
@@ -2391,17 +2331,6 @@
                 systemLeaderboardModal.classList.add('hidden');
             };
 
-            const copyText = (text, type) => {
-                const tempInput = document.createElement('input');
-                tempInput.value = text;
-                document.body.appendChild(tempInput);
-                tempInput.select();
-                document.execCommand('copy');
-                document.body.removeChild(tempInput);
-                copyToast.textContent = `Copied ${type}!`;
-                copyToast.classList.add('show');
-                setTimeout(() => { copyToast.classList.remove('show'); }, 2000);
-            };
 
             // --- Event Listeners ---
             document.addEventListener('click', () => closeAllDropdowns());
@@ -2410,13 +2339,14 @@
             rarityExplainedBtn.addEventListener('click', () => rarityModal.classList.remove('hidden'));
             rarityModalCloseBtn.addEventListener('click', () => rarityModal.classList.add('hidden'));
             rarityModal.addEventListener('click', (e) => { if (e.target === rarityModal) rarityModal.classList.add('hidden'); });
+            badgesExplainedBtn.addEventListener('click', () => badgeModal.classList.remove('hidden'));
+            badgeModalCloseBtn.addEventListener('click', () => badgeModal.classList.add('hidden'));
+            badgeModal.addEventListener('click', (e) => { if (e.target === badgeModal) badgeModal.classList.add('hidden'); });
             walletModalCloseBtn.addEventListener('click', hideWalletExplorerModal);
             walletExplorerModal.addEventListener('click', (e) => { if (e.target === walletExplorerModal) hideWalletExplorerModal(); });
             systemModalCloseBtn.addEventListener('click', hideSystemLeaderboardModal);
             systemLeaderboardModal.addEventListener('click', (e) => { if (e.target === systemLeaderboardModal) hideSystemLeaderboardModal(); });
-            badgeKeyBtn.addEventListener('click', () => badgeKeyModal.classList.remove('hidden'));
-            badgeKeyModalCloseBtn.addEventListener('click', () => badgeKeyModal.classList.add('hidden'));
-            badgeKeyModal.addEventListener('click', (e) => { if(e.target === badgeKeyModal) badgeKeyModal.classList.add('hidden'); });
+
             
             const debouncedFilter = debounce(handleFilterChange, 300);
             searchInput.addEventListener('input', debouncedFilter);
@@ -2463,18 +2393,18 @@
             });
             
             const searchWallet = () => {
-                const address = walletSearchAddressInput.value.trim().toLowerCase();
+                const address = walletSearchAddressInput.value.trim();
                 walletAddressSuggestions.classList.add('hidden');
 
                 document.querySelectorAll('.leaderboard-row').forEach(row => {
-                    row.classList.toggle('selected', row.dataset.address.toLowerCase() === address);
+                    row.classList.toggle('selected', row.dataset.address === address);
                 });
 
                 if (!address) {
                     showError(walletGallery, 'Please enter a wallet address.');
                     return;
                 }
-                const walletNfts = allNfts.filter(nft => nft.owner && nft.owner.toLowerCase() === address);
+                const walletNfts = allNfts.filter(nft => nft.owner === address);
                 walletGalleryTitle.textContent = `Found ${walletNfts.length} NFTs for wallet:`;
                 walletGallery.innerHTML = '';
                 if (walletNfts.length === 0) {
@@ -2482,7 +2412,7 @@
                     return;
                 }
                 walletNfts.sort((a,b) => a.rank - b.rank).forEach(nft => {
-                    walletGallery.appendChild(createNftCard(nft, true, true));
+                    walletGallery.appendChild(createNftCard(nft, '.wallet-trait-toggle'));
                 });
             };
 
@@ -2507,16 +2437,14 @@
                     holderSort.direction = holderSort.direction === 'desc' ? 'asc' : 'desc';
                 } else {
                     holderSort.column = newColumn;
-                    holderSort.direction = (newColumn === 'address') ? 'asc' : 'desc';
+                    holderSort.direction = (newColumn === 'address') ? 'asc' : 'desc'; // Default text to A-Z
                 }
                 sortAndDisplayHolders();
             });
 
 
              const setupCopyButton = (buttonEl, inputEl) => {
-                buttonEl.addEventListener('click', () => {
-                    copyText(inputEl.value, 'Address');
-                });
+                buttonEl.addEventListener('click', () => copyToClipboard(inputEl.value));
              };
 
             setupCopyButton(copyAddressBtn, searchAddressInput);
@@ -2527,4 +2455,8 @@
     </script>
 </body>
 </html>
+
+
+
+
 
