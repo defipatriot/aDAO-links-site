@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alliance DAO - Historical Data</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Chart.js for interactive charts -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #0D0D0D;
+            color: #EAEAEA;
+        }
+        .chart-card {
+            background: #1A1A1A;
+            border: 1px solid #2e2e2e;
+            transition: all 0.3s ease;
+        }
+        .chart-card:hover {
+            border-color: #2dd4bf;
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <!-- Header -->
+    <header class="py-4">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+            <!-- Back to Dashboard Link -->
+            <a href="index.html" class="block w-32"> 
+                <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Alliance%20DAO%20Logo.png" alt="Alliance DAO Logo" class="h-16 w-auto transition-transform transform hover:scale-110">
+            </a>
+            <!-- Page Title -->
+            <div class="text-center">
+                 <h1 class="text-3xl font-bold text-gray-300">Historical Data & Charts</h1>
+            </div>
+             <!-- Right: Terra Logo -->
+             <div class="w-32 flex justify-end">
+                <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Terra.PNG" alt="Terra Logo" class="h-16 w-auto">
+             </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            
+            <!-- Chart 1: Backing per NFT -->
+            <div class="chart-card rounded-xl p-6">
+                <h3 class="text-xl font-bold text-white mb-4">Backing per NFT (LUNA)</h3>
+                <canvas id="backingChart"></canvas>
+            </div>
+
+            <!-- Chart 2: Unbroken vs. Broken NFT Count -->
+            <div class="chart-card rounded-xl p-6">
+                <h3 class="text-xl font-bold text-white mb-4">Unbroken NFT Count</h3>
+                <canvas id="nftStatusChart"></canvas>
+            </div>
+
+            <!-- Chart 4: Floor Price Analysis -->
+             <div class="chart-card rounded-xl p-6">
+                <h3 class="text-xl font-bold text-white mb-4">Floor Price Analysis</h3>
+                <canvas id="floorPriceChart"></canvas>
+            </div>
+
+            <!-- Chart 5: Sales Volume vs Market Premium -->
+            <div class="chart-card rounded-xl p-6">
+                <h3 class="text-xl font-bold text-white mb-4">Sales Volume vs. Market Premium</h3>
+                <canvas id="salesVolumeChart"></canvas>
+            </div>
+
+             <!-- Chart 6: 5-Year Projections -->
+            <div class="chart-card rounded-xl p-6 lg:col-span-2">
+                 <div class="text-center mb-4">
+                    <h3 class="text-xl font-bold text-white">5-Year Backing Projections (LUNA)</h3>
+                    <p class="text-sm text-yellow-400/80 mt-2">
+                        <span class="font-bold">Disclaimer:</span> These are forward-looking projections based on current trends and are not guaranteed.
+                    </p>
+                </div>
+                <canvas id="projectionChart"></canvas>
+            </div>
+
+        </div>
+    </main>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- Chart.js Configuration ---
+            Chart.defaults.color = 'rgba(234, 234, 234, 0.7)';
+            Chart.defaults.borderColor = 'rgba(255, 255, 255, 0.1)';
+            Chart.defaults.font.family = "'Inter', sans-serif";
+
+            // --- Shared Labels for all charts ---
+            const historicalLabels = ['Apr 24', 'May 24', 'Jun 24', 'Jul 24', 'Aug 24', 'Sep 24', 'Oct 24', 'Nov 24', 'Dec 24', 'Jan 25', 'Feb 25', 'Mar 25', 'Apr 25', 'May 25', 'Jun 25', 'Jul 25', 'Aug 25', 'Sep 25'];
+            const projectionLabels = ['2025', '2026', '2027', '2028', '2029', '2030'];
+
+            // --- Chart 1: Backing per NFT Data ---
+            const backingData = {
+                labels: historicalLabels,
+                datasets: [{
+                    label: 'Backing per NFT (LUNA)',
+                    data: [10.60, 7.78, 12.38, 17.09, 23.43, 29.85, 36.36, 42.64, 48.03, 59.43, 65.39, 70.33, 77.57, 82.60, 88.99, 95.37, 102.18, 109.97],
+                    fill: true,
+                    backgroundColor: 'rgba(45, 212, 191, 0.2)',
+                    borderColor: '#2dd4bf',
+                    tension: 0.4,
+                    pointBackgroundColor: '#2dd4bf',
+                }]
+            };
+
+            // --- Render Backing Chart ---
+            const backingCtx = document.getElementById('backingChart').getContext('2d');
+            new Chart(backingCtx, {
+                type: 'line',
+                data: backingData,
+                options: {
+                    responsive: true,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true, ticks: { callback: (value) => value + ' LUNA' } } }
+                }
+            });
+
+            // --- Chart 2: Unbroken NFT Data ---
+            const nftStatusData = {
+                labels: historicalLabels,
+                datasets: [{
+                    label: 'Unbroken NFTs',
+                    data: [9538, 9538, 9538, 8998, 8997, 8996, 8995, 8993, 8991, 8990, 8986, 8986, 8935, 8934, 8932, 8928, 8927, 8924],
+                    backgroundColor: 'rgba(59, 130, 246, 0.7)',
+                    borderColor: 'rgba(59, 130, 246, 1)',
+                    fill: false,
+                    tension: 0.4
+                }]
+            };
+
+            // --- Render NFT Status Chart ---
+            const nftStatusCtx = document.getElementById('nftStatusChart').getContext('2d');
+            new Chart(nftStatusCtx, {
+                type: 'line',
+                data: nftStatusData,
+                options: {
+                    responsive: true,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { min: 8900, max: 9600 } }
+                }
+            });
+
+            // --- Chart 4: Floor Price Analysis ---
+            const floorPriceData = {
+                labels: historicalLabels,
+                 datasets: [
+                    {
+                        label: 'Floor Price (LUNA)',
+                        data: [11, 10, 15, 18, 25, 33, 40, 45, 50, 62, 68, 73, 80, 85, 92, 98, 105, 115],
+                        borderColor: 'rgba(45, 212, 191, 0.8)',
+                        backgroundColor: 'rgba(45, 212, 191, 0.2)',
+                        yAxisID: 'yLuna',
+                        tension: 0.4
+                    },
+                    {
+                        label: 'Floor Price (USD)',
+                        data: [1.43, 1.00, 1.80, 2.16, 3.75, 4.95, 6.40, 7.20, 7.50, 8.68, 8.84, 8.76, 11.20, 12.75, 14.72, 15.68, 15.75, 17.94],
+                        borderColor: 'rgba(59, 130, 246, 0.8)',
+                        backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                        yAxisID: 'yUsd',
+                        tension: 0.4
+                    }
+                ]
+            };
+            const floorPriceCtx = document.getElementById('floorPriceChart').getContext('2d');
+            new Chart(floorPriceCtx, {
+                type: 'line',
+                data: floorPriceData,
+                options: {
+                    responsive: true,
+                    scales: {
+                        yLuna: { type: 'linear', position: 'left', ticks: { callback: (value) => value + ' LUNA' } },
+                        yUsd: { type: 'linear', position: 'right', grid: { drawOnChartArea: false }, ticks: { callback: (value) => '$' + value.toFixed(2) } }
+                    }
+                }
+            });
+
+             // --- Chart 5: Sales Volume vs Market Premium ---
+             const salesData = {
+                labels: historicalLabels,
+                datasets: [{
+                    type: 'bar',
+                    label: 'Monthly Sales Count',
+                    data: [5, 3, 8, 12, 15, 22, 25, 18, 16, 20, 14, 10, 25, 30, 28, 22, 19, 18],
+                    backgroundColor: 'rgba(139, 92, 246, 0.6)'
+                }, {
+                    type: 'line',
+                    label: 'LUNA Premium (%)',
+                    data: [3.77, 28.53, 21.16, 5.48, 6.39, 10.49, 10.01, 5.48, 4.14, 4.32, 3.99, 3.80, 3.13, 2.90, 3.38, 2.76, 2.76, 4.57],
+                    borderColor: '#facc15',
+                    backgroundColor: 'rgba(250, 204, 21, 0.2)',
+                    yAxisID: 'yPct',
+                    tension: 0.4
+                }]
+             };
+            const salesVolumeCtx = document.getElementById('salesVolumeChart').getContext('2d');
+            new Chart(salesVolumeCtx, {
+                data: salesData,
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: { type: 'linear', position: 'left', title: { display: true, text: 'Sales Count' } },
+                        yPct: { type: 'linear', position: 'right', grid: { drawOnChartArea: false }, ticks: { callback: (value) => value + '%' }, title: { display: true, text: 'Premium' } }
+                    }
+                }
+            });
+
+            // --- Chart 6: 5-Year Projections ---
+            const projectionData = {
+                labels: projectionLabels,
+                datasets: [
+                    { label: '0 Broken / Year', data: [109.97, 219.78, 329.59, 439.40, 549.21, 659.02], borderColor: '#60a5fa' },
+                    { label: '50 Broken / Year', data: [109.97, 221.72, 336.19, 453.79, 574.96, 700.17], borderColor: '#818cf8' },
+                    { label: '100 Broken / Year', data: [109.97, 223.75, 343.34, 469.75, 603.54, 745.89], borderColor: '#a78bfa' },
+                    { label: '150 Broken / Year', data: [109.97, 225.86, 351.10, 487.49, 634.90, 794.71], borderColor: '#c084fc' },
+                    { label: '200 Broken / Year', data: [109.97, 228.08, 359.54, 507.28, 669.57, 850.56], borderColor: '#e879f9' }
+                ]
+            };
+            const projectionCtx = document.getElementById('projectionChart').getContext('2d');
+            new Chart(projectionCtx, {
+                type: 'line',
+                data: projectionData,
+                options: {
+                    responsive: true,
+                    plugins: { legend: { position: 'top' } },
+                    scales: { y: { beginAtZero: true, title: { display: true, text: 'Backing per NFT (LUNA)' } } }
+                }
+            });
+
+        });
+    </script>
+
+</body>
+</html>
+
