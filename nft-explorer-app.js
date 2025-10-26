@@ -79,20 +79,39 @@ const mergeNftData = (metadata, statusData) => {
     const statusMap = new Map(statusData.nfts.map(nft => [String(nft.id), nft]));
     return metadata.map(nft => {
         const status = statusMap.get(String(nft.id));
+        let mergedNft = { ...nft }; // Start with metadata
+
         if (status) {
-            // Map new data structure to the one used throughout the app
-            return {
-                ...nft,
-                owner: status.owner,
-                broken: status.broken,
-                staked_daodao: status.daodao,
-                staked_enterprise_legacy: status.enterprise,
-                bbl_market: status.bbl,
-                boost_market: status.boost,
-                liquid: status.liquid
-            };
+            // Add status properties
+            mergedNft.owner = status.owner;
+            mergedNft.broken = status.broken;
+            mergedNft.staked_daodao = status.daodao;
+            mergedNft.staked_enterprise_legacy = status.enterprise;
+            mergedNft.bbl_market = status.bbl;
+            mergedNft.boost_market = status.boost;
+            // IMPORTANT: Recalculate 'liquid' based on user's definition
+            const isStaked = status.daodao || status.enterprise;
+            const isListed = status.bbl || status.boost;
+            // Assume 'owned_by_alliance_dao' exists in statusData based on user example
+            const isOwnedByDAO = status.owner === DAO_WALLET_ADDRESS; // Use direct address check instead of potentially missing flag
+
+            mergedNft.liquid = !isOwnedByDAO && !isStaked && !isListed;
+
+            // Include owned_by_alliance_dao if needed elsewhere, calculated from owner
+            mergedNft.owned_by_alliance_dao = isOwnedByDAO;
+
+        } else {
+             // If no status data, assume it's liquid unless it's known to be owned by DAO (though unlikely scenario without status)
+             mergedNft.owner = null; // Or some default
+             mergedNft.broken = false;
+             mergedNft.staked_daodao = false;
+             mergedNft.staked_enterprise_legacy = false;
+             mergedNft.bbl_market = false;
+             mergedNft.boost_market = false;
+             mergedNft.liquid = true; // Default assumption if no status
+             mergedNft.owned_by_alliance_dao = false;
         }
-        return nft;
+        return mergedNft;
     });
 };
 
@@ -411,12 +430,18 @@ const applyFiltersAndSort = () => {
 
     // Address Search
     const addressSearchTerm = searchAddressInput.value.trim().toLowerCase();
-    if(addressSearchTerm) {
-        tempNfts = tempNfts.filter(nft => nft.owner && nft.owner.toLowerCase().includes(addressSearchTerm));
+    if (addressSearchTerm) {
+        // Filter by exact match or partial match from the end if input is shorter
+        tempNfts = tempNfts.filter(nft =>
+            nft.owner &&
+            (nft.owner.toLowerCase() === addressSearchTerm ||
+             (addressSearchTerm.length < 42 && nft.owner.toLowerCase().endsWith(addressSearchTerm)))
+        );
     }
     
     // --- Status Filters ---
-    if (document.querySelector('.status-toggle-cb[data-key="staked"]').checked) {
+    // ... (staked, listed, rewards filters remain the same) ...
+     if (document.querySelector('.status-toggle-cb[data-key="staked"]').checked) {
         const sliderValue = document.querySelector('.direction-slider[data-slider-key="staked"]').value;
         if (sliderValue === '0') tempNfts = tempNfts.filter(nft => nft.staked_enterprise_legacy);
         else if (sliderValue === '1') tempNfts = tempNfts.filter(nft => nft.staked_enterprise_legacy || nft.staked_daodao);
@@ -431,19 +456,26 @@ const applyFiltersAndSort = () => {
     if (document.querySelector('.status-toggle-cb[data-key="rewards"]').checked) {
         const sliderValue = document.querySelector('.direction-slider[data-slider-key="rewards"]').value;
         if (sliderValue === '0') tempNfts = tempNfts.filter(nft => nft.broken === true);
+        else if (sliderValue === '1') tempNfts = tempNfts.filter(nft => nft.broken !== undefined); // Match both broken and unbroken
         else if (sliderValue === '2') tempNfts = tempNfts.filter(nft => nft.broken === false);
     }
+
+    // Updated Liquid Status Filter logic
     if (document.querySelector('.status-toggle-cb[data-key="liquid_status"]').checked) {
         const sliderValue = document.querySelector('.direction-slider[data-slider-key="liquid_status"]').value;
-        if (sliderValue === '0') tempNfts = tempNfts.filter(nft => nft.liquid === true);
-        else if (sliderValue === '2') tempNfts = tempNfts.filter(nft => nft.liquid === false);
+        if (sliderValue === '0') tempNfts = tempNfts.filter(nft => nft.liquid === true); // Slider Left = Liquid
+        else if (sliderValue === '1') tempNfts = tempNfts.filter(nft => nft.liquid !== undefined); // Slider Middle = Both (Show all)
+        else if (sliderValue === '2') tempNfts = tempNfts.filter(nft => nft.liquid === false); // Slider Right = Not Liquid
     }
      if (document.querySelector('.status-toggle-cb[data-key="mint_status"]').checked) {
         const sliderValue = document.querySelector('.direction-slider[data-slider-key="mint_status"]').value;
-        if (sliderValue === '0') tempNfts = tempNfts.filter(nft => nft.owner === DAO_WALLET_ADDRESS);
-        else if (sliderValue === '2') tempNfts = tempNfts.filter(nft => nft.owner !== DAO_WALLET_ADDRESS);
+        // Check owner against DAO_WALLET_ADDRESS directly
+        if (sliderValue === '0') tempNfts = tempNfts.filter(nft => nft.owner === DAO_WALLET_ADDRESS); // Un-Minted (Owned by DAO)
+        else if (sliderValue === '1') tempNfts = tempNfts.filter(nft => nft.owner !== undefined); // Both (Show all with an owner)
+        else if (sliderValue === '2') tempNfts = tempNfts.filter(nft => nft.owner !== DAO_WALLET_ADDRESS); // Minted (Not owned by DAO)
     }
 
+    // ... (planet, inhabitant, trait, sort filters remain the same) ...
     const activePlanetFilters = [];
     document.querySelectorAll('.planet-toggle-cb:checked').forEach(cb => {
         const planetName = cb.dataset.key;
@@ -502,248 +534,17 @@ const applyFiltersAndSort = () => {
     else if (sortValue === 'desc') tempNfts.sort((a, b) => b.rank - a.rank);
     else if (sortValue === 'id') tempNfts.sort((a, b) => a.id - b.id);
 
+
     filteredNfts = tempNfts;
     resultsCount.textContent = filteredNfts.length;
-    updateFilterCounts();
+    updateFilterCounts(); // Ensure this runs after filtering
     displayPage(1);
-};
-
-const handleFilterChange = () => { applyFiltersAndSort(); updateUrlState(); };
-
-const updateUrlState = () => {
-    const params = new URLSearchParams();
-    if (searchAddressInput.value) params.set('address', searchAddressInput.value);
-    if (searchInput.value) params.set('id', searchInput.value);
-    if (sortSelect.value !== 'asc') params.set('sort', sortSelect.value);
-
-    document.querySelectorAll('.multi-select-container').forEach(container => {
-        const traitElement = container.querySelector('[data-trait]');
-        if (!traitElement) return;
-        const trait = traitElement.dataset.trait;
-        let selectedValues = [];
-        container.querySelectorAll('.multi-select-checkbox:checked').forEach(cb => selectedValues.push(cb.value));
-        if (selectedValues.length > 0) params.set(trait.toLowerCase(), selectedValues.join(','));
-    });
-
-    document.querySelectorAll('.toggle-checkbox:checked').forEach(toggle => {
-        params.set(toggle.dataset.key, 'true');
-        const slider = document.querySelector(`.direction-slider[data-slider-key="${toggle.dataset.key}"]`);
-        if(slider) {
-            params.set(`${toggle.dataset.key}_pos`, slider.value);
-        }
-    });
-    
-    try {
-        const newUrl = `${window.location.pathname}?${params.toString()}`;
-        history.pushState({}, '', newUrl);
-    } catch (e) { console.warn("Could not update URL state."); }
-};
-
-const applyStateFromUrl = () => {
-    const params = new URLSearchParams(window.location.search);
-    searchInput.value = params.get('id') || '';
-    searchAddressInput.value = params.get('address') || '';
-    sortSelect.value = params.get('sort') || 'asc';
-    
-    document.querySelectorAll('.multi-select-container').forEach(container => {
-        const traitElement = container.querySelector('[data-trait]');
-        if (!traitElement) return;
-        const trait = traitElement.dataset.trait.toLowerCase();
-        if (!params.has(trait)) return;
-        const values = params.get(trait).split(',');
-        container.querySelectorAll('.multi-select-checkbox').forEach(cb => {
-            if (values.includes(cb.value)) cb.checked = true;
-        });
-        updateMultiSelectButtonText(container);
-    });
-
-    document.querySelectorAll('.toggle-checkbox').forEach(toggle => {
-        const key = toggle.dataset.key;
-        if (params.get(key) === 'true') {
-            toggle.checked = true;
-            const slider = document.querySelector(`.direction-slider[data-slider-key="${key}"]`);
-            if(slider) {
-                slider.disabled = false;
-                slider.value = params.get(`${key}_pos`) || '1';
-            }
-        }
-    });
-};
-
-const updateMultiSelectButtonText = (container) => {
-    const buttonSpan = container.querySelector('.multi-select-button span');
-    const traitType = container.querySelector('.multi-select-checkbox').dataset.trait;
-    const checkedCount = container.querySelectorAll('.multi-select-checkbox:checked').length;
-    buttonSpan.textContent = checkedCount === 0 ? `All ${traitType}s` : `${checkedCount} ${traitType}(s) selected`;
-};
-
-const closeAllDropdowns = (exceptThisOne = null) => {
-    document.querySelectorAll('.multi-select-dropdown').forEach(d => {
-        if (d !== exceptThisOne) d.classList.add('hidden');
-    });
-    addressSuggestions.classList.add('hidden');
-    walletAddressSuggestions.classList.add('hidden');
-};
-
-const displayPage = (page) => {
-    currentPage = page;
-    gallery.innerHTML = '';
-    if (filteredNfts.length === 0) {
-        showLoading(gallery, 'No NFTs match the current filters.');
-        updatePaginationControls(0);
-        return;
-    }
-    const totalPages = Math.ceil(filteredNfts.length / itemsPerPage);
-    const pageItems = filteredNfts.slice((page - 1) * itemsPerPage, page * itemsPerPage);
-    pageItems.forEach(nft => gallery.appendChild(createNftCard(nft, '.trait-toggle')));
-    updatePaginationControls(totalPages);
-};
-
-const createNftCard = (nft, toggleSelector) => {
-    const card = document.createElement('div');
-    card.className = 'nft-card bg-gray-800 border border-gray-700 rounded-xl overflow-hidden flex flex-col';
-    card.addEventListener('click', () => showNftDetails(nft));
-    const imageUrl = convertIpfsUrl(nft.thumbnail_image || nft.image);
-    const newTitle = nft.name.replace('The AllianceDAO NFT', 'AllianceDAO NFT');
-
-    let traitsHtml = '';
-    const visibleTraits = traitOrder.filter(t => document.querySelector(`${toggleSelector}[data-trait="${t}"]`)?.checked);
-    visibleTraits.forEach(traitType => {
-        let value = traitType === 'Rank' ? `#${nft.rank}` : nft.attributes?.find(attr => attr.trait_type === traitType)?.value || 'N/A';
-        traitsHtml += `<li class="flex justify-between items-center py-2 px-1 border-b border-gray-700 last:border-b-0"><span class="text-xs font-medium text-cyan-400 uppercase">${traitType}</span><span class="text-sm font-semibold text-white">${value}</span></li>`;
-    });
-    
-    card.innerHTML = `<div class="image-container aspect-w-1-aspect-h-1 w-full"><img src="${imageUrl}" alt="${nft.name}" class="w-full h-full" loading="lazy" onerror="this.onerror=null; this.src='https://placehold.co/300x300/1f2937/eb?text=Image+Error';"></div><div class="p-4 flex-grow flex flex-col"><h2 class="text-lg font-bold text-white mb-3 truncate" title="${newTitle}">${newTitle}</h2><ul class="text-sm flex-grow">${traitsHtml}</ul></div>`;
-    
-    const imageContainer = card.querySelector('.image-container');
-    
-    const isDaoOwned = nft.owner === DAO_WALLET_ADDRESS;
-    const hasBadges = nft.broken || nft.staked_daodao || nft.boost_market || nft.bbl_market || nft.staked_enterprise_legacy || isDaoOwned;
-
-    if (hasBadges) {
-        // --- Add Badge Visibility Toggle ---
-        const toggleButton = document.createElement('button');
-        toggleButton.className = 'top-left-toggle';
-        toggleButton.title = 'Toggle badge visibility';
-        toggleButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`; // Eye icon
-
-        toggleButton.addEventListener('click', (e) => {
-            e.stopPropagation(); // IMPORTANT: Prevents the modal from opening
-            const isHidden = imageContainer.classList.toggle('badges-hidden');
-            if (isHidden) {
-                toggleButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>`; // Eye-off icon
-            } else {
-                toggleButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`; // Eye icon
-            }
-        });
-        imageContainer.appendChild(toggleButton);
-    }
-
-
-    if (nft.broken) {
-        const brokenBanner = document.createElement('div');
-        brokenBanner.className = 'broken-banner';
-        brokenBanner.textContent = 'BROKEN';
-        imageContainer.appendChild(brokenBanner);
-    }
-
-    const topRightStack = document.createElement('div');
-    topRightStack.className = 'top-right-stack';
-
-    if (isDaoOwned) {
-        const daoLogo = document.createElement('img');
-        daoLogo.src = 'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Alliance%20DAO%20Logo.png';
-        daoLogo.alt = 'Owned by DAO';
-        daoLogo.className = 'overlay-icon';
-        topRightStack.appendChild(daoLogo);
-    }
-    if (nft.staked_daodao) {
-        const daodaoLogo = document.createElement('img');
-        daodaoLogo.src = 'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/DAODAO.png';
-        daodaoLogo.alt = 'Staked on DAODAO';
-        daodaoLogo.className = 'overlay-icon';
-        topRightStack.appendChild(daodaoLogo);
-    }
-    if (nft.boost_market) {
-        const boostLogo = document.createElement('img');
-        boostLogo.src = 'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Boost%20Logo.png';
-        boostLogo.alt = 'Listed on Boost';
-        boostLogo.className = 'overlay-icon';
-        topRightStack.appendChild(boostLogo);
-    }
-    if (nft.bbl_market) {
-        const bblLogo = document.createElement('img');
-        bblLogo.src = 'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/BBL%20No%20Background.png';
-        bblLogo.alt = 'Listed on BBL';
-        bblLogo.className = 'overlay-icon';
-        topRightStack.appendChild(bblLogo);
-    }
-    if (nft.staked_enterprise_legacy) {
-        const enterpriseE = document.createElement('img');
-        enterpriseE.src = 'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Enterprise.jpg';
-        enterpriseE.alt = 'Staked on Enterprise';
-        enterpriseE.className = 'overlay-icon';
-        topRightStack.appendChild(enterpriseE);
-    }
-
-    if (topRightStack.children.length > 0) {
-        imageContainer.appendChild(topRightStack);
-    }
-
-    return card;
-};
-
-const updatePaginationControls = (totalPages) => {
-    paginationControls.innerHTML = '';
-    if (totalPages <= 1) return;
-    const prevButton = document.createElement('button');
-    prevButton.textContent = 'Previous';
-    prevButton.className = 'pagination-btn';
-    prevButton.disabled = currentPage === 1;
-    prevButton.onclick = () => displayPage(currentPage - 1);
-    paginationControls.appendChild(prevButton);
-    const pageInfo = document.createElement('span');
-    pageInfo.className = 'text-gray-400';
-    pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
-    paginationControls.appendChild(pageInfo);
-    const nextButton = document.createElement('button');
-    nextButton.textContent = 'Next';
-    nextButton.className = 'pagination-btn';
-    nextButton.disabled = currentPage === totalPages;
-    nextButton.onclick = () => displayPage(currentPage + 1);
-    paginationControls.appendChild(nextButton);
-};
-
-const resetAll = () => {
-    searchInput.value = '';
-    searchAddressInput.value = '';
-    addressDropdown.value = '';
-    sortSelect.value = 'asc';
-    
-    document.querySelectorAll('.toggle-checkbox').forEach(toggle => {
-        if(!toggle.classList.contains('trait-toggle')) {
-            toggle.checked = false;
-            const key = toggle.dataset.key;
-            const slider = document.querySelector(`.direction-slider[data-slider-key="${key}"]`);
-            if(slider) {
-                slider.value = 1;
-                slider.disabled = true;
-            }
-        }
-    });
-
-    document.querySelectorAll('.multi-select-container').forEach(container => {
-        container.querySelectorAll('.multi-select-checkbox').forEach(cb => cb.checked = false);
-        updateMultiSelectButtonText(container);
-    });
-    
-    document.querySelectorAll('.trait-toggle').forEach(toggle => { toggle.checked = defaultTraitsOn.includes(toggle.dataset.trait); });
-    
-    handleFilterChange();
 };
 
 
 const updateFilterCounts = () => {
+const updateFilterCounts = () => {
+    // ... (existing trait, inhabitant, planet counts logic) ...
     const newCounts = {};
     filteredNfts.forEach(nft => {
         if (nft.attributes) {
@@ -796,6 +597,7 @@ const updateFilterCounts = () => {
         else if (slider.value === '2') countSpan.textContent = southCount;
     });
 
+
     // Update Status Filter Counts
     document.querySelectorAll('.status-count').forEach(countSpan => {
         const key = countSpan.dataset.countKey;
@@ -803,36 +605,40 @@ const updateFilterCounts = () => {
         if (!slider) return;
 
         let count = 0;
+        let totalCount = filteredNfts.length; // Use current filtered set size
+
         if (key === 'staked') {
              const enterpriseCount = filteredNfts.filter(n => n.staked_enterprise_legacy).length;
              const daodaoCount = filteredNfts.filter(n => n.staked_daodao).length;
              if(slider.value === '0') count = enterpriseCount;
-             else if (slider.value === '1') count = filteredNfts.filter(n => n.staked_enterprise_legacy || n.staked_daodao).length;
+             else if (slider.value === '1') count = filteredNfts.filter(n => n.staked_enterprise_legacy || n.staked_daodao).length; // Count unique NFTs that are staked in either
              else if (slider.value === '2') count = daodaoCount;
         } else if (key === 'listed') {
             const boostCount = filteredNfts.filter(n => n.boost_market).length;
             const bblCount = filteredNfts.filter(n => n.bbl_market).length;
             if(slider.value === '0') count = boostCount;
-            else if (slider.value === '1') count = filteredNfts.filter(n => n.boost_market || n.bbl_market).length;
+            else if (slider.value === '1') count = filteredNfts.filter(n => n.boost_market || n.bbl_market).length; // Count unique NFTs listed in either
             else if (slider.value === '2') count = bblCount;
         } else if (key === 'rewards') {
-             const brokenCount = filteredNfts.filter(n => n.broken).length;
-             const unbrokenCount = filteredNfts.filter(n => !n.broken).length;
+             const brokenCount = filteredNfts.filter(n => n.broken === true).length;
+             const unbrokenCount = filteredNfts.filter(n => n.broken === false).length;
              if(slider.value === '0') count = brokenCount;
-             else if (slider.value === '1') count = brokenCount + unbrokenCount;
+             else if (slider.value === '1') count = brokenCount + unbrokenCount; // Total count of NFTs with known broken status
              else if (slider.value === '2') count = unbrokenCount;
         } else if (key === 'liquid_status') {
-            const liquidCount = filteredNfts.filter(n => n.liquid).length;
-            const notLiquidCount = filteredNfts.filter(n => !n.liquid).length;
-            if(slider.value === '0') count = liquidCount;
-            else if (slider.value === '1') count = liquidCount + notLiquidCount;
-            else if (slider.value === '2') count = notLiquidCount;
+            // Use the recalculated 'liquid' property
+            const liquidCount = filteredNfts.filter(n => n.liquid === true).length;
+            const notLiquidCount = filteredNfts.filter(n => n.liquid === false).length;
+            if(slider.value === '0') count = liquidCount; // Liquid
+            else if (slider.value === '1') count = liquidCount + notLiquidCount; // Both (Total NFTs with determined liquid status)
+            else if (slider.value === '2') count = notLiquidCount; // Not Liquid
         } else if (key === 'mint_status') {
+             // Use owner check directly
             const unmintedCount = filteredNfts.filter(n => n.owner === DAO_WALLET_ADDRESS).length;
             const mintedCount = filteredNfts.filter(n => n.owner !== DAO_WALLET_ADDRESS).length;
-            if(slider.value === '0') count = unmintedCount;
-            else if (slider.value === '1') count = unmintedCount + mintedCount;
-            else if (slider.value === '2') count = mintedCount;
+            if(slider.value === '0') count = unmintedCount; // Un-Minted
+            else if (slider.value === '1') count = unmintedCount + mintedCount; // Both (Total NFTs with an owner)
+            else if (slider.value === '2') count = mintedCount; // Minted
         }
         countSpan.textContent = count;
     });
@@ -921,17 +727,42 @@ const showNftDetails = (nft) => {
         .map(attr => `<div class="flex justify-between text-sm"><span class="text-gray-400">${attr.trait_type}:</span><span class="font-semibold text-white">${attr.value}</span></div>`).join('');
     
     traitsHtml += `<div class="pt-2 mt-2 border-t border-gray-600"></div>`;
+    
+    // Updated Status Display Logic
     const isStaked = nft.staked_daodao || nft.staked_enterprise_legacy;
     const isListed = nft.bbl_market || nft.boost_market;
-    traitsHtml += `<div class="flex justify-between text-sm"><span class="text-gray-400">Status:</span><span class="font-semibold text-white">${nft.liquid ? 'Liquid' : (isStaked ? 'Staked' : 'In Wallet')}</span></div>`;
+    let statusText = 'Unknown';
+    if (nft.owner === DAO_WALLET_ADDRESS) {
+        statusText = 'Un-Minted (DAO Owned)';
+    } else if (nft.liquid) { // Use recalculated liquid status
+        statusText = 'Liquid (In Wallet)';
+    } else if (isStaked) {
+        statusText = 'Staked'; // Could specify DAODAO/Enterprise if needed
+    } else if (isListed) {
+        statusText = 'Listed'; // Could specify BBL/Boost if needed
+    } else {
+        // If not liquid, not staked, not listed, and not DAO owned, it's likely still just 'In Wallet' but considered non-liquid by some definition
+        // We'll stick to 'Liquid' based on our calculation or specific status
+         statusText = 'In Wallet (Not Liquid)'; // Fallback if somehow `nft.liquid` is false but no other status applies
+    }
+
+    traitsHtml += `<div class="flex justify-between text-sm"><span class="text-gray-400">Status:</span><span class="font-semibold text-white">${statusText}</span></div>`;
     traitsHtml += `<div class="flex justify-between text-sm"><span class="text-gray-400">Listed:</span><span class="font-semibold text-white">${isListed ? 'Yes' : 'No'}</span></div>`;
     traitsHtml += `<div class="flex justify-between text-sm"><span class="text-gray-400">Broken:</span><span class="font-semibold text-white">${nft.broken ? 'Yes' : 'No'}</span></div>`;
     traitsHtml += `<div class="pt-2 mt-2 border-t border-gray-600"></div>`;
-    traitsHtml += `<div class="flex justify-between text-sm items-center"><span class="text-gray-400">Owner:</span><span class="owner-address font-mono text-sm font-semibold text-white truncate cursor-pointer" title="Click to copy">${nft.owner}</span></div>`;
+    traitsHtml += `<div class="flex justify-between text-sm items-center"><span class="text-gray-400">Owner:</span><span class="owner-address font-mono text-sm font-semibold text-white truncate cursor-pointer" title="Click to copy">${nft.owner || 'N/A'}</span></div>`;
 
     const modalTraits = document.getElementById('modal-traits');
     modalTraits.innerHTML = traitsHtml;
-    modalTraits.querySelector('.owner-address').addEventListener('click', () => copyToClipboard(nft.owner, 'Owner Address'));
+    // Add click listener only if owner exists
+    const ownerAddressEl = modalTraits.querySelector('.owner-address');
+    if (nft.owner && ownerAddressEl) {
+         ownerAddressEl.addEventListener('click', () => copyToClipboard(nft.owner, 'Owner Address'));
+    } else if (ownerAddressEl) {
+         ownerAddressEl.classList.remove('cursor-pointer'); // Remove pointer if no owner
+         ownerAddressEl.removeAttribute('title');
+    }
+
 
     document.getElementById('modal-link').href = convertIpfsUrl(nft.image);
     
@@ -1030,10 +861,13 @@ const calculateAndDisplayLeaderboard = () => {
     allNfts.forEach(nft => {
         if (nft.owner) {
             if (!ownerStats[nft.owner]) {
-                 ownerStats[nft.owner] = { address: nft.owner, total: 0, daodaoStaked: 0, enterpriseStaked: 0, broken: 0, unbroken: 0, bblListed: 0, boostListed: 0 };
+                 // Initialize with recalculated liquid count
+                 ownerStats[nft.owner] = { address: nft.owner, total: 0, liquid: 0, daodaoStaked: 0, enterpriseStaked: 0, broken: 0, unbroken: 0, bblListed: 0, boostListed: 0 };
             }
             const stats = ownerStats[nft.owner];
             stats.total++;
+            // Increment liquid count based on the recalculated property
+            if (nft.liquid) stats.liquid++;
             if (nft.staked_daodao) stats.daodaoStaked++;
             if (nft.staked_enterprise_legacy) stats.enterpriseStaked++;
             if (nft.bbl_market) stats.bblListed++;
@@ -1043,28 +877,13 @@ const calculateAndDisplayLeaderboard = () => {
         }
     });
 
-    allHolderStats = Object.values(ownerStats).map(stats => {
-            const liquid = stats.total - (stats.daodaoStaked + stats.enterpriseStaked + stats.bblListed + stats.boostListed);
-            return { ...stats, liquid };
-        });
+    // No need to map again, liquid is now calculated correctly during aggregation
+    allHolderStats = Object.values(ownerStats);
 
     sortAndDisplayHolders();
 };
 
-const sortAndDisplayHolders = () => {
-    const { column, direction } = holderSort;
-    allHolderStats.sort((a, b) => {
-        const valA = a[column];
-        const valB = b[column];
-        if (column === 'address') {
-            return direction === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
-        } else {
-            return direction === 'asc' ? valA - valB : valB - valA;
-        }
-    });
-    displayHolderPage(1);
-};
-
+// ... (displayHolderPage remains largely the same, but will now use the correct liquid count) ...
 const displayHolderPage = (page) => {
     holderCurrentPage = page;
     leaderboardTable.innerHTML = ''; 
@@ -1092,7 +911,7 @@ const displayHolderPage = (page) => {
     
     const headerData = [
         { label: 'Rank' }, { label: 'Holder', key: 'address' },
-        { label: 'Liquid', key: 'liquid' }, { label: 'DAODAO', key: 'daodaoStaked' },
+        { label: 'Liquid', key: 'liquid' }, { label: 'DAODAO', key: 'daodaoStaked' }, // Ensure key matches stats object
         { label: 'Enterprise', key: 'enterpriseStaked' }, { label: 'Broken', key: 'broken' },
         { label: 'Unbroken', key: 'unbroken' }, { label: 'BBL Listed', key: 'bblListed' },
         { label: 'Boost Listed', key: 'boostListed' }, { label: 'Total', key: 'total' }
@@ -1131,7 +950,8 @@ const displayHolderPage = (page) => {
 
         itemRow.appendChild(createCell(`#${rank}`, ['font-bold']));
         itemRow.appendChild(createCell(shortAddress, ['font-mono', 'text-sm'], address));
-        itemRow.appendChild(createCell(stats.liquid));
+        // Use the calculated liquid count directly from stats
+        itemRow.appendChild(createCell(stats.liquid)); 
         itemRow.appendChild(createCell(stats.daodaoStaked, ['text-green-400']));
         itemRow.appendChild(createCell(stats.enterpriseStaked, ['text-red-400']));
         itemRow.appendChild(createCell(stats.broken, ['text-red-400']));
@@ -1150,715 +970,6 @@ const displayHolderPage = (page) => {
     leaderboardTable.appendChild(table);
 
     updateHolderPaginationControls();
-};
-
-const updateHolderPaginationControls = () => {
-    leaderboardPagination.innerHTML = '';
-    const totalPages = Math.ceil(allHolderStats.length / holdersPerPage);
-    if (totalPages <= 1) return;
-
-    const prevButton = document.createElement('button');
-    prevButton.textContent = 'Previous';
-    prevButton.className = 'pagination-btn';
-    prevButton.disabled = holderCurrentPage === 1;
-    prevButton.onclick = () => displayHolderPage(holderCurrentPage - 1);
-    leaderboardPagination.appendChild(prevButton);
-
-    const pageInfo = document.createElement('span');
-    pageInfo.className = 'text-gray-400';
-    pageInfo.textContent = `Page ${holderCurrentPage} of ${totalPages}`;
-    leaderboardPagination.appendChild(pageInfo);
-
-    const nextButton = document.createElement('button');
-    nextButton.textContent = 'Next';
-    nextButton.className = 'pagination-btn';
-    nextButton.disabled = holderCurrentPage === totalPages;
-    nextButton.onclick = () => displayHolderPage(holderCurrentPage + 1);
-    leaderboardPagination.appendChild(nextButton);
-};
-
-// --- Map View Logic ---
-//let isMapInitialized = false; // Moved initialization check inside initializeStarfield
-const initializeStarfield = () => {
-    // Check if already initialized or canvas not found
-    const canvas = document.getElementById('space-canvas');
-    if (!canvas) {
-        console.error("Space canvas element not found!");
-        return;
-    }
-     // If map is already running, don't re-initialize
-    if (isMapInitialized) {
-        // Ensure animation is running if we switch back to the tab
-        if (!globalAnimationFrameId) {
-             console.log("Restarting map animation frame."); // Debug log
-             animate(); // Restart animation loop if stopped
-        }
-        return;
-    }
-    console.log("Initializing starfield..."); // Debug log
-
-    const ctx = canvas.getContext('2d');
-    let stars = [];
-    let mapObjects = [];
-    
-    let zoom = 0.15, rotation = 0, offsetX = 0, offsetY = 0;
-    let isPanning = false, isRotating = false;
-    let lastMouseX = 0, lastMouseY = 0;
-    const minZoom = 0.1, maxZoom = 5;
-
-    function setCanvasSize() {
-        // Ensure canvas dimensions reflect actual display size
-        const displayWidth = canvas.clientWidth;
-        const displayHeight = canvas.clientHeight;
-
-        // Check if the canvas size needs updating
-        if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
-            canvas.width = displayWidth;
-            canvas.height = displayHeight;
-             console.log(`Canvas resized to: ${canvas.width}x${canvas.height}`); // Debug log
-            return true; // Indicate size changed
-        }
-        return false; // Indicate size did not change
-    }
-    
-    // ... existing createStars function ...
-    function createStars() {
-        stars = [];
-        // Ensure width/height are valid before calculating count
-        const width = canvas.width || canvas.clientWidth;
-        const height = canvas.height || canvas.clientHeight;
-        if (width === 0 || height === 0) return; // Don't create stars if canvas size is invalid
-
-        const starCount = (width * height * 4) / 1000; 
-        console.log(`Creating ${Math.round(starCount)} stars for ${width}x${height} canvas.`); // Debug log
-        for (let i = 0; i < starCount; i++) {
-            stars.push({
-                x: (Math.random() - 0.5) * width * 10, // Use calculated width/height
-                y: (Math.random() - 0.5) * height * 10, // Use calculated width/height
-                radius: Math.random() * 1.5 + 0.5,
-                alpha: Math.random(),
-                twinkleSpeed: Math.random() * 0.03 + 0.005,
-                twinkleDirection: 1
-            });
-        }
-    }
-
-
-    // ... existing drawGalaxy, updateStars, updateObjectRotations functions ...
-    function drawGalaxy() {
-        if (!ctx) return; // Ensure context is valid
-        ctx.save();
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        // Check for valid dimensions before proceeding
-        if (canvas.width === 0 || canvas.height === 0) {
-             ctx.restore();
-             console.warn("Skipping drawGalaxy: Canvas dimensions are zero."); // Debug log
-             return;
-        }
-        ctx.translate(canvas.width / 2 + offsetX, canvas.height / 2 + offsetY);
-        ctx.scale(zoom, zoom);
-        ctx.rotate(rotation);
-
-        stars.forEach(star => {
-            ctx.beginPath();
-            ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2, false);
-            ctx.fillStyle = `rgba(255, 255, 255, ${star.alpha})`;
-            ctx.fill();
-        });
-        
-        const systemLineColors = {
-            daodao: 'rgba(56, 189, 248, 0.7)', // Blue
-            bbl: 'rgba(16, 185, 129, 0.7)', // Green
-            boost: 'rgba(168, 85, 247, 0.7)', // Purple
-            enterprise: 'rgba(56, 189, 248, 0.7)' // Blue
-        };
-
-        mapObjects.forEach(obj => {
-            if (obj.lineTargetId) {
-                const target = mapObjects.find(t => t.id === obj.lineTargetId);
-                if (target) {
-                    ctx.beginPath();
-                    ctx.moveTo(obj.x, obj.y);
-                    if (obj.lineTargetId === 'enterprise') {
-                        const angle = Math.atan2(obj.y - target.y, obj.x - target.x);
-                        // Ensure target width/scale are valid numbers
-                        const targetWidth = (typeof target.width === 'number' && target.width > 0) ? target.width : 100; // Default width
-                        const targetScale = (typeof target.scale === 'number' && target.scale > 0) ? target.scale : 0.1; // Default scale
-                        const edgeRadius = (targetWidth * targetScale / 2) * 0.45; 
-                        ctx.lineTo(target.x + Math.cos(angle) * edgeRadius, target.y + Math.sin(angle) * edgeRadius);
-                    } else if (obj.id.startsWith('satellite')) {
-                        ctx.lineTo(target.x, target.y);
-                        const mothership = mapObjects.find(m => m.id === `mothership_${obj.system}_${obj.address}`);
-                        if(mothership) ctx.lineTo(mothership.x, mothership.y);
-                    }
-                    ctx.strokeStyle = systemLineColors[obj.system];
-                    ctx.lineWidth = 2 / zoom;
-                    ctx.stroke();
-                }
-            }
-        });
-
-        mapObjects.forEach(obj => {
-            // Check if image is loaded and dimensions are valid
-            if (!obj.img || !obj.img.complete || !(obj.width > 0) || !(obj.height > 0)) return;
-            
-            let displayWidth = obj.width * obj.scale;
-            let displayHeight = obj.height * obj.scale;
-            
-            ctx.save();
-            ctx.translate(obj.x, obj.y);
-            ctx.rotate(obj.rotation || 0);
-            try {
-                ctx.drawImage(obj.img, -displayWidth / 2, -displayHeight / 2, displayWidth, displayHeight);
-            } catch (e) {
-                console.error("Error drawing image for object:", obj.id, e);
-            }
-            ctx.restore();
-
-            if(obj.textAbove || obj.textBelow) {
-                ctx.save();
-                ctx.translate(obj.x, obj.y);
-                ctx.rotate(-rotation);
-                ctx.fillStyle = '#FFFFFF';
-                ctx.textAlign = 'center';
-                const textScale = 1 / zoom;
-                if (obj.textAbove) {
-                    ctx.font = `bold ${18 * textScale}px Inter`;
-                    ctx.fillText(obj.textAbove, 0, -displayHeight / 2 - (10 * textScale));
-                }
-                if (obj.textBelow) {
-                     ctx.font = `${16 * textScale}px Inter`;
-                     ctx.fillStyle = '#9ca3af';
-                     ctx.fillText(obj.textBelow, 0, displayHeight / 2 + (20 * textScale));
-                }
-                ctx.restore();
-            }
-        });
-
-        ctx.restore();
-    }
-     function updateStars() {
-        stars.forEach(star => {
-            star.alpha += star.twinkleSpeed * star.twinkleDirection;
-            if (star.alpha > 1 || star.alpha < 0) {
-                 star.alpha = Math.max(0, Math.min(1, star.alpha)); // Clamp alpha
-                 star.twinkleDirection *= -1;
-            }
-        });
-    }
-    
-    function updateObjectRotations() {
-        mapObjects.forEach(obj => {
-            if (obj.rotationSpeed && !obj.isFrozen) {
-                obj.rotation = (obj.rotation || 0) + obj.rotationSpeed; // Ensure rotation is initialized
-            }
-        });
-    }
-
-    function animate() {
-        // Stop animation if canvas is no longer in the DOM or map view is hidden
-        if (!document.body.contains(canvas) || mapView.classList.contains('hidden')) {
-            console.log("Map view hidden or canvas removed, stopping animation."); // Debug log
-             if (globalAnimationFrameId) {
-                cancelAnimationFrame(globalAnimationFrameId);
-                globalAnimationFrameId = null;
-            }
-            isMapInitialized = false; // Allow re-initialization next time
-            return;
-        }
-        updateStars();
-        updateObjectRotations();
-        drawGalaxy();
-        globalAnimationFrameId = requestAnimationFrame(animate); // Continue animation
-    }
-    
-    // ... existing addMapObject function ...
-     function addMapObject(config, preloadedImages) {
-        const img = preloadedImages[config.imageId];
-        if (!img) {
-            console.error(`Image with ID ${config.imageId} not preloaded.`);
-            return;
-        }
-        // Ensure image has dimensions before adding
-        if (!img.width || !img.height) {
-             console.warn(`Image ${config.imageId} has zero dimensions, attempting reload or skip.`);
-             // Optional: try reloading image here if needed
-             return; 
-        }
-        mapObjects.push({ 
-             ...config, 
-             img: img, 
-             width: img.width, 
-             height: img.height, 
-             isFrozen: false,
-             rotation: config.rotation || 0 // Ensure rotation is initialized
-        });
-    }
-
-
-    function init() {
-        console.log("Running init function..."); // Debug log
-        if (globalAnimationFrameId) { 
-            cancelAnimationFrame(globalAnimationFrameId); 
-            globalAnimationFrameId = null;
-        }
-
-        setCanvasSize(); // Attempt to set size based on client dimensions
-        // **CRITICAL CHECK:** Ensure canvas has valid dimensions AFTER setting them.
-        if (canvas.width === 0 || canvas.height === 0) {
-            console.error("Canvas dimensions are zero immediately after setCanvasSize. Map initialization aborted.");
-            // Optionally try again slightly later, although requestAnimationFrame should handle this.
-             // setTimeout(init, 50); 
-            return; // Stop initialization
-        }
-       
-        mapObjects = []; 
-        createStars(); // Create stars based on current (hopefully valid) dimensions
-        
-        const imageAssets = {
-            daodao: 'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/daodao-planet.png',
-            bbl: 'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/bbl-planet.png',
-            boost: 'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/boost-ship.png',
-            enterprise: 'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/enterprise-blackhole.png',
-            allianceLogo: 'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/aDAO%20Logo%20No%20Background.png',
-            terra: 'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Terra.PNG'
-        };
-
-        const imagePromises = Object.entries(imageAssets).map(([id, url]) => {
-            return new Promise((resolve, reject) => {
-                const img = new Image();
-                img.crossOrigin = "anonymous";
-                img.onload = () => {
-                    // Double check dimensions on load
-                     if (img.width === 0 || img.height === 0) {
-                        console.warn(`Image loaded but has zero dimensions: ${id}`);
-                    }
-                    resolve({ id, img });
-                };
-                img.onerror = (err) => {
-                     console.error(`Failed to load image: ${id} from ${url}`, err); // Log error with URL
-                     // Resolve with a placeholder or skip? For now, reject.
-                     reject(new Error(`Failed to load ${id}`));
-                };
-                img.src = url;
-            });
-        });
-
-        Promise.all(imagePromises).then(loadedImageArray => {
-            const preloadedImages = loadedImageArray.reduce((acc, {id, img}) => {
-                acc[id] = img;
-                return acc;
-            }, {});
-            
-            // Re-check canvas size *after* images load, before building systems that rely on positions
-            setCanvasSize();
-             if (canvas.width === 0 || canvas.height === 0) {
-                 console.error("Canvas dimensions became zero after image load. Map initialization aborted.");
-                 return; 
-             }
-
-            buildGalaxySystems(preloadedImages);
-            isMapInitialized = true; // Set flag only after successful setup
-            console.log("Starfield initialization complete. Starting animation."); // Debug log
-            animate(); // Start animation loop
-
-        }).catch(error => {
-             console.error("Error loading one or more system images:", error);
-             showError(canvas.parentElement, `Could not load map assets. Error: ${error.message}`); // Show error in UI
-             isMapInitialized = false; // Ensure flag remains false on error
-        });
-    }
-    
-    // ... existing buildGalaxySystems function ...
-    function buildGalaxySystems(preloadedImages) {
-        // Ensure width/height are valid before calculating positions
-        const width = canvas.width || canvas.clientWidth;
-        const height = canvas.height || canvas.clientHeight;
-        if (width === 0 || height === 0) {
-            console.error("Cannot build galaxy systems, canvas dimensions are zero.");
-            return;
-        }
-
-        const systemCenters = {
-            daodao: { x: 0, y: -height * 2 }, // Use calculated height
-            bbl: { x: -width * 2, y: 0 },   // Use calculated width
-            boost: { x: width * 2, y: 0 },  // Use calculated width
-            enterprise: { x: 0, y: height * 2 } // Use calculated height
-        };
-
-        addMapObject({
-            id: 'terra', imageId: 'terra', type: 'planet',
-            x: 0, y: 0, scale: 0.25, rotation: 0
-        }, preloadedImages);
-
-        const addSystemCenter = (id, imageId, type, scale, spin) => {
-            addMapObject({
-                id: id, imageId: imageId, type: type,
-                x: systemCenters[id].x, y: systemCenters[id].y,
-                scale: scale, rotation: 0, rotationSpeed: spin ? (Math.random() - 0.5) * 0.002 : 0
-            }, preloadedImages);
-        };
-        // Safely calculate scales based on counts (avoid division by zero)
-        const bblCount = allNfts.filter(n=>n.bbl_market).length;
-        const boostCount = allNfts.filter(n=>n.boost_market).length;
-        const enterpriseCount = allNfts.filter(n=>n.staked_enterprise_legacy).length;
-
-        addSystemCenter('daodao', 'daodao', 'planet', 0.5, true);
-        addSystemCenter('bbl', 'bbl', 'planet', bblCount > 0 ? (bblCount / 59) * 0.5 : 0.1, true); // Min scale if 0
-        addSystemCenter('boost', 'boost', 'ship_main', boostCount > 0 ? (boostCount / 59) * 0.5 : 0.1, true); // Min scale if 0
-        addSystemCenter('enterprise', 'enterprise', 'blackhole', enterpriseCount > 0 ? (enterpriseCount / 515) * 0.5 : 0.1, true); // Min scale if 0
-
-
-        const holderStats = {};
-        allNfts.forEach(nft => {
-            if (nft.owner) {
-                if (!holderStats[nft.owner]) {
-                    holderStats[nft.owner] = { total: 0, daodaoStaked: 0, bblListed: 0, boostListed: 0, enterpriseStaked: 0 };
-                }
-                const stats = holderStats[nft.owner];
-                stats.total++;
-                if (nft.staked_daodao) stats.daodaoStaked++;
-                if (nft.bbl_market) stats.bblListed++;
-                if (nft.boost_market) stats.boostListed++;
-                if (nft.staked_enterprise_legacy) stats.enterpriseStaked++;
-            }
-        });
-
-        const createFleetSystem = (systemId, statKey) => {
-            const center = systemCenters[systemId];
-            
-             const topHolders = Object.entries(holderStats)
-                .filter(([, stats]) => stats[statKey] > 0)
-                .sort(([, a], [, b]) => b[statKey] - a[statKey])
-                .slice(0, 10)
-                .map(([address, stats]) => ({ address, ...stats }));
-            
-            if (topHolders.length === 0) return;
-
-            const countList = topHolders.map(s => s[statKey]);
-            const minCount = countList.length > 0 ? Math.min(...countList) : 1;
-            const maxCount = countList.length > 0 ? Math.max(...countList) : 1;
-            const countRange = maxCount > minCount ? maxCount - minCount : 1;
-
-            const minScale = 0.1; const maxScale = 0.3;
-            const scaleRange = maxScale - minScale;
-            
-            // Use current canvas dimensions for radius calculations
-            const currentWidth = canvas.width || canvas.clientWidth;
-            const currentHeight = canvas.height || canvas.clientHeight;
-            const minRadius = Math.min(currentWidth, currentHeight) * 0.6;
-            const maxRadius = Math.min(currentWidth, currentHeight) * 1.5;
-            const radiusRange = maxRadius - minRadius;
-            const angleStep = (2 * Math.PI) / topHolders.length;
-
-            topHolders.forEach((stats, index) => {
-                const { address, total } = stats;
-                const platformCount = stats[statKey];
-                const angle = angleStep * index;
-                
-                // Avoid division by zero if countRange is 1 and platformCount equals minCount
-                const normalizedSize = countRange === 1 ? 0 : (platformCount - minCount) / countRange;
-                const distance = minRadius + (normalizedSize * radiusRange);
-                const scale = minScale + (normalizedSize * scaleRange);
-                const last4 = address.slice(-4);
-                
-                const mothershipX = center.x + Math.cos(angle) * distance;
-                const mothershipY = center.y + Math.sin(angle) * distance;
-
-                addMapObject({
-                    id: `mothership_${systemId}_${address}`, imageId: 'allianceLogo', type: 'ship', address: address,
-                    system: systemId, lineTargetId: `satellite_${systemId}_${address}`,
-                    x: mothershipX, y: mothershipY, scale: scale,
-                    textAbove: `${total - platformCount}`, textBelow: last4
-                }, preloadedImages);
-                
-                addMapObject({
-                    id: `satellite_${systemId}_${address}`, imageId: 'allianceLogo', type: 'ship', address: address,
-                    system: systemId, lineTargetId: systemId,
-                    x: (mothershipX + center.x) / 2, y: (mothershipY + center.y) / 2,
-                    scale: scale * 0.8, // Satellite slightly smaller
-                    textAbove: `${platformCount}`, textBelow: last4
-                }, preloadedImages);
-            });
-        };
-        
-        const createEnterpriseSystem = () => {
-             // Use current canvas dimensions
-             const currentWidth = canvas.width || canvas.clientWidth;
-             const currentHeight = canvas.height || canvas.clientHeight;
-             if (currentWidth === 0 || currentHeight === 0) return; // Guard clause
-
-             const center = systemCenters.enterprise;
-             const statKey = 'enterpriseStaked'; // Define statKey here
-            
-             const topStakers = Object.entries(holderStats)
-                .filter(([, stats]) => stats.enterpriseStaked > 0)
-                // Corrected sorting key here
-                .sort(([, a], [, b]) => b.enterpriseStaked - a.enterpriseStaked) 
-                .slice(0, 10)
-                .map(([address, stats]) => ({ address, ...stats }));
-            
-            if (topStakers.length === 0) return;
-
-            const countList = topStakers.map(s => s.enterpriseStaked);
-            const minCount = Math.min(...countList);
-            const maxCount = Math.max(...countList);
-            const countRange = maxCount > minCount ? maxCount - minCount : 1;
-
-            const minScale = 0.1; const maxScale = 0.3;
-            const scaleRange = maxScale - minScale;
-
-            const minRadius = Math.min(currentWidth, currentHeight) * 0.6;
-            const maxRadius = Math.min(currentWidth, currentHeight) * 1.2;
-            const radiusRange = maxRadius - minRadius;
-            const angleStep = (2 * Math.PI) / topStakers.length;
-            
-            topStakers.forEach((stats, index) => {
-                const { address, enterpriseStaked } = stats;
-                const angle = angleStep * index;
-                
-                 // Avoid division by zero
-                const normalizedSize = countRange === 1 ? 0 : (enterpriseStaked - minCount) / countRange;
-                const distance = minRadius + (normalizedSize * radiusRange);
-                const scale = minScale + (normalizedSize * scaleRange);
-                
-                addMapObject({
-                    id: `ship_enterprise_${address}`, imageId: 'allianceLogo', type: 'ship', address: address,
-                    system: 'enterprise', lineTargetId: 'enterprise',
-                    x: center.x + Math.cos(angle) * distance, y: center.y + Math.sin(angle) * distance,
-                    scale: scale, textAbove: `${enterpriseStaked}`, textBelow: address.slice(-4)
-                }, preloadedImages);
-            });
-        };
-
-        createFleetSystem('daodao', 'daodaoStaked');
-        createFleetSystem('bbl', 'bblListed');
-        createFleetSystem('boost', 'boostListed');
-        createEnterpriseSystem();
-        console.log("Galaxy systems built."); // Debug log
-    }
-
-    // --- Event Listeners for Panning and Zooming ---
-    // Remove existing listeners before adding new ones to prevent duplicates if init runs multiple times
-    const removeIfExists = (element, type, handler, options) => {
-         if (element && typeof element.removeEventListener === 'function') {
-             element.removeEventListener(type, handler, options);
-         }
-    };
-    
-    // Define handlers separately to allow removal
-    const handleContextMenu = (e) => e.preventDefault();
-    const handleMouseDown = (e) => {
-         e.preventDefault();
-        if (e.button === 1 || e.ctrlKey || e.metaKey) { // Middle mouse or Ctrl/Cmd + Left Click for rotate
-            isRotating = true; 
-            isPanning = false; 
-            canvas.style.cursor = 'ew-resize'; 
-        } 
-        else if (e.button === 0) { // Left click for pan
-            isPanning = true; 
-            isRotating = false; 
-            canvas.style.cursor = 'grabbing'; 
-        }
-        lastMouseX = e.clientX;
-        lastMouseY = e.clientY;
-    };
-     const handleMouseUp = (e) => {
-        e.preventDefault();
-        isPanning = false; // Always stop panning on mouse up
-        isRotating = false; // Always stop rotating on mouse up
-        canvas.style.cursor = 'grab'; // Reset cursor
-    };
-     const handleMouseLeave = () => {
-        isPanning = false;
-        isRotating = false;
-        canvas.style.cursor = 'grab';
-    };
-     const handleMouseMove = (e) => {
-         // ... (rest of mouse move logic remains the same) ...
-         const rect = canvas.getBoundingClientRect();
-         // Check if rect dimensions are valid
-        if (rect.width === 0 || rect.height === 0) return; 
-
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
-
-        // Check if mouse coordinates are valid relative to canvas
-        if (mouseX < 0 || mouseX > canvas.width || mouseY < 0 || mouseY > canvas.height) {
-            // Mouse is outside the canvas bounds, potentially due to rapid movement or leaving window
-             if (isPanning || isRotating) { // If dragging, stop the drag operation
-                 isPanning = false;
-                 isRotating = false;
-                 canvas.style.cursor = 'grab';
-             }
-            return; 
-        }
-
-
-        // Calculate world coordinates relative to the current view transform
-         // Add guards for zoom being zero
-        const currentZoom = (zoom === 0) ? 0.0001 : zoom; // Prevent division by zero
-        const worldX = (mouseX - (canvas.width / 2 + offsetX)) / currentZoom;
-        const worldY = (mouseY - (canvas.height / 2 + offsetY)) / currentZoom;
-
-        // Apply inverse rotation to get coordinates in the unrotated world space
-        const sinR = Math.sin(-rotation);
-        const cosR = Math.cos(-rotation);
-        const rotatedX = worldX * cosR - worldY * sinR;
-        const rotatedY = worldX * sinR + worldY * cosR;
-
-         if (isPanning || isRotating) {
-             if (isPanning) {
-                 offsetX += e.clientX - lastMouseX;
-                 offsetY += e.clientY - lastMouseY;
-             } else if (isRotating) {
-                 rotation += (e.clientX - lastMouseX) / 300;
-             }
-         } else {
-             // Hover detection logic
-             let isAnyObjectHovered = false;
-             // Iterate backwards to check topmost objects first
-             for (let i = mapObjects.length - 1; i >= 0; i--) {
-                 const obj = mapObjects[i];
-                 // Ensure object properties are valid before hit testing
-                 if (!obj || typeof obj.x !== 'number' || typeof obj.y !== 'number' || typeof obj.width !== 'number' || typeof obj.height !== 'number' || typeof obj.scale !== 'number') continue; 
-
-                 const displayWidth = obj.width * obj.scale;
-                 const displayHeight = obj.height * obj.scale;
-                 const halfWidth = displayWidth / 2;
-                 const halfHeight = displayHeight / 2;
-
-                 // Simple AABB (Axis-Aligned Bounding Box) check in the rotated world space
-                 const isHovered = (
-                     rotatedX >= obj.x - halfWidth && 
-                     rotatedX <= obj.x + halfWidth && 
-                     rotatedY >= obj.y - halfHeight && 
-                     rotatedY <= obj.y + halfHeight
-                 );
-
-                 obj.isFrozen = isHovered; // Freeze rotation on hover
-
-                 if (isHovered && (obj.address || ['daodao', 'bbl', 'boost', 'enterprise'].includes(obj.id))) {
-                     isAnyObjectHovered = true;
-                     break; // Found a hover target, no need to check objects underneath
-                 }
-             }
-             canvas.style.cursor = isAnyObjectHovered ? 'pointer' : 'grab';
-         }
-         lastMouseX = e.clientX;
-         lastMouseY = e.clientY;
-    };
-     const handleWheel = (e) => {
-        e.preventDefault();
-        const rect = canvas.getBoundingClientRect();
-        if (rect.width === 0 || rect.height === 0) return; // Prevent zoom if canvas has no size
-
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
-        const zoomFactor = 1.1;
-
-         // Prevent division by zero if zoom is somehow 0
-        const currentZoom = (zoom === 0) ? 0.0001 : zoom; 
-
-        // World coordinates before zoom
-        const mouseBeforeZoomX = (mouseX - (canvas.width / 2 + offsetX)) / currentZoom;
-        const mouseBeforeZoomY = (mouseY - (canvas.height / 2 + offsetY)) / currentZoom;
-
-        let newZoom;
-        if (e.deltaY < 0) { // Zoom in
-             newZoom = Math.min(maxZoom, currentZoom * zoomFactor); 
-        } 
-        else { // Zoom out
-             newZoom = Math.max(minZoom, currentZoom / zoomFactor); 
-        }
-         // Prevent zoom from becoming exactly zero
-         if (newZoom <= 0) newZoom = minZoom; 
-
-         // World coordinates after zoom
-         const mouseAfterZoomX = (mouseX - (canvas.width / 2 + offsetX)) / newZoom;
-         const mouseAfterZoomY = (mouseY - (canvas.height / 2 + offsetY)) / newZoom;
-
-         // Adjust offset to keep the point under the mouse stationary
-         offsetX += (mouseAfterZoomX - mouseBeforeZoomX) * newZoom;
-         offsetY += (mouseAfterZoomY - mouseBeforeZoomY) * newZoom;
-
-         zoom = newZoom; // Update the global zoom state
-    };
-    const handleClick = (e) => {
-         // ... (rest of click logic remains the same) ...
-         const rect = canvas.getBoundingClientRect();
-          if (rect.width === 0 || rect.height === 0) return;
-
-         const mouseX = e.clientX - rect.left;
-         const mouseY = e.clientY - rect.top;
-
-         // Add guards for zoom being zero
-         const currentZoom = (zoom === 0) ? 0.0001 : zoom;
-         const worldX = (mouseX - (canvas.width / 2 + offsetX)) / currentZoom;
-         const worldY = (mouseY - (canvas.height / 2 + offsetY)) / currentZoom;
-         const sinR = Math.sin(-rotation);
-         const cosR = Math.cos(-rotation);
-         const rotatedX = worldX * cosR - worldY * sinR;
-         const rotatedY = worldX * sinR + worldY * cosR;
-
-         let clickedObject = null;
-         // Check in reverse to prioritize clicking top-most items
-         for (let i = mapObjects.length - 1; i >= 0; i--) {
-             const obj = mapObjects[i];
-              // Add checks for valid object properties
-              if (!obj || typeof obj.x !== 'number' || typeof obj.y !== 'number' || typeof obj.width !== 'number' || typeof obj.height !== 'number' || typeof obj.scale !== 'number') continue; 
-
-             const displayWidth = obj.width * obj.scale;
-             const displayHeight = obj.height * obj.scale;
-             const halfWidth = displayWidth / 2;
-             const halfHeight = displayHeight / 2;
-             
-             if (rotatedX >= obj.x - halfWidth && rotatedX <= obj.x + halfWidth && rotatedY >= obj.y - halfHeight && rotatedY <= obj.y + halfHeight) {
-                 clickedObject = obj;
-                 break; 
-             }
-         }
-
-         if (clickedObject) {
-             console.log("Clicked map object:", clickedObject); // Debug log
-             if (clickedObject.address) {
-                 showWalletExplorerModal(clickedObject.address);
-             } else if (['daodao', 'bbl', 'boost', 'enterprise'].includes(clickedObject.id)) {
-                  showSystemLeaderboardModal(clickedObject.id);
-             }
-         } else {
-             console.log("Clicked empty space on map."); // Debug log
-         }
-    };
-    const handleResize = debounce(() => {
-        console.log("Window resize detected, re-initializing map."); // Debug log
-        isMapInitialized = false; // Reset flag to allow re-init
-        initializeStarfield(); // Re-initialize completely on resize
-    }, 250);
-
-    // Remove old listeners
-    removeIfExists(canvas, 'contextmenu', handleContextMenu);
-    removeIfExists(canvas, 'mousedown', handleMouseDown);
-    removeIfExists(canvas, 'mouseup', handleMouseUp);
-    removeIfExists(canvas, 'mouseleave', handleMouseLeave);
-    removeIfExists(canvas, 'mousemove', handleMouseMove);
-    removeIfExists(canvas, 'wheel', handleWheel, { passive: false });
-    removeIfExists(canvas, 'click', handleClick);
-    removeIfExists(window, 'resize', handleResize);
-
-
-    // Add new listeners
-    canvas.addEventListener('contextmenu', handleContextMenu);
-    canvas.addEventListener('mousedown', handleMouseDown);
-    // Add listeners to window for mouseup/leave to catch events outside canvas
-    window.addEventListener('mouseup', handleMouseUp); 
-    // canvas.addEventListener('mouseleave', handleMouseLeave); // Keep mouseleave on canvas
-    canvas.addEventListener('mousemove', handleMouseMove);
-    canvas.addEventListener('wheel', handleWheel, { passive: false }); // Need passive: false to prevent default scroll zoom
-    canvas.addEventListener('click', handleClick);
-    window.addEventListener('resize', handleResize);
-
-    init(); // Start the initialization process
 };
 
 
@@ -1937,4 +1048,56 @@ const handleAddressInput = (inputEl, suggestionsEl, onSelectCallback, isWallet) 
 
 // --- Initialize Application ---
 initializeExplorer();
+
+const showWalletExplorerModal = (address) => {
+    const walletNfts = allNfts.filter(nft => nft.owner === address);
+    if (walletNfts.length === 0) return;
+
+    const titleEl = document.getElementById('wallet-modal-title');
+    const statsEl = document.getElementById('wallet-modal-stats');
+    const galleryEl = document.getElementById('wallet-modal-gallery');
+
+    titleEl.textContent = address;
+    statsEl.innerHTML = '';
+    galleryEl.innerHTML = '';
+
+    // Calculate stats based on the wallet's NFTs, using recalculated liquid status
+    const daodaoStaked = walletNfts.filter(n => n.staked_daodao).length;
+    const enterpriseStaked = walletNfts.filter(n => n.staked_enterprise_legacy).length;
+    const boostListed = walletNfts.filter(n => n.boost_market).length;
+    const bblListed = walletNfts.filter(n => n.bbl_market).length;
+    const broken = walletNfts.filter(n => n.broken).length;
+    const total = walletNfts.length;
+    const unbroken = total - broken;
+    // Calculate liquid specifically for this wallet using the updated definition
+    const liquid = walletNfts.filter(n => n.liquid).length;
+
+    const stats = [
+        { label: 'Total NFTs', value: total, color: 'text-white' },
+        { label: 'Liquid', value: liquid, color: 'text-white' }, // Display recalculated liquid
+        { label: 'DAODAO Staked', value: daodaoStaked, color: 'text-cyan-400' },
+        { label: 'Enterprise Staked', value: enterpriseStaked, color: 'text-gray-400' },
+        { label: 'Boost Listed', value: boostListed, color: 'text-purple-400' },
+        { label: 'BBL Listed', value: bblListed, color: 'text-green-400' },
+        { label: 'Unbroken', value: unbroken, color: 'text-green-400' },
+        { label: 'Broken', value: broken, color: 'text-red-400' },
+    ];
+
+    stats.forEach(stat => {
+        statsEl.innerHTML += `
+            <div class="text-center">
+                <div class="text-xs text-gray-400 uppercase tracking-wider">${stat.label}</div>
+                <div class="text-2xl font-bold ${stat.color}">${stat.value}</div>
+            </div>
+        `;
+    });
+
+    walletNfts.sort((a,b) => a.rank - b.rank).forEach(nft => {
+        galleryEl.appendChild(createNftCard(nft, '.wallet-trait-toggle'));
+    });
+
+    walletExplorerModal.classList.remove('hidden');
+};
+
+// ... rest of existing code ...
 
