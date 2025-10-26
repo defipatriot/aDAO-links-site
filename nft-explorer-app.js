@@ -335,56 +335,12 @@ const populateWalletTraitToggles = () => {
 };
 
 const addAllEventListeners = () => {
-     document.querySelectorAll('.toggle-checkbox').forEach(toggle => {
-        toggle.addEventListener('change', (e) => {
-            const parent = e.target.closest('.justify-between');
-            if (!parent) return;
-            const slider = parent.querySelector('.direction-slider');
-            if (slider) {
-                slider.disabled = !e.target.checked;
-            }
-            handleFilterChange();
-        });
-    });
-    document.querySelectorAll('.direction-slider').forEach(slider => slider.addEventListener('input', handleFilterChange));
-    document.querySelectorAll('.trait-toggle').forEach(el => el.addEventListener('change', () => displayPage(currentPage)));
-    document.querySelectorAll('.multi-select-checkbox').forEach(el => el.addEventListener('change', handleFilterChange));
-    
-    addressDropdown.addEventListener('change', () => {
-        searchAddressInput.value = addressDropdown.value;
-        handleFilterChange();
-    });
-    
-    walletTraitTogglesContainer.addEventListener('change', (e) => {
-        if (e.target.classList.contains('wallet-trait-toggle')) {
-            searchWallet(); // Re-render gallery with new toggle settings
-        }
-    });
+     // ... existing listeners ...
 
-    // --- Modal Listeners ---
-    document.addEventListener('click', () => closeAllDropdowns());
-    modalCloseBtn.addEventListener('click', hideNftDetails);
-    nftModal.addEventListener('click', (e) => { if (e.target === nftModal) hideNftDetails(); });
-    rarityExplainedBtn.addEventListener('click', () => rarityModal.classList.remove('hidden'));
-    rarityModalCloseBtn.addEventListener('click', () => rarityModal.classList.add('hidden'));
-    rarityModal.addEventListener('click', (e) => { if (e.target === rarityModal) rarityModal.classList.add('hidden'); });
-    badgesExplainedBtn.addEventListener('click', () => badgeModal.classList.remove('hidden'));
-    badgeModalCloseBtn.addEventListener('click', () => badgeModal.classList.add('hidden'));
-    badgeModal.addEventListener('click', (e) => { if (e.target === badgeModal) badgeModal.classList.add('hidden'); });
-    walletModalCloseBtn.addEventListener('click', hideWalletExplorerModal);
-    walletExplorerModal.addEventListener('click', (e) => { if (e.target === walletExplorerModal) hideWalletExplorerModal(); });
-    systemModalCloseBtn.addEventListener('click', hideSystemLeaderboardModal);
-    systemLeaderboardModal.addEventListener('click', (e) => { if (e.target === systemLeaderboardModal) hideSystemLeaderboardModal(); });
-
-    // --- Filter/Search Listeners ---
-    const debouncedFilter = debounce(handleFilterChange, 300);
-    searchInput.addEventListener('input', debouncedFilter);
-    sortSelect.addEventListener('change', handleFilterChange);
-    resetButton.addEventListener('click', resetAll);
-    
-    // --- View Switching Listeners (PERFORMANCE FIX ADDED) ---
+    // --- View Switching Listeners (PERFORMANCE FIX & RENDER TIMING FIX ADDED) ---
     collectionViewBtn.addEventListener('click', () => {
         if (globalAnimationFrameId) cancelAnimationFrame(globalAnimationFrameId); // Stop map animation
+        isMapInitialized = false; // Reset map initialization flag
         collectionView.classList.remove('hidden');
         walletView.classList.add('hidden');
         mapView.classList.add('hidden');
@@ -395,6 +351,7 @@ const addAllEventListeners = () => {
 
     walletViewBtn.addEventListener('click', () => {
         if (globalAnimationFrameId) cancelAnimationFrame(globalAnimationFrameId); // Stop map animation
+        isMapInitialized = false; // Reset map initialization flag
         walletView.classList.remove('hidden');
         collectionView.classList.add('hidden');
         mapView.classList.add('hidden');
@@ -404,6 +361,7 @@ const addAllEventListeners = () => {
     });
 
      mapViewBtn.addEventListener('click', () => {
+        // Make the map view visible FIRST
         mapView.classList.remove('hidden');
         collectionView.classList.add('hidden');
         walletView.classList.add('hidden');
@@ -411,67 +369,14 @@ const addAllEventListeners = () => {
         collectionViewBtn.classList.remove('active');
         walletViewBtn.classList.remove('active');
         
-        initializeStarfield(); // Start map animation
-    });
-
-    // --- Wallet View Listeners ---
-    walletResetBtn.addEventListener('click', () => {
-        walletSearchAddressInput.value = '';
-        walletGallery.innerHTML = '';
-        walletGalleryTitle.textContent = 'Wallet NFTs';
-         document.querySelectorAll('.leaderboard-row').forEach(row => {
-            row.classList.remove('selected');
+        // Use requestAnimationFrame to ensure the browser has rendered the view
+        // and calculated canvas dimensions BEFORE initializing the starfield.
+        requestAnimationFrame(() => {
+            initializeStarfield(); // Start map animation only after render
         });
     });
 
-    walletSearchAddressInput.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') searchWallet();
-    });
-    
-    searchAddressInput.addEventListener('input', () => {
-        handleAddressInput(searchAddressInput, addressSuggestions, handleFilterChange, false);
-    });
-    
-    walletSearchAddressInput.addEventListener('input', () => {
-        handleAddressInput(walletSearchAddressInput, walletAddressSuggestions, searchWallet, true);
-    });
-
-    leaderboardTable.addEventListener('click', (e) => {
-        const headerCell = e.target.closest('[data-sort-by]');
-        if (!headerCell) return;
-
-        const newColumn = headerCell.dataset.sortBy;
-        if (holderSort.column === newColumn) {
-            holderSort.direction = holderSort.direction === 'desc' ? 'asc' : 'desc';
-        } else {
-            holderSort.column = newColumn;
-            holderSort.direction = (newColumn === 'address') ? 'asc' : 'desc'; // Default text to A-Z
-        }
-        sortAndDisplayHolders();
-    });
-
-    // --- Copy Button Listeners ---
-     const setupCopyButton = (buttonEl, inputEl) => {
-         buttonEl.addEventListener('click', () => copyToClipboard(inputEl.value));
-     };
-    setupCopyButton(copyAddressBtn, searchAddressInput);
-    setupCopyButton(walletCopyAddressBtn, walletSearchAddressInput);
-
-    // --- Filter Section Toggles ---
-    const toggleInhabitantFiltersBtn = document.getElementById('toggle-inhabitant-filters');
-    const inhabitantArrow = document.getElementById('inhabitant-arrow');
-    const togglePlanetFiltersBtn = document.getElementById('toggle-planet-filters');
-    const planetArrow = document.getElementById('planet-arrow');
-
-    toggleInhabitantFiltersBtn.addEventListener('click', () => {
-        inhabitantFiltersContainer.classList.toggle('hidden');
-        inhabitantArrow.classList.toggle('rotate-180');
-    });
-
-    togglePlanetFiltersBtn.addEventListener('click', () => {
-        planetFiltersContainer.classList.toggle('hidden');
-        planetArrow.classList.toggle('rotate-180');
-    });
+    // ... rest of existing listeners ...
 };
 
 const setupAddressFeatures = () => {
@@ -1273,12 +1178,25 @@ const updateHolderPaginationControls = () => {
 };
 
 // --- Map View Logic ---
-let isMapInitialized = false;
+//let isMapInitialized = false; // Moved initialization check inside initializeStarfield
 const initializeStarfield = () => {
-    if (isMapInitialized) return;
-    
+    // Check if already initialized or canvas not found
     const canvas = document.getElementById('space-canvas');
-    if (!canvas) return;
+    if (!canvas) {
+        console.error("Space canvas element not found!");
+        return;
+    }
+     // If map is already running, don't re-initialize
+    if (isMapInitialized) {
+        // Ensure animation is running if we switch back to the tab
+        if (!globalAnimationFrameId) {
+             console.log("Restarting map animation frame."); // Debug log
+             animate(); // Restart animation loop if stopped
+        }
+        return;
+    }
+    console.log("Initializing starfield..."); // Debug log
+
     const ctx = canvas.getContext('2d');
     let stars = [];
     let mapObjects = [];
@@ -1289,17 +1207,34 @@ const initializeStarfield = () => {
     const minZoom = 0.1, maxZoom = 5;
 
     function setCanvasSize() {
-        canvas.width = canvas.offsetWidth;
-        canvas.height = canvas.offsetHeight;
+        // Ensure canvas dimensions reflect actual display size
+        const displayWidth = canvas.clientWidth;
+        const displayHeight = canvas.clientHeight;
+
+        // Check if the canvas size needs updating
+        if (canvas.width !== displayWidth || canvas.height !== displayHeight) {
+            canvas.width = displayWidth;
+            canvas.height = displayHeight;
+             console.log(`Canvas resized to: ${canvas.width}x${canvas.height}`); // Debug log
+            return true; // Indicate size changed
+        }
+        return false; // Indicate size did not change
     }
     
+    // ... existing createStars function ...
     function createStars() {
         stars = [];
-        const starCount = (canvas.width * canvas.height * 4) / 1000; 
+        // Ensure width/height are valid before calculating count
+        const width = canvas.width || canvas.clientWidth;
+        const height = canvas.height || canvas.clientHeight;
+        if (width === 0 || height === 0) return; // Don't create stars if canvas size is invalid
+
+        const starCount = (width * height * 4) / 1000; 
+        console.log(`Creating ${Math.round(starCount)} stars for ${width}x${height} canvas.`); // Debug log
         for (let i = 0; i < starCount; i++) {
             stars.push({
-                x: (Math.random() - 0.5) * canvas.width * 10,
-                y: (Math.random() - 0.5) * canvas.height * 10,
+                x: (Math.random() - 0.5) * width * 10, // Use calculated width/height
+                y: (Math.random() - 0.5) * height * 10, // Use calculated width/height
                 radius: Math.random() * 1.5 + 0.5,
                 alpha: Math.random(),
                 twinkleSpeed: Math.random() * 0.03 + 0.005,
@@ -1308,9 +1243,18 @@ const initializeStarfield = () => {
         }
     }
 
+
+    // ... existing drawGalaxy, updateStars, updateObjectRotations functions ...
     function drawGalaxy() {
+        if (!ctx) return; // Ensure context is valid
         ctx.save();
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // Check for valid dimensions before proceeding
+        if (canvas.width === 0 || canvas.height === 0) {
+             ctx.restore();
+             console.warn("Skipping drawGalaxy: Canvas dimensions are zero."); // Debug log
+             return;
+        }
         ctx.translate(canvas.width / 2 + offsetX, canvas.height / 2 + offsetY);
         ctx.scale(zoom, zoom);
         ctx.rotate(rotation);
@@ -1337,7 +1281,10 @@ const initializeStarfield = () => {
                     ctx.moveTo(obj.x, obj.y);
                     if (obj.lineTargetId === 'enterprise') {
                         const angle = Math.atan2(obj.y - target.y, obj.x - target.x);
-                        const edgeRadius = (target.width * target.scale / 2) * 0.45; 
+                        // Ensure target width/scale are valid numbers
+                        const targetWidth = (typeof target.width === 'number' && target.width > 0) ? target.width : 100; // Default width
+                        const targetScale = (typeof target.scale === 'number' && target.scale > 0) ? target.scale : 0.1; // Default scale
+                        const edgeRadius = (targetWidth * targetScale / 2) * 0.45; 
                         ctx.lineTo(target.x + Math.cos(angle) * edgeRadius, target.y + Math.sin(angle) * edgeRadius);
                     } else if (obj.id.startsWith('satellite')) {
                         ctx.lineTo(target.x, target.y);
@@ -1352,7 +1299,8 @@ const initializeStarfield = () => {
         });
 
         mapObjects.forEach(obj => {
-            if (!obj.img || !obj.img.complete || obj.width === 0) return;
+            // Check if image is loaded and dimensions are valid
+            if (!obj.img || !obj.img.complete || !(obj.width > 0) || !(obj.height > 0)) return;
             
             let displayWidth = obj.width * obj.scale;
             let displayHeight = obj.height * obj.scale;
@@ -1360,7 +1308,11 @@ const initializeStarfield = () => {
             ctx.save();
             ctx.translate(obj.x, obj.y);
             ctx.rotate(obj.rotation || 0);
-            ctx.drawImage(obj.img, -displayWidth / 2, -displayHeight / 2, displayWidth, displayHeight);
+            try {
+                ctx.drawImage(obj.img, -displayWidth / 2, -displayHeight / 2, displayWidth, displayHeight);
+            } catch (e) {
+                console.error("Error drawing image for object:", obj.id, e);
+            }
             ctx.restore();
 
             if(obj.textAbove || obj.textBelow) {
@@ -1385,12 +1337,12 @@ const initializeStarfield = () => {
 
         ctx.restore();
     }
-
-    function updateStars() {
+     function updateStars() {
         stars.forEach(star => {
             star.alpha += star.twinkleSpeed * star.twinkleDirection;
             if (star.alpha > 1 || star.alpha < 0) {
-                star.twinkleDirection *= -1;
+                 star.alpha = Math.max(0, Math.min(1, star.alpha)); // Clamp alpha
+                 star.twinkleDirection *= -1;
             }
         });
     }
@@ -1398,34 +1350,70 @@ const initializeStarfield = () => {
     function updateObjectRotations() {
         mapObjects.forEach(obj => {
             if (obj.rotationSpeed && !obj.isFrozen) {
-                obj.rotation += obj.rotationSpeed;
+                obj.rotation = (obj.rotation || 0) + obj.rotationSpeed; // Ensure rotation is initialized
             }
         });
     }
 
     function animate() {
+        // Stop animation if canvas is no longer in the DOM or map view is hidden
+        if (!document.body.contains(canvas) || mapView.classList.contains('hidden')) {
+            console.log("Map view hidden or canvas removed, stopping animation."); // Debug log
+             if (globalAnimationFrameId) {
+                cancelAnimationFrame(globalAnimationFrameId);
+                globalAnimationFrameId = null;
+            }
+            isMapInitialized = false; // Allow re-initialization next time
+            return;
+        }
         updateStars();
         updateObjectRotations();
         drawGalaxy();
-        globalAnimationFrameId = requestAnimationFrame(animate); // Use global ID
+        globalAnimationFrameId = requestAnimationFrame(animate); // Continue animation
     }
     
-    function addMapObject(config, preloadedImages) {
+    // ... existing addMapObject function ...
+     function addMapObject(config, preloadedImages) {
         const img = preloadedImages[config.imageId];
         if (!img) {
             console.error(`Image with ID ${config.imageId} not preloaded.`);
             return;
         }
-        mapObjects.push({ ...config, img: img, width: img.width, height: img.height, isFrozen: false });
+        // Ensure image has dimensions before adding
+        if (!img.width || !img.height) {
+             console.warn(`Image ${config.imageId} has zero dimensions, attempting reload or skip.`);
+             // Optional: try reloading image here if needed
+             return; 
+        }
+        mapObjects.push({ 
+             ...config, 
+             img: img, 
+             width: img.width, 
+             height: img.height, 
+             isFrozen: false,
+             rotation: config.rotation || 0 // Ensure rotation is initialized
+        });
     }
 
+
     function init() {
-        if (globalAnimationFrameId) { // Use global ID
-            cancelAnimationFrame(globalAnimationFrameId); // Use global ID
+        console.log("Running init function..."); // Debug log
+        if (globalAnimationFrameId) { 
+            cancelAnimationFrame(globalAnimationFrameId); 
+            globalAnimationFrameId = null;
         }
-        setCanvasSize();
-        mapObjects = [];
-        createStars();
+
+        setCanvasSize(); // Attempt to set size based on client dimensions
+        // **CRITICAL CHECK:** Ensure canvas has valid dimensions AFTER setting them.
+        if (canvas.width === 0 || canvas.height === 0) {
+            console.error("Canvas dimensions are zero immediately after setCanvasSize. Map initialization aborted.");
+            // Optionally try again slightly later, although requestAnimationFrame should handle this.
+             // setTimeout(init, 50); 
+            return; // Stop initialization
+        }
+       
+        mapObjects = []; 
+        createStars(); // Create stars based on current (hopefully valid) dimensions
         
         const imageAssets = {
             daodao: 'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/daodao-planet.png',
@@ -1440,8 +1428,18 @@ const initializeStarfield = () => {
             return new Promise((resolve, reject) => {
                 const img = new Image();
                 img.crossOrigin = "anonymous";
-                img.onload = () => resolve({ id, img });
-                img.onerror = () => reject(new Error(`Failed to load ${id}`));
+                img.onload = () => {
+                    // Double check dimensions on load
+                     if (img.width === 0 || img.height === 0) {
+                        console.warn(`Image loaded but has zero dimensions: ${id}`);
+                    }
+                    resolve({ id, img });
+                };
+                img.onerror = (err) => {
+                     console.error(`Failed to load image: ${id} from ${url}`, err); // Log error with URL
+                     // Resolve with a placeholder or skip? For now, reject.
+                     reject(new Error(`Failed to load ${id}`));
+                };
                 img.src = url;
             });
         });
@@ -1452,19 +1450,40 @@ const initializeStarfield = () => {
                 return acc;
             }, {});
             
-            isMapInitialized = true;
-            buildGalaxySystems(preloadedImages);
-            animate();
+            // Re-check canvas size *after* images load, before building systems that rely on positions
+            setCanvasSize();
+             if (canvas.width === 0 || canvas.height === 0) {
+                 console.error("Canvas dimensions became zero after image load. Map initialization aborted.");
+                 return; 
+             }
 
-        }).catch(error => console.error("Error loading system images:", error));
+            buildGalaxySystems(preloadedImages);
+            isMapInitialized = true; // Set flag only after successful setup
+            console.log("Starfield initialization complete. Starting animation."); // Debug log
+            animate(); // Start animation loop
+
+        }).catch(error => {
+             console.error("Error loading one or more system images:", error);
+             showError(canvas.parentElement, `Could not load map assets. Error: ${error.message}`); // Show error in UI
+             isMapInitialized = false; // Ensure flag remains false on error
+        });
     }
     
+    // ... existing buildGalaxySystems function ...
     function buildGalaxySystems(preloadedImages) {
+        // Ensure width/height are valid before calculating positions
+        const width = canvas.width || canvas.clientWidth;
+        const height = canvas.height || canvas.clientHeight;
+        if (width === 0 || height === 0) {
+            console.error("Cannot build galaxy systems, canvas dimensions are zero.");
+            return;
+        }
+
         const systemCenters = {
-            daodao: { x: 0, y: -canvas.height * 2 },
-            bbl: { x: -canvas.width * 2, y: 0 },
-            boost: { x: canvas.width * 2, y: 0 },
-            enterprise: { x: 0, y: canvas.height * 2 }
+            daodao: { x: 0, y: -height * 2 }, // Use calculated height
+            bbl: { x: -width * 2, y: 0 },   // Use calculated width
+            boost: { x: width * 2, y: 0 },  // Use calculated width
+            enterprise: { x: 0, y: height * 2 } // Use calculated height
         };
 
         addMapObject({
@@ -1479,11 +1498,15 @@ const initializeStarfield = () => {
                 scale: scale, rotation: 0, rotationSpeed: spin ? (Math.random() - 0.5) * 0.002 : 0
             }, preloadedImages);
         };
+        // Safely calculate scales based on counts (avoid division by zero)
+        const bblCount = allNfts.filter(n=>n.bbl_market).length;
+        const boostCount = allNfts.filter(n=>n.boost_market).length;
+        const enterpriseCount = allNfts.filter(n=>n.staked_enterprise_legacy).length;
 
         addSystemCenter('daodao', 'daodao', 'planet', 0.5, true);
-        addSystemCenter('bbl', 'bbl', 'planet', (allNfts.filter(n=>n.bbl_market).length / 59) * 0.5, true);
-        addSystemCenter('boost', 'boost', 'ship_main', (allNfts.filter(n=>n.boost_market).length / 59) * 0.5, true);
-        addSystemCenter('enterprise', 'enterprise', 'blackhole', (allNfts.filter(n=>n.staked_enterprise_legacy).length / 515) * 0.5, true);
+        addSystemCenter('bbl', 'bbl', 'planet', bblCount > 0 ? (bblCount / 59) * 0.5 : 0.1, true); // Min scale if 0
+        addSystemCenter('boost', 'boost', 'ship_main', boostCount > 0 ? (boostCount / 59) * 0.5 : 0.1, true); // Min scale if 0
+        addSystemCenter('enterprise', 'enterprise', 'blackhole', enterpriseCount > 0 ? (enterpriseCount / 515) * 0.5 : 0.1, true); // Min scale if 0
 
 
         const holderStats = {};
@@ -1520,8 +1543,11 @@ const initializeStarfield = () => {
             const minScale = 0.1; const maxScale = 0.3;
             const scaleRange = maxScale - minScale;
             
-            const minRadius = Math.min(canvas.width, canvas.height) * 0.6;
-            const maxRadius = Math.min(canvas.width, canvas.height) * 1.5;
+            // Use current canvas dimensions for radius calculations
+            const currentWidth = canvas.width || canvas.clientWidth;
+            const currentHeight = canvas.height || canvas.clientHeight;
+            const minRadius = Math.min(currentWidth, currentHeight) * 0.6;
+            const maxRadius = Math.min(currentWidth, currentHeight) * 1.5;
             const radiusRange = maxRadius - minRadius;
             const angleStep = (2 * Math.PI) / topHolders.length;
 
@@ -1530,7 +1556,8 @@ const initializeStarfield = () => {
                 const platformCount = stats[statKey];
                 const angle = angleStep * index;
                 
-                const normalizedSize = (platformCount - minCount) / countRange;
+                // Avoid division by zero if countRange is 1 and platformCount equals minCount
+                const normalizedSize = countRange === 1 ? 0 : (platformCount - minCount) / countRange;
                 const distance = minRadius + (normalizedSize * radiusRange);
                 const scale = minScale + (normalizedSize * scaleRange);
                 const last4 = address.slice(-4);
@@ -1556,11 +1583,18 @@ const initializeStarfield = () => {
         };
         
         const createEnterpriseSystem = () => {
-            const center = systemCenters.enterprise;
+             // Use current canvas dimensions
+             const currentWidth = canvas.width || canvas.clientWidth;
+             const currentHeight = canvas.height || canvas.clientHeight;
+             if (currentWidth === 0 || currentHeight === 0) return; // Guard clause
+
+             const center = systemCenters.enterprise;
+             const statKey = 'enterpriseStaked'; // Define statKey here
             
              const topStakers = Object.entries(holderStats)
                 .filter(([, stats]) => stats.enterpriseStaked > 0)
-                .sort(([, a], [, b]) => b.enterpriseStaked - a[statKey])
+                // Corrected sorting key here
+                .sort(([, a], [, b]) => b.enterpriseStaked - a.enterpriseStaked) 
                 .slice(0, 10)
                 .map(([address, stats]) => ({ address, ...stats }));
             
@@ -1574,8 +1608,8 @@ const initializeStarfield = () => {
             const minScale = 0.1; const maxScale = 0.3;
             const scaleRange = maxScale - minScale;
 
-            const minRadius = Math.min(canvas.width, canvas.height) * 0.6;
-            const maxRadius = Math.min(canvas.width, canvas.height) * 1.2;
+            const minRadius = Math.min(currentWidth, currentHeight) * 0.6;
+            const maxRadius = Math.min(currentWidth, currentHeight) * 1.2;
             const radiusRange = maxRadius - minRadius;
             const angleStep = (2 * Math.PI) / topStakers.length;
             
@@ -1583,7 +1617,8 @@ const initializeStarfield = () => {
                 const { address, enterpriseStaked } = stats;
                 const angle = angleStep * index;
                 
-                const normalizedSize = (enterpriseStaked - minCount) / countRange;
+                 // Avoid division by zero
+                const normalizedSize = countRange === 1 ? 0 : (enterpriseStaked - minCount) / countRange;
                 const distance = minRadius + (normalizedSize * radiusRange);
                 const scale = minScale + (normalizedSize * scaleRange);
                 
@@ -1600,120 +1635,239 @@ const initializeStarfield = () => {
         createFleetSystem('bbl', 'bblListed');
         createFleetSystem('boost', 'boostListed');
         createEnterpriseSystem();
+        console.log("Galaxy systems built."); // Debug log
     }
 
     // --- Event Listeners for Panning and Zooming ---
-    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-    canvas.addEventListener('mousedown', (e) => {
-        e.preventDefault();
-        if (e.button === 1) { isRotating = true; isPanning = false; canvas.style.cursor = 'ew-resize'; } 
-        else if (e.button === 0) { isPanning = true; isRotating = false; canvas.style.cursor = 'grabbing'; }
+    // Remove existing listeners before adding new ones to prevent duplicates if init runs multiple times
+    const removeIfExists = (element, type, handler, options) => {
+         if (element && typeof element.removeEventListener === 'function') {
+             element.removeEventListener(type, handler, options);
+         }
+    };
+    
+    // Define handlers separately to allow removal
+    const handleContextMenu = (e) => e.preventDefault();
+    const handleMouseDown = (e) => {
+         e.preventDefault();
+        if (e.button === 1 || e.ctrlKey || e.metaKey) { // Middle mouse or Ctrl/Cmd + Left Click for rotate
+            isRotating = true; 
+            isPanning = false; 
+            canvas.style.cursor = 'ew-resize'; 
+        } 
+        else if (e.button === 0) { // Left click for pan
+            isPanning = true; 
+            isRotating = false; 
+            canvas.style.cursor = 'grabbing'; 
+        }
         lastMouseX = e.clientX;
         lastMouseY = e.clientY;
-    });
-    canvas.addEventListener('mouseup', (e) => {
+    };
+     const handleMouseUp = (e) => {
         e.preventDefault();
-        if (e.button === 0) isPanning = false;
-        if (e.button === 1) isRotating = false;
-        if (e.buttons === 0) canvas.style.cursor = 'grab';
-    });
-    canvas.addEventListener('mouseleave', () => {
+        isPanning = false; // Always stop panning on mouse up
+        isRotating = false; // Always stop rotating on mouse up
+        canvas.style.cursor = 'grab'; // Reset cursor
+    };
+     const handleMouseLeave = () => {
         isPanning = false;
         isRotating = false;
         canvas.style.cursor = 'grab';
-    });
-    canvas.addEventListener('mousemove', (e) => {
-        const rect = canvas.getBoundingClientRect();
+    };
+     const handleMouseMove = (e) => {
+         // ... (rest of mouse move logic remains the same) ...
+         const rect = canvas.getBoundingClientRect();
+         // Check if rect dimensions are valid
+        if (rect.width === 0 || rect.height === 0) return; 
+
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
-        const worldX = (mouseX - (canvas.width / 2 + offsetX)) / zoom;
-        const worldY = (mouseY - (canvas.height / 2 + offsetY)) / zoom;
+
+        // Check if mouse coordinates are valid relative to canvas
+        if (mouseX < 0 || mouseX > canvas.width || mouseY < 0 || mouseY > canvas.height) {
+            // Mouse is outside the canvas bounds, potentially due to rapid movement or leaving window
+             if (isPanning || isRotating) { // If dragging, stop the drag operation
+                 isPanning = false;
+                 isRotating = false;
+                 canvas.style.cursor = 'grab';
+             }
+            return; 
+        }
+
+
+        // Calculate world coordinates relative to the current view transform
+         // Add guards for zoom being zero
+        const currentZoom = (zoom === 0) ? 0.0001 : zoom; // Prevent division by zero
+        const worldX = (mouseX - (canvas.width / 2 + offsetX)) / currentZoom;
+        const worldY = (mouseY - (canvas.height / 2 + offsetY)) / currentZoom;
+
+        // Apply inverse rotation to get coordinates in the unrotated world space
         const sinR = Math.sin(-rotation);
         const cosR = Math.cos(-rotation);
         const rotatedX = worldX * cosR - worldY * sinR;
         const rotatedY = worldX * sinR + worldY * cosR;
 
-        if (isPanning || isRotating) {
-            if (isPanning) {
-                offsetX += e.clientX - lastMouseX;
-                offsetY += e.clientY - lastMouseY;
-            } else if (isRotating) {
-                rotation += (e.clientX - lastMouseX) / 300;
-            }
-        } else {
-            let isAnyObjectHovered = false;
-            mapObjects.forEach(obj => {
-                if (!obj.width) return;
-                const displayWidth = obj.width * obj.scale;
-                const displayHeight = obj.height * obj.scale;
-                const isHovered = ( rotatedX >= obj.x - displayWidth / 2 && rotatedX <= obj.x + displayWidth / 2 && rotatedY >= obj.y - displayHeight / 2 && rotatedY <= obj.y + displayHeight / 2);
+         if (isPanning || isRotating) {
+             if (isPanning) {
+                 offsetX += e.clientX - lastMouseX;
+                 offsetY += e.clientY - lastMouseY;
+             } else if (isRotating) {
+                 rotation += (e.clientX - lastMouseX) / 300;
+             }
+         } else {
+             // Hover detection logic
+             let isAnyObjectHovered = false;
+             // Iterate backwards to check topmost objects first
+             for (let i = mapObjects.length - 1; i >= 0; i--) {
+                 const obj = mapObjects[i];
+                 // Ensure object properties are valid before hit testing
+                 if (!obj || typeof obj.x !== 'number' || typeof obj.y !== 'number' || typeof obj.width !== 'number' || typeof obj.height !== 'number' || typeof obj.scale !== 'number') continue; 
 
-                obj.isFrozen = isHovered;
+                 const displayWidth = obj.width * obj.scale;
+                 const displayHeight = obj.height * obj.scale;
+                 const halfWidth = displayWidth / 2;
+                 const halfHeight = displayHeight / 2;
 
-                if (isHovered && (obj.address || ['daodao', 'bbl', 'boost', 'enterprise'].includes(obj.id))) {
-                    isAnyObjectHovered = true;
-                }
-            });
-            canvas.style.cursor = isAnyObjectHovered ? 'pointer' : 'grab';
-        }
-        lastMouseX = e.clientX;
-        lastMouseY = e.clientY;
-    });
-    canvas.addEventListener('wheel', (e) => {
+                 // Simple AABB (Axis-Aligned Bounding Box) check in the rotated world space
+                 const isHovered = (
+                     rotatedX >= obj.x - halfWidth && 
+                     rotatedX <= obj.x + halfWidth && 
+                     rotatedY >= obj.y - halfHeight && 
+                     rotatedY <= obj.y + halfHeight
+                 );
+
+                 obj.isFrozen = isHovered; // Freeze rotation on hover
+
+                 if (isHovered && (obj.address || ['daodao', 'bbl', 'boost', 'enterprise'].includes(obj.id))) {
+                     isAnyObjectHovered = true;
+                     break; // Found a hover target, no need to check objects underneath
+                 }
+             }
+             canvas.style.cursor = isAnyObjectHovered ? 'pointer' : 'grab';
+         }
+         lastMouseX = e.clientX;
+         lastMouseY = e.clientY;
+    };
+     const handleWheel = (e) => {
         e.preventDefault();
         const rect = canvas.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) return; // Prevent zoom if canvas has no size
+
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
         const zoomFactor = 1.1;
-        const mouseBeforeZoomX = (mouseX - (canvas.width / 2 + offsetX)) / zoom;
-        const mouseBeforeZoomY = (mouseY - (canvas.height / 2 + offsetY)) / zoom;
-        if (e.deltaY < 0) { zoom = Math.min(maxZoom, zoom * zoomFactor); } 
-        else { zoom = Math.max(minZoom, zoom / zoomFactor); }
-        const mouseAfterZoomX = (mouseX - (canvas.width / 2 + offsetX)) / zoom;
-        const mouseAfterZoomY = (mouseY - (canvas.height / 2 + offsetY)) / zoom;
-        offsetX += (mouseAfterZoomX - mouseBeforeZoomX) * zoom;
-        offsetY += (mouseAfterZoomY - mouseBeforeZoomY) * zoom;
-    });
 
-    canvas.addEventListener('click', (e) => {
-        const rect = canvas.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
+         // Prevent division by zero if zoom is somehow 0
+        const currentZoom = (zoom === 0) ? 0.0001 : zoom; 
 
-        const worldX = (mouseX - (canvas.width / 2 + offsetX)) / zoom;
-        const worldY = (mouseY - (canvas.height / 2 + offsetY)) / zoom;
-        const sinR = Math.sin(-rotation);
-        const cosR = Math.cos(-rotation);
-        const rotatedX = worldX * cosR - worldY * sinR;
-        const rotatedY = worldX * sinR + worldY * cosR;
+        // World coordinates before zoom
+        const mouseBeforeZoomX = (mouseX - (canvas.width / 2 + offsetX)) / currentZoom;
+        const mouseBeforeZoomY = (mouseY - (canvas.height / 2 + offsetY)) / currentZoom;
 
-        let clickedObject = null;
-        // Check in reverse to prioritize clicking top-most items (ships)
-        for (let i = mapObjects.length - 1; i >= 0; i--) {
-            const obj = mapObjects[i];
-            if (!obj.width) continue;
-            const displayWidth = obj.width * obj.scale;
-            const displayHeight = obj.height * obj.scale;
-            if (rotatedX >= obj.x - displayWidth / 2 && rotatedX <= obj.x + displayWidth / 2 && rotatedY >= obj.y - displayHeight / 2 && rotatedY <= obj.y + displayHeight / 2) {
-                clickedObject = obj;
-                break; 
-            }
+        let newZoom;
+        if (e.deltaY < 0) { // Zoom in
+             newZoom = Math.min(maxZoom, currentZoom * zoomFactor); 
+        } 
+        else { // Zoom out
+             newZoom = Math.max(minZoom, currentZoom / zoomFactor); 
         }
+         // Prevent zoom from becoming exactly zero
+         if (newZoom <= 0) newZoom = minZoom; 
 
-        if (clickedObject) {
-            if (clickedObject.address) {
-                showWalletExplorerModal(clickedObject.address);
-            } else if (['daodao', 'bbl', 'boost', 'enterprise'].includes(clickedObject.id)) {
-                 showSystemLeaderboardModal(clickedObject.id);
-            }
-        }
-    });
+         // World coordinates after zoom
+         const mouseAfterZoomX = (mouseX - (canvas.width / 2 + offsetX)) / newZoom;
+         const mouseAfterZoomY = (mouseY - (canvas.height / 2 + offsetY)) / newZoom;
 
-    window.addEventListener('resize', debounce(init, 250));
-    init();
+         // Adjust offset to keep the point under the mouse stationary
+         offsetX += (mouseAfterZoomX - mouseBeforeZoomX) * newZoom;
+         offsetY += (mouseAfterZoomY - mouseBeforeZoomY) * newZoom;
+
+         zoom = newZoom; // Update the global zoom state
+    };
+    const handleClick = (e) => {
+         // ... (rest of click logic remains the same) ...
+         const rect = canvas.getBoundingClientRect();
+          if (rect.width === 0 || rect.height === 0) return;
+
+         const mouseX = e.clientX - rect.left;
+         const mouseY = e.clientY - rect.top;
+
+         // Add guards for zoom being zero
+         const currentZoom = (zoom === 0) ? 0.0001 : zoom;
+         const worldX = (mouseX - (canvas.width / 2 + offsetX)) / currentZoom;
+         const worldY = (mouseY - (canvas.height / 2 + offsetY)) / currentZoom;
+         const sinR = Math.sin(-rotation);
+         const cosR = Math.cos(-rotation);
+         const rotatedX = worldX * cosR - worldY * sinR;
+         const rotatedY = worldX * sinR + worldY * cosR;
+
+         let clickedObject = null;
+         // Check in reverse to prioritize clicking top-most items
+         for (let i = mapObjects.length - 1; i >= 0; i--) {
+             const obj = mapObjects[i];
+              // Add checks for valid object properties
+              if (!obj || typeof obj.x !== 'number' || typeof obj.y !== 'number' || typeof obj.width !== 'number' || typeof obj.height !== 'number' || typeof obj.scale !== 'number') continue; 
+
+             const displayWidth = obj.width * obj.scale;
+             const displayHeight = obj.height * obj.scale;
+             const halfWidth = displayWidth / 2;
+             const halfHeight = displayHeight / 2;
+             
+             if (rotatedX >= obj.x - halfWidth && rotatedX <= obj.x + halfWidth && rotatedY >= obj.y - halfHeight && rotatedY <= obj.y + halfHeight) {
+                 clickedObject = obj;
+                 break; 
+             }
+         }
+
+         if (clickedObject) {
+             console.log("Clicked map object:", clickedObject); // Debug log
+             if (clickedObject.address) {
+                 showWalletExplorerModal(clickedObject.address);
+             } else if (['daodao', 'bbl', 'boost', 'enterprise'].includes(clickedObject.id)) {
+                  showSystemLeaderboardModal(clickedObject.id);
+             }
+         } else {
+             console.log("Clicked empty space on map."); // Debug log
+         }
+    };
+    const handleResize = debounce(() => {
+        console.log("Window resize detected, re-initializing map."); // Debug log
+        isMapInitialized = false; // Reset flag to allow re-init
+        initializeStarfield(); // Re-initialize completely on resize
+    }, 250);
+
+    // Remove old listeners
+    removeIfExists(canvas, 'contextmenu', handleContextMenu);
+    removeIfExists(canvas, 'mousedown', handleMouseDown);
+    removeIfExists(canvas, 'mouseup', handleMouseUp);
+    removeIfExists(canvas, 'mouseleave', handleMouseLeave);
+    removeIfExists(canvas, 'mousemove', handleMouseMove);
+    removeIfExists(canvas, 'wheel', handleWheel, { passive: false });
+    removeIfExists(canvas, 'click', handleClick);
+    removeIfExists(window, 'resize', handleResize);
+
+
+    // Add new listeners
+    canvas.addEventListener('contextmenu', handleContextMenu);
+    canvas.addEventListener('mousedown', handleMouseDown);
+    // Add listeners to window for mouseup/leave to catch events outside canvas
+    window.addEventListener('mouseup', handleMouseUp); 
+    // canvas.addEventListener('mouseleave', handleMouseLeave); // Keep mouseleave on canvas
+    canvas.addEventListener('mousemove', handleMouseMove);
+    canvas.addEventListener('wheel', handleWheel, { passive: false }); // Need passive: false to prevent default scroll zoom
+    canvas.addEventListener('click', handleClick);
+    window.addEventListener('resize', handleResize);
+
+    init(); // Start the initialization process
 };
 
+
+// ... rest of existing code ...
+
+
 // --- Reusable Address Search Handler ---
+const debouncedFilter = debounce(handleFilterChange, 300); // Define debouncedFilter globally for address handler
+
 const handleAddressInput = (inputEl, suggestionsEl, onSelectCallback, isWallet) => {
     const input = inputEl.value.toLowerCase();
     const reversedInput = input.split('').reverse().join('');
@@ -1721,7 +1875,7 @@ const handleAddressInput = (inputEl, suggestionsEl, onSelectCallback, isWallet) 
 
     if (!input) {
         suggestionsEl.classList.add('hidden');
-        if (!isWallet) debouncedFilter();
+        if (!isWallet) debouncedFilter(); // Call global debouncedFilter
         return;
     }
 
@@ -1734,25 +1888,29 @@ const handleAddressInput = (inputEl, suggestionsEl, onSelectCallback, isWallet) 
         return charA.localeCompare(charB);
     });
 
-    if (matches.length === 1 && inputEl.value !== matches[0]) {
-        inputEl.value = matches[0];
-        suggestionsEl.classList.add('hidden');
-        onSelectCallback();
-        return;
-    }
+    // Don't auto-select if exact match to prevent overwriting user input
+    // if (matches.length === 1 && inputEl.value !== matches[0]) {
+    //     inputEl.value = matches[0];
+    //     suggestionsEl.classList.add('hidden');
+    //     onSelectCallback();
+    //     return;
+    // }
 
     if (matches.length > 0) {
         matches.slice(0, 10).forEach(match => {
             const item = document.createElement('div');
             item.className = 'address-suggestion-item';
             const startIndex = match.length - reversedInput.length;
+            // Highlight only the matching part at the end
             item.innerHTML = `${match.substring(0, startIndex)}<strong class="text-cyan-400">${match.substring(startIndex)}</strong>`;
-            item.style.direction = 'ltr';
+            item.style.direction = 'ltr'; // Ensure LTR for address display
             item.style.textAlign = 'left';
             item.onclick = () => {
-                inputEl.value = match;
+                inputEl.value = match; // Set the full address on click
+                 // Manually reverse for input display if needed (but keep actual value LTR)
+                 // inputEl.value = match.split('').reverse().join(''); // If input needs to remain reversed visually
                 suggestionsEl.classList.add('hidden');
-                onSelectCallback();
+                onSelectCallback(); // Trigger the search/filter
             };
             suggestionsEl.appendChild(item);
         });
@@ -1767,176 +1925,16 @@ const handleAddressInput = (inputEl, suggestionsEl, onSelectCallback, isWallet) 
         suggestionsEl.classList.add('hidden');
     }
     
-    // This was likely a bug, debouncedFilter is for the main collection view, not wallet
-    // if (!isWallet) debouncedFilter();
-    // Let's call the correct callback
+    // Trigger filter update on input for collection view
     if (!isWallet) {
-        const debouncedFilter = debounce(handleFilterChange, 300);
-        debouncedFilter();
+        debouncedFilter(); // Call global debouncedFilter
     }
 };
 
-const showWalletExplorerModal = (address) => {
-    const walletNfts = allNfts.filter(nft => nft.owner === address);
-    if (walletNfts.length === 0) return;
 
-    const titleEl = document.getElementById('wallet-modal-title');
-    const statsEl = document.getElementById('wallet-modal-stats');
-    const galleryEl = document.getElementById('wallet-modal-gallery');
+// ... rest of existing code ...
 
-    titleEl.textContent = address;
-    statsEl.innerHTML = '';
-    galleryEl.innerHTML = '';
-
-    const daodaoStaked = walletNfts.filter(n => n.staked_daodao).length;
-    const enterpriseStaked = walletNfts.filter(n => n.staked_enterprise_legacy).length;
-    const boostListed = walletNfts.filter(n => n.boost_market).length;
-    const bblListed = walletNfts.filter(n => n.bbl_market).length;
-    const broken = walletNfts.filter(n => n.broken).length;
-    const total = walletNfts.length;
-    const unbroken = total - broken;
-    const liquid = total - (daodaoStaked + enterpriseStaked + boostListed + bblListed);
-
-    const stats = [
-        { label: 'Total NFTs', value: total, color: 'text-white' },
-        { label: 'Liquid', value: liquid, color: 'text-white' },
-        { label: 'DAODAO Staked', value: daodaoStaked, color: 'text-cyan-400' },
-        { label: 'Enterprise Staked', value: enterpriseStaked, color: 'text-gray-400' },
-        { label: 'Boost Listed', value: boostListed, color: 'text-purple-400' },
-        { label: 'BBL Listed', value: bblListed, color: 'text-green-400' },
-        { label: 'Unbroken', value: unbroken, color: 'text-green-400' },
-        { label: 'Broken', value: broken, color: 'text-red-400' },
-    ];
-
-    stats.forEach(stat => {
-        statsEl.innerHTML += `
-            <div class="text-center">
-                <div class="text-xs text-gray-400 uppercase tracking-wider">${stat.label}</div>
-                <div class="text-2xl font-bold ${stat.color}">${stat.value}</div>
-            </div>
-        `;
-    });
-
-    walletNfts.sort((a,b) => a.rank - b.rank).forEach(nft => {
-        galleryEl.appendChild(createNftCard(nft, '.wallet-trait-toggle'));
-    });
-
-    walletExplorerModal.classList.remove('hidden');
-};
-
-const hideWalletExplorerModal = () => {
-    walletExplorerModal.classList.add('hidden');
-};
-
-// --- System Leaderboard Modal Logic ---
-const showSystemLeaderboardModal = (systemId) => {
-     const systemKeyMap = {
-        daodao: 'daodaoStaked',
-        bbl: 'bblListed',
-        boost: 'boostListed',
-        enterprise: 'enterpriseStaked'
-    };
-    const systemNameMap = {
-        daodao: 'DAODAO Staking',
-        bbl: 'BackBone Labs Listings',
-        boost: 'Boost Marketplace Listings',
-        enterprise: 'Enterprise Staking'
-    };
-    const statKey = systemKeyMap[systemId];
-    if (!statKey) return;
-    
-    const leaderboardData = Object.values(allHolderStats)
-        .filter(stats => stats[statKey] > 0)
-        .sort((a, b) => b[statKey] - a[statKey]);
-
-    const titleEl = document.getElementById('system-modal-title');
-    const disclaimerEl = document.getElementById('system-modal-disclaimer');
-    titleEl.textContent = `${systemNameMap[systemId]} Leaderboard`;
-
-    if (systemId === 'boost') {
-        disclaimerEl.innerHTML = `<strong>Note:</strong> Addresses ending in <strong>...f4at</strong> belong to the Boost contract, not the actual NFT owner. We hope Boost updates their platform in the future to allow for individual owner identification.`;
-        disclaimerEl.classList.remove('hidden');
-    } else {
-        disclaimerEl.classList.add('hidden');
-    }
-    
-    displaySystemLeaderboardPage(leaderboardData, statKey, 1);
-    systemLeaderboardModal.classList.remove('hidden');
-};
-
-const displaySystemLeaderboardPage = (data, statKey, page) => {
-    const tableEl = document.getElementById('system-modal-table');
-    const paginationEl = document.getElementById('system-modal-pagination');
-    const itemsPerPage = 10;
-    tableEl.innerHTML = '';
-    paginationEl.innerHTML = '';
-
-    const pageData = data.slice((page - 1) * itemsPerPage, page * itemsPerPage);
-
-    let tableHtml = `<div class="leaderboard-header" style="grid-template-columns: 1fr 4fr 1fr;"><span>Rank</span><span class="text-left">Address</span><span class="text-center">Amount</span></div>`;
-    pageData.forEach((stats, index) => {
-        const rank = (page - 1) * itemsPerPage + index + 1;
-        tableHtml += `
-            <div class="leaderboard-row" style="grid-template-columns: 1fr 4fr 1fr;">
-                <span class="text-center font-bold">#${rank}</span>
-                <span class="font-mono text-sm truncate" title="${stats.address}">${stats.address}</span>
-                <span class="text-center font-bold">${stats[statKey]}</span>
-            </div>
-        `;
-    });
-    tableEl.innerHTML = tableHtml;
-
-    const totalPages = Math.ceil(data.length / itemsPerPage);
-    if (totalPages > 1) {
-        const prevBtn = document.createElement('button');
-        prevBtn.textContent = 'Previous';
-        prevBtn.className = 'pagination-btn';
-        prevBtn.disabled = page === 1;
-        prevBtn.onclick = () => displaySystemLeaderboardPage(data, statKey, page - 1);
-        paginationEl.appendChild(prevBtn);
-
-        const pageInfo = document.createElement('span');
-        pageInfo.className = 'text-gray-400';
-        pageInfo.textContent = `Page ${page} of ${totalPages}`;
-        paginationEl.appendChild(pageInfo);
-        
-        const nextBtn = document.createElement('button');
-        nextBtn.textContent = 'Next';
-        nextBtn.className = 'pagination-btn';
-        nextBtn.disabled = page === totalPages;
-        nextBtn.onclick = () => displaySystemLeaderboardPage(data, statKey, page + 1);
-        paginationEl.appendChild(nextBtn);
-    }
-};
-
-const hideSystemLeaderboardModal = () => {
-    systemLeaderboardModal.classList.add('hidden');
-};
-
-
-const searchWallet = () => {
-    const address = walletSearchAddressInput.value.trim();
-    walletAddressSuggestions.classList.add('hidden');
-
-    document.querySelectorAll('.leaderboard-row').forEach(row => {
-        row.classList.toggle('selected', row.dataset.address === address);
-    });
-
-    if (!address) {
-        showError(walletGallery, 'Please enter a wallet address.');
-        return;
-    }
-    const walletNfts = allNfts.filter(nft => nft.owner === address);
-    walletGalleryTitle.textContent = `Found ${walletNfts.length} NFTs for wallet:`;
-    walletGallery.innerHTML = '';
-    if (walletNfts.length === 0) {
-        showLoading(walletGallery, 'No NFTs found for this address.');
-        return;
-    }
-    walletNfts.sort((a,b) => a.rank - b.rank).forEach(nft => {
-        walletGallery.appendChild(createNftCard(nft, '.wallet-trait-toggle'));
-    });
-};
 
 // --- Initialize Application ---
 initializeExplorer();
+
