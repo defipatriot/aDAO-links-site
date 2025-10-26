@@ -42,6 +42,50 @@
             border: 4px solid #2dd4bf; /* teal-400 */
             z-index: 10;
         }
+         /* Add styles for spinner alignment if needed */
+         .spinner-small {
+             font-size: 1rem; /* Adjust size */
+             color: #9ca3af; /* gray-400 */
+         }
+         /* --- Backing Bar Styles --- */
+         .backing-bar-container {
+             position: relative;
+             height: 1rem; /* h-4 */
+             background-color: #374151; /* gray-700 */
+             border-radius: 9999px; /* rounded-full */
+             margin-top: 1.5rem; /* Add some space above */
+             margin-bottom: 2rem; /* Add space below for labels */
+             display: flex; /* Use flex for stacked segments */
+             overflow: hidden; /* Ensure rounded corners */
+         }
+         .backing-bar-segment {
+             height: 100%;
+         }
+         .backing-bar-marker {
+             position: absolute;
+             bottom: -1.75rem; /* Position below the bar */
+             transform: translateX(-50%); /* Center the marker */
+             text-align: center;
+         }
+         .backing-bar-marker::before { /* Vertical line */
+             content: '';
+             position: absolute;
+             bottom: 1.25rem; /* From bottom of text up to bar */
+             left: 50%;
+             width: 1px;
+             height: 0.5rem; /* Height of the line */
+             background-color: #6b7280; /* gray-500 */
+         }
+         .backing-bar-label {
+             font-size: 0.75rem; /* text-xs */
+             line-height: 1rem;
+             color: #9ca3af; /* gray-400 */
+             white-space: nowrap;
+         }
+          .backing-bar-value {
+              font-weight: 600; /* font-semibold */
+              color: #e5e7eb; /* gray-200 */
+          }
     </style>
 </head>
 <body class="antialiased">
@@ -51,7 +95,7 @@
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
             <!-- Back to Dashboard Link -->
             <a href="index.html" class="block w-32"> 
-                <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Alliance%20DAO%20Logo.png" alt="Alliance DAO Logo" class="h-16 w-auto transition-transform transform hover:scale-110">
+                <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Alliance%20DAO%20Logo.png" alt="Alliance DAO Logo" class="h-16 w-auto transition-transform transform hover:scale-110" onerror="this.src='https://placehold.co/128x64/0D0D0D/EAEAEA?text=Logo'; this.onerror=null;">
             </a>
             <!-- Page Title -->
             <div class="text-center">
@@ -59,7 +103,7 @@
             </div>
              <!-- Right: Terra Logo -->
              <div class="w-32 flex justify-end">
-                <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Terra.PNG" alt="Terra Logo" class="h-16 w-auto">
+                <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Terra.PNG" alt="Terra Logo" class="h-16 w-auto" onerror="this.src='https://placehold.co/128x64/0D0D0D/EAEAEA?text=Logo'; this.onerror=null;">
              </div>
         </div>
     </header>
@@ -69,6 +113,15 @@
         <div class="text-center mb-12">
             <h2 class="text-4xl font-bold text-white">Collection Release & Supply Breakdown</h2>
             <p class="mt-4 text-lg text-gray-400">An overview of the distribution and release schedule for the 10,000-piece AllianceDAO NFT collection.</p>
+            
+            <!-- Temporary Live Backing Display -->
+            <div class="mt-4 text-center">
+                <p class="text-sm text-gray-500">(Debug Info) Live Backing Per NFT:</p>
+                <p id="live-backing-display" class="text-xl font-bold text-cyan-400">
+                    <i class="fas fa-spinner fa-spin text-cyan-400"></i> LUNA
+                </p>
+            </div>
+
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12 text-center">
@@ -104,31 +157,58 @@
                 <!-- Timeline -->
                 <div class="relative pl-8">
                     <!-- Phase 1 -->
-                    <div class="timeline-item pb-8">
+                    <div class="timeline-item pb-12"> <!-- Increased padding bottom -->
                         <div class="timeline-dot"></div>
                         <div class="stat-card p-6 rounded-xl">
                             <p class="text-sm text-gray-400">November 6, 2023</p>
                             <h4 class="text-xl font-bold text-white mt-1">Phase 1: Genesis Mint</h4>
                             <p class="text-gray-400 mt-2">Dedicated to the earliest supporters and contributors. A total of <span class="font-bold text-white">2,000 NFTs</span> were released, starting at 50 LUNA and increasing to 75 LUNA. This phase is now sold out.</p>
-                            <div class="mt-4 p-3 bg-green-500/10 border border-green-500/30 rounded-lg text-center">
-                                <p class="text-sm font-semibold text-green-300">
-                                    Current Gain Over Mint Price: <span id="phase1-gain" class="font-bold text-white">...</span> LUNA
-                                </p>
-                            </div>
+                            
+                             <!-- Phase 1 Visual Backing Bar -->
+                             <div class="relative mt-4">
+                                <div id="phase1-bar" class="backing-bar-container">
+                                    <!-- Segments added by JS -->
+                                    <div class="h-full flex items-center justify-center"> <i class="fas fa-spinner fa-spin spinner-small"></i> </div> 
+                                </div>
+                                <!-- Markers / Labels -->
+                                <div id="phase1-label-low" class="backing-bar-marker" style="left: 0%;">
+                                    <span class="backing-bar-label">Mint: 50</span>
+                                </div>
+                                <div id="phase1-label-high" class="backing-bar-marker" style="left: 0%;">
+                                    <span class="backing-bar-label">Mint: 75</span>
+                                </div>
+                                <div id="phase1-label-backing" class="backing-bar-marker" style="left: 0%;">
+                                     <span class="backing-bar-label">Backing: <span id="phase1-backing-value" class="backing-bar-value">...</span></span>
+                                </div>
+                             </div>
+                              <!-- Summary Text (Optional) -->
+                             <p id="phase1-gain-text" class="text-xs text-center text-gray-400 mt-1">Calculating gain...</p>
                         </div>
                     </div>
                     <!-- Phase 2 -->
-                     <div class="timeline-item pb-8">
+                     <div class="timeline-item pb-12"> <!-- Increased padding bottom -->
                         <div class="timeline-dot"></div>
                         <div class="stat-card p-6 rounded-xl">
                             <p class="text-sm text-gray-400">February 1–10, 2024</p>
                             <h4 class="text-xl font-bold text-white mt-1">Phase 2: Terra Community Expansion</h4>
                             <p class="text-gray-400 mt-2">Expanded access to prominent Terra NFT communities. A total of <span class="font-bold text-white">2,172 NFTs</span> were released at 75 LUNA each. The remaining 28 were returned to the treasury.</p>
-                             <div class="mt-4 p-3 bg-green-500/10 border border-green-500/30 rounded-lg text-center">
-                                <p class="text-sm font-semibold text-green-300">
-                                    Current Gain Over Mint Price: <span id="phase2-gain" class="font-bold text-white">...</span> LUNA
-                                </p>
-                            </div>
+                             
+                             <!-- Phase 2 Visual Backing Bar -->
+                              <div class="relative mt-4">
+                                <div id="phase2-bar" class="backing-bar-container">
+                                    <!-- Segments added by JS -->
+                                     <div class="h-full flex items-center justify-center"> <i class="fas fa-spinner fa-spin spinner-small"></i> </div> 
+                                </div>
+                                <!-- Markers / Labels -->
+                                <div id="phase2-label-mint" class="backing-bar-marker" style="left: 0%;">
+                                    <span class="backing-bar-label">Mint: 75</span>
+                                </div>
+                                <div id="phase2-label-backing" class="backing-bar-marker" style="left: 0%;">
+                                    <span class="backing-bar-label">Backing: <span id="phase2-backing-value" class="backing-bar-value">...</span></span>
+                                </div>
+                             </div>
+                             <!-- Summary Text (Optional) -->
+                             <p id="phase2-gain-text" class="text-xs text-center text-gray-400 mt-1">Calculating gain...</p>
                         </div>
                     </div>
                 </div>
@@ -157,28 +237,191 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            // --- CENTRAL DATA OBJECT ---
-            // This object should be kept in sync with the main dashboard's data object.
-            const dashboardData = {
-              "keyMetrics": {
-                "backingInLuna": 109.97
-              }
-            };
 
-            // --- CALCULATIONS ---
-            const mintPricePhase1 = 75; // Using the higher price for a conservative gain estimate
-            const mintPricePhase2 = 75;
+            // --- UI ELEMENTS ---
+            const liveBackingDisplayEl = document.getElementById('live-backing-display'); 
             
-            const gainPhase1 = dashboardData.keyMetrics.backingInLuna - mintPricePhase1;
-            const gainPhase2 = dashboardData.keyMetrics.backingInLuna - mintPricePhase2;
+            // Phase 1 Elements
+            const phase1Bar = document.getElementById('phase1-bar');
+            const phase1LabelLow = document.getElementById('phase1-label-low');
+            const phase1LabelHigh = document.getElementById('phase1-label-high');
+            const phase1LabelBacking = document.getElementById('phase1-label-backing');
+            const phase1BackingValueEl = document.getElementById('phase1-backing-value');
+            const phase1GainTextEl = document.getElementById('phase1-gain-text'); 
 
-            // --- UPDATE UI ---
-            document.getElementById('phase1-gain').textContent = gainPhase1.toFixed(2);
-            document.getElementById('phase2-gain').textContent = gainPhase2.toFixed(2);
+            // Phase 2 Elements
+            const phase2Bar = document.getElementById('phase2-bar');
+            const phase2LabelMint = document.getElementById('phase2-label-mint');
+            const phase2LabelBacking = document.getElementById('phase2-label-backing');
+            const phase2BackingValueEl = document.getElementById('phase2-backing-value');
+            const phase2GainTextEl = document.getElementById('phase2-gain-text');
+
+            // --- MINT PRICES (Constants) ---
+            const mintPricePhase1Low = 50; 
+            const mintPricePhase1High = 75; 
+            const mintPricePhase2 = 75;
+
+            // --- API Fetch Function ---
+            async function fetchLiveBacking() {
+                // ... (API URLs remain the same) ...
+                 const contractRewardsQuery = btoa(JSON.stringify({ all_nft_info: { token_id: "9068" } }));
+                const contractUrl = `https://terra.publicnode.com/cosmwasm/wasm/v1/contract/terra1phr9fngjv7a8an4dhmhd0u0f98wazxfnzccqtyheq4zqrrp4fpuqw3apw9/smart/${contractRewardsQuery}`;
+                const ampLunaRateQuery = btoa(JSON.stringify({ exchange_rates: {} }));
+                const ampLunaRateUrl = `https://terra.publicnode.com/cosmwasm/wasm/v1/contract/terra10788fkzah89xrdm27zkj5yvhj9x3494lxawzm5qq3vvxcqz2yzaqyd3enk/smart/${ampLunaRateQuery}`;
+
+                try {
+                    const [contractResponse, ampLunaRateResponse] = await Promise.all([
+                        fetch(contractUrl).catch(e => { console.error("Contract Fetch Error:", e); return null; }),
+                        fetch(ampLunaRateUrl).catch(e => { console.error("ampLUNA Rate Fetch Error:", e); return null; })
+                    ]);
+
+                    if (!contractResponse?.ok || !ampLunaRateResponse?.ok) {
+                        throw new Error("One or more API requests failed");
+                    }
+
+                    const contractJson = await contractResponse.json();
+                    const ampLunaRateData = await ampLunaRateResponse.json();
+
+                    // --- Process Data ---
+                     const rewardsAttribute = contractJson?.data?.info?.extension?.attributes?.find(attr => attr.trait_type === 'rewards');
+                     const rewardsValue = rewardsAttribute?.value;
+                     const liveAmpLunaBacking = rewardsValue ? Number(rewardsValue) / 1000000 : 0; 
+                     const ampLunaToLunaRate = parseFloat(ampLunaRateData?.data?.exchange_rates?.[0]?.[1]);
+                     if (isNaN(ampLunaToLunaRate)) {
+                         throw new Error("Invalid ampLUNA exchange rate");
+                     }
+                    const backingInLunaLive = liveAmpLunaBacking * ampLunaToLunaRate;
+                    
+                    // --- Update UI ---
+                    updateGainsAndBars(backingInLunaLive); 
+
+                    // --- Update the debug display ---
+                    if (liveBackingDisplayEl) {
+                        liveBackingDisplayEl.textContent = `${backingInLunaLive.toFixed(4)} LUNA`; 
+                    }
+
+                } catch (error) {
+                    console.error("Failed to fetch or process live backing data:", error);
+                    // Update UI to show error state for bars and text
+                     updateGainsAndBars(null); // Pass null to indicate error
+
+                     // --- Update the debug display on error ---
+                     if (liveBackingDisplayEl) {
+                         liveBackingDisplayEl.textContent = "Error Fetching LUNA";
+                         liveBackingDisplayEl.classList.remove('text-cyan-400'); 
+                         liveBackingDisplayEl.classList.add('text-red-400');
+                     }
+                }
+            }
+
+            // --- UPDATE UI FUNCTION for Bars and Gains ---
+            function updateGainsAndBars(liveLunaBacking) {
+                 const isError = typeof liveLunaBacking !== 'number';
+
+                // Define scale - slightly below lowest mint, slightly above highest value
+                const minScale = Math.min(mintPricePhase1Low, mintPricePhase2) * 0.9; 
+                const maxScale = Math.max(liveLunaBacking || 0, mintPricePhase1High, mintPricePhase2) * 1.1 || 100; // Ensure not zero if backing fails
+                const range = maxScale - minScale;
+                 if (range <= 0) return; // Avoid division by zero
+
+                 // Helper to calculate percentage position, clamped between 0 and 100
+                 const perc = (value) => Math.max(0, Math.min(100, ((value - minScale) / range) * 100));
+
+                 // --- Update Phase 1 ---
+                 if (phase1Bar && phase1LabelLow && phase1LabelHigh && phase1LabelBacking && phase1BackingValueEl && phase1GainTextEl) {
+                     if (isError) {
+                         phase1Bar.innerHTML = `<div class="h-full flex items-center justify-center text-xs text-red-400">Error</div>`;
+                         phase1LabelLow.style.opacity = '0';
+                         phase1LabelHigh.style.opacity = '0';
+                         phase1LabelBacking.style.opacity = '0';
+                         phase1GainTextEl.textContent = 'Error calculating gain.';
+                         phase1GainTextEl.className = 'text-xs text-center text-red-400 mt-1';
+                     } else {
+                         const p1LowPerc = perc(mintPricePhase1Low);
+                         const p1HighPerc = perc(mintPricePhase1High);
+                         const p1BackingPerc = perc(liveLunaBacking);
+                         const gainHigh = liveLunaBacking - mintPricePhase1High;
+                         const gainLow = liveLunaBacking - mintPricePhase1Low;
+
+                         phase1Bar.innerHTML = ''; // Clear spinner/error
+
+                         // Determine bar segments and colors
+                         if (liveLunaBacking < mintPricePhase1Low) { // Loss vs Low
+                            phase1Bar.innerHTML = `<div class="backing-bar-segment bg-red-500 rounded-l-full" style="width: ${p1BackingPerc}%;"></div>`;
+                         } else if (liveLunaBacking < mintPricePhase1High) { // Between Low and High
+                            phase1Bar.innerHTML = `
+                                <div class="backing-bar-segment bg-blue-600 rounded-l-full" style="width: ${p1LowPerc}%;"></div>
+                                <div class="backing-bar-segment bg-yellow-500" style="width: ${p1BackingPerc - p1LowPerc}%;"></div>
+                             `;
+                         } else { // Gain vs High
+                             phase1Bar.innerHTML = `
+                                <div class="backing-bar-segment bg-blue-600" style="width: ${p1LowPerc}%;"></div>
+                                <div class="backing-bar-segment bg-blue-400" style="width: ${p1HighPerc - p1LowPerc}%;"></div>
+                                <div class="backing-bar-segment bg-green-500 rounded-r-full" style="width: ${p1BackingPerc - p1HighPerc}%;"></div>
+                             `;
+                         }
+
+                         // Update Label Positions and Values
+                         phase1LabelLow.style.left = `${p1LowPerc}%`;
+                         phase1LabelHigh.style.left = `${p1HighPerc}%`;
+                         phase1LabelBacking.style.left = `${p1BackingPerc}%`;
+                         phase1BackingValueEl.textContent = liveLunaBacking.toFixed(2);
+                         phase1LabelLow.style.opacity = '1';
+                         phase1LabelHigh.style.opacity = '1';
+                         phase1LabelBacking.style.opacity = '1';
+
+                         // Update Summary Text
+                         const gainHighColor = gainHigh >= 0 ? 'text-green-300' : 'text-red-400';
+                         const gainLowColor = gainLow >= 0 ? 'text-green-300' : 'text-red-400';
+                          phase1GainTextEl.innerHTML = `Gain: <span class="font-bold ${gainHighColor}">${gainHigh.toFixed(2)}</span> (vs 75) / <span class="font-bold ${gainLowColor}">${gainLow.toFixed(2)}</span> (vs 50) LUNA`;
+                         phase1GainTextEl.className = 'text-xs text-center text-gray-400 mt-1'; // Reset class
+                     }
+                 }
+
+                 // --- Update Phase 2 ---
+                  if (phase2Bar && phase2LabelMint && phase2LabelBacking && phase2BackingValueEl && phase2GainTextEl) {
+                     if (isError) {
+                          phase2Bar.innerHTML = `<div class="h-full flex items-center justify-center text-xs text-red-400">Error</div>`;
+                          phase2LabelMint.style.opacity = '0';
+                          phase2LabelBacking.style.opacity = '0';
+                          phase2GainTextEl.textContent = 'Error calculating gain.';
+                          phase2GainTextEl.className = 'text-xs text-center text-red-400 mt-1';
+                     } else {
+                         const p2MintPerc = perc(mintPricePhase2);
+                         const p2BackingPerc = perc(liveLunaBacking);
+                         const gainPhase2 = liveLunaBacking - mintPricePhase2;
+
+                         phase2Bar.innerHTML = ''; // Clear spinner/error
+
+                          // Determine bar segments and colors
+                         if (gainPhase2 < 0) { // Loss vs Mint
+                             phase2Bar.innerHTML = `<div class="backing-bar-segment bg-red-500 rounded-l-full" style="width: ${p2BackingPerc}%;"></div>`;
+                         } else { // Gain vs Mint
+                             phase2Bar.innerHTML = `
+                                <div class="backing-bar-segment bg-blue-500 rounded-l-full" style="width: ${p2MintPerc}%;"></div>
+                                <div class="backing-bar-segment bg-green-500 rounded-r-full" style="width: ${p2BackingPerc - p2MintPerc}%;"></div>
+                             `;
+                         }
+
+                         // Update Label Positions and Values
+                         phase2LabelMint.style.left = `${p2MintPerc}%`;
+                         phase2LabelBacking.style.left = `${p2BackingPerc}%`;
+                         phase2BackingValueEl.textContent = liveLunaBacking.toFixed(2);
+                         phase2LabelMint.style.opacity = '1';
+                         phase2LabelBacking.style.opacity = '1';
+
+                         // Update Summary Text
+                         const gainColor = gainPhase2 >= 0 ? 'text-green-300' : 'text-red-400';
+                         phase2GainTextEl.innerHTML = `Gain Over Mint (75 LUNA): <span class="font-bold ${gainColor}">${gainPhase2.toFixed(2)}</span> LUNA`;
+                          phase2GainTextEl.className = 'text-xs text-center text-gray-400 mt-1'; // Reset class
+                     }
+                 }
+            }
+
+            // --- INITIALIZE THE PAGE by fetching live data ---
+            fetchLiveBacking(); 
         });
     </script>
 
 </body>
 </html>
-
-
