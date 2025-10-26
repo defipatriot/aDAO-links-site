@@ -1,78 +1,75 @@
-// ... (existing code before handleAddressInput) ...
+// ... (existing code before updateAddressFeatures) ...
 
-// --- Reusable Address Search Handler ---
-const debouncedFilter = debounce(handleFilterChange, 300);
-
-const handleAddressInput = (inputEl, suggestionsEl, onSelectCallback, isWallet) => {
-    const input = inputEl.value.toLowerCase();
-    const reversedSearchTerm = input.split('').reverse().join('');
-    suggestionsEl.innerHTML = '';
-
-    // Determine the correct list of addresses to search within
-    // For Collection view suggestions, use the dynamically updated filtered list
-    // For Wallet view suggestions, or if the filtered list is empty, use the master list
-    const sourceList = (!isWallet && currentFilteredOwnerAddresses.length > 0)
-        ? currentFilteredOwnerAddresses
-        : ownerAddresses;
-
-    if (!input) {
-        suggestionsEl.classList.add('hidden');
-        // Trigger filter update only for collection view when input is cleared
-        if (!isWallet && searchAddressInput.value === '') {
-             // Check if the current dropdown value is also empty. If so, applyFiltersAndSort
-             // to potentially remove an address filter if one was selected via dropdown previously.
-             // If a dropdown value IS selected, don't trigger filter, let the dropdown control it.
-            if (addressDropdown.value === '') {
-                debouncedFilter();
-            }
+// Updates the address dropdown and suggestion list based on provided NFTs
+const updateAddressFeatures = (nftList) => {
+    const ownerCounts = {};
+    nftList.forEach(nft => {
+        if (nft.owner) {
+            ownerCounts[nft.owner] = (ownerCounts[nft.owner] || 0) + 1;
         }
-        return;
+    });
+
+    const sortedOwners = Object.entries(ownerCounts)
+        .sort(([, countA], [, countB]) => countB - countA); // Sort by count desc
+
+    // --- DEBUG LOGS ---
+    console.log(`updateAddressFeatures: Processing ${nftList.length} NFTs.`);
+    console.log(`updateAddressFeatures: Found ${sortedOwners.length} unique owners in the filtered list.`);
+    if (sortedOwners.length > 0) {
+        console.log(`updateAddressFeatures: Top owner in filtered list: ${sortedOwners[0][0]}, Count: ${sortedOwners[0][1]}`);
     }
+    // --- END DEBUG LOGS ---
 
-    // Filter the relevant source list
-    let matches = sourceList.filter(addr => addr.toLowerCase().endsWith(reversedSearchTerm));
+    // Update the state variable for live suggestions
+    currentFilteredOwnerAddresses = sortedOwners.map(([address]) => address);
 
-    // Sort matches based on the character *before* the matched part
-    const sortIndex = reversedSearchTerm.length;
-     matches.sort((a, b) => {
-         const charA = a.charAt(a.length - 1 - sortIndex) || '';
-         const charB = b.charAt(b.length - 1 - sortIndex) || '';
-         return charA.localeCompare(charB);
-     });
-
-    if (matches.length > 0) {
-        matches.slice(0, 10).forEach(match => {
-            const item = document.createElement('div');
-            item.className = 'address-suggestion-item';
-            const startIndex = match.length - reversedSearchTerm.length;
-            // Display the full address, highlighting the matched part at the end
-            item.innerHTML = `${match.substring(0, startIndex)}<strong class="text-cyan-400">${match.substring(startIndex)}</strong>`;
-            item.style.direction = 'ltr';
-            item.style.textAlign = 'left';
-            item.onclick = () => {
-                 inputEl.value = match; // Set the full, correct address
-                suggestionsEl.classList.add('hidden');
-                onSelectCallback(); // Trigger filter/search
-            };
-            suggestionsEl.appendChild(item);
-        });
-        if (matches.length > 10) {
-            const item = document.createElement('div');
-            item.className = 'address-suggestion-item text-gray-400';
-            item.textContent = `${matches.length - 10} more... Keep typing`;
-            suggestionsEl.appendChild(item);
+    // --- Update Dropdown ---
+    const currentSelectedAddress = addressDropdown.value; // Store current selection
+    addressDropdown.innerHTML = '<option value="">Holders</option>'; // Clear existing options
+    let newSelectionFound = false;
+    sortedOwners.forEach(([address, count]) => {
+        const option = document.createElement('option');
+        option.value = address;
+        // Display count + truncated address
+        option.textContent = `(${count}) ${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
+        addressDropdown.appendChild(option);
+        if (address === currentSelectedAddress) {
+            option.selected = true; // Re-select if still present
+            newSelectionFound = true;
         }
-        suggestionsEl.classList.remove('hidden');
-    } else {
-        suggestionsEl.classList.add('hidden');
-    }
+    });
 
-    // Trigger filter update for collection view ONLY when typing
-    if (!isWallet) {
-        debouncedFilter();
+    // If the previously selected address is no longer in the filtered list,
+    // set the dropdown back to the default "Holders" option.
+    if (!newSelectionFound && currentSelectedAddress !== '') {
+         addressDropdown.value = ''; // Set dropdown back to default "Holders"
     }
 };
 
 
-// ... (rest of the existing code) ...
+// ... (existing code in applyFiltersAndSort, before the call to updateAddressFeatures) ...
+
+    filteredNfts = tempNfts; // Update the global state
+    resultsCount.textContent = filteredNfts.length;
+
+    // --- DEBUG LOG ---
+    console.log(`applyFiltersAndSort: Final filteredNfts length before updateAddressFeatures: ${filteredNfts.length}`);
+    // --- END DEBUG LOG ---
+
+    // ** Update address features based on the FINAL filtered list **
+    updateAddressFeatures(filteredNfts);
+
+    updateFilterCounts(filteredNfts); // Update counts in filter sections
+
+    // Apply Sorting LAST
+    const sortValue = sortSelect.value;
+    if (sortValue === 'asc') filteredNfts.sort((a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity));
+    else if (sortValue === 'desc') filteredNfts.sort((a, b) => (b.rank ?? -Infinity) - (a.rank ?? -Infinity));
+    else if (sortValue === 'id') filteredNfts.sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
+
+    displayPage(1); // Display the first page of the final, sorted list
+};
+
+
+// ... (rest of the code) ...
 
