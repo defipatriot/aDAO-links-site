@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alliance DAO NFT Dashboard</title>
+    
+    <!-- External Libraries -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+     window.va = window.va || function () { (window.va.q = window.va.q || []).push(arguments); };
+    </script>
+    <script src="/_vercel/insights/script.js" defer></script>
+
+    <!-- Your Custom Styles (Updated Link) -->
+    <link rel="stylesheet" href="nft-explorer-style.css">
+
+</head>
+<body class="bg-gray-900 p-4 sm:p-8">
+
+    <header class="max-w-screen-2xl mx-auto mb-8 flex justify-between items-center">
+        <a href="https://www.thealliancedao.com/" rel="noopener noreferrer">
+            <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Alliance%20DAO%20Logo.png" alt="Alliance DAO Logo" class="h-12 w-auto">
+        </a>
+        <div class="flex rounded-lg border-2 border-gray-600 overflow-hidden w-96">
+            <button id="collection-view-btn" class="view-toggle-btn active">Collection</button>
+            <button id="wallet-view-btn" class="view-toggle-btn">Wallet</button>
+            <button id="map-view-btn" class="view-toggle-btn">Map</button>
+        </div>
+        <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Terra.PNG" alt="Terra Logo" class="h-12 w-auto">
+    </header>
+
+    <main class="max-w-screen-2xl mx-auto">
+        
+        <div id="collection-view">
+            <div id="controls" class="p-4 bg-gray-800/50 rounded-lg border border-gray-700">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-end mb-4">
+                    <div>
+                        <label for="search-id" class="block text-sm font-medium text-gray-300 mb-1">Search by ID</label>
+                        <input type="number" id="search-id" placeholder="Enter NFT ID..." class="form-input w-full">
+                    </div>
+                    <div>
+                        <label for="sort-rank" class="block text-sm font-medium text-gray-300 mb-1">Sort By</label>
+                        <select id="sort-rank" class="form-select w-full">
+                            <option value="asc" selected>Rank: Low to High</option>
+                            <option value="desc">Rank: High to Low</option>
+                            <option value="id">ID</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                    <div class="relative md:col-span-2">
+                        <label for="search-address" class="block text-sm font-medium text-gray-300 mb-1">Search by Address</label>
+                        <div class="flex items-center gap-2">
+                            <input type="text" id="search-address" placeholder="...Enter end of address" class="form-input w-full" style="direction: rtl; text-align: left;">
+                            <select id="address-dropdown" class="form-select flex-shrink-0">
+                                <option value="">Holders</option>
+                            </select>
+                            <button id="copy-address-btn" class="control-btn h-10 flex-shrink-0" title="Copy Address">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                            </button>
+                        </div>
+                        <div id="address-suggestions" class="address-suggestions hidden"></div>
+                    </div>
+                    <div class="flex justify-end items-end gap-4">
+                        <div class="text-center">
+                            <label class="block text-sm font-medium text-gray-300 mb-1">AMOUNT</label>
+                            <div id="results-count" class="h-10 bg-gray-900/50 rounded-lg flex items-center justify-center border border-gray-700 text-lg font-semibold text-cyan-400 whitespace-nowrap px-4"></div>
+                        </div>
+                        <div class="self-end">
+                           <button id="reset-filters" class="control-btn h-10">Reset</button>
+                        </div>
+                    </div>
+                </div>
+
+
+                 <div class="mt-6 pt-4 border-t border-gray-700">
+                    <h3 class="filter-section-title">Status Filters</h3>
+                    <div id="status-filters-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-y-4 gap-x-6"></div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-y-4 gap-x-6 mt-4">
+                        <div id="mint-status-container"></div>
+                    </div>
+                </div>
+                
+                <div class="mt-6 pt-4 border-t border-gray-700">
+                    <div id="toggle-inhabitant-filters" class="flex justify-between items-center cursor-pointer">
+                        <h3 class="filter-section-title !mb-0">Inhabitant Filters</h3>
+                        <svg id="inhabitant-arrow" class="w-5 h-5 text-gray-400 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </div>
+                    <div id="inhabitant-filters-container" class="hidden grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-y-4 gap-x-6 mt-4"></div>
+                </div>
+
+                <div class="mt-6 pt-4 border-t border-gray-700">
+                     <div id="toggle-planet-filters" class="flex justify-between items-center cursor-pointer">
+                        <h3 class="filter-section-title !mb-0">Planet Filters</h3>
+                        <svg id="planet-arrow" class="w-5 h-5 text-gray-400 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </div>
+                    <div id="planet-filters-container" class="hidden grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-y-4 gap-x-6 mt-4"></div>
+                </div>
+
+                <div id="trait-filters-container" class="mt-6 pt-4 border-t border-gray-700 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"></div>
+        
+                <div class="mt-6 pt-4 border-t border-gray-700">
+                    <label class="filter-section-title">Display Options</label>
+                    <div id="trait-toggles-container" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-x-4 gap-y-2"></div>
+                </div>
+            </div>
+            
+            <div id="nft-gallery" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6 min-h-[500px] mt-8"></div>
+            <div id="pagination-controls" class="flex justify-center items-center mt-8 space-x-4"></div>
+        </div>
+
+        <!-- Wallet Explorer View -->
+        <div id="wallet-view" class="hidden">
+            <div class="p-4 bg-gray-800/50 rounded-lg border border-gray-700 mb-8">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                    <div class="relative md:col-span-2">
+                        <label for="wallet-search-address" class="block text-sm font-medium text-gray-300 mb-1">Search by Address</label>
+                        <div class="flex items-center gap-2">
+                            <input type="text" id="wallet-search-address" placeholder="...Enter end of address" class="form-input w-full" style="direction: rtl; text-align: left;">
+                            <button id="wallet-copy-address-btn" class="control-btn h-10 flex-shrink-0" title="Copy Address">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                            </button>
+                        </div>
+                        <div id="wallet-address-suggestions" class="address-suggestions hidden"></div>
+                    </div>
+                    <div class="flex justify-end items-end">
+                        <button id="wallet-reset-btn" class="control-btn h-10">Reset</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="space-y-8">
+                <div>
+                    <h2 class="text-2xl font-bold text-white mb-4">Holder Leaderboard</h2>
+                    <div id="leaderboard-table">
+                        <!-- Header and rows will be injected here -->
+                    </div>
+                    <div id="leaderboard-pagination" class="flex justify-center items-center mt-4 space-x-4"></div>
+                </div>
+                <div>
+                    <div id="wallet-trait-toggles-container" class="flex flex-wrap gap-x-4 gap-y-2 justify-center mb-4 p-4 bg-gray-800/50 rounded-lg border border-gray-700"></div>
+                     <h2 id="wallet-gallery-title" class="text-2xl font-bold text-white mb-4">Wallet NFTs</h2>
+                    <div id="wallet-gallery" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6 min-h-[200px]"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Map View -->
+        <div id="map-view" class="hidden">
+            <canvas id="space-canvas"></canvas>
+        </div>
+    </main>
+
+    <footer class="text-center mt-12 space-x-6">
+        <button id="rarity-explained-btn" class="text-red-500 font-bold hover:text-red-400 transition-colors underline">Rarity Explained</button>
+        <button id="badges-explained-btn" class="text-cyan-400 font-bold hover:text-cyan-300 transition-colors underline">Badges Explained</button>
+    </footer>
+    <div class="mt-6 text-xs text-gray-500 max-w-3xl mx-auto text-center">
+        <p>
+            NFT status and ownership data is generously provided by <a href="https://deving.zone/" target="_blank" rel="noopener noreferrer" class="underline hover:text-gray-300">deving.zone</a>. We are incredibly grateful for their contribution to the community.
+        </p>
+        <p class="mt-2">
+            Disclaimer: This data is updated periodically and may not reflect live market conditions. While we strive for accuracy, all information is provided "as is" without warranty of any kind. Please verify data independently before making any financial decisions.
+        </p>
+    </div>
+
+    <div id="copy-toast">Copied!</div>
+
+    <div id="preview-tile" class="hidden fixed bg-gray-800 border border-cyan-400 rounded-lg shadow-lg p-2 z-20 pointer-events-none">
+        <div class="flex gap-2">
+            <div id="preview-container-1">
+                <img id="preview-image-1" src="" class="w-32 h-auto rounded-md" alt="Preview 1">
+                <p id="preview-name-1" class="text-xs text-center mt-1 truncate text-white"></p>
+            </div>
+            <div id="preview-container-2" class="hidden">
+                <img id="preview-image-2" src="" class="w-32 h-auto rounded-md" alt="Preview 2">
+                <p id="preview-name-2" class="text-xs text-center mt-1 truncate text-white"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div id="nft-modal" class="modal-backdrop hidden">
+        <div class="modal-content" style="width: 500px;">
+            <svg id="modal-close" class="modal-close-btn w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            <div class="flex flex-col items-center text-center">
+                <h2 id="modal-title" class="text-2xl font-bold text-white mb-4"></h2>
+                <img id="modal-image" src="" class="w-full max-w-sm h-auto rounded-lg border border-gray-600 mb-4" alt="NFT Image">
+                <div class="w-full max-w-sm">
+                    <div id="modal-traits" class="space-y-2 mb-4 text-left"></div>
+                    <div class="flex items-center justify-center gap-4 mb-4">
+                        <a id="modal-link" href="#" target="_blank" class="inline-block text-cyan-400 hover:text-cyan-300 transition-colors">View on IPFS &rarr;</a>
+                        <button id="download-post-btn" class="control-btn">Download Post</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="rarity-modal" class="modal-backdrop hidden">
+        <div class="modal-content text-gray-300">
+            <svg id="rarity-modal-close" class="modal-close-btn w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            <h2 class="text-2xl font-bold text-white mb-4">AllianceDAO NFT Rarity: The Official Guide</h2>
+            <div class="space-y-6 text-sm leading-relaxed">
+                <div>
+                    <p>This guide provides a complete overview of the rarity system for the AllianceDAO NFT collection, covering the initial design and the final mint results.</p>
+                </div>
+                
+                <div>
+                    <h3 class="text-lg font-semibold text-white mb-2">Part 1: NFT Generation Process</h3>
+                    <p>The image combinations for the AllianceDAO NFTs were created using the open-source <strong>Hashlips Art Engine</strong>. Each of the 10,000 unique NFTs consists of 5 distinct image layers:</p>
+                    <ul class="list-disc list-inside pl-4 mt-2 space-y-1">
+                        <li><b>Background:</b> 20 options (10 planets, with a "North" and "South" variation for each).</li>
+                        <li><b>Object:</b> 40 options with weighted rarity.</li>
+                        <li><b>Inhabitant:</b> 20 options (a male and female version for each of the 10 planetary races).</li>
+                        <li><b>Light:</b> A unique lighting overlay for each planet.</li>
+                        <li><b>Weather:</b> Several different weather options for each planet.</li>
+                    </ul>
+                    <p class="mt-2">To ensure every NFT is unique, the program checks the DNA sequence of each new combination against all previously created images. If a duplicate is found, it is discarded, and the process repeats.</p>
+                </div>
+
+                <div>
+                    <h3 class="text-lg font-semibold text-white mb-2">Part 2: Rarity Design</h3>
+                    <p>Although the generation process is random, certain traits were designed to be rarer than others.</p>
+                    <div class="mt-4 pl-4 border-l-2 border-cyan-500">
+                        <h4 class="font-semibold text-white">Planet & Inhabitant Rarity</h4>
+                        <p class="mt-1">The <strong>Planet</strong> (background) and <strong>Inhabitant</strong> layers were designed for an equal distribution. Each of the 20 options in both categories was intended to have a 5% chance of being selected, resulting in a planned count of 500 for each. The final mint achieved a very even distribution.</p>
+                    </div>
+                     <div class="mt-4 pl-4 border-l-2 border-cyan-500">
+                        <h4 class="font-semibold text-white">Object Rarity</h4>
+                        <p class="mt-1">The <strong>Object</strong> layer is where true weighted rarity was implemented. Each of the 40 objects was assigned a different rarity weight. Imagine a game-show wheel where an object with a weight of 1 appears once, while an object with a weight of 40 appears 40 times. The probability of choosing the rarest object was ~0.12%, while the most common was ~4.88%.</p>
+                    </div>
+                </div>
+
+                <p class="pt-4 text-xs text-gray-400 italic">Note: The "Weather" and "Light" layers do not factor into the collection's rarity scores, as their options were generally unique to each planet.</p>
+            </div>
+        </div>
+    </div>
+    
+    <div id="badge-modal" class="modal-backdrop hidden">
+        <div class="modal-content text-gray-300" style="width: 600px;">
+            <svg id="badge-modal-close" class="modal-close-btn w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            <h2 class="text-2xl font-bold text-white mb-6 text-center">Badge & Status Key</h2>
+            <div class="space-y-4">
+                <div class="flex items-center gap-4 p-3 bg-gray-800 rounded-lg">
+                    <div class="w-24 flex-shrink-0 flex items-center justify-center">
+                         <div class="h-10 w-full flex items-center justify-center" style="background-color: rgba(220, 38, 38, 0.85); color: white; font-size: 1rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;">
+                            BROKEN
+                        </div>
+                    </div>
+                    <p class="text-sm">Indicates the NFT's metadata is 'broken,' making it eligible for rewards.</p>
+                </div>
+                <div class="flex items-center gap-4 p-3 bg-gray-800 rounded-lg">
+                    <div class="w-24 flex-shrink-0 flex items-center justify-center">
+                        <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/DAODAO.png" alt="DAODAO Logo" class="w-12 h-12 object-contain">
+                    </div>
+                    <p class="text-sm">Staked on the DAODAO platform.</p>
+                </div>
+                <div class="flex items-center gap-4 p-3 bg-gray-800 rounded-lg">
+                    <div class="w-24 flex-shrink-0 flex items-center justify-center">
+                        <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Enterprise.jpg" alt="Enterprise Logo" class="w-12 h-12 object-contain rounded-full">
+                    </div>
+                    <p class="text-sm">Staked on the legacy Enterprise protocol.</p>
+                </div>
+                 <div class="flex items-center gap-4 p-3 bg-gray-800 rounded-lg">
+                    <div class="w-24 flex-shrink-0 flex items-center justify-center">
+                        <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/BBL%20No%20Background.png" alt="BBL Logo" class="w-12 h-12 object-contain">
+                    </div>
+                    <p class="text-sm">Listed for sale on the BackBone Labs marketplace.</p>
+                </div>
+                 <div class="flex items-center gap-4 p-3 bg-gray-800 rounded-lg">
+                    <div class="w-24 flex-shrink-0 flex items-center justify-center">
+                        <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Boost%20Logo.png" alt="Boost Logo" class="w-12 h-12 object-contain">
+                    </div>
+                    <p class="text-sm">Listed for sale on the Boost marketplace.</p>
+                </div>
+                 <div class="flex items-center gap-4 p-3 bg-gray-800 rounded-lg">
+                    <div class="w-24 flex-shrink-0 flex items-center justify-center">
+                        <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Alliance%20DAO%20Logo.png" alt="Alliance DAO Logo" class="w-12 h-12 object-contain">
+                    </div>
+                    <p class="text-sm">Owned by the Alliance DAO wallet (currently un-minted).</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="wallet-explorer-modal" class="modal-backdrop hidden">
+        <div class="modal-content" style="width: 900px;">
+            <svg id="wallet-modal-close" class="modal-close-btn w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            <h2 id="wallet-modal-title" class="text-xl font-bold text-white mb-4 text-center font-mono"></h2>
+            <div id="wallet-modal-stats" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 p-4 bg-gray-900/50 rounded-lg border border-gray-700"></div>
+            <div id="wallet-modal-gallery" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 max-h-[50vh] overflow-y-auto pr-2"></div>
+        </div>
+    </div>
+    
+    <div id="system-leaderboard-modal" class="modal-backdrop hidden">
+        <div class="modal-content" style="width: 900px;">
+            <svg id="system-modal-close" class="modal-close-btn w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            <h2 id="system-modal-title" class="text-2xl font-bold text-white mb-4 text-center"></h2>
+            <div id="system-modal-disclaimer" class="hidden p-3 mb-4 text-sm text-yellow-200 bg-yellow-900/50 border border-yellow-700 rounded-lg"></div>
+            <div id="system-modal-table" class="mb-4"></div>
+            <div id="system-modal-pagination" class="flex justify-center items-center space-x-4"></div>
+        </div>
+    </div>
+
+    <canvas id="share-canvas" class="hidden"></canvas>
+
+    <!-- Your Custom App Logic (Updated Link) -->
+    <script src="nft-explorer-app.js" defer></script>
+
+</body>
+</html>
