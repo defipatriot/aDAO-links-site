@@ -369,7 +369,8 @@
                         <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/ampLuna.webp?raw=true" alt="ampLUNA" class="h-8 w-8" onerror="this.src='https://placehold.co/32x32/1f2937/EAEAEA?text=AL'; this.onerror=null;">
                     </div>
                 </div>
-                 <p id="backing-per-nft-change" class="subtext text-xs font-semibold mt-1">&nbsp;</p>
+                 <!-- Corrected subtext ID for ampLUNA Ratio -->
+                 <p id="backing-per-nft-change" class="subtext text-xs font-semibold mt-1 text-gray-500"><i class="fas fa-spinner fa-spin text-gray-500"></i></p>
             </div>
             <div class="stat-card p-6 rounded-xl text-center">
                 <div>
@@ -380,7 +381,8 @@
                         <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Luna.webp?raw=true" alt="LUNA" class="h-8 w-8" onerror="this.src='https://placehold.co/32x32/1f2937/EAEAEA?text=L'; this.onerror=null;">
                     </div>
                 </div>
-                <p id="live-ampluna-price-luna" class="subtext text-xs font-semibold mt-1 text-gray-500"><i class="fas fa-spinner fa-spin text-gray-500"></i></p>
+                <!-- Corrected subtext ID for LUNA Tile -->
+                <p id="live-ampluna-price-luna" class="subtext text-xs font-semibold mt-1 text-gray-500">&nbsp;</p> <!-- Was showing Rate here, now empty -->
             </div>
             <div class="stat-card p-6 rounded-xl text-center">
                 <div>
@@ -669,988 +671,192 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            // --- GLOBAL CACHE ---
-            // UNUSED JS VARS REMOVED: nftMetadataCache and nftStatusCache
-            // UNUSED JS VAR REMOVED: traitOrder
+
+            // --- UI ELEMENTS ---
+            const liveBackingDisplayEl = document.getElementById('live-backing-display'); 
             
-            // --- GLOBAL MODAL ELEMENTS ---
-            // UNUSED: nftModal and modalCloseBtn (part of the removed modal)
-            // Note: Other modals have their own triggers, so these aren't needed globally.
+            // Phase 1 Elements
+            const phase1Bar = document.getElementById('phase1-bar');
+            const phase1LabelLow = document.getElementById('phase1-label-low');
+            const phase1LabelHigh = document.getElementById('phase1-label-high');
+            const phase1LabelBacking = document.getElementById('phase1-label-backing');
+            const phase1BackingValueEl = document.getElementById('phase1-backing-value');
+            const phase1GainTextEl = document.getElementById('phase1-gain-text'); 
 
-            // --- CENTRAL DATA OBJECT ---
-            const dashboardData = {
-              "lastUpdated": "2025-09-11T16:02:00Z",
-              "statusSliders": {
-                "mint": { "unMinted": 5828, "minted": 4172, "percentMinted": "41.72%" },
-                "broken": { "unBroken": 8924, "broken": 1076, "percentBroken": "10.76%" }
-              },
-              "keyMetrics": {
-                "daodaoStaked": 1476, 
-                "daoMembers": 160,
-                "enterpriseStakedHolder": 415,
-                "backingInLuna": 109.97,
-                "avgDailyGain": 0.21,
-              },
-              "tlaDeposits": {
-                "snapshotDate": "2025-10-07T00:00:00Z",
-                "totalDeposit": 10218.54,
-                "estApr": 40.74,
-                "unclaimedRewards": 289.72,
-                "pools": [
-                    { "name": "LUNA-CAPA LP", "platform": "Astroport - pcl", "whiteValue": 513.54, "whiteApr": 79.90, "orangeValue": 276.55, "orangeApr": 118.35, "rewards": 68.03 },
-                    { "name": "LUNA-ROAR LP", "platform": "Astroport - pcl", "whiteValue": 530.65, "whiteApr": 60.26, "orangeValue": 657.78, "orangeApr": 80.57, "rewards": 76.15 },
-                    { "name": "LUNA-ampLUNA LP", "platform": "Astroport - pcl", "whiteValue": 3228.12, "whiteApr": 31.37, "orangeValue": 3784.25, "orangeApr": 35.96, "rewards": 196.84 },
-                    { "name": "ampCAPA", "platform": "Single", "whiteValue": 492.52, "whiteApr": 53.09, "orangeValue": null, "orangeApr": null, "rewards": 184.10 },
-                    { "name": "ampROAR-ROAR LP", "platform": "WhiteWhale - xyk", "whiteValue": 297.25, "whiteApr": 52.01, "orangeValue": 352.81, "orangeApr": 66.84, "rewards": 122.26 },
-                    { "name": "xASTRO", "platform": "Single", "whiteValue": 85.02, "whiteApr": 18.69, "orangeValue": null, "orangeApr": null, "rewards": 22.10 }
-                ],
-                "tokenBalances": [
-                    { "name": "CAPA", "amount": 250256.08685873394, "geckoId": "capapult" },
-                    { "name": "LUNA", "amount": 39618.737103526684, "geckoId": "terra-luna-2" },
-                    { "name": "ROAR", "amount": 1493992555.9437172, "geckoId": "lion-dao" },
-                    { "name": "ampLUNA", "amount": 10978.16979097311, "geckoId": "eris-amplified-luna" },
-                    { "name": "ampCAPA", "amount": 282784.93885, "geckoId": null },
-                    { "name": "ampROAR", "amount": 479132249.52277726, "geckoId": null },
-                    { "name": "xASTRO", "amount": 20971.817211, "geckoId": "astroport-fi" }
-                ]
-              }
-            };
-            
-            const tokenLogos = {
-                "LUNA": "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Luna.webp?raw=true",
-                "ampLUNA": "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/ampLuna.webp?raw=true",
-                "ASTRO": "https://raw.githubusercontent.com/defipatriot/token_logo/main/Astro.webp?raw=true",
-                "wBTC": "https://raw.githubusercontent.com/defipatriot/token_logo/main/wBTC.png?raw=true",
-                "ATOM": "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/atom.png?raw=true",
-                "CAPA": "https://raw.githubusercontent.com/defipatriot/token_logo/main/capa.svg?raw=true",
-                "xASTRO": "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/astro.png?raw=true",
-                "ROAR": "https://raw.githubusercontent.com/defipatriot/token_logo/main/ROAR_LOGO.png?raw=true",
-                "SOLID": "https://raw.githubusercontent.com/defipatriot/token_logo/main/solid.svg?raw=true",
-                "bLUNA": "https://raw.githubusercontent.com/defipatriot/token_logo/main/bLUNA.webp?raw=true",
-                "USDC": "https://assets.coingecko.com/coins/images/6319/small/usdc.png",
-                "arbLUNA": "https://raw.githubusercontent.com/defipatriot/token_logo/main/arbLuna.svg?raw=true",
-                "ampCAPA": null, // No official logo
-                "ampROAR": null // No official logo
-            };
-
-            // --- Map of Terra denoms to friendly names, gecko IDs, and decimals ---
-            const denomMap = {
-                // Native Token
-                'uluna': { name: 'LUNA', geckoId: 'terra-luna-2', decimals: 6 },
-
-                // IBC Tokens
-                'ibc/8D8A7F7253615E5F76CB6252A1E1BD921D5EDB7BBAAF8913FB1C77FF125D9995': { name: 'ASTRO', geckoId: 'astroport-fi', decimals: 6 },
-                'ibc/2C962DAB9F57FE0921435426AE75196009FAA1981BF86991203C8411F8980FDB': { name: 'USDC', geckoId: 'usd-coin', decimals: 6 },
-                'ibc/88386AC48152D48B34B082648DF836F975506F0B57DBBFC10A54213B1BF484CB': { name: 'wBTC', geckoId: 'wrapped-bitcoin', decimals: 8 },
-                
-                // CW20 Tokens
-                'terra1ecgazyd0waaj3g7l9cmy5gulhxkps2gmxu9ghducvuypjq68mq2s5lvsct': { name: 'ampLUNA', geckoId: 'eris-amplified-luna', decimals: 6 },
-                'terra17jnhankdf4jtr2g53v635q5k70g7g64x2s9w2s': { name: 'arbLUNA', geckoId: 'staked-luna-slinky', decimals: 6 },
-                'terra1t4p3u8khpd7f8qzurwyafxt648dya6mp6vur3vaapswt6m24gkuqrfdhar': { name: 'CAPA', geckoId: 'capapult', decimals: 6 },
-                'terra10aa3zdkrc7jwuf8ekl3zq7e7m42vmzqehcmu74e4egc7xkm5kr2s0muyst': { name: 'SOLID', geckoId: 'solid-2', decimals: 6 },
-                'terra1lxx40s29qvkrcj8fsa3yzyehy7w50umdvvnls2r830rys6lu2zns63eelv': { name: 'ROAR', geckoId: 'lion-dao', decimals: 6 },
-                'terra17aj4ty4sz4yhgm08na8drc0v03v2jwr3waxcqrwhajj729zhl7zqnpc0ml': { name: 'bLUNA', geckoId: 'backbone-labs-staked-luna', decimals: 6 }
-                // Add ampCAPA and ampROAR if they become CW20s with addresses
-            };
+            // Phase 2 Elements
+            const phase2Bar = document.getElementById('phase2-bar');
+            const phase2LabelMint = document.getElementById('phase2-label-mint');
+            const phase2LabelBacking = document.getElementById('phase2-label-backing');
+            const phase2BackingValueEl = document.getElementById('phase2-backing-value');
+            const phase2GainTextEl = document.getElementById('phase2-gain-text');
 
 
-            // --- UI UPDATE FUNCTION ---
-            function updateUI() {
-                const lastUpdatedEl = document.getElementById('last-updated');
-                if (lastUpdatedEl) lastUpdatedEl.textContent = new Date(dashboardData.lastUpdated).toUTCString();
-                
-                 // Mint Slider (Update with static data initially)
-                const mintSliderEl = document.getElementById('mint-slider');
-                const unmintedCountEl = document.getElementById('unminted-count');
-                const mintedCountEl = document.getElementById('minted-count');
-                const mintedPercentEl = document.getElementById('minted-percent');
+            // --- MINT PRICES (Constants) ---
+            const mintPricePhase1Low = 50; 
+            const mintPricePhase1High = 75; 
+            const mintPricePhase2 = 75;
 
-                if (mintSliderEl && unmintedCountEl && mintedCountEl && mintedPercentEl) {
-                    const percentMintedNum = parseFloat(dashboardData.statusSliders.mint.percentMinted);
-                    mintSliderEl.innerHTML = `<div class="slider-fill-blue" style="width: ${100 - percentMintedNum}%;"></div><div class="slider-fill-gray" style="width: ${percentMintedNum}%;"></div>`;
-                    
-                    // Set static data if spinner is present
-                     if (unmintedCountEl.innerHTML.includes('fa-spinner')) {
-                        unmintedCountEl.textContent = dashboardData.statusSliders.mint.unMinted.toLocaleString();
-                     }
-                      if (mintedCountEl.innerHTML.includes('fa-spinner')) {
-                         mintedCountEl.textContent = dashboardData.statusSliders.mint.minted.toLocaleString();
-                      }
-                      if (mintedPercentEl.innerHTML.includes('fa-spinner')) {
-                         mintedPercentEl.textContent = `${dashboardData.statusSliders.mint.percentMinted} Minted`;
-                      }
-                }
-                
-                 // Update Avg Daily Gain (Static)
-                 const avgDailyGainEl = document.getElementById('avg-daily-gain');
-                 if (avgDailyGainEl && avgDailyGainEl.innerHTML.includes('fa-spinner')) {
-                    avgDailyGainEl.textContent = `+${dashboardData.keyMetrics.avgDailyGain}`;
-                 }
-                  const avgDailyGainSubEl = document.getElementById('avg-daily-gain-subtext');
-                  if(avgDailyGainSubEl && avgDailyGainSubEl.innerHTML.includes('fa-spinner')){
-                       avgDailyGainSubEl.textContent = `(Snapshot)`;
-                  }
-
-                // Trigger live data fetch
-                fetchLiveOnChainData();
-            }
-
-            async function fetchLiveOnChainData() {
-                const onChainStatsUrl = 'https://deving.zone/en/nfts/alliance_daos.json';
-                // Contract query for rewards (assuming it's still needed, example uses NFT 9068)
-                const contractRewardsQuery = btoa(JSON.stringify({ all_nft_info: { token_id: "9068" } }));
+            // --- API Fetch Function ---
+            async function fetchLiveBacking() {
+                // ... (API URLs remain the same) ...
+                 const contractRewardsQuery = btoa(JSON.stringify({ all_nft_info: { token_id: "9068" } }));
                 const contractUrl = `https://terra.publicnode.com/cosmwasm/wasm/v1/contract/terra1phr9fngjv7a8an4dhmhd0u0f98wazxfnzccqtyheq4zqrrp4fpuqw3apw9/smart/${contractRewardsQuery}`;
-                
-                // ampLUNA rate query
                 const ampLunaRateQuery = btoa(JSON.stringify({ exchange_rates: {} }));
                 const ampLunaRateUrl = `https://terra.publicnode.com/cosmwasm/wasm/v1/contract/terra10788fkzah89xrdm27zkj5yvhj9x3494lxawzm5qq3vvxcqz2yzaqyd3enk/smart/${ampLunaRateQuery}`;
-                
-                const treasuryWalletAddress = 'terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm';
-                const nativeBalancesUrl = `https://terra.publicnode.com/cosmos/bank/v1beta1/balances/${treasuryWalletAddress}`;
 
-                // --- Price Fetching Setup ---
-                // Dynamically build gecko IDs needed for price fetching
-                const neededGeckoIds = new Set(['terra-luna-2', 'eris-amplified-luna']); // Start with essential LUNA and ampLUNA
-                // Add IDs from denomMap used in treasury
-                Object.values(denomMap).forEach(token => {
-                    if (token.geckoId) neededGeckoIds.add(token.geckoId);
-                });
-                // Add IDs from TLA token balances
-                dashboardData.tlaDeposits.tokenBalances.forEach(token => {
-                     if (token.geckoId) neededGeckoIds.add(token.geckoId);
-                });
-                // Add arbLUNA if used in TLA VP
-                neededGeckoIds.add('staked-luna-slinky'); // Add arbLUNA geckoId
-
-                const allGeckoIdsString = Array.from(neededGeckoIds).join(',');
-                const priceUrl = `https://api.coingecko.com/api/v3/simple/price?ids=${allGeckoIdsString}&vs_currencies=usd`;
-                
                 try {
-                    // Fetch primary data first
-                    const [statsResponse, contractResponse, ampLunaRateResponse, priceResponse] = await Promise.all([
-                        fetch(onChainStatsUrl).catch(e => { console.error("Stats Fetch Error:", e); return null; }), // Add catch
-                        fetch(contractUrl).catch(e => { console.error("Contract Fetch Error:", e); return null; }), // Add catch
-                        fetch(ampLunaRateUrl).catch(e => { console.error("ampLUNA Rate Fetch Error:", e); return null; }), // Add catch
-                        fetch(priceUrl).catch(e => { console.error("Price Fetch Error:", e); return null; }) // Add catch
+                    const [contractResponse, ampLunaRateResponse] = await Promise.all([
+                        fetch(contractUrl).catch(e => { console.error("Contract Fetch Error:", e); return null; }),
+                        fetch(ampLunaRateUrl).catch(e => { console.error("ampLUNA Rate Fetch Error:", e); return null; })
                     ]);
 
-                    // Check if essential responses failed
-                    if (!statsResponse?.ok || !contractResponse?.ok || !ampLunaRateResponse?.ok || !priceResponse?.ok) {
-                         console.error("One or more primary API requests failed or returned null.");
-                         throw new Error("Primary API requests failed");
+                    if (!contractResponse?.ok || !ampLunaRateResponse?.ok) {
+                        throw new Error("One or more API requests failed");
                     }
 
-                    const statsData = await statsResponse.json();
-                    // UNUSED JS: nftStatusCache = statsData.nfts; // Cache status data
                     const contractJson = await contractResponse.json();
                     const ampLunaRateData = await ampLunaRateResponse.json();
-                    const priceData = await priceResponse.json();
 
-                    // --- Fetch all treasury balances (native and CW20) ---
-                    const balancePromises = [];
-                    // 1. Native balances
-                    balancePromises.push(fetch(nativeBalancesUrl).then(res => res.ok ? res.json() : null).catch(() => null)); // Handle errors
-
-                    // 2. CW20 balances by querying each contract
-                    const queryMsg = btoa(JSON.stringify({ balance: { address: treasuryWalletAddress } }));
-                    for (const denom in denomMap) {
-                        if (denom.startsWith('terra1')) { // Filter only CW20 token addresses
-                            const url = `https://terra.publicnode.com/cosmwasm/wasm/v1/contract/${denom}/smart/${queryMsg}`;
-                            balancePromises.push(
-                                fetch(url)
-                                .then(res => res.ok ? res.json() : Promise.reject(new Error(`Fetch failed for ${denom}`))) // Check res.ok
-                                .then(data => ({ denom, data }))
-                                .catch(() => {
-                                     // console.warn(`Failed to fetch balance for ${denomMap[denom]?.name || denom}`); // Log warning
-                                     return null;
-                                 }) // Catch fetch or json errors
-                            );
-                        }
-                    }
-
-
-                    const balanceResults = await Promise.all(balancePromises);
-                    
-                    const liveTreasuryAssets = [];
-                    // Process native balances result (check if result exists)
-                    const nativeBalancesResult = balanceResults[0];
-                    if (nativeBalancesResult && nativeBalancesResult.balances) {
-                         nativeBalancesResult.balances.forEach(balance => {
-                            const tokenInfo = denomMap[balance.denom];
-                            if (tokenInfo) {
-                                liveTreasuryAssets.push({ ...tokenInfo, amount: Number(balance.amount) / Math.pow(10, tokenInfo.decimals || 0) }); // Default decimals to 0
-                            }
-                        });
-                    } else {
-                         console.warn("Failed to load native treasury balances.");
-                    }
-
-                    // Process CW20 balances results
-                    for (let i = 1; i < balanceResults.length; i++) {
-                        const result = balanceResults[i];
-                        // Check result and nested properties carefully
-                        if (result && result.data && result.data.data && typeof result.data.data.balance === 'string') {
-                             const tokenInfo = denomMap[result.denom];
-                             if (tokenInfo) {
-                                 const amount = Number(result.data.data.balance) / Math.pow(10, tokenInfo.decimals || 0); // Default decimals
-                                 if (amount > 0) {
-                                     liveTreasuryAssets.push({ ...tokenInfo, amount });
-                                 }
-                             }
-                        }
-                         // else: Implicitly handles cases where fetch failed (result is null) or data structure is wrong
-                    }
-
-                    const { collection_stats, nfts } = statsData;
-                    const lunaPriceUSD = priceData?.['terra-luna-2']?.usd;
-                    // Check if LUNA price is valid
-                    if (typeof lunaPriceUSD !== 'number') {
-                         console.error("Invalid or missing price data for LUNA");
-                         throw new Error("Invalid price data for LUNA");
-                     }
-
-                    // Safely access ampLUNA rate
-                    const ampLunaToLunaRate = parseFloat(ampLunaRateData?.data?.exchange_rates?.[0]?.[1]);
-                     if (isNaN(ampLunaToLunaRate)) {
-                         console.error("Invalid or missing ampLUNA exchange rate");
-                          throw new Error("Invalid ampLUNA exchange rate");
-                     }
-
-
-                    buildTreasuryTable(priceData, liveTreasuryAssets);
-                    buildTlaVp(priceData, ampLunaToLunaRate);
-                    buildTlaDeposits(priceData);
-
-                    const daodaoStakers = nfts.filter(nft => nft.daodao === true);
-                    const daodaoCount = daodaoStakers.length;
-                    const brokenCount = nfts.filter(nft => nft.broken).length;
-                    const daoMembers = collection_stats?.unique_stakers || 0; // Default if missing
-                    
-                    const daoEnterpriseWallet = 'terra1nn7yrgjzj6zvle7ms9vlpg4cj3kaxjls4g6ugw';
-                    const enterpriseStakers = nfts.filter(nft => nft.enterprise === true && nft.owner !== daoEnterpriseWallet);
-                    const enterpriseStakedByHolder = enterpriseStakers.length;
-
-                    // Build Staker Tables for modals
-                    const enterpriseStakerCounts = enterpriseStakers.reduce((acc, nft) => { if(nft.owner) acc[nft.owner] = (acc[nft.owner] || 0) + 1; return acc; }, {}); // Check owner
-                    buildStakerTable('enterprise-stakers-table', enterpriseStakerCounts);
-                    // buildStakerTable('locked-modal-enterprise-table', enterpriseStakerCounts); // Assuming this element exists
-
-                    const daodaoStakerCounts = daodaoStakers.reduce((acc, nft) => { if(nft.owner) acc[nft.owner] = (acc[nft.owner] || 0) + 1; return acc; }, {}); // Check owner
-                    buildStakerTable('daodao-stakers-table', daodaoStakerCounts);
-                    // buildStakerTable('locked-modal-daodao-table', daodaoStakerCounts); // Assuming this element exists
-
-                    // --- Calculations for Tiles & Modals ---
-                    const mintedCount = dashboardData.statusSliders.mint.minted;
-                    const daoControlledCount = 1000; // This seems static
-                    const circulatingSupply = Math.max(0, mintedCount - daoControlledCount); // Ensure non-negative
-                    const totalLocked = daodaoCount + enterpriseStakedByHolder;
-                     // Avoid division by zero
-                    const daodaoLockedPercentage = circulatingSupply > 0 ? (daodaoCount / circulatingSupply) * 100 : 0;
-                    const liquidSupply = Math.max(0, circulatingSupply - totalLocked); // Ensure non-negative
-
-                    // Update UI Tiles that are live
-                    updateTile('daodao-staked', daodaoCount.toLocaleString(), true);
-                    const daodaoStakedPercentageEl = document.getElementById('daodao-staked-percentage');
-                    if (daodaoStakedPercentageEl) daodaoStakedPercentageEl.textContent = `${daodaoLockedPercentage.toFixed(2)}% of Circulating`;
-
-                    updateTile('dao-members', daoMembers.toLocaleString(), true);
-                    updateTile('enterprise-staked-holder', enterpriseStakedByHolder.toLocaleString(), true, { titleId: 'enterprise-staked-title' });
-                    // updateTile('broken-count', brokenCount.toLocaleString(), true); // Assuming 'broken-count' element exists
-                    
-                    // Update DAODAO Modal Supply Breakdown (with safety checks)
-                     const supplyMintedEl = document.getElementById('supply-minted');
-                     const supplyCirculatingEl = document.getElementById('supply-circulating');
-                     const supplyLiquidEl = document.getElementById('supply-liquid');
-                     const supplyDaodaoStakedEl = document.getElementById('supply-daodao-staked');
-                     const supplyEnterpriseStakedEl = document.getElementById('supply-enterprise-staked');
-                     const daodaoModalHolderCountEl = document.getElementById('daodao-modal-holder-count');
-
-                     if(supplyMintedEl) supplyMintedEl.textContent = mintedCount.toLocaleString();
-                     if(supplyCirculatingEl) supplyCirculatingEl.textContent = circulatingSupply.toLocaleString();
-                     if(supplyLiquidEl) supplyLiquidEl.textContent = liquidSupply.toLocaleString();
-                     if(supplyDaodaoStakedEl) supplyDaodaoStakedEl.textContent = daodaoCount.toLocaleString();
-                     if(supplyEnterpriseStakedEl) supplyEnterpriseStakedEl.textContent = enterpriseStakedByHolder.toLocaleString();
-                     if(daodaoModalHolderCountEl) daodaoModalHolderCountEl.textContent = daodaoCount.toLocaleString(); // Update count in modal title
-
-
-                     // Update Broken Slider/Counts (with safety checks)
-                     const unbrokenCountEl = document.getElementById('unbroken-count');
-                     const brokenCountEl = document.getElementById('broken-count'); // Assuming this exists for the slider
-                     const brokenPercentEl = document.getElementById('broken-percent');
-                     const brokenSliderEl = document.getElementById('broken-slider');
-                     const totalNftsForBrokenCalc = 10000; // Assuming total is 10k
-
-                     if (unbrokenCountEl) unbrokenCountEl.textContent = (totalNftsForBrokenCalc - brokenCount).toLocaleString();
-                     if (brokenCountEl) brokenCountEl.textContent = brokenCount.toLocaleString(); // Update count next to slider if element exists
-                     if (brokenPercentEl) brokenPercentEl.textContent = `${(brokenCount / totalNftsForBrokenCalc * 100).toFixed(2)}% Broken`;
-                     if (brokenSliderEl) {
-                         const percentBrokenNum = brokenCount / totalNftsForBrokenCalc * 100;
-                         brokenSliderEl.innerHTML = `<div class="slider-fill-blue" style="width: ${100 - percentBrokenNum}%;"></div><div class="slider-fill-gray" style="width: ${percentBrokenNum}%;"></div>`;
-                     }
-
-                    
-                     // Safely access contract rewards data
+                    // --- Process Data ---
                      const rewardsAttribute = contractJson?.data?.info?.extension?.attributes?.find(attr => attr.trait_type === 'rewards');
                      const rewardsValue = rewardsAttribute?.value;
-                     const liveAmpLunaBacking = rewardsValue ? Number(rewardsValue) / 1000000 : 0; // Default to 0 if missing
-
-                    
+                     const liveAmpLunaBacking = rewardsValue ? Number(rewardsValue) / 1000000 : 0; 
+                     const ampLunaToLunaRate = parseFloat(ampLunaRateData?.data?.exchange_rates?.[0]?.[1]);
+                     if (isNaN(ampLunaToLunaRate)) {
+                         throw new Error("Invalid ampLUNA exchange rate");
+                     }
                     const backingInLunaLive = liveAmpLunaBacking * ampLunaToLunaRate;
-                    const backingInUSD = backingInLunaLive * lunaPriceUSD;
-
-                    const unmintedCount = dashboardData.statusSliders.mint.unMinted;
-                    const unmintedBackingLuna = unmintedCount * backingInLunaLive;
-                    const unmintedBackingUSD = unmintedCount * backingInUSD;
                     
-                    updateTile('backing-per-nft-ampluna', liveAmpLunaBacking.toFixed(4), true, { titleId: 'backing-ampluna-title' });
-                    updateTile('backing-per-nft-luna-live', backingInLunaLive.toFixed(4), true, { titleId: 'backing-luna-live-title', subtextId: 'live-ampluna-price-luna', subtext: `Rate: ${ampLunaToLunaRate.toFixed(4)}` });
-                    updateTile('backing-per-nft-usd', `$${backingInUSD.toFixed(2)}`, true, { titleId: 'backing-usd-title', subtextId: 'live-luna-price', subtext: `@ $${lunaPriceUSD.toFixed(4)} / LUNA` });
-                    
-                    updateTile('unminted-nft-backing-luna', `${unmintedBackingLuna.toLocaleString('en-US', {maximumFractionDigits: 0})} LUNA`, true, { titleId: 'unminted-nft-backing-title' });
-                     const unmintedNftBackingUsdEl = document.getElementById('unminted-nft-backing-usd');
-                     if (unmintedNftBackingUsdEl) unmintedNftBackingUsdEl.textContent = `$${unmintedBackingUSD.toLocaleString('en-US', {maximumFractionDigits: 0})} USD`;
-                    
-                     // Update Unminted Modal (with safety checks)
-                     const unmintedModalCount1 = document.getElementById('unminted-modal-count');
-                     const unmintedModalCount2 = document.getElementById('unminted-modal-count-2');
-                     const unmintedModalBackingLuna = document.getElementById('unminted-modal-backing-luna');
-                     const unmintedModalBackingUsd = document.getElementById('unminted-modal-backing-usd');
-                     const unmintedModalTotalLuna = document.getElementById('unminted-modal-total-luna');
-                     const unmintedModalTotalUsd = document.getElementById('unminted-modal-total-usd');
+                    // --- Update UI ---
+                    updateGainsAndBars(backingInLunaLive); 
 
-                     if(unmintedModalCount1) unmintedModalCount1.textContent = unmintedCount.toLocaleString();
-                     if(unmintedModalCount2) unmintedModalCount2.textContent = unmintedCount.toLocaleString();
-                     if(unmintedModalBackingLuna) unmintedModalBackingLuna.textContent = backingInLunaLive.toFixed(4);
-                     if(unmintedModalBackingUsd) unmintedModalBackingUsd.textContent = backingInUSD.toFixed(4);
-                     if(unmintedModalTotalLuna) unmintedModalTotalLuna.textContent = `${unmintedBackingLuna.toLocaleString('en-US', {maximumFractionDigits: 0})} LUNA`;
-                     if(unmintedModalTotalUsd) unmintedModalTotalUsd.textContent = `$${unmintedBackingUSD.toLocaleString('en-US', {maximumFractionDigits: 0})} USD`;
-
+                    // --- Update the debug display ---
+                    if (liveBackingDisplayEl) {
+                        liveBackingDisplayEl.textContent = `${backingInLunaLive.toFixed(4)} LUNA`; 
+                    }
 
                 } catch (error) {
-                    console.error("Failed to fetch or process live data:", error);
-                    // Fallback for key metrics if APIs fail
-                    const { keyMetrics } = dashboardData;
-                    buildTreasuryTable(null, []); // Pass null prices, empty assets
-                    buildTlaVp(null, null); // Pass null prices, null rate
-                    buildTlaDeposits(null); // Pass null prices
-                    
-                    // Update tiles with error or snapshot data
-                    updateTile('daodao-staked', keyMetrics.daodaoStaked.toLocaleString(), false);
-                    updateTile('dao-members', keyMetrics.daoMembers.toLocaleString(), false);
-                    updateTile('enterprise-staked-holder', keyMetrics.enterpriseStakedHolder.toLocaleString(), false, { titleId: 'enterprise-staked-title'});
-                    updateTile('backing-per-nft-ampluna', 'Error', false, { titleId: 'backing-ampluna-title' });
-                    updateTile('backing-per-nft-luna-live', keyMetrics.backingInLuna.toFixed(2), false, { titleId: 'backing-luna-live-title'});
-                    updateTile('backing-per-nft-usd', 'Error', false, { titleId: 'backing-usd-title' });
-                    updateTile('unminted-nft-backing-luna', 'Error', false, { titleId: 'unminted-nft-backing-title' });
-                     const unmintedNftBackingUsdEl = document.getElementById('unminted-nft-backing-usd');
-                     if (unmintedNftBackingUsdEl) unmintedNftBackingUsdEl.textContent = 'Error';
-                     
-                     // Clear relevant modal fields on error
-                     const unmintedModalBackingLuna = document.getElementById('unminted-modal-backing-luna');
-                     const unmintedModalBackingUsd = document.getElementById('unminted-modal-backing-usd');
-                     const unmintedModalTotalLuna = document.getElementById('unminted-modal-total-luna');
-                     const unmintedModalTotalUsd = document.getElementById('unminted-modal-total-usd');
-                     if(unmintedModalBackingLuna) unmintedModalBackingLuna.textContent = 'Error';
-                     if(unmintedModalBackingUsd) unmintedModalBackingUsd.textContent = 'Error';
-                     if(unmintedModalTotalLuna) unmintedModalTotalLuna.textContent = 'Error';
-                     if(unmintedModalTotalUsd) unmintedModalTotalUsd.textContent = 'Error';
-                }
+                    console.error("Failed to fetch or process live backing data:", error);
+                    // Update UI to show error state for bars and text
+                     updateGainsAndBars(null); // Pass null to indicate error
 
-                // Update Static Tiles (from snapshot data) - Place outside try/catch if they should always show
-                 const { keyMetrics } = dashboardData;
-                 // Don't overwrite spinner if already set to static value
-                 updateTile('avg-daily-gain', `+${keyMetrics.avgDailyGain}`, false, { titleId: 'avg-daily-gain-title'});
-                 const avgDailyGainSubEl = document.getElementById('avg-daily-gain-subtext');
-                 if (avgDailyGainSubEl && avgDailyGainSubEl.innerHTML.includes('fa-spinner')) {
-                    avgDailyGainSubEl.textContent = `(Snapshot)`;
-                 }
-
-
-                 // Update elements that depend only on dashboardData (if any)
-                 const daoBrokenTotalEl = document.getElementById('dao-broken-total');
-                 if (daoBrokenTotalEl) daoBrokenTotalEl.textContent = (1000).toLocaleString(); // Assuming this is static
-                 const supplyDaoControlledEl = document.getElementById('supply-dao-controlled');
-                 if (supplyDaoControlledEl) supplyDaoControlledEl.textContent = (1000).toLocaleString(); // Assuming this is static
-
-
-            }
-            
-            // --- Helper to build Treasury Table ---
-            function buildTreasuryTable(priceData, liveAssets) {
-                 const container = document.getElementById('treasury-table-container');
-                 const totalValueEl = document.getElementById('dao-treasury-total'); // Get total display element
-                 if (!container || !totalValueEl) {
-                     console.warn("Treasury container or total value element not found.");
-                     if (totalValueEl) totalValueEl.textContent = 'Error'; // Indicate error on main tile
-                     return;
-                 }
-                
-                let totalLiveUsd = 0;
-
-                // 1. Calculate live values and separate assets
-                const valuedAssets = [];
-                const unvaluedAssets = [];
-
-                 liveAssets.forEach(asset => {
-                    let livePrice = null;
-                    // Check if priceData exists and has the geckoId
-                    if (priceData && priceData[asset.geckoId]) {
-                         livePrice = priceData[asset.geckoId].usd;
-                    }
-                     // Ensure price is a number before calculating
-                    const liveValue = (typeof livePrice === 'number') ? asset.amount * livePrice : null;
-                    
-                    if (liveValue !== null) {
-                        valuedAssets.push({ ...asset, liveValue });
-                        totalLiveUsd += liveValue;
-                    } else {
-                        unvaluedAssets.push({ ...asset, liveValue: null });
-                    }
-                });
-
-
-                // 2. Sort assets based on the specified logic
-                valuedAssets.sort((a, b) => b.liveValue - a.liveValue);
-                unvaluedAssets.sort((a, b) => b.amount - a.amount); // Sort unvalued by amount
-
-                const sortedAssets = [...valuedAssets, ...unvaluedAssets];
-
-                let tableHtml = `<table class="w-full text-left text-sm"><thead class="sticky top-0 bg-gray-900 z-10"><tr><th class="p-2">Asset</th><th class="p-2 text-right">Amount</th><th class="p-2 text-right">Live Value (USD)</th></tr></thead><tbody>`;
-
-                if (sortedAssets.length === 0) {
-                     // Display appropriate message based on whether price data was available
-                     tableHtml += `<tr><td colspan="3" class="text-center p-4 text-gray-500">${priceData === null ? 'Failed to load treasury data.' : 'No assets found in treasury.'}</td></tr>`;
-                 } else {
-                     for(const asset of sortedAssets) {
-                         // Format amount carefully
-                         let amountFormatted = asset.amount < 0.0001 && asset.amount > 0 ? asset.amount.toExponential(2) : // Use exponential for very small numbers
-                                              asset.amount < 1 ? asset.amount.toFixed(6) : // More decimals for < 1
-                                              asset.amount.toLocaleString('en-US', { maximumFractionDigits: 2 }); // Standard for >= 1
-                         const logoUrl = tokenLogos[asset.name];
-                         const valueDisplay = asset.liveValue !== null 
-                             ? '$' + asset.liveValue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) 
-                             : '<span class="text-gray-500">N/A</span>'; // Use N/A if price unknown
-
-                         tableHtml += `
-                             <tr class="border-t border-gray-700">
-                                 <td class="p-2 font-bold flex items-center gap-2">
-                                     ${logoUrl ? `<img src="${logoUrl}" alt="${asset.name}" class="h-5 w-5 rounded-full" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-block';"> <span style="display:none;" class="h-5 w-5"></span>` // Fallback placeholder logic
-                                               : '<div class="h-5 w-5 inline-block"></div>'}
-                                     <span>${asset.name}</span>
-                                 </td>
-                                 <td class="p-2 text-right font-mono">${amountFormatted}</td>
-                                 <td class="p-2 text-right font-mono">${valueDisplay}</td>
-                             </tr>
-                         `;
+                     // --- Update the debug display on error ---
+                     if (liveBackingDisplayEl) {
+                         liveBackingDisplayEl.textContent = "Error Fetching LUNA";
+                         liveBackingDisplayEl.classList.remove('text-cyan-400'); 
+                         liveBackingDisplayEl.classList.add('text-red-400');
                      }
-                 }
-
-                
-                tableHtml += `</tbody><tfoot class="sticky bottom-0 bg-gray-900 z-10"><tr class="border-t-2 border-cyan-400 font-bold"><td class="p-2">Total</td><td></td><td class="p-2 text-right font-mono text-cyan-400">${'$' + totalLiveUsd.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td></tr></tfoot></table>`;
-                container.innerHTML = tableHtml;
-
-                 // Update main tile display only if it still has spinner
-                  if (totalValueEl.innerHTML.includes('fa-spinner')) {
-                     totalValueEl.textContent = '$' + totalLiveUsd.toLocaleString('en-US', {maximumFractionDigits: 0});
-                 }
-                 updateTile('dao-treasury-total', null, priceData !== null, { titleId: 'dao-treasury-title' }); // Mark live only if prices loaded
-
-
+                }
             }
 
-            // --- Helper to build TLA Deposits Modal ---
-            function buildTlaDeposits(priceData) {
-                 const tlaData = dashboardData.tlaDeposits;
-                 // Get all necessary elements with safety checks
-                 const totalValueTileEl = document.getElementById('dao-tla-total');
-                 const aprTileEl = document.getElementById('dao-tla-apr');
-                 const modalTotalUsdEl = document.getElementById('tla-deposit-total-usd');
-                 const modalTotalAprEl = document.getElementById('tla-deposit-total-apr');
-                 const modalUnclaimedEl = document.getElementById('tla-unclaimed-rewards');
-                 const snapshotDateEl = document.getElementById('tla-snapshot-date');
-                 const poolsContainer = document.getElementById('tla-pools-container');
-                 const tokensContainer = document.getElementById('tla-tokens-container');
+            // --- UPDATE UI FUNCTION for Bars and Gains ---
+            function updateGainsAndBars(liveLunaBacking) {
+                 const isError = typeof liveLunaBacking !== 'number';
 
-                 if (!tlaData || !totalValueTileEl || !aprTileEl || !modalTotalUsdEl || !modalTotalAprEl || !modalUnclaimedEl || !snapshotDateEl || !poolsContainer || !tokensContainer) {
-                     console.warn("One or more TLA Deposit elements not found.");
-                     if(totalValueTileEl) totalValueTileEl.textContent = 'Error'; // Show error on tile
-                     if(aprTileEl) aprTileEl.textContent = '';
-                     return;
-                 }
+                // Define scale - slightly below lowest mint, slightly above highest value
+                const minScale = Math.min(mintPricePhase1Low, mintPricePhase2) * 0.9; 
+                const maxScale = Math.max(liveLunaBacking || 0, mintPricePhase1High, mintPricePhase2) * 1.1 || 100; // Ensure not zero if backing fails
+                const range = maxScale - minScale;
+                 if (range <= 0) return; // Avoid division by zero
 
+                 // Helper to calculate percentage position, clamped between 0 and 100
+                 const perc = (value) => Math.max(0, Math.min(100, ((value - minScale) / range) * 100));
 
-                // Update main tile (using snapshot data) only if spinner is present
-                 if (totalValueTileEl.innerHTML.includes('fa-spinner')) {
-                    totalValueTileEl.textContent = `$${tlaData.totalDeposit.toLocaleString('en-US', {minimumFractionDigits: 0})}`;
-                 }
-                 if (aprTileEl.innerHTML.includes('fa-spinner')) {
-                    aprTileEl.textContent = `Est. APR ${tlaData.estApr.toFixed(2)}%`;
-                 }
-                 updateTile('dao-tla-total', null, false, { titleId: 'dao-tla-title' }); // Mark as snapshot
-                
+                 // --- Update Phase 1 ---
+                 if (phase1Bar && phase1LabelLow && phase1LabelHigh && phase1LabelBacking && phase1BackingValueEl && phase1GainTextEl) {
+                     if (isError) {
+                         phase1Bar.innerHTML = `<div class="h-full flex items-center justify-center text-xs text-red-400">Error</div>`;
+                         phase1LabelLow.style.opacity = '0';
+                         phase1LabelHigh.style.opacity = '0';
+                         phase1LabelBacking.style.opacity = '0';
+                         phase1GainTextEl.textContent = 'Error calculating gain.';
+                         phase1GainTextEl.className = 'text-xs text-center text-red-400 mt-1';
+                     } else {
+                         const p1LowPerc = perc(mintPricePhase1Low);
+                         const p1HighPerc = perc(mintPricePhase1High);
+                         const p1BackingPerc = perc(liveLunaBacking);
+                         const gainHigh = liveLunaBacking - mintPricePhase1High;
+                         const gainLow = liveLunaBacking - mintPricePhase1Low;
 
-                // Update modal header (using snapshot data)
-                modalTotalUsdEl.textContent = `$${tlaData.totalDeposit.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-                modalTotalAprEl.textContent = `Est. APR ${tlaData.estApr.toFixed(2)}%`;
-                modalUnclaimedEl.textContent = `Unclaimed Rewards: $${tlaData.unclaimedRewards.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-                snapshotDateEl.textContent = new Date(tlaData.snapshotDate).toLocaleDateString();
+                         phase1Bar.innerHTML = ''; // Clear spinner/error
 
-                // Build Pools Table (using snapshot data)
-                let poolsHtml = '';
-                tlaData.pools.forEach(pool => {
-                    poolsHtml += `
-                        <div class="bg-gray-800/50 p-3 rounded-lg text-sm">
-                            <p class="font-bold text-white">${pool.name}</p>
-                            <p class="text-xs text-gray-400">${pool.platform}</p>
-                            <div class="border-t border-gray-600 mt-2 pt-2 space-y-1">
-                                <div class="flex justify-between"><span>Non-Compounding:</span> <span class="font-mono">$${pool.whiteValue?.toLocaleString() || 'N/A'} @ ${pool.whiteApr?.toFixed(2) || 'N/A'}%</span></div>
-                                ${pool.orangeValue ? `<div class="flex justify-between"><span class="text-yellow-400">Compounding:</span> <span class="font-mono text-yellow-400">$${pool.orangeValue.toLocaleString()} @ ${pool.orangeApr.toFixed(2)}%</span></div>` : ''}
-                            </div>
-                        </div>
-                    `;
-                });
-                poolsContainer.innerHTML = poolsHtml;
-
-                // Build Tokens Table (using snapshot amounts + LIVE prices if available)
-                let tokensHtml = '<table class="w-full text-left text-sm"><thead><tr><th class="p-1">Token</th><th class="p-1 text-right">Balance (Snapshot)</th><th class="p-1 text-right">Live Est. Value</th></tr></thead><tbody>';
-                let totalLiveEstValue = 0;
-                
-                // --- Static Ratios for ampTokens ---
-                const ampRatios = {
-                    "ampCAPA": { ratio: 1.1055, baseGeckoId: 'capapult' },
-                    "ampROAR": { ratio: 1.1087, baseGeckoId: 'lion-dao' }
-                };
-                
-                 tlaData.tokenBalances.forEach(token => {
-                     const logoUrl = tokenLogos[token.name];
-                     let liveValue = null;
-                     if (priceData) { // Only calculate if priceData is valid
-                         const geckoId = token.geckoId;
-                         if (geckoId && priceData[geckoId] && typeof priceData[geckoId].usd === 'number') {
-                             liveValue = token.amount * priceData[geckoId].usd;
-                         } else if (ampRatios[token.name]) {
-                             // Handle ampTokens using their ratios
-                             const ratioInfo = ampRatios[token.name];
-                             const baseTokenPrice = priceData[ratioInfo.baseGeckoId]?.usd;
-                             if(typeof baseTokenPrice === 'number'){
-                                 const baseTokenAmount = token.amount * ratioInfo.ratio;
-                                 liveValue = baseTokenAmount * baseTokenPrice;
-                             }
+                         // Determine bar segments and colors
+                         if (liveLunaBacking < mintPricePhase1Low) { // Loss vs Low
+                            phase1Bar.innerHTML = `<div class="backing-bar-segment bg-red-500 rounded-l-full" style="width: ${p1BackingPerc}%;"></div>`;
+                         } else if (liveLunaBacking < mintPricePhase1High) { // Between Low and High
+                            phase1Bar.innerHTML = `
+                                <div class="backing-bar-segment bg-blue-600 rounded-l-full" style="width: ${p1LowPerc}%;"></div>
+                                <div class="backing-bar-segment bg-yellow-500" style="width: ${p1BackingPerc - p1LowPerc}%;"></div>
+                             `;
+                         } else { // Gain vs High
+                             phase1Bar.innerHTML = `
+                                <div class="backing-bar-segment bg-blue-600" style="width: ${p1LowPerc}%;"></div>
+                                <div class="backing-bar-segment bg-blue-400" style="width: ${p1HighPerc - p1LowPerc}%;"></div>
+                                <div class="backing-bar-segment bg-green-500 rounded-r-full" style="width: ${p1BackingPerc - p1HighPerc}%;"></div>
+                             `;
                          }
-                          if (typeof liveValue === 'number') { // Ensure liveValue is a number before adding
-                             totalLiveEstValue += liveValue;
+
+                         // Update Label Positions and Values
+                         phase1LabelLow.style.left = `${p1LowPerc}%`;
+                         phase1LabelHigh.style.left = `${p1HighPerc}%`;
+                         phase1LabelBacking.style.left = `${p1BackingPerc}%`;
+                         phase1BackingValueEl.textContent = liveLunaBacking.toFixed(2);
+                         phase1LabelLow.style.opacity = '1';
+                         phase1LabelHigh.style.opacity = '1';
+                         phase1LabelBacking.style.opacity = '1';
+
+                         // Update Summary Text
+                         const gainHighColor = gainHigh >= 0 ? 'text-green-300' : 'text-red-400';
+                         const gainLowColor = gainLow >= 0 ? 'text-green-300' : 'text-red-400';
+                          phase1GainTextEl.innerHTML = `Gain: <span class="font-bold ${gainHighColor}">${gainHigh.toFixed(2)}</span> (vs 75) / <span class="font-bold ${gainLowColor}">${gainLow.toFixed(2)}</span> (vs 50) LUNA`;
+                         phase1GainTextEl.className = 'text-xs text-center text-gray-400 mt-1'; // Reset class
+                     }
+                 }
+
+                 // --- Update Phase 2 ---
+                  if (phase2Bar && phase2LabelMint && phase2LabelBacking && phase2BackingValueEl && phase2GainTextEl) {
+                     if (isError) {
+                          phase2Bar.innerHTML = `<div class="h-full flex items-center justify-center text-xs text-red-400">Error</div>`;
+                          phase2LabelMint.style.opacity = '0';
+                          phase2LabelBacking.style.opacity = '0';
+                          phase2GainTextEl.textContent = 'Error calculating gain.';
+                          phase2GainTextEl.className = 'text-xs text-center text-red-400 mt-1';
+                     } else {
+                         const p2MintPerc = perc(mintPricePhase2);
+                         const p2BackingPerc = perc(liveLunaBacking);
+                         const gainPhase2 = liveLunaBacking - mintPricePhase2;
+
+                         phase2Bar.innerHTML = ''; // Clear spinner/error
+
+                          // Determine bar segments and colors
+                         if (gainPhase2 < 0) { // Loss vs Mint
+                             phase2Bar.innerHTML = `<div class="backing-bar-segment bg-red-500 rounded-l-full" style="width: ${p2BackingPerc}%;"></div>`;
+                         } else { // Gain vs Mint
+                             phase2Bar.innerHTML = `
+                                <div class="backing-bar-segment bg-blue-500 rounded-l-full" style="width: ${p2MintPerc}%;"></div>
+                                <div class="backing-bar-segment bg-green-500 rounded-r-full" style="width: ${p2BackingPerc - p2MintPerc}%;"></div>
+                             `;
                          }
-                     }
-                      // Format amount carefully
-                      let amountFormatted = token.amount < 0.0001 && token.amount > 0 ? token.amount.toExponential(2) : // Use exponential for very small numbers
-                                             token.amount < 1 ? token.amount.toFixed(6) : // More decimals for < 1
-                                             token.amount.toLocaleString('en-US', { maximumFractionDigits: 2 }); // Standard for >= 1
 
-                     tokensHtml += `
-                        <tr class="border-t border-gray-700">
-                            <td class="p-1 font-bold flex items-center gap-2">
-                                ${logoUrl ? `<img src="${logoUrl}" alt="${token.name}" class="h-5 w-5 rounded-full" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-block';"><span style="display:none;" class="h-5 w-5"></span>` 
-                                          : '<div class="h-5 w-5 inline-block"></div>'}
-                                ${token.name}
-                            </td>
-                            <td class="p-1 text-right font-mono">${amountFormatted}</td>
-                            <td class="p-1 text-right font-mono">${liveValue !== null ? '$' + liveValue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '<span class="text-gray-500">N/A</span>'}</td>
-                        </tr>
-                     `;
-                });
+                         // Update Label Positions and Values
+                         phase2LabelMint.style.left = `${p2MintPerc}%`;
+                         phase2LabelBacking.style.left = `${p2BackingPerc}%`;
+                         phase2BackingValueEl.textContent = liveLunaBacking.toFixed(2);
+                         phase2LabelMint.style.opacity = '1';
+                         phase2LabelBacking.style.opacity = '1';
 
-                tokensHtml += `</tbody><tfoot class="sticky bottom-0 bg-gray-900 z-10"><tr class="border-t-2 border-cyan-400 font-bold"><td class="p-1" colspan="2">Total Live Est. Value</td><td class="p-1 text-right font-mono text-cyan-400">$${totalLiveEstValue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td></tr></tfoot></table>`;
-                tokensContainer.innerHTML = tokensHtml;
-
-            }
-
-            // --- Helper to build TLA VP Modal ---
-            function buildTlaVp(priceData, ampLunaToLunaRate) {
-                const container = document.getElementById('tla-vp-locks-container');
-                 const mainTileValueEl = document.getElementById('dao-tla-vp'); // This is static "Details" text now
-                 const mainTileUsdEl = document.getElementById('dao-tla-vp-usd');
-                 const modalLunaEl = document.getElementById('tla-vp-modal-luna');
-                 const modalUsdEl = document.getElementById('tla-vp-modal-usd');
-
-                 // Safety checks for essential elements
-                 if (!container || !mainTileValueEl || !mainTileUsdEl || !modalLunaEl || !modalUsdEl) {
-                     console.warn("One or more TLA VP elements not found.");
-                    // Don't set error on 'Details' text
-                     if(mainTileUsdEl) mainTileUsdEl.textContent = 'Error';
-                     return;
-                 }
-
-                // Check if necessary price data and rates are available
-                const lunaPriceUSD = priceData?.['terra-luna-2']?.usd;
-                 const arbLunaGeckoId = 'staked-luna-slinky'; // arbLUNA
-                 const arbLunaPriceUSD = priceData?.[arbLunaGeckoId]?.usd; // Get arbLUNA price
-
-                 // Use a static ratio if live price isn't available, but prefer live price if possible
-                 // Note: Calculating exact LUNA underlying from arbLUNA price isn't straightforward without the contract rate.
-                 // We will use a static ratio as a fallback or primary method if the live rate isn't easily queryable.
-                 const staticArbLunaToLunaRate = 2.3583; // Keep the static rate
-                 let effectiveArbLunaRate = staticArbLunaToLunaRate; // Default to static
-
-                 // Decide rate logic (example: prefer static for now unless a live rate API is added)
-                 const arbLunaToLunaRate = effectiveArbLunaRate;
-
-
-                 // Check if all needed data is valid numbers
-                 const ratesAreValid = typeof lunaPriceUSD === 'number' && typeof ampLunaToLunaRate === 'number' && typeof arbLunaToLunaRate === 'number';
-
-
-                const locks = [
-                    { id: 600, asset: 'arbLUNA', amount: 27290, ratio: arbLunaToLunaRate, isLive: ratesAreValid, staticVp: 631570 },
-                    { id: 711, asset: 'ampLUNA', amount: 413.03, ratio: ampLunaToLunaRate, isLive: ratesAreValid, staticVp: 7316.76 }
-                ];
-
-                let totalUnderlyingLuna = 0;
-                let locksHtml = '';
-
-                locks.forEach(lock => {
-                    const logoUrl = tokenLogos[lock.asset];
-                    const underlyingLuna = lock.amount * lock.ratio;
-                     // Calculate USD value only if rates are valid
-                    const usdValue = ratesAreValid ? underlyingLuna * lunaPriceUSD : null;
-                    totalUnderlyingLuna += underlyingLuna;
-
-                    const ratioDot = lock.isLive 
-                        ? '<span class="pulse-dot ml-1"></span>' 
-                        : '<span class="static-dot-red ml-1"></span>';
-
-                    locksHtml += `
-                        <div class="bg-gray-800/50 p-4 rounded-lg grid grid-cols-1 md:grid-cols-5 gap-4 items-center text-center mt-2 text-sm">
-                            <div class="font-bold text-lg text-white"><p>NFT #${lock.id}</p></div>
-                            <div class="flex items-center justify-center gap-2">
-                                ${logoUrl ? `<img src="${logoUrl}" alt="${lock.asset}" class="h-6 w-6 rounded-full" onerror="this.style.display='none';">` : '<div class="h-6 w-6"></div>'}
-                                <p class="font-bold text-white">${lock.amount.toLocaleString('en-US', {maximumFractionDigits:2})} ${lock.asset}</p>
-                            </div>
-                            <div>
-                                <p class="text-sm text-gray-400">Underlying LUNA</p>
-                                <p class="font-bold text-white">${underlyingLuna.toLocaleString('en-US', {maximumFractionDigits:2})}</p>
-                                <p class="text-xs text-gray-500 flex items-center justify-center">
-                                    <span>(Ratio: ${lock.ratio.toFixed(4)})</span>
-                                    ${ratioDot}
-                                </p>
-                            </div>
-                             <div>
-                                <p class="text-sm text-gray-400">Value (USD)</p>
-                                <p class="font-bold text-white">${usdValue !== null ? '$' + usdValue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : 'N/A'}</p>
-                            </div>
-                             <div>
-                                 <p class="text-sm text-gray-400">Voting Power</p>
-                                 <p class="font-bold text-cyan-400">${(lock.staticVp / 1000).toFixed(2)}K VP</p>
-                                 <p class="text-xs text-green-400">Max Locked (10x)</p>
-                            </div>
-                        </div>
-                    `;
-                });
-
-                container.innerHTML = locksHtml;
-                const totalUsdValue = ratesAreValid ? totalUnderlyingLuna * lunaPriceUSD : null;
-                const totalStaticVp = 638880; // This seems static based on the code
-
-                // Update main tile USD value only if spinner is present
-                 if (mainTileUsdEl.innerHTML.includes('fa-spinner')) {
-                     mainTileUsdEl.textContent = totalUsdValue !== null ? `$${totalUsdValue.toLocaleString('en-US', {maximumFractionDigits: 0})}` : '...';
-                 }
-                 updateTile('dao-tla-vp-usd', null, ratesAreValid, { titleId: 'dao-tla-vp-title' }); // Mark live only if rates are valid
-
-                // Update modal header
-                 modalLunaEl.textContent = `~${(totalUnderlyingLuna).toLocaleString('en-US', {maximumFractionDigits:2})} LUNA / TLA Lock`;
-                 modalUsdEl.textContent = totalUsdValue !== null ? `(${totalUsdValue.toLocaleString('en-US', {style: 'currency', currency: 'USD'})})` : '(Live calculation unavailable)';
-
-            }
-            
-             // --- SCROLL FIX: JS UPDATED ---
-            // Helper to build Staker Tables (NOW WITHOUT HEADER)
-            function buildStakerTable(tableId, stakerData) {
-                const tableContainer = document.getElementById(tableId);
-                if (!tableContainer) {
-                    // console.warn(`Staker table container not found: ${tableId}`);
-                    return; // Don't proceed if container missing
-                 }
-
-                // Create a full table structure BUT WITHOUT the <thead>
-                let tableHtml = `<table class="w-full text-left text-sm"><tbody>`; // Start table and tbody
-
-                const sortedStakers = Object.entries(stakerData).sort(([, a], [, b]) => b - a);
-                
-                if(sortedStakers.length > 0) {
-                    for (const [address, count] of sortedStakers) {
-                        // Truncate address for display
-                        const shortAddress = address.length > 15 ? `${address.substring(0, 6)}...${address.substring(address.length - 4)}` : address;
-                        // Add matching width classes to table cells (td) for alignment
-                        tableHtml += `<tr class="border-t border-gray-700">
-                                         <td class="p-2 font-mono w-3/4" title="${address}">${shortAddress}</td>
-                                         <td class="p-2 text-right font-bold w-1/4">${count}</td>
-                                      </tr>`;
-                    }
-                } else {
-                    // Ensure colspan matches the number of columns (2)
-                    tableHtml += `<tr><td colspan="2" class="text-center p-4 text-gray-500">No holder NFTs currently staked here.</td></tr>`;
-                }
-                
-                tableHtml += `</tbody></table>`; // Close tbody and table
-
-                tableContainer.innerHTML = tableHtml; // Inject the table with only tbody
-
-                // Update holder counts in modal titles (if elements exist)
-                 const totalCount = sortedStakers.reduce((sum, [, count]) => sum + count, 0); // Calculate total count
-                 if (tableId === 'enterprise-stakers-table') {
-                     const enterpriseCountEl = document.getElementById('enterprise-modal-holder-count');
-                     if (enterpriseCountEl && enterpriseCountEl.innerHTML.includes('fa-spinner')) enterpriseCountEl.textContent = totalCount.toLocaleString();
-                 }
-                 if (tableId === 'daodao-stakers-table') {
-                     const daodaoCountEl = document.getElementById('daodao-modal-holder-count');
-                     if (daodaoCountEl && daodaoCountEl.innerHTML.includes('fa-spinner')) daodaoCountEl.textContent = totalCount.toLocaleString();
-                 }
-            }
-
-
-            // --- Helper to update Tile status (Live/Snapshot) ---
-            function updateTile(elementId, value, isLive, options = {}) {
-                 const el = document.getElementById(elementId);
-                 // Update value if provided and element exists
-                 if (value !== null && value !== undefined && el) {
-                     // Check if current content is a spinner before overwriting, avoids flicker if data comes back fast
-                     if (el.innerHTML.includes('fa-spinner') || value === 'Error') {
-                        el.textContent = value;
+                         // Update Summary Text
+                         const gainColor = gainPhase2 >= 0 ? 'text-green-300' : 'text-red-400';
+                         phase2GainTextEl.innerHTML = `Gain Over Mint (75 LUNA): <span class="font-bold ${gainColor}">${gainPhase2.toFixed(2)}</span> LUNA`;
+                          phase2GainTextEl.className = 'text-xs text-center text-gray-400 mt-1'; // Reset class
                      }
                  }
-
-                 // Update live/snapshot dot
-                const titleId = options.titleId || `${elementId}-title`;
-                const titleEl = document.getElementById(titleId);
-                if (titleEl) {
-                    // Clear existing dot first
-                    const existingDot = titleEl.querySelector('.pulse-dot, .static-dot-red');
-                    if (existingDot) existingDot.remove();
-                    
-                    // Add new dot
-                    const newDot = document.createElement('span');
-                    newDot.className = isLive ? 'pulse-dot ml-1' : 'static-dot-red ml-1';
-                     // Check if a dot already exists before appending again
-                     if (!titleEl.querySelector('.pulse-dot, .static-dot-red')) {
-                        titleEl.appendChild(newDot);
-                     }
-                }
-
-                 // Update subtext if provided
-                if (options.subtextId && options.subtext !== undefined) { // Check for undefined specifically
-                     const subtextEl = document.getElementById(options.subtextId);
-                     if (subtextEl) {
-                        // Check if current content is a spinner before overwriting
-                        if (subtextEl.innerHTML.includes('fa-spinner') || options.subtext === 'Error') {
-                            subtextEl.textContent = options.subtext;
-                        }
-                     }
-                }
             }
 
-
-           // --- MODALS --- (Copied necessary functions from explorer)
-            const showCopyToast = (text) => {
-                 // Requires a div with id="copy-toast" somewhere in the HTML, styled appropriately
-                 const toast = document.getElementById('copy-toast');
-                 if (!toast) return; // Safety check
-                toast.textContent = text;
-                toast.classList.add('show'); // Requires CSS for .show to make it visible
-                setTimeout(() => { toast.classList.remove('show'); }, 2000);
-            }
-
-            const copyToClipboard = (textToCopy, typeName = 'Address') => {
-                if (!textToCopy) return;
-                try {
-                    // Use Clipboard API if available (more modern and secure)
-                    if (navigator.clipboard && window.isSecureContext) {
-                        navigator.clipboard.writeText(textToCopy).then(() => {
-                            const shortText = textToCopy.length > 15 ? `${textToCopy.substring(0, 5)}...${textToCopy.substring(textToCopy.length - 5)}` : textToCopy;
-                            // showCopyToast(`Copied ${typeName}: ${shortText}`); // Requires toast HTML/CSS
-                            console.log(`Copied ${typeName}: ${shortText}`); // Console fallback
-                        }).catch(err => {
-                             console.warn('Clipboard API failed, falling back:', err);
-                             fallbackCopy(textToCopy, typeName); // Fallback
-                        });
-                    } else {
-                         fallbackCopy(textToCopy, typeName); // Fallback for insecure contexts or older browsers
-                    }
-                } catch (e) {
-                     console.error("Copy to clipboard failed:", e);
-                     fallbackCopy(textToCopy, typeName); // Fallback on any error
-                }
-            };
-            
-            // Fallback using document.execCommand
-             const fallbackCopy = (textToCopy, typeName) => {
-                 const tempInput = document.createElement('textarea'); // Use textarea for potentially long addresses
-                 tempInput.value = textToCopy;
-                 tempInput.style.position = 'absolute';
-                 tempInput.style.left = '-9999px';
-                 document.body.appendChild(tempInput);
-                 tempInput.select();
-                 try {
-                     document.execCommand('copy');
-                     const shortText = textToCopy.length > 15 ? `${textToCopy.substring(0, 5)}...${textToCopy.substring(textToCopy.length - 5)}` : textToCopy;
-                    // showCopyToast(`Copied ${typeName}: ${shortText}`); // Requires toast HTML/CSS
-                     console.log(`Copied ${typeName}: ${shortText}`); // Console fallback
-                 } catch (err) {
-                     console.error('Fallback copy command failed: ', err);
-                    // showCopyToast(`Failed to copy!`); // Inform user on failure
-                    console.error("Fallback copy failed.");
-                 }
-                 document.body.removeChild(tempInput);
-             };
-
-            
-            // --- UNUSED JS FUNCTIONS REMOVED: showNftDetails, findRarestTrait, generateShareImage ---
-            
-
-            // --- Info Modals Setup ---
-            function setupInfoModals() {
-                const modalTriggers = {
-                    'daodao-staked-card': 'daodaoModal',
-                    'enterprise-staked-card': 'enterpriseModal',
-                    'dao-broken-card': 'daoBrokenModal',
-                    'unminted-backing-card': 'unmintedModal',
-                    'dao-treasury-card': 'treasuryModal',
-                    'logo-modal-trigger': 'logoModal', // Assuming this button exists
-                    'dao-tla-vp-card': 'tlaVpModal',
-                    'dao-tla-card': 'tlaModal'
-                };
-
-                const openModal = (modalId) => {
-                    const modal = document.getElementById(modalId);
-                    if (!modal) return;
-                    modal.classList.remove('hidden', 'opacity-0');
-                     // Select the correct content element (could be modal-content or modal-content-explorer)
-                     const content = modal.querySelector('.modal-content, .modal-content-explorer');
-                     if (content) {
-                        setTimeout(() => content.classList.remove('scale-95', 'opacity-0'), 10);
-                     }
-                };
-
-                const closeModalFunc = (modal) => { // Renamed to avoid conflict
-                    if (!modal) return;
-                    modal.classList.add('opacity-0');
-                    const content = modal.querySelector('.modal-content, .modal-content-explorer');
-                     if (content) {
-                        content.classList.add('scale-95', 'opacity-0');
-                     }
-                    setTimeout(() => modal.classList.add('hidden'), 300);
-                };
-
-                 // Attach triggers
-                for (const triggerId in modalTriggers) {
-                    const trigger = document.getElementById(triggerId);
-                    if (trigger) {
-                        trigger.addEventListener('click', (e) => {
-                             // Prevent default only if it's potentially a link
-                             if (trigger.tagName === 'A' || trigger.closest('a')) {
-                                e.preventDefault();
-                             }
-                             openModal(modalTriggers[triggerId])
-                        });
-                    } else {
-                         // console.warn(`Trigger element not found: ${triggerId}`); // Log if trigger missing
-                     }
-                }
-
-                // Attach close buttons and backdrop clicks
-                document.querySelectorAll('.modal-close').forEach(button => {
-                    const modal = button.closest('.modal');
-                    if(modal) {
-                       button.addEventListener('click', () => closeModalFunc(modal)); // Use renamed function
-                    }
-                });
-                
-                 document.querySelectorAll('.modal, .modal-backdrop').forEach(modal => { // Include modal-backdrop
-                     modal.addEventListener('click', (e) => {
-                         // Close only if the backdrop itself (not content) is clicked
-                         if (e.target === modal) closeModalFunc(modal); // Use renamed function
-                     });
-                 });
-
-                 // Specific close for NFT modal reused from explorer
-                  // UNUSED: The modal this applied to was removed.
-                  // const nftExplorerModalClose = document.getElementById('modal-close');
-                  // const nftExplorerModal = document.getElementById('nft-modal');
-                  //  if (nftExplorerModalClose && nftExplorerModal) {
-                  //      nftExplorerModalClose.addEventListener('click', () => closeModalFunc(nftExplorerModal));
-                  //  }
-
-            }
-
-            // --- Build Logo Modal ---
-            function buildLogoModal() {
-                 const container = document.getElementById('logo-library-container');
-                 if (!container) return; // Safety check
-
-                 const logos = [
-                    { "name": "Alliance DAO", "url": "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Alliance%20DAO%20Logo.png" },
-                    { "name": "Alliance DAO (No BG)", "url": "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/aDAO%20Logo%20No%20Background.png" },
-                    { "name": "Alliance DAO (SVG)", "url": "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/aDAO%20Logo.svg" },
-                    { "name": "Enterprise Protocol", "url": "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Enterprise.jpg" },
-                    // <<< SYNTAX ERROR FIXED HERE >>>
-                    { "name": "Boost", "url": "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Boost%20Logo.png" },
-                    { "name": "BackBone Labs", "url": "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/BBL%20No%20Background.png" },
-                    { "name": "Terra", "url": "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Terra.PNG" }
-                    // Add more logos as needed
-                ];
-
-                container.innerHTML = ''; // Clear previous content
-
-                logos.forEach(logo => {
-                    const logoCard = document.createElement('div');
-                    logoCard.className = 'flex flex-col items-center justify-between p-4 bg-gray-800/50 rounded-lg h-full';
-                    
-                    const logoUrl = logo.url;
-
-                    logoCard.innerHTML = `
-                        <a href="${logoUrl}" target="_blank" rel="noopener noreferrer" class="flex-grow flex items-center justify-center mb-2">
-                             <img src="${logoUrl}" alt="${logo.name} Logo" class="max-h-20 max-w-full" onerror="this.src='https://placehold.co/80x80/1f2937/4b5563?text=Error'; this.onerror=null;">
-                        </a>
-                        <div class="w-full">
-                            <p class="text-xs text-gray-400 mb-2 truncate">${logo.name}</p>
-                            <button class="copy-logo-url-btn w-full bg-gray-700 hover:bg-gray-600 text-white text-xs font-bold py-1 px-2 rounded transition-colors" data-url="${logoUrl}">
-                                Copy URL
-                            </button>
-                        </div>
-                    `;
-                    container.appendChild(logoCard);
-                });
-
-                // Re-attach copy listeners after rebuilding
-                document.querySelectorAll('.copy-logo-url-btn').forEach(button => {
-                    button.addEventListener('click', function() { // Use 'function' to preserve 'this'
-                        const urlToCopy = this.dataset.url;
-                        const originalText = this.textContent;
-                        copyToClipboard(urlToCopy, 'Logo URL'); // Use the main copy function
-                        this.textContent = 'Copied!';
-                        setTimeout(() => {
-                            this.textContent = originalText;
-                        }, 1500);
-                    });
-                });
-            }
-
-
-            // --- Main Execution ---
-            updateUI(); // Initial UI setup with static data & trigger live fetch
-            setupInfoModals(); // Setup general info modals
-            buildLogoModal(); // Build the logo modal content
-            
-            // --- Disclaimer Banner Logic ---
-            const banner = document.getElementById('disclaimer-banner');
-            const closeButton = document.getElementById('close-banner');
-            if (banner && closeButton) {
-                closeButton.addEventListener('click', () => {
-                    banner.style.display = 'none';
-                });
-            }
-
-        }); // End of main DOMContentLoaded listener
-
+            // --- INITIALIZE THE PAGE by fetching live data ---
+            fetchLiveBacking(); 
+        });
     </script>
+
 </body>
 </html>
