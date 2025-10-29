@@ -208,7 +208,7 @@ const calculateRanks = () => {
         if (nft.attributes) {
             nft.attributes.forEach(attr => {
                 // Rarity score based on all traits except Weather and Light
-                if (traitCounts[attr.trait_type]?.[attr.value] && !['Weather', 'Light'].includes(attr.trait_type)) {
+                if (traitCounts[attr.trait_type]?.[attr.value] && !['Weather', 'Light', 'Rarity'].includes(attr.trait_type)) {
                     const count = traitCounts[attr.trait_type][attr.value];
                     const rarity = count / allNfts.length;
                     if (rarity > 0) totalScore += 1 / rarity;
@@ -2371,3 +2371,4 @@ if (document.readyState === 'loading') {
 } else {
     initializeExplorer(); // DOM is already ready
 }
+
