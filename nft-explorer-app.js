@@ -1155,8 +1155,6 @@ const copyToClipboard = (textToCopy, typeName = 'Address') => {
         }
     });
 };
-
-
 const showNftDetails = (nft) => {
     if (!nftModal || !nft) return;
     const imgEl = document.getElementById('modal-image');
@@ -1170,27 +1168,27 @@ const showNftDetails = (nft) => {
     imgEl.src = convertIpfsUrl(nft.image) || `https://placehold.co/400x400/1f2937/e5e7eb?text=No+Image`;
     titleEl.textContent = (nft.name || `NFT #${nft.id || '?'}`).replace('The AllianceDAO NFT', 'AllianceDAO NFT');
     
+    // Get the "Rarity" trait value, default to 'N/A'
+    const rarityValue = nft.attributes?.find(a => a.trait_type === 'Rarity')?.value || 'N/A';
+
+    // Start traits HTML with Rank and the corrected Rarity value
     let traitsHtml = `<div class="flex justify-between text-sm"><span class="text-gray-400">Rank:</span><span class="font-semibold text-white">#${nft.rank || 'N/A'}</span></div>`;
-    if (nft.rarityScore) {
-   // Get the "Rarity" trait value, default to 'N/A'
-const rarityValue = nft.attributes?.find(a => a.trait_type === 'Rarity')?.value || 'N/A';
-
-let traitsHtml = `<div class="flex justify-between text-sm"><span class="text-gray-400">Rank:</span><span class="font-semibold text-white">#${nft.rank || 'N/A'}</span></div>`;
-// Show the "Rarity" trait value, not the calculated score
-traitsHtml += `<div class="flex justify-between text-sm"><span class="text-gray-400">Rarity:</span><span class="font-semibold text-white">${rarityValue}</span></div>`;
-
-const attributesToShow = (nft.attributes || [])
-    // Filter out Rank AND Rarity, since we manually added them above
-    .filter(a => traitOrder.includes(a.trait_type) && !['Rank', 'Rarity'].includes(a.trait_type))
+    traitsHtml += `<div class="flex justify-between text-sm"><span class="text-gray-400">Rarity:</span><span class="font-semibold text-white">${rarityValue}</span></div>`;
+    
+    // Filter and sort the *rest* of the attributes
+    const attributesToShow = (nft.attributes || [])
+        .filter(a => traitOrder.includes(a.trait_type) && !['Rank', 'Rarity'].includes(a.trait_type))
         .sort((a, b) => traitOrder.indexOf(a.trait_type) - traitOrder.indexOf(b.trait_type));
         
+    // Add the filtered attributes to the HTML
     traitsHtml += attributesToShow.map(attr => 
         `<div class="flex justify-between text-sm"><span class="text-gray-400">${attr.trait_type}:</span><span class="font-semibold text-white truncate" title="${attr.value}">${attr.value || 'N/A'}</span></div>`
     ).join('');
     
+    // Separator line
     traitsHtml += `<div class="pt-2 mt-2 border-t border-gray-600"></div>`;
     
-    // Status Text
+    // Status Text Logic (same as before)
     let statusTxt = 'Unknown';
     if (nft.owned_by_alliance_dao) {
         statusTxt = 'DAO Owned (Un-minted)';
@@ -1210,11 +1208,17 @@ const attributesToShow = (nft.attributes || [])
 
     traitsHtml += `<div class="flex justify-between text-sm"><span class="text-gray-400">Status:</span><span class="font-semibold text-white">${statusTxt}</span></div>`;
     traitsHtml += `<div class="flex justify-between text-sm"><span class="text-gray-400">Broken:</span><span class="font-semibold text-white">${nft.broken ? 'Yes' : 'No'}</span></div>`;
+    
+    // Separator line
     traitsHtml += `<div class="pt-2 mt-2 border-t border-gray-600"></div>`;
+    
+    // Owner Info (same as before)
     traitsHtml += `<div class="flex justify-between text-sm items-center"><span class="text-gray-400">Owner:</span><span class="owner-address font-mono text-sm font-semibold text-white truncate cursor-pointer" title="Click to copy">${nft.owner || 'N/A'}</span></div>`;
 
+    // Update the DOM
     traitsEl.innerHTML = traitsHtml;
     
+    // Add click listener for owner address copy
     const ownerEl = traitsEl.querySelector('.owner-address');
     if (nft.owner && ownerEl) {
         ownerEl.addEventListener('click', () => copyToClipboard(nft.owner, 'Owner Address'));
@@ -1223,15 +1227,18 @@ const attributesToShow = (nft.attributes || [])
         ownerEl.removeAttribute('title');
     }
 
+    // Update IPFS link and Download button (same as before)
     linkEl.href = convertIpfsUrl(nft.image) || '#';
-    
     dlBtn.textContent = 'Download Post';
-    dlBtn.disabled = false; // Ensure button is enabled
-    dlBtn.onclick = () => generateShareImage(nft, dlBtn); // Use onclick to re-bind
+    dlBtn.disabled = false;
+    dlBtn.onclick = () => generateShareImage(nft, dlBtn); 
 
-    window.location.hash = nft.id || ''; // Set hash
+    // Update hash and show modal (same as before)
+    window.location.hash = nft.id || ''; 
     nftModal.classList.remove('hidden');
 };
+
+;
 
 const hideNftDetails = () => {
     if (nftModal) nftModal.classList.add('hidden');
@@ -2376,5 +2383,6 @@ if (document.readyState === 'loading') {
 } else {
     initializeExplorer(); // DOM is already ready
 }
+
 
 
