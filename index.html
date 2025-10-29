@@ -184,7 +184,8 @@
             </div>
             <!-- Center: Navigation Tiles -->
             <nav class="flex-1 flex justify-center items-center space-x-6">
-                <a href="nft-explorer.html" class="bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-3 px-8 rounded-lg shadow-lg transition-all transform hover:scale-105">
+                <!-- MODIFIED LINK -->
+                <a href="https://github.com/defipatriot/aDAO-links-site/blob/main/nft-explorer-index.html" target="_blank" rel="noopener noreferrer" class="bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-3 px-8 rounded-lg shadow-lg transition-all transform hover:scale-105">
                     NFT Explorer
                 </a>
                  <!-- Removed Galaxy Map link temporarily -->
@@ -765,7 +766,9 @@
 
             // --- UI UPDATE FUNCTION ---
             function updateUI() {
-                // ... (rest of updateUI function - setting static data, triggering fetch) ...
+                const lastUpdatedEl = document.getElementById('last-updated');
+                if (lastUpdatedEl) lastUpdatedEl.textContent = new Date(dashboardData.lastUpdated).toUTCString();
+                
                  // Mint Slider (Update with static data initially)
                 const mintSliderEl = document.getElementById('mint-slider');
                 const unmintedCountEl = document.getElementById('unminted-count');
@@ -780,11 +783,9 @@
                     if (mintedPercentEl.innerHTML.includes('fa-spinner')) mintedPercentEl.textContent = `${dashboardData.statusSliders.mint.percentMinted} Minted`;
                 }
                 
-                 // Update Avg Daily Gain (Static)
-                 const avgDailyGainEl = document.getElementById('avg-daily-gain');
-                 if (avgDailyGainEl && avgDailyGainEl.innerHTML.includes('fa-spinner')) avgDailyGainEl.textContent = `+${dashboardData.keyMetrics.avgDailyGain}`;
-                 const avgDailyGainSubEl = document.getElementById('avg-daily-gain-subtext');
-                 if(avgDailyGainSubEl && avgDailyGainSubEl.innerHTML.includes('fa-spinner')) avgDailyGainSubEl.textContent = `(Snapshot)`;
+                 // --- FIX: Removed redundant static update for Avg Daily Gain ---
+                 // The fetchLiveOnChainData's 'finally' block now handles this.
+                 // --- END FIX ---
 
                 fetchLiveOnChainData();
             }
@@ -1070,10 +1071,8 @@
                       // Update static tiles regardless of success/failure, if needed
                        console.log("DEBUG: Updating static tiles (final check)..."); 
                        const { keyMetrics } = dashboardData;
-                       const avgDailyGainEl = document.getElementById('avg-daily-gain');
-                       if (avgDailyGainEl && avgDailyGainEl.innerHTML.includes('fa-spinner')) {
-                          updateTile('avg-daily-gain', `+${keyMetrics.avgDailyGain}`, false, { titleId: 'avg-daily-gain-title'});
-                       }
+                       // This is now the *only* place avg-daily-gain is updated
+                       updateTile('avg-daily-gain', `+${keyMetrics.avgDailyGain}`, false, { titleId: 'avg-daily-gain-title'});
                         const avgDailyGainSubEl = document.getElementById('avg-daily-gain-subtext');
                         if (avgDailyGainSubEl && avgDailyGainSubEl.innerHTML.includes('fa-spinner')) {
                            avgDailyGainSubEl.textContent = `(Snapshot)`;
