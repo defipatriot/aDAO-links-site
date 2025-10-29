@@ -43,12 +43,19 @@ const walletExplorerModal = document.getElementById('wallet-explorer-modal');
 const walletModalCloseBtn = document.getElementById('wallet-modal-close');
 const systemLeaderboardModal = document.getElementById('system-leaderboard-modal');
 const systemModalCloseBtn = document.getElementById('system-modal-close');
+const spaceCanvas = document.getElementById('space-canvas'); // Added spaceCanvas
+// Add references for new toggles
+const togInhabBtn = document.getElementById('toggle-inhabitant-filters');
+const inhabArrow = document.getElementById('inhabitant-arrow');
+const togPlanBtn = document.getElementById('toggle-planet-filters');
+const planArrow = document.getElementById('planet-arrow');
 
 
 // --- Config ---
 const METADATA_URL = "https://cdn.jsdelivr.net/gh/defipatriot/nft-metadata/all_nfts_metadata.json";
 const STATUS_DATA_URL = "https://deving.zone/en/nfts/alliance_daos.json";
 const DAO_WALLET_ADDRESS = "terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm";
+const DAO_LOCKED_WALLET_SUFFIXES = ["8ywv", "417v", "6ugw"]; // Added from previous logic
 const itemsPerPage = 20;
 const traitOrder = ["Rank", "Rarity", "Planet", "Inhabitant", "Object", "Weather", "Light"];
 const filterLayoutOrder = ["Rarity", "Object", "Weather", "Light"];
@@ -66,11 +73,21 @@ let allHolderStats = [];
 let holderCurrentPage = 1;
 const holdersPerPage = 10;
 let holderSort = { column: 'total', direction: 'desc' };
+// Map State (moved from inside function to global)
+let globalAnimationFrameId;
+let isMapInitialized = false;
+let mapZoom = 0.15, mapRotation = 0, mapOffsetX = 0, mapOffsetY = 0;
+let isPanning = false, isRotating = false;
+let lastMouseX = 0, lastMouseY = 0;
+let mapStars = [];
+let mapObjects = [];
+let isInitialLoad = true;
+
 
 // --- Utility Functions ---
 const debounce = (func, delay) => { let timeout; return function(...args) { clearTimeout(timeout); timeout = setTimeout(() => func.apply(this, args), delay); }; };
-const showLoading = (container, message) => { container.innerHTML = `<p class="text-center col-span-full text-cyan-400 text-lg">${message}</p>`; };
-const showError = (container, message) => { container.innerHTML = `<div class="text-center col-span-full bg-red-900/50 border border-red-700 text-white p-6 rounded-lg"><h3 class="font-bold text-xl">Error</h3><p class="mt-2 text-red-300">${message}</p></div>`; };
+const showLoading = (container, message) => { if(container) container.innerHTML = `<p class="text-center col-span-full text-cyan-400 text-lg">${message}</p>`; };
+const showError = (container, message) => { if(container) container.innerHTML = `<div class="text-center col-span-full bg-red-900/50 border border-red-700 text-white p-6 rounded-lg"><h3 class="font-bold text-xl">Error</h3><p class="mt-2 text-red-300">${message}</p></div>`; };
 function convertIpfsUrl(ipfsUrl) { if (!ipfsUrl || !ipfsUrl.startsWith('ipfs://')) return ''; return `https://ipfs.io/ipfs/${ipfsUrl.replace('ipfs://', '')}`; }
 
 // --- Data Fetching and Processing ---
@@ -78,20 +95,37 @@ const mergeNftData = (metadata, statusData) => {
     const statusMap = new Map(statusData.nfts.map(nft => [String(nft.id), nft]));
     return metadata.map(nft => {
         const status = statusMap.get(String(nft.id));
+        let mergedNft = { ...nft }; // Start with metadata
+
         if (status) {
-            // Map new data structure to the one used throughout the app
-            return {
-                ...nft,
-                owner: status.owner,
-                broken: status.broken,
-                staked_daodao: status.daodao,
-                staked_enterprise_legacy: status.enterprise,
-                bbl_market: status.bbl,
-                boost_market: status.boost,
-                liquid: status.liquid
-            };
+            // Merge status data
+            mergedNft.owner = status.owner;
+            mergedNft.broken = status.broken;
+            mergedNft.staked_daodao = status.daodao;
+            mergedNft.staked_enterprise_legacy = status.enterprise;
+            mergedNft.bbl_market = status.bbl;
+            mergedNft.boost_market = status.boost;
+
+            // Re-calculate liquid status based on all fields
+            const isStaked = status.daodao || status.enterprise;
+            const isListed = status.bbl || status.boost;
+            const isOwnedByMainDAO = status.owner === DAO_WALLET_ADDRESS;
+            const isOwnedByLockedDAO = status.owner ? DAO_LOCKED_WALLET_SUFFIXES.some(suffix => status.owner.endsWith(suffix)) : false;
+            
+            mergedNft.liquid = !isOwnedByMainDAO && !isOwnedByLockedDAO && !isStaked && !isListed;
+            mergedNft.owned_by_alliance_dao = isOwnedByMainDAO || isOwnedByLockedDAO; // Keep this if needed
+        } else {
+            // Set defaults if no status data is found
+             mergedNft.owner = null;
+             mergedNft.broken = false;
+             mergedNft.staked_daodao = false;
+             mergedNft.staked_enterprise_legacy = false;
+             mergedNft.bbl_market = false;
+             mergedNft.boost_market = false;
+             mergedNft.liquid = true; // Default to liquid if not in status file?
+             mergedNft.owned_by_alliance_dao = false;
         }
-        return nft;
+        return mergedNft;
     });
 };
 
@@ -114,20 +148,24 @@ const initializeExplorer = async () => {
         if (!Array.isArray(metadata) || metadata.length === 0) { showError(gallery, "Metadata is empty or in the wrong format."); return; }
         
         allNfts = mergeNftData(metadata, statusData);
+        ownerAddresses = [...new Set(allNfts.map(nft => nft.owner).filter(Boolean))]; // Populate master list
 
         calculateRanks();
         populateTraitFilters();
         populateInhabitantFilters();
         populatePlanetFilters();
-        populateStatusFilters();
+        populateStatusFilters(); // This will now add the Liquid filter
         populateTraitToggles();
         populateWalletTraitToggles();
-        setupAddressFeatures();
+        setupAddressFeatures(); // This populates the dropdown
         updateFilterCounts(allNfts);
         addAllEventListeners();
         applyStateFromUrl();
         applyFiltersAndSort();
         calculateAndDisplayLeaderboard();
+        
+        handleHashChange(); // Check hash on initial load
+        isInitialLoad = false; // Mark initial load complete
 
     } catch (error) {
         console.error("Failed to initialize explorer:", error);
@@ -169,9 +207,11 @@ const calculateRanks = () => {
         let totalScore = 0;
         if (nft.attributes) {
             nft.attributes.forEach(attr => {
-                if (attr.trait_type !== 'Weather' && attr.trait_type !== 'Light') {
+                // Rarity score based on all traits except Weather and Light
+                if (traitCounts[attr.trait_type]?.[attr.value] && !['Weather', 'Light'].includes(attr.trait_type)) {
                     const count = traitCounts[attr.trait_type][attr.value];
-                    totalScore += 1 / (count / allNfts.length);
+                    const rarity = count / allNfts.length;
+                    if (rarity > 0) totalScore += 1 / rarity;
                 }
             });
         }
@@ -253,8 +293,10 @@ const populateTraitFilters = () => {
         if (traitType === 'Object') {
             dropdown.querySelectorAll('label').forEach(label => {
                 const checkbox = label.querySelector('input');
-                label.addEventListener('mouseenter', (e) => showPreviewTile(e, 'Object', checkbox.value));
-                label.addEventListener('mouseleave', hidePreviewTile);
+                if (checkbox) { // Ensure checkbox exists
+                    label.addEventListener('mouseenter', (e) => showPreviewTile(e, 'Object', checkbox.value));
+                    label.addEventListener('mouseleave', hidePreviewTile);
+                }
             });
         }
         return container;
@@ -269,7 +311,7 @@ const populateTraitFilters = () => {
         }
         
         if (traitType === 'Object' || traitType === 'Weather' || traitType === 'Light') {
-            values.sort((a, b) => traitCounts[traitType][a] - traitCounts[traitType][b]);
+            values.sort((a, b) => (traitCounts[traitType]?.[a] || 0) - (traitCounts[traitType]?.[b] || 0));
         }
         if (traitType === 'Object') {
             const phoenixIndex = values.indexOf('Phoenix Rising');
@@ -282,8 +324,8 @@ const populateTraitFilters = () => {
 const populateStatusFilters = () => {
     statusFiltersGrid.innerHTML = '';
     const statusFilterConfig = [
-        { key: 'staked', label: 'Staked', left: 'Enterprise', right: 'DAODAO' },
-        { key: 'listed', label: 'Listed', left: 'Boost', right: 'BackBoneLabs' },
+        { key: 'staked', label: 'Staked', left: 'Ent', right: 'DAO' }, // Changed from Enterprise/DAODAO
+        { key: 'listed', label: 'Listed', left: 'Boost', right: 'BBL' }, // Changed from Boost/BackBoneLabs
         { key: 'rewards', label: 'Rewards', left: 'Broken', right: 'Unbroken' }
     ];
 
@@ -303,6 +345,18 @@ const populateStatusFilters = () => {
         sliderClass: 'status-slider', left: 'Un-Minted', right: 'Minted'
     });
     mintStatusContainer.appendChild(mintStatusFilter);
+    
+    // *** ADDED LIQUID FILTER ***
+    const liquidStatusFilter = createFilterItem({
+        toggleClass: 'status-toggle-cb', key: 'liquid_status', label: 'Liquid Status',
+        countClass: 'status-count',
+        sliderClass: 'status-slider', left: 'Liquid', right: 'Not Liq'
+    });
+    // Add it to the same grid as the mint status
+    const grid = mintStatusContainer.closest('.grid') || mintStatusContainer.parentElement;
+    if (grid) {
+        grid.appendChild(liquidStatusFilter);
+    }
 };
 
 const populateTraitToggles = () => {
@@ -340,22 +394,155 @@ const addAllEventListeners = () => {
     });
     document.querySelectorAll('.direction-slider').forEach(slider => slider.addEventListener('input', handleFilterChange));
     document.querySelectorAll('.trait-toggle').forEach(el => el.addEventListener('change', () => displayPage(currentPage)));
-    document.querySelectorAll('.multi-select-checkbox').forEach(el => el.addEventListener('change', handleFilterChange));
+    // Note: multi-select-checkbox listeners are added in populateTraitFilters
     
-    addressDropdown.addEventListener('change', () => {
-        searchAddressInput.value = addressDropdown.value;
-        handleFilterChange();
-    });
+    if (addressDropdown) {
+        addressDropdown.addEventListener('change', () => {
+            searchAddressInput.value = addressDropdown.value;
+            handleFilterChange();
+        });
+    }
     
-    walletTraitTogglesContainer.addEventListener('change', (e) => {
-        if (e.target.classList.contains('wallet-trait-toggle')) {
-            searchWallet(); // Re-render gallery with new toggle settings
-        }
-    });
+    if (walletTraitTogglesContainer) {
+        walletTraitTogglesContainer.addEventListener('change', (e) => {
+            if (e.target.classList.contains('wallet-trait-toggle')) {
+                searchWallet(); // Re-render gallery with new toggle settings
+            }
+        });
+    }
+    
+    // *** ADDED EVENT LISTENERS FOR COLLAPSIBLE SECTIONS ***
+    if(togInhabBtn && inhabitantFiltersContainer && inhabArrow) {
+        togInhabBtn.addEventListener('click', () => {
+            inhabitantFiltersContainer.classList.toggle('hidden');
+            inhabArrow.classList.toggle('rotate-180');
+        });
+    }
+    if(togPlanBtn && planetFiltersContainer && planArrow) {
+        togPlanBtn.addEventListener('click', () => {
+            planetFiltersContainer.classList.toggle('hidden');
+            planArrow.classList.toggle('rotate-180');
+        });
+    }
+    
+    // Add other listeners from the single file
+    document.addEventListener('click', () => closeAllDropdowns());
+    if (modalCloseBtn) modalCloseBtn.addEventListener('click', hideNftDetails);
+    if (nftModal) nftModal.addEventListener('click', (e) => { if (e.target === nftModal) hideNftDetails(); });
+    if (rarityExplainedBtn) rarityExplainedBtn.addEventListener('click', () => rarityModal.classList.remove('hidden'));
+    if (rarityModalCloseBtn) rarityModalCloseBtn.addEventListener('click', () => rarityModal.classList.add('hidden'));
+    if (rarityModal) rarityModal.addEventListener('click', (e) => { if (e.target === rarityModal) rarityModal.classList.add('hidden'); });
+    if (badgesExplainedBtn) badgesExplainedBtn.addEventListener('click', () => badgeModal.classList.remove('hidden'));
+    if (badgeModalCloseBtn) badgeModalCloseBtn.addEventListener('click', () => badgeModal.classList.add('hidden'));
+    if (badgeModal) badgeModal.addEventListener('click', (e) => { if (e.target === badgeModal) badgeModal.classList.add('hidden'); });
+    if (walletModalCloseBtn) walletModalCloseBtn.addEventListener('click', hideWalletExplorerModal);
+    if (walletExplorerModal) walletExplorerModal.addEventListener('click', (e) => { if (e.target === walletExplorerModal) hideWalletExplorerModal(); });
+    if (systemModalCloseBtn) systemModalCloseBtn.addEventListener('click', hideSystemLeaderboardModal);
+    if (systemLeaderboardModal) systemLeaderboardModal.addEventListener('click', (e) => { if (e.target === systemLeaderboardModal) hideSystemLeaderboardModal(); });
+
+    
+    const debouncedFilter = debounce(handleFilterChange, 300);
+    if (searchInput) searchInput.addEventListener('input', debouncedFilter);
+    if (sortSelect) sortSelect.addEventListener('change', handleFilterChange);
+    if (resetButton) resetButton.addEventListener('click', resetAll);
+    
+    if (collectionViewBtn) collectionViewBtn.addEventListener('click', () => switchView('collection'));
+    if (walletViewBtn) walletViewBtn.addEventListener('click', () => switchView('wallet'));
+    if (mapViewBtn) mapViewBtn.addEventListener('click', () => switchView('map'));
+
+
+    if (walletResetBtn) {
+        walletResetBtn.addEventListener('click', () => {
+            if (walletSearchAddressInput) walletSearchAddressInput.value = '';
+            if (walletGallery) walletGallery.innerHTML = '';
+            if (walletGalleryTitle) walletGalleryTitle.textContent = 'Wallet NFTs';
+             document.querySelectorAll('#leaderboard-table .leaderboard-row').forEach(row => {
+                row.classList.remove('selected');
+            });
+            showLoading(walletGallery,'Search for or select a wallet to see owned NFTs.'); // Reset gallery text
+        });
+    }
+
+    if (walletSearchAddressInput) {
+        walletSearchAddressInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') searchWallet();
+        });
+    }
+    
+    if (searchAddressInput) {
+        searchAddressInput.addEventListener('input', () => {
+            handleAddressInput(searchAddressInput, addressSuggestions, handleFilterChange, false);
+        });
+    }
+    
+    if (walletSearchAddressInput) {
+        walletSearchAddressInput.addEventListener('input', () => {
+            handleAddressInput(walletSearchAddressInput, walletAddressSuggestions, searchWallet, true);
+        });
+    }
+
+    if (leaderboardTable) {
+        leaderboardTable.addEventListener('click', (e) => {
+            const headerCell = e.target.closest('[data-sort-by]');
+            if (!headerCell) return;
+
+            const newColumn = headerCell.dataset.sortBy;
+            if (holderSort.column === newColumn) {
+                holderSort.direction = holderSort.direction === 'desc' ? 'asc' : 'desc';
+            } else {
+                holderSort.column = newColumn;
+                holderSort.direction = (newColumn === 'address') ? 'asc' : 'desc'; // Default text to A-Z
+            }
+            sortAndDisplayHolders();
+        });
+    }
+
+
+     const setupCopyButton = (buttonEl, inputEl) => {
+         if (buttonEl && inputEl) { // Add null check
+            buttonEl.addEventListener('click', () => copyToClipboard(inputEl.value));
+         }
+     };
+
+    setupCopyButton(copyAddressBtn, searchAddressInput);
+    setupCopyButton(walletCopyAddressBtn, walletSearchAddressInput);
+    
+    // Map listeners
+    addMapListeners(); // Add map listeners
+    window.addEventListener('resize', handleMapResize); // Add resize listener
+    window.addEventListener('hashchange', handleHashChange); // Add hashchange listener
 };
 
+function switchView(viewName) {
+    if (viewName !== 'map' && globalAnimationFrameId) {
+        cancelAnimationFrame(globalAnimationFrameId);
+        globalAnimationFrameId = null;
+        // isMapInitialized = false; // Keep map initialized but stop animation
+    }
+    if (collectionView) collectionView.classList.add('hidden');
+    if (walletView) walletView.classList.add('hidden');
+    if (mapView) mapView.classList.add('hidden');
+    if (collectionViewBtn) collectionViewBtn.classList.remove('active');
+    if (walletViewBtn) walletViewBtn.classList.remove('active');
+    if (mapViewBtn) mapViewBtn.classList.remove('active');
+
+    if (viewName === 'collection') {
+        if (collectionView) collectionView.classList.remove('hidden');
+        if (collectionViewBtn) collectionViewBtn.classList.add('active');
+    } else if (viewName === 'wallet') {
+        if (walletView) walletView.classList.remove('hidden');
+        if (walletViewBtn) walletViewBtn.classList.add('active');
+    } else if (viewName === 'map') {
+        if (mapView) mapView.classList.remove('hidden');
+        if (mapViewBtn) mapViewBtn.classList.add('active');
+        requestAnimationFrame(initializeStarfield); // Use requestAnimationFrame
+    }
+}
+
+
 const setupAddressFeatures = () => {
-    // 1. Calculate NFT counts for each owner
+    // This function is now just for populating the dropdown
+    // ownerAddresses is populated in initializeExplorer
     const ownerCounts = {};
     allNfts.forEach(nft => {
         if (nft.owner) {
@@ -363,21 +550,18 @@ const setupAddressFeatures = () => {
         }
     });
 
-    // 2. Sort owners by count, descending
     const sortedOwners = Object.entries(ownerCounts)
         .sort(([, countA], [, countB]) => countB - countA);
 
-    // 3. Populate collection dropdown
-    addressDropdown.innerHTML = '<option value="">Holders</option>';
-    sortedOwners.forEach(([address, count]) => {
-        const option = document.createElement('option');
-        option.value = address;
-        option.textContent = `(${count}) ${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
-        addressDropdown.appendChild(option);
-    });
-    
-    // 4. Store the master list of addresses (just the addresses) for the live search feature
-    ownerAddresses = sortedOwners.map(([address]) => address);
+    if (addressDropdown) {
+        addressDropdown.innerHTML = '<option value="">Holders</option>';
+        sortedOwners.forEach(([address, count]) => {
+            const option = document.createElement('option');
+            option.value = address;
+            option.textContent = `(${count}) ${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
+            addressDropdown.appendChild(option);
+        });
+    }
 };
 
 // --- Collection View Logic ---
@@ -387,33 +571,44 @@ const applyFiltersAndSort = () => {
     // Address Search
     const addressSearchTerm = searchAddressInput.value.trim().toLowerCase();
     if(addressSearchTerm) {
-        tempNfts = tempNfts.filter(nft => nft.owner && nft.owner.toLowerCase().includes(addressSearchTerm));
+        // Use endsWith for partial matching from the end, or full match
+        tempNfts = tempNfts.filter(nft => 
+            nft.owner && 
+            (nft.owner.toLowerCase() === addressSearchTerm || 
+            (addressSearchTerm.length < 42 && nft.owner.toLowerCase().endsWith(addressSearchTerm)))
+        );
     }
     
     // --- Status Filters ---
-    if (document.querySelector('.status-toggle-cb[data-key="staked"]').checked) {
+    if (document.querySelector('.status-toggle-cb[data-key="staked"]')?.checked) {
         const sliderValue = document.querySelector('.direction-slider[data-slider-key="staked"]').value;
         if (sliderValue === '0') tempNfts = tempNfts.filter(nft => nft.staked_enterprise_legacy);
         else if (sliderValue === '1') tempNfts = tempNfts.filter(nft => nft.staked_enterprise_legacy || nft.staked_daodao);
         else if (sliderValue === '2') tempNfts = tempNfts.filter(nft => nft.staked_daodao);
     }
-    if (document.querySelector('.status-toggle-cb[data-key="listed"]').checked) {
+    if (document.querySelector('.status-toggle-cb[data-key="listed"]')?.checked) {
         const sliderValue = document.querySelector('.direction-slider[data-slider-key="listed"]').value;
         if (sliderValue === '0') tempNfts = tempNfts.filter(nft => nft.boost_market);
         else if (sliderValue === '1') tempNfts = tempNfts.filter(nft => nft.boost_market || nft.bbl_market);
         else if (sliderValue === '2') tempNfts = tempNfts.filter(nft => nft.bbl_market);
     }
-    if (document.querySelector('.status-toggle-cb[data-key="rewards"]').checked) {
+    if (document.querySelector('.status-toggle-cb[data-key="rewards"]')?.checked) {
         const sliderValue = document.querySelector('.direction-slider[data-slider-key="rewards"]').value;
         if (sliderValue === '0') tempNfts = tempNfts.filter(nft => nft.broken === true);
+        else if (sliderValue === '1') tempNfts = tempNfts.filter(nft => nft.broken !== undefined); // All that have the property
         else if (sliderValue === '2') tempNfts = tempNfts.filter(nft => nft.broken === false);
     }
-     if (document.querySelector('.status-toggle-cb[data-key="mint_status"]').checked) {
+     if (document.querySelector('.status-toggle-cb[data-key="mint_status"]')?.checked) {
         const sliderValue = document.querySelector('.direction-slider[data-slider-key="mint_status"]').value;
-        if (sliderValue === '0') tempNfts = tempNfts.filter(nft => nft.owner === DAO_WALLET_ADDRESS);
-        else if (sliderValue === '2') tempNfts = tempNfts.filter(nft => nft.owner !== DAO_WALLET_ADDRESS);
+        if (sliderValue === '0') tempNfts = tempNfts.filter(nft => nft.owned_by_alliance_dao === true); // Use combined DAO property
+        else if (sliderValue === '2') tempNfts = tempNfts.filter(nft => nft.owned_by_alliance_dao === false);
     }
-
+    // *** ADDED LIQUID FILTER LOGIC ***
+    if (document.querySelector('.status-toggle-cb[data-key="liquid_status"]')?.checked) {
+        const sliderValue = document.querySelector('.direction-slider[data-slider-key="liquid_status"]').value;
+        if (sliderValue === '0') tempNfts = tempNfts.filter(nft => nft.liquid === true);
+        else if (sliderValue === '2') tempNfts = tempNfts.filter(nft => nft.liquid === false);
+    }
     const activePlanetFilters = [];
     document.querySelectorAll('.planet-toggle-cb:checked').forEach(cb => {
         const planetName = cb.dataset.key;
@@ -468,13 +663,13 @@ const applyFiltersAndSort = () => {
     });
 
     const sortValue = sortSelect.value;
-    if (sortValue === 'asc') tempNfts.sort((a, b) => a.rank - b.rank);
-    else if (sortValue === 'desc') tempNfts.sort((a, b) => b.rank - a.rank);
-    else if (sortValue === 'id') tempNfts.sort((a, b) => a.id - b.id);
+    if (sortValue === 'asc') tempNfts.sort((a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity));
+    else if (sortValue === 'desc') tempNfts.sort((a, b) => (b.rank ?? -Infinity) - (a.rank ?? -Infinity));
+    else if (sortValue === 'id') tempNfts.sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
 
     filteredNfts = tempNfts;
-    resultsCount.textContent = filteredNfts.length;
-    updateFilterCounts();
+    if (resultsCount) resultsCount.textContent = filteredNfts.length;
+    updateFilterCounts(filteredNfts); // Pass the filtered list
     displayPage(1);
 };
 
@@ -496,24 +691,35 @@ const updateUrlState = () => {
     });
 
     document.querySelectorAll('.toggle-checkbox:checked').forEach(toggle => {
-        params.set(toggle.dataset.key, 'true');
-        const slider = document.querySelector(`.direction-slider[data-slider-key="${toggle.dataset.key}"]`);
-        if(slider) {
-            params.set(`${toggle.dataset.key}_pos`, slider.value);
+        // Check if it's one of the filter toggles
+        if (['status-toggle-cb', 'planet-toggle-cb', 'inhabitant-toggle-cb'].some(cls => toggle.classList.contains(cls))) {
+            params.set(toggle.dataset.key, 'true');
+            const slider = document.querySelector(`.direction-slider[data-slider-key="${toggle.dataset.key}"]`);
+            if(slider && !slider.disabled) { // Only save slider pos if it's enabled
+                params.set(`${toggle.dataset.key}_pos`, slider.value);
+            }
         }
     });
     
     try {
-        const newUrl = `${window.location.pathname}?${params.toString()}`;
-        history.pushState({}, '', newUrl);
+        // Use replaceState to avoid cluttering browser history
+        const newUrl = `${window.location.pathname}?${params.toString()}${window.location.hash}`; // Keep hash
+        history.replaceState({}, '', newUrl);
     } catch (e) { console.warn("Could not update URL state."); }
 };
 
 const applyStateFromUrl = () => {
     const params = new URLSearchParams(window.location.search);
-    searchInput.value = params.get('id') || '';
-    searchAddressInput.value = params.get('address') || '';
-    sortSelect.value = params.get('sort') || 'asc';
+    if (searchInput) searchInput.value = params.get('id') || '';
+    if (searchAddressInput) searchAddressInput.value = params.get('address') || '';
+    
+    // Validate sort param before setting it
+    const sortParam = params.get('sort');
+    if (sortSelect && [...sortSelect.options].some(o => o.value === sortParam)) {
+        sortSelect.value = sortParam;
+    } else if (sortSelect) {
+        sortSelect.value = 'asc';
+    }
     
     document.querySelectorAll('.multi-select-container').forEach(container => {
         const traitElement = container.querySelector('[data-trait]');
@@ -528,13 +734,15 @@ const applyStateFromUrl = () => {
     });
 
     document.querySelectorAll('.toggle-checkbox').forEach(toggle => {
-        const key = toggle.dataset.key;
-        if (params.get(key) === 'true') {
-            toggle.checked = true;
-            const slider = document.querySelector(`.direction-slider[data-slider-key="${key}"]`);
-            if(slider) {
-                slider.disabled = false;
-                slider.value = params.get(`${key}_pos`) || '1';
+        if (['status-toggle-cb', 'planet-toggle-cb', 'inhabitant-toggle-cb'].some(cls => toggle.classList.contains(cls))) {
+            const key = toggle.dataset.key;
+            if (params.get(key) === 'true') {
+                toggle.checked = true;
+                const slider = document.querySelector(`.direction-slider[data-slider-key="${key}"]`);
+                if(slider) {
+                    slider.disabled = false;
+                    slider.value = params.get(`${key}_pos`) || '1';
+                }
             }
         }
     });
@@ -542,21 +750,31 @@ const applyStateFromUrl = () => {
 
 const updateMultiSelectButtonText = (container) => {
     const buttonSpan = container.querySelector('.multi-select-button span');
-    const traitType = container.querySelector('.multi-select-checkbox').dataset.trait;
+    const traitCheckbox = container.querySelector('.multi-select-checkbox');
+    if (!buttonSpan || !traitCheckbox) return; // Safety check
+    
+    const traitType = traitCheckbox.dataset.trait;
     const checkedCount = container.querySelectorAll('.multi-select-checkbox:checked').length;
-    buttonSpan.textContent = checkedCount === 0 ? `All ${traitType}s` : `${checkedCount} ${traitType}(s) selected`;
+    const totalCount = container.querySelectorAll('.multi-select-checkbox').length;
+    
+    if (checkedCount === 0 || checkedCount === totalCount) {
+        buttonSpan.textContent = `All ${traitType}s`;
+    } else {
+        buttonSpan.textContent = `${checkedCount} ${traitType}(s) selected`;
+    }
 };
 
 const closeAllDropdowns = (exceptThisOne = null) => {
     document.querySelectorAll('.multi-select-dropdown').forEach(d => {
         if (d !== exceptThisOne) d.classList.add('hidden');
     });
-    addressSuggestions.classList.add('hidden');
-    walletAddressSuggestions.classList.add('hidden');
+    if (addressSuggestions) addressSuggestions.classList.add('hidden');
+    if (walletAddressSuggestions) walletAddressSuggestions.classList.add('hidden');
 };
 
 const displayPage = (page) => {
     currentPage = page;
+    if (!gallery) return;
     gallery.innerHTML = '';
     if (filteredNfts.length === 0) {
         showLoading(gallery, 'No NFTs match the current filters.');
@@ -564,6 +782,9 @@ const displayPage = (page) => {
         return;
     }
     const totalPages = Math.ceil(filteredNfts.length / itemsPerPage);
+    page = Math.max(1, Math.min(page, totalPages)); // Clamp page number
+    currentPage = page; // Update global state
+    
     const pageItems = filteredNfts.slice((page - 1) * itemsPerPage, page * itemsPerPage);
     pageItems.forEach(nft => gallery.appendChild(createNftCard(nft, '.trait-toggle')));
     updatePaginationControls(totalPages);
@@ -573,26 +794,39 @@ const createNftCard = (nft, toggleSelector) => {
     const card = document.createElement('div');
     card.className = 'nft-card bg-gray-800 border border-gray-700 rounded-xl overflow-hidden flex flex-col';
     card.addEventListener('click', () => showNftDetails(nft));
-    const imageUrl = convertIpfsUrl(nft.thumbnail_image || nft.image);
-    const newTitle = nft.name.replace('The AllianceDAO NFT', 'AllianceDAO NFT');
+    const imageUrl = convertIpfsUrl(nft.thumbnail_image || nft.image) || `https://placehold.co/300x300/1f2937/e5e7eb?text=No+Image`;
+    const newTitle = (nft.name || `NFT #${nft.id || '?'}`).replace('The AllianceDAO NFT', 'AllianceDAO NFT');
 
     let traitsHtml = '';
-    const visibleTraits = traitOrder.filter(t => document.querySelector(`${toggleSelector}[data-trait="${t}"]`)?.checked);
-    visibleTraits.forEach(traitType => {
-        let value = traitType === 'Rank' ? `#${nft.rank}` : nft.attributes?.find(attr => attr.trait_type === traitType)?.value || 'N/A';
-        traitsHtml += `<li class="flex justify-between items-center py-2 px-1 border-b border-gray-700 last:border-b-0"><span class="text-xs font-medium text-cyan-400 uppercase">${traitType}</span><span class="text-sm font-semibold text-white">${value}</span></li>`;
+    const visibleTraits = traitOrder.filter(t => {
+        const toggle = document.querySelector(`${toggleSelector}[data-trait="${t}"]`);
+        return toggle && toggle.checked;
     });
     
-    card.innerHTML = `<div class="image-container aspect-w-1-aspect-h-1 w-full"><img src="${imageUrl}" alt="${nft.name}" class="w-full h-full" loading="lazy" onerror="this.onerror=null; this.src='https://placehold.co/300x300/1f2937/eb?text=Image+Error';"></div><div class="p-4 flex-grow flex flex-col"><h2 class="text-lg font-bold text-white mb-3 truncate" title="${newTitle}">${newTitle}</h2><ul class="text-sm flex-grow">${traitsHtml}</ul></div>`;
+    visibleTraits.forEach(traitType => {
+        let value = 'N/A';
+        if (traitType === 'Rank' && nft.rank != null) {
+            value = `#${nft.rank}`;
+        } else if (traitType === 'Rarity' && nft.rarityScore != null) {
+            value = nft.rarityScore.toFixed(2);
+        } else {
+            value = nft.attributes?.find(attr => attr.trait_type === traitType)?.value || 'N/A';
+        }
+        traitsHtml += `<li class="flex justify-between items-center py-2 px-1 border-b border-gray-700 last:border-b-0"><span class="text-xs font-medium text-cyan-400 uppercase">${traitType}</span><span class="text-sm font-semibold text-white truncate" title="${value}">${value}</span></li>`;
+    });
+    
+    card.innerHTML = `<div class="image-container aspect-w-1-aspect-h-1 w-full"><img src="${imageUrl}" alt="${newTitle}" class="w-full h-full object-cover" loading="lazy" onerror="this.onerror=null; this.src='https://placehold.co/300x300/1f2937/e5e7eb?text=Image+Error'; this.alt='Image Error';"></div><div class="p-4 flex-grow flex flex-col"><h2 class="text-lg font-bold text-white mb-3 truncate" title="${newTitle}">${newTitle}</h2><ul class="text-sm flex-grow">${traitsHtml}</ul></div>`;
     
     const imageContainer = card.querySelector('.image-container');
+    if (!imageContainer) return card; // Safety check
     
-    const isDaoOwned = nft.owner === DAO_WALLET_ADDRESS;
+    const isDaoOwned = nft.owned_by_alliance_dao; // Use the combined property
     const hasBadges = nft.broken || nft.staked_daodao || nft.boost_market || nft.bbl_market || nft.staked_enterprise_legacy || isDaoOwned;
 
     if (hasBadges) {
         // --- Add Badge Visibility Toggle ---
         const toggleButton = document.createElement('button');
+        toggleButton.type = 'button'; // Explicitly set type
         toggleButton.className = 'top-left-toggle';
         toggleButton.title = 'Toggle badge visibility';
         toggleButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`; // Eye icon
@@ -600,11 +834,9 @@ const createNftCard = (nft, toggleSelector) => {
         toggleButton.addEventListener('click', (e) => {
             e.stopPropagation(); // IMPORTANT: Prevents the modal from opening
             const isHidden = imageContainer.classList.toggle('badges-hidden');
-            if (isHidden) {
-                toggleButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>`; // Eye-off icon
-            } else {
-                toggleButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`; // Eye icon
-            }
+            toggleButton.innerHTML = isHidden 
+                ? `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>` // Eye-off icon
+                : `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`; // Eye icon
         });
         imageContainer.appendChild(toggleButton);
     }
@@ -620,41 +852,21 @@ const createNftCard = (nft, toggleSelector) => {
     const topRightStack = document.createElement('div');
     topRightStack.className = 'top-right-stack';
 
-    if (isDaoOwned) {
-        const daoLogo = document.createElement('img');
-        daoLogo.src = 'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Alliance%20DAO%20Logo.png';
-        daoLogo.alt = 'Owned by DAO';
-        daoLogo.className = 'overlay-icon';
-        topRightStack.appendChild(daoLogo);
-    }
-    if (nft.staked_daodao) {
-        const daodaoLogo = document.createElement('img');
-        daodaoLogo.src = 'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/DAODAO.png';
-        daodaoLogo.alt = 'Staked on DAODAO';
-        daodaoLogo.className = 'overlay-icon';
-        topRightStack.appendChild(daodaoLogo);
-    }
-    if (nft.boost_market) {
-        const boostLogo = document.createElement('img');
-        boostLogo.src = 'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Boost%20Logo.png';
-        boostLogo.alt = 'Listed on Boost';
-        boostLogo.className = 'overlay-icon';
-        topRightStack.appendChild(boostLogo);
-    }
-    if (nft.bbl_market) {
-        const bblLogo = document.createElement('img');
-        bblLogo.src = 'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/BBL%20No%20Background.png';
-        bblLogo.alt = 'Listed on BBL';
-        bblLogo.className = 'overlay-icon';
-        topRightStack.appendChild(bblLogo);
-    }
-    if (nft.staked_enterprise_legacy) {
-        const enterpriseE = document.createElement('img');
-        enterpriseE.src = 'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Enterprise.jpg';
-        enterpriseE.alt = 'Staked on Enterprise';
-        enterpriseE.className = 'overlay-icon';
-        topRightStack.appendChild(enterpriseE);
-    }
+    // Helper function to add badges
+    const addBadge = (src, alt) => {
+        const img = document.createElement('img');
+        img.src = src;
+        img.alt = alt;
+        img.title = alt; // Add title for hover tooltip
+        img.className = 'overlay-icon';
+        topRightStack.appendChild(img);
+    };
+
+    if (isDaoOwned) addBadge('https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Alliance%20DAO%20Logo.png', 'Owned by DAO');
+    if (nft.staked_daodao) addBadge('https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/DAODAO.png', 'Staked on DAODAO');
+    if (nft.boost_market) addBadge('https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Boost%20Logo.png', 'Listed on Boost');
+    if (nft.bbl_market) addBadge('https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/BBL%20No%20Background.png', 'Listed on BBL');
+    if (nft.staked_enterprise_legacy) addBadge('https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Enterprise.jpg', 'Staked on Enterprise');
 
     if (topRightStack.children.length > 0) {
         imageContainer.appendChild(topRightStack);
@@ -664,18 +876,22 @@ const createNftCard = (nft, toggleSelector) => {
 };
 
 const updatePaginationControls = (totalPages) => {
+    if (!paginationControls) return;
     paginationControls.innerHTML = '';
     if (totalPages <= 1) return;
+    
     const prevButton = document.createElement('button');
     prevButton.textContent = 'Previous';
     prevButton.className = 'pagination-btn';
     prevButton.disabled = currentPage === 1;
     prevButton.onclick = () => displayPage(currentPage - 1);
     paginationControls.appendChild(prevButton);
+    
     const pageInfo = document.createElement('span');
     pageInfo.className = 'text-gray-400';
     pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
     paginationControls.appendChild(pageInfo);
+    
     const nextButton = document.createElement('button');
     nextButton.textContent = 'Next';
     nextButton.className = 'pagination-btn';
@@ -685,13 +901,13 @@ const updatePaginationControls = (totalPages) => {
 };
 
 const resetAll = () => {
-    searchInput.value = '';
-    searchAddressInput.value = '';
-    addressDropdown.value = '';
-    sortSelect.value = 'asc';
+    if(searchInput) searchInput.value = '';
+    if(searchAddressInput) searchAddressInput.value = '';
+    if(addressDropdown) addressDropdown.value = '';
+    if(sortSelect) sortSelect.value = 'asc';
     
     document.querySelectorAll('.toggle-checkbox').forEach(toggle => {
-        if(!toggle.classList.contains('trait-toggle')) {
+        if (['status-toggle-cb', 'planet-toggle-cb', 'inhabitant-toggle-cb'].some(cls => toggle.classList.contains(cls))) {
             toggle.checked = false;
             const key = toggle.dataset.key;
             const slider = document.querySelector(`.direction-slider[data-slider-key="${key}"]`);
@@ -713,26 +929,45 @@ const resetAll = () => {
 };
 
 
-const updateFilterCounts = () => {
+const updateFilterCounts = (currentNfts) => { // Pass in the list to count
     const newCounts = {};
-    filteredNfts.forEach(nft => {
+    const curInhabCounts = {};
+    const curPlanCounts = {};
+    
+    currentNfts.forEach(nft => {
         if (nft.attributes) {
             nft.attributes.forEach(attr => {
                 if (!newCounts[attr.trait_type]) newCounts[attr.trait_type] = {};
                 newCounts[attr.trait_type][attr.value] = (newCounts[attr.trait_type][attr.value] || 0) + 1;
+                
+                if (attr.trait_type === 'Inhabitant') {
+                    const baseName = attr.value.replace(/ (M|F)$/, '');
+                    if (!curInhabCounts[baseName]) curInhabCounts[baseName] = { total: 0, male: 0, female: 0 };
+                    curInhabCounts[baseName].total++;
+                    if (attr.value.endsWith(' M')) curInhabCounts[baseName].male++;
+                    if (attr.value.endsWith(' F')) curInhabCounts[baseName].female++;
+                }
+                if (attr.trait_type === 'Planet') {
+                    const baseName = attr.value.replace(/ (North|South)$/, '');
+                    if (!curPlanCounts[baseName]) curPlanCounts[baseName] = { total: 0, north: 0, south: 0 };
+                    curPlanCounts[baseName].total++;
+                    if (attr.value.endsWith(' North')) curPlanCounts[baseName].north++;
+                    if (attr.value.endsWith(' South')) curPlanCounts[baseName].south++;
+                }
             });
         }
     });
 
     document.querySelectorAll('.multi-select-container').forEach(container => {
-        const traitType = container.querySelector('[data-trait]').dataset.trait;
+        const traitType = container.querySelector('[data-trait]')?.dataset.trait;
+        if (!traitType) return;
         container.querySelectorAll('label').forEach(label => {
             const checkbox = label.querySelector('input');
             if (!checkbox) return;
             const value = checkbox.value;
             const countSpan = label.querySelector('.trait-count');
             const count = newCounts[traitType]?.[value] || 0;
-            countSpan.textContent = count;
+            if (countSpan) countSpan.textContent = count;
             if (count === 0 && !checkbox.checked) {
                 label.style.opacity = '0.5';
                 label.style.cursor = 'not-allowed';
@@ -748,24 +983,28 @@ const updateFilterCounts = () => {
     document.querySelectorAll('.inhabitant-count').forEach(countSpan => {
         const name = countSpan.dataset.countKey;
         const slider = document.querySelector(`.gender-slider[data-slider-key="${name}"]`);
-        const maleCount = filteredNfts.filter(nft => nft.attributes?.some(a => a.trait_type === 'Inhabitant' && a.value === `${name} M`)).length;
-        const femaleCount = filteredNfts.filter(nft => nft.attributes?.some(a => a.trait_type === 'Inhabitant' && a.value === `${name} F`)).length;
-        if (slider.value === '0') countSpan.textContent = maleCount;
-        else if (slider.value === '1') countSpan.textContent = maleCount + femaleCount;
-        else if (slider.value === '2') countSpan.textContent = femaleCount;
+        const counts = curInhabCounts[name] || { male: 0, female: 0, total: 0 };
+        if (slider) {
+            if (slider.value === '0') countSpan.textContent = counts.male;
+            else if (slider.value === '1') countSpan.textContent = counts.total;
+            else if (slider.value === '2') countSpan.textContent = counts.female;
+        } else {
+             countSpan.textContent = counts.total;
+        }
     });
 
     document.querySelectorAll('.planet-count').forEach(countSpan => {
         const name = countSpan.dataset.countKey;
         const slider = document.querySelector(`.direction-slider[data-slider-key="${name}"]`);
-        const northCount = filteredNfts.filter(nft => nft.attributes?.some(a => a.trait_type === 'Planet' && a.value === `${name} North`)).length;
-        const southCount = filteredNfts.filter(nft => nft.attributes?.some(a => a.trait_type === 'Planet' && a.value === `${name} South`)).length;
-        const totalCount = filteredNfts.filter(nft => nft.attributes?.some(a => a.trait_type === 'Planet' && a.value.startsWith(name))).length;
-        if (slider.value === '0') countSpan.textContent = northCount;
-        else if (slider.value === '1') countSpan.textContent = totalCount;
-        else if (slider.value === '2') countSpan.textContent = southCount;
+        const counts = curPlanCounts[name] || { north: 0, south: 0, total: 0 };
+        if (slider) {
+            if (slider.value === '0') countSpan.textContent = counts.north;
+            else if (slider.value === '1') countSpan.textContent = counts.total;
+            else if (slider.value === '2') countSpan.textContent = counts.south;
+        } else {
+            countSpan.textContent = counts.total;
+        }
     });
-
     // Update Status Filter Counts
     document.querySelectorAll('.status-count').forEach(countSpan => {
         const key = countSpan.dataset.countKey;
@@ -773,30 +1012,38 @@ const updateFilterCounts = () => {
         if (!slider) return;
 
         let count = 0;
+        const list = currentNfts; // Use the passed-in list
+        
         if (key === 'staked') {
-             const enterpriseCount = filteredNfts.filter(n => n.staked_enterprise_legacy).length;
-             const daodaoCount = filteredNfts.filter(n => n.staked_daodao).length;
+             const enterpriseCount = list.filter(n => n.staked_enterprise_legacy).length;
+             const daodaoCount = list.filter(n => n.staked_daodao).length;
              if(slider.value === '0') count = enterpriseCount;
-             else if (slider.value === '1') count = filteredNfts.filter(n => n.staked_enterprise_legacy || n.staked_daodao).length;
+             else if (slider.value === '1') count = list.filter(n => n.staked_enterprise_legacy || n.staked_daodao).length;
              else if (slider.value === '2') count = daodaoCount;
         } else if (key === 'listed') {
-            const boostCount = filteredNfts.filter(n => n.boost_market).length;
-            const bblCount = filteredNfts.filter(n => n.bbl_market).length;
+            const boostCount = list.filter(n => n.boost_market).length;
+            const bblCount = list.filter(n => n.bbl_market).length;
             if(slider.value === '0') count = boostCount;
-            else if (slider.value === '1') count = filteredNfts.filter(n => n.boost_market || n.bbl_market).length;
+            else if (slider.value === '1') count = list.filter(n => n.boost_market || n.bbl_market).length;
             else if (slider.value === '2') count = bblCount;
         } else if (key === 'rewards') {
-             const brokenCount = filteredNfts.filter(n => n.broken).length;
-             const unbrokenCount = filteredNfts.filter(n => !n.broken).length;
+             const brokenCount = list.filter(n => n.broken === true).length;
+             const unbrokenCount = list.filter(n => n.broken === false).length;
              if(slider.value === '0') count = brokenCount;
              else if (slider.value === '1') count = brokenCount + unbrokenCount;
              else if (slider.value === '2') count = unbrokenCount;
         } else if (key === 'mint_status') {
-            const unmintedCount = filteredNfts.filter(n => n.owner === DAO_WALLET_ADDRESS).length;
-            const mintedCount = filteredNfts.filter(n => n.owner !== DAO_WALLET_ADDRESS).length;
+            const unmintedCount = list.filter(n => n.owned_by_alliance_dao === true).length;
+            const mintedCount = list.filter(n => n.owned_by_alliance_dao === false).length;
             if(slider.value === '0') count = unmintedCount;
             else if (slider.value === '1') count = unmintedCount + mintedCount;
             else if (slider.value === '2') count = mintedCount;
+        } else if (key === 'liquid_status') { // *** ADDED LIQUID COUNT ***
+            const liquidCount = list.filter(n => n.liquid === true).length;
+            const notLiquidCount = list.filter(n => n.liquid === false).length;
+            if(slider.value === '0') count = liquidCount;
+            else if (slider.value === '1') count = liquidCount + notLiquidCount;
+            else if (slider.value === '2') count = notLiquidCount;
         }
         countSpan.textContent = count;
     });
@@ -804,7 +1051,11 @@ const updateFilterCounts = () => {
 
 // --- Modal and Preview Logic ---
 const findHighestRaritySample = (filterFn) => {
-    return allNfts.filter(filterFn).sort((a, b) => b.rarityScore - a.rarityScore)[0];
+    // Find the highest *score* (lowest rank)
+    const matches = allNfts.filter(filterFn);
+    if (matches.length === 0) return null;
+    matches.sort((a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity)); // Sort by rank asc
+    return matches[0];
 };
 
 const showPreviewTile = (event, traitType, value) => {
@@ -815,6 +1066,9 @@ const showPreviewTile = (event, traitType, value) => {
     const container2 = document.getElementById('preview-container-2');
     const image2 = document.getElementById('preview-image-2');
     const name2 = document.getElementById('preview-name-2');
+    
+    if (!previewTile || !container1 || !image1 || !name1 || !container2 || !image2 || !name2) return;
+    
     let sample1 = null, sample2 = null;
     if (traitType === 'Object') {
         sample1 = findHighestRaritySample(nft => nft.attributes?.some(a => a.trait_type === 'Object' && a.value === value));
@@ -826,37 +1080,52 @@ const showPreviewTile = (event, traitType, value) => {
             const suffix2 = traitType === 'Inhabitant' ? ' F' : ' South';
             sample1 = findHighestRaritySample(nft => nft.attributes?.some(a => a.trait_type === traitType && a.value === value + suffix1));
             sample2 = findHighestRaritySample(nft => nft.attributes?.some(a => a.trait_type === traitType && a.value === value + suffix2));
-            if (!sample1) sample1 = findHighestRaritySample(nft => nft.attributes?.some(a => a.trait_type === traitType && a.value.startsWith(value)));
+            if (!sample1 && !sample2) sample1 = findHighestRaritySample(nft => nft.attributes?.some(a => a.trait_type === traitType && a.value.startsWith(value)));
+            else if (!sample1) sample1 = sample2; // If only F/South exists, show it in box 1
         } else {
             const suffix = (traitType === 'Inhabitant' ? (sliderValue === '0' ? ' M' : ' F') : (sliderValue === '0' ? ' North' : ' South'));
             sample1 = findHighestRaritySample(nft => nft.attributes?.some(a => a.trait_type === traitType && a.value === value + suffix));
         }
     }
+    
+    const placeholder = `https://placehold.co/128x128/374151/9ca3af?text=N/A`;
+    
     if (sample1) {
-        image1.src = convertIpfsUrl(sample1.thumbnail_image || sample1.image);
+        image1.src = convertIpfsUrl(sample1.thumbnail_image || sample1.image) || placeholder;
         name1.textContent = sample1.attributes?.find(a => a.trait_type === traitType)?.value || value;
         container1.classList.remove('hidden');
-    } else { container1.classList.add('hidden'); }
+    } else { container1.classList.add('hidden'); image1.src=''; name1.textContent=''; }
+    
     if (sample2) {
-        image2.src = convertIpfsUrl(sample2.thumbnail_image || sample2.image);
+        image2.src = convertIpfsUrl(sample2.thumbnail_image || sample2.image) || placeholder;
         name2.textContent = sample2.attributes?.find(a => a.trait_type === traitType)?.value || value;
         container2.classList.remove('hidden');
-    } else { container2.classList.add('hidden'); }
+    } else { container2.classList.add('hidden'); image2.src=''; name2.textContent=''; }
 
     if (sample1 || sample2) {
         const tileWidth = sample2 ? 330 : 160;
         let x = event.clientX + 20;
         let y = event.clientY + 10;
         if (x + tileWidth > window.innerWidth) { x = event.clientX - tileWidth - 20; }
+        if (y + previewTile.offsetHeight > window.innerHeight) { y = window.innerHeight - previewTile.offsetHeight - 10; }
+        if (x < 0) x = 10;
+        if (y < 0) y = 10;
+        
         previewTile.style.left = `${x}px`;
         previewTile.style.top = `${y}px`;
         previewTile.classList.remove('hidden');
+    } else {
+        hidePreviewTile();
     }
 };
 
-const hidePreviewTile = () => document.getElementById('preview-tile').classList.add('hidden');
+const hidePreviewTile = () => {
+    const previewTile = document.getElementById('preview-tile');
+    if (previewTile) previewTile.classList.add('hidden');
+};
 
 const showCopyToast = (text) => {
+    if (!copyToast) return;
     copyToast.textContent = text;
     copyToast.classList.add('show');
     setTimeout(() => { copyToast.classList.remove('show'); }, 2000);
@@ -864,49 +1133,108 @@ const showCopyToast = (text) => {
 
 const copyToClipboard = (textToCopy, typeName = 'Address') => {
     if (!textToCopy) return;
-    const tempInput = document.createElement('input');
-    tempInput.value = textToCopy;
-    document.body.appendChild(tempInput);
-    tempInput.select();
-    document.execCommand('copy');
-    document.body.removeChild(tempInput);
-    const shortText = `${textToCopy.substring(0, 5)}...${textToCopy.substring(textToCopy.length - 5)}`;
-    showCopyToast(`Copied ${typeName}: ${shortText}`);
+    navigator.clipboard.writeText(textToCopy).then(() => {
+        const shortText = textToCopy.length > 10 ? `${textToCopy.substring(0, 5)}...${textToCopy.substring(textToCopy.length - 5)}` : textToCopy;
+        showCopyToast(`Copied ${typeName}: ${shortText}`);
+    }).catch(err => {
+        console.error('Clipboard copy failed, falling back to execCommand:', err);
+        try {
+            const tempInput = document.createElement('textarea'); // Use textarea for better compatibility
+            tempInput.value = textToCopy;
+            tempInput.style.position = 'absolute';
+            tempInput.style.left = '-9999px';
+            document.body.appendChild(tempInput);
+            tempInput.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempInput);
+            const shortText = textToCopy.length > 10 ? `...` : textToCopy;
+            showCopyToast(`Copied ${typeName}: ${shortText}`);
+        } catch (e) {
+            console.error('Fallback copy failed:', e);
+            showCopyToast(`Copy Failed!`);
+        }
+    });
 };
 
 
 const showNftDetails = (nft) => {
-    document.getElementById('modal-image').src = convertIpfsUrl(nft.image);
-    document.getElementById('modal-title').textContent = nft.name.replace('The AllianceDAO NFT', 'AllianceDAO NFT');
+    if (!nftModal || !nft) return;
+    const imgEl = document.getElementById('modal-image');
+    const titleEl = document.getElementById('modal-title');
+    const traitsEl = document.getElementById('modal-traits');
+    const linkEl = document.getElementById('modal-link');
+    const dlBtn = document.getElementById('download-post-btn');
     
-    let traitsHtml = `<div class="flex justify-between text-sm"><span class="text-gray-400">Rank:</span><span class="font-semibold text-white">#${nft.rank}</span></div>`;
-    traitsHtml += nft.attributes
-        .sort((a, b) => traitOrder.indexOf(a.trait_type) - traitOrder.indexOf(b.trait_type))
-        .map(attr => `<div class="flex justify-between text-sm"><span class="text-gray-400">${attr.trait_type}:</span><span class="font-semibold text-white">${attr.value}</span></div>`).join('');
+    if(!imgEl || !titleEl || !traitsEl || !linkEl || !dlBtn) return; // Safety check
+    
+    imgEl.src = convertIpfsUrl(nft.image) || `https://placehold.co/400x400/1f2937/e5e7eb?text=No+Image`;
+    titleEl.textContent = (nft.name || `NFT #${nft.id || '?'}`).replace('The AllianceDAO NFT', 'AllianceDAO NFT');
+    
+    let traitsHtml = `<div class="flex justify-between text-sm"><span class="text-gray-400">Rank:</span><span class="font-semibold text-white">#${nft.rank || 'N/A'}</span></div>`;
+    if (nft.rarityScore) {
+        traitsHtml += `<div class="flex justify-between text-sm"><span class="text-gray-400">Rarity Score:</span><span class="font-semibold text-white">${nft.rarityScore.toFixed(2)}</span></div>`;
+    }
+    
+    const attributesToShow = (nft.attributes || [])
+        .filter(a => traitOrder.includes(a.trait_type) && !['Rank', 'Rarity'].includes(a.trait_type))
+        .sort((a, b) => traitOrder.indexOf(a.trait_type) - traitOrder.indexOf(b.trait_type));
+        
+    traitsHtml += attributesToShow.map(attr => 
+        `<div class="flex justify-between text-sm"><span class="text-gray-400">${attr.trait_type}:</span><span class="font-semibold text-white truncate" title="${attr.value}">${attr.value || 'N/A'}</span></div>`
+    ).join('');
     
     traitsHtml += `<div class="pt-2 mt-2 border-t border-gray-600"></div>`;
-    const isStaked = nft.staked_daodao || nft.staked_enterprise_legacy;
-    const isListed = nft.bbl_market || nft.boost_market;
-    traitsHtml += `<div class="flex justify-between text-sm"><span class="text-gray-400">Status:</span><span class="font-semibold text-white">${nft.liquid ? 'Liquid' : (isStaked ? 'Staked' : 'In Wallet')}</span></div>`;
-    traitsHtml += `<div class="flex justify-between text-sm"><span class="text-gray-400">Listed:</span><span class="font-semibold text-white">${isListed ? 'Yes' : 'No'}</span></div>`;
+    
+    // Status Text
+    let statusTxt = 'Unknown';
+    if (nft.owned_by_alliance_dao) {
+        statusTxt = 'DAO Owned (Un-minted)';
+    } else if (nft.liquid === true) {
+        statusTxt = 'Liquid (In Wallet)';
+    } else if (nft.staked_daodao) {
+        statusTxt = 'Staked (DAODAO)';
+    } else if (nft.staked_enterprise_legacy) {
+        statusTxt = 'Staked (Enterprise)';
+    } else if (nft.bbl_market) {
+        statusTxt = 'Listed (BackBone Labs)';
+    } else if (nft.boost_market) {
+        statusTxt = 'Listed (Boost)';
+    } else if (nft.liquid === false) {
+        statusTxt = 'In Wallet (Not Liquid)'; // Catch-all for non-liquid
+    }
+
+    traitsHtml += `<div class="flex justify-between text-sm"><span class="text-gray-400">Status:</span><span class="font-semibold text-white">${statusTxt}</span></div>`;
     traitsHtml += `<div class="flex justify-between text-sm"><span class="text-gray-400">Broken:</span><span class="font-semibold text-white">${nft.broken ? 'Yes' : 'No'}</span></div>`;
     traitsHtml += `<div class="pt-2 mt-2 border-t border-gray-600"></div>`;
-    traitsHtml += `<div class="flex justify-between text-sm items-center"><span class="text-gray-400">Owner:</span><span class="owner-address font-mono text-sm font-semibold text-white truncate cursor-pointer" title="Click to copy">${nft.owner}</span></div>`;
+    traitsHtml += `<div class="flex justify-between text-sm items-center"><span class="text-gray-400">Owner:</span><span class="owner-address font-mono text-sm font-semibold text-white truncate cursor-pointer" title="Click to copy">${nft.owner || 'N/A'}</span></div>`;
 
-    const modalTraits = document.getElementById('modal-traits');
-    modalTraits.innerHTML = traitsHtml;
-    modalTraits.querySelector('.owner-address').addEventListener('click', () => copyToClipboard(nft.owner, 'Owner Address'));
-
-    document.getElementById('modal-link').href = convertIpfsUrl(nft.image);
+    traitsEl.innerHTML = traitsHtml;
     
-    const downloadBtn = document.getElementById('download-post-btn');
-    downloadBtn.textContent = 'Download Post';
-    downloadBtn.onclick = () => generateShareImage(nft, downloadBtn);
+    const ownerEl = traitsEl.querySelector('.owner-address');
+    if (nft.owner && ownerEl) {
+        ownerEl.addEventListener('click', () => copyToClipboard(nft.owner, 'Owner Address'));
+    } else if (ownerEl) {
+        ownerEl.style.cursor = 'default';
+        ownerEl.removeAttribute('title');
+    }
 
+    linkEl.href = convertIpfsUrl(nft.image) || '#';
+    
+    dlBtn.textContent = 'Download Post';
+    dlBtn.disabled = false; // Ensure button is enabled
+    dlBtn.onclick = () => generateShareImage(nft, dlBtn); // Use onclick to re-bind
+
+    window.location.hash = nft.id || ''; // Set hash
     nftModal.classList.remove('hidden');
 };
 
-const hideNftDetails = () => nftModal.classList.add('hidden');
+const hideNftDetails = () => {
+    if (nftModal) nftModal.classList.add('hidden');
+    // Clear hash without adding to history
+    if (window.location.hash) {
+        history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+};
 
 const findRarestTrait = (nft) => {
     if (!nft.attributes || !traitCounts) return { value: 'N/A', trait_type: 'Unknown' };
@@ -915,8 +1243,9 @@ const findRarestTrait = (nft) => {
     let minCount = Infinity;
 
     nft.attributes.forEach(attr => {
-        if (attr.trait_type !== 'Weather' && attr.trait_type !== 'Light') {
-            const count = traitCounts[attr.trait_type]?.[attr.value];
+        // Only count traits that contribute to rarity score
+        if (traitCounts[attr.trait_type]?.[attr.value] && !['Weather', 'Light'].includes(attr.trait_type)) {
+            const count = traitCounts[attr.trait_type][attr.value];
             if (count < minCount) {
                 minCount = count;
                 rarestTrait = attr;
@@ -927,51 +1256,95 @@ const findRarestTrait = (nft) => {
 };
 
 const generateShareImage = (nft, button) => {
+    if (!button) return;
     button.textContent = 'Generating...';
+    button.disabled = true;
+    
     const canvas = document.getElementById('share-canvas');
+    if (!canvas) {
+        button.textContent = 'Error';
+        return;
+    }
     const ctx = canvas.getContext('2d');
     const img = new Image();
     img.crossOrigin = "anonymous";
-    img.src = convertIpfsUrl(nft.image);
+    
+    const imgUrl = convertIpfsUrl(nft.image) || convertIpfsUrl(nft.thumbnail_image);
+    if (!imgUrl) {
+        button.textContent = 'No Image';
+        setTimeout(() => { button.textContent = 'Download Post'; button.disabled = false; }, 2000);
+        return;
+    }
+    img.src = imgUrl;
 
     img.onload = () => {
         canvas.width = 1080; canvas.height = 1080;
-        ctx.drawImage(img, 0, 0, 1080, 1080);
+        ctx.clearRect(0, 0, 1080, 1080);
+        try {
+            ctx.drawImage(img, 0, 0, 1080, 1080);
+        } catch (e) {
+            console.error("Error drawing image to canvas:", e);
+            button.textContent = 'Draw Error';
+            setTimeout(() => { button.textContent = 'Download Post'; button.disabled = false; }, 2000);
+            return;
+        }
+
         const getTrait = (type) => nft.attributes?.find(a => a.trait_type === type)?.value || 'N/A';
         ctx.fillStyle = 'white'; ctx.strokeStyle = 'black';
         ctx.lineWidth = 8; ctx.font = 'bold 48px Inter, sans-serif';
+        ctx.lineJoin = 'round'; // Smoother text corners
         const margin = 40;
-        ctx.textAlign = 'left';
-        ctx.strokeText(`NFT #${nft.id}`, margin, margin + 48);
-        ctx.fillText(`NFT #${nft.id}`, margin, margin + 48);
-        ctx.textAlign = 'right';
-        ctx.strokeText(`Rank #${nft.rank}`, canvas.width - margin, margin + 48);
-        ctx.fillText(`Rank #${nft.rank}`, canvas.width - margin, margin + 48);
-        ctx.textAlign = 'left';
-        ctx.strokeText(getTrait('Planet'), margin, canvas.height - margin);
-        ctx.fillText(getTrait('Planet'), margin, canvas.height - margin);
-        ctx.textAlign = 'right';
+
+        const drawText = (text, x, y, align = 'left') => {
+            ctx.textAlign = align;
+            ctx.strokeText(text, x, y);
+            ctx.fillText(text, x, y);
+        };
+
+        drawText(`NFT #${nft.id || '?'}`, margin, margin + 48, 'left');
+        drawText(`Rank #${nft.rank || 'N/A'}`, canvas.width - margin, margin + 48, 'right');
+        drawText(getTrait('Planet'), margin, canvas.height - margin, 'left');
+        
         let inhabitantText = getTrait('Inhabitant');
         if (inhabitantText.endsWith(' M')) inhabitantText = inhabitantText.replace(' M', ' Male');
         else if (inhabitantText.endsWith(' F')) inhabitantText = inhabitantText.replace(' F', ' Female');
-        ctx.strokeText(inhabitantText, canvas.width - margin, canvas.height - margin);
-        ctx.fillText(inhabitantText, canvas.width - margin, canvas.height - margin);
+        drawText(inhabitantText, canvas.width - margin, canvas.height - margin, 'right');
+        
         const bannerHeight = 120;
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-        ctx.fillRect(0, canvas.height - bannerHeight - 80, canvas.width, bannerHeight);
-        const strength = findRarestTrait(nft);
-        ctx.fillStyle = 'white'; ctx.textAlign = 'center'; ctx.font = 'bold 40px Inter, sans-serif';
-        ctx.fillText(`Strength: ${strength.value}`, canvas.width / 2, canvas.height - bannerHeight - 80 + 75);
-        const link = document.createElement('a');
-        link.download = `AllianceDAO_NFT_${nft.id}.png`;
-        link.href = canvas.toDataURL('image/png');
-        link.click();
-        button.textContent = 'Download Post';
+        const bannerY = canvas.height - bannerHeight - 80;
+        
+        if (nft.broken) {
+            ctx.fillStyle = 'rgba(220, 38, 38, 0.85)'; // Red
+            ctx.fillRect(0, bannerY, canvas.width, bannerHeight);
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 60px Inter, sans-serif';
+            drawText('BROKEN', canvas.width / 2, bannerY + 85, 'center');
+        } else {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'; // Dark
+            ctx.fillRect(0, bannerY, canvas.width, bannerHeight);
+            const strength = findRarestTrait(nft);
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 40px Inter, sans-serif';
+            drawText(`Rarest: ${strength.value || 'N/A'}`, canvas.width / 2, bannerY + 75, 'center');
+        }
+        
+        try {
+            const link = document.createElement('a');
+            link.download = `AllianceDAO_NFT_${nft.id || 'Unknown'}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+            button.textContent = 'Downloaded!';
+        } catch(e) {
+            console.error("Error creating download link:", e);
+            button.textContent = 'DL Failed';
+        }
+
+        setTimeout(() => { button.textContent = 'Download Post'; button.disabled = false; }, 2000);
     };
     img.onerror = () => {
         console.error("Could not load image to generate post for download.");
-        button.textContent = 'Error';
-        setTimeout(() => { button.textContent = 'Download Post'; }, 2000);
+        button.textContent = 'Load Error';
+        setTimeout(() => { button.textContent = 'Download Post'; button.disabled = false; }, 3000);
     }
 };
 
@@ -983,24 +1356,21 @@ const calculateAndDisplayLeaderboard = () => {
     allNfts.forEach(nft => {
         if (nft.owner) {
             if (!ownerStats[nft.owner]) {
-                 ownerStats[nft.owner] = { address: nft.owner, total: 0, daodaoStaked: 0, enterpriseStaked: 0, broken: 0, unbroken: 0, bblListed: 0, boostListed: 0 };
+                 ownerStats[nft.owner] = { address: nft.owner, total: 0, liquid: 0, daodaoStaked: 0, enterpriseStaked: 0, broken: 0, unbroken: 0, bblListed: 0, boostListed: 0 };
             }
             const stats = ownerStats[nft.owner];
             stats.total++;
+            if (nft.liquid) stats.liquid++; // Use pre-calculated liquid status
             if (nft.staked_daodao) stats.daodaoStaked++;
             if (nft.staked_enterprise_legacy) stats.enterpriseStaked++;
             if (nft.bbl_market) stats.bblListed++;
             if (nft.boost_market) stats.boostListed++;
             if (nft.broken) stats.broken++;
-            else stats.unbroken++;
+            else stats.unbroken++; // Count unbroken
         }
     });
 
-    allHolderStats = Object.values(ownerStats).map(stats => {
-            const liquid = stats.total - (stats.daodaoStaked + stats.enterpriseStaked + stats.bblListed + stats.boostListed);
-            return { ...stats, liquid };
-        });
-
+    allHolderStats = Object.values(ownerStats); // No need to map, liquid is already counted
     sortAndDisplayHolders();
 };
 
@@ -1010,66 +1380,78 @@ const sortAndDisplayHolders = () => {
         const valA = a[column];
         const valB = b[column];
         if (column === 'address') {
-            return direction === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+            return direction === 'asc' ? (valA || '').localeCompare(valB || '') : (valB || '').localeCompare(valA || '');
         } else {
-            return direction === 'asc' ? valA - valB : valB - valA;
+            // Handle numbers
+            const numA = typeof valA === 'number' ? valA : -Infinity;
+            const numB = typeof valB === 'number' ? valB : -Infinity;
+            return direction === 'asc' ? numA - numB : numB - numA;
         }
     });
     displayHolderPage(1);
 };
 
 const displayHolderPage = (page) => {
+    if (!leaderboardTable) return;
     holderCurrentPage = page;
     leaderboardTable.innerHTML = ''; 
 
     const header = document.createElement('div');
     header.className = 'leaderboard-header';
-    header.style.gridTemplateColumns = '2.5fr repeat(8, 1fr)';
+    // Updated grid columns for new fields
+    header.style.gridTemplateColumns = 'minmax(60px, 1fr) 2.5fr repeat(8, 1fr)'; 
     
-    const createHeaderCell = (label, columnKey) => {
+    const createHeaderCell = (label, columnKey, isCentered = true) => {
         const isSortCol = holderSort.column === columnKey;
         const ascActive = isSortCol && holderSort.direction === 'asc';
         const descActive = isSortCol && holderSort.direction === 'desc';
-        const isCentered = columnKey !== 'address';
         const activeClass = isSortCol ? 'sort-active' : '';
-        return `<span data-sort-by="${columnKey}" class="${isCentered ? 'text-center' : ''} ${activeClass}">${label}<svg class="sort-icon w-4 h-4 ${ascActive ? 'active' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg><svg class="sort-icon w-4 h-4 ${descActive ? 'active' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg></span>`;
+        return `<span data-sort-by="${columnKey}" class="${isCentered ? 'text-center' : ''} ${activeClass}">${label}<svg class="sort-icon w-4 h-4 inline-block ${ascActive ? 'active' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg><svg class="sort-icon w-4 h-4 inline-block ${descActive ? 'active' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg></span>`;
     };
 
-    header.innerHTML = createHeaderCell('Holder', 'address') +
+    header.innerHTML = `<span>Rank</span>` + // Rank is not sortable
+                         createHeaderCell('Holder', 'address', false) +
                          createHeaderCell('Liquid', 'liquid') +
                          createHeaderCell('DAODAO', 'daodaoStaked') +
                          createHeaderCell('Enterprise', 'enterpriseStaked') +
                          createHeaderCell('Broken', 'broken') +
                          createHeaderCell('Unbroken', 'unbroken') +
-                         createHeaderCell('BBL Listed', 'bblListed') +
-                         createHeaderCell('Boost Listed', 'boostListed') +
+                         createHeaderCell('BBL', 'bblListed') + // Shorter name
+                         createHeaderCell('Boost', 'boostListed') + // Shorter name
                          createHeaderCell('Total', 'total');
 
     leaderboardTable.appendChild(header);
 
     const pageItems = allHolderStats.slice((page - 1) * holdersPerPage, page * holdersPerPage);
 
-    pageItems.forEach(({ address, ...stats }) => {
+    pageItems.forEach(({ address, ...stats }, index) => {
+        const rank = (page - 1) * holdersPerPage + index + 1;
         const item = document.createElement('div');
         item.className = 'leaderboard-row';
-        item.style.gridTemplateColumns = '2.5fr repeat(8, 1fr)';
+        item.style.gridTemplateColumns = 'minmax(60px, 1fr) 2.5fr repeat(8, 1fr)';
         item.dataset.address = address;
-        const shortAddress = `terra...${address.substring(address.length - 4)}`;
+        const shortAddress = address ? `terra...${address.substring(address.length - 4)}` : 'N/A';
 
         item.innerHTML = `
-            <span class="font-mono text-sm truncate" title="${address}">${shortAddress}</span>
-            <span class="text-center">${stats.liquid}</span>
-            <span class="text-center text-green-400">${stats.daodaoStaked}</span>
-            <span class="text-center text-red-400">${stats.enterpriseStaked}</span>
-            <span class="text-center text-red-400">${stats.broken}</span>
-            <span class="text-center text-green-400">${stats.unbroken}</span>
-            <span class="text-center">${stats.bblListed}</span>
-            <span class="text-center">${stats.boostListed}</span>
-            <span class="font-bold text-center">${stats.total}</span>
+            <span class="text-center font-bold">#${rank}</span>
+            <span class="font-mono text-sm truncate" title="${address || ''}">${shortAddress}</span>
+            <span class="text-center">${stats.liquid || 0}</span>
+            <span class="text-center ${stats.daodaoStaked > 0 ? 'text-cyan-400' : ''}">${stats.daodaoStaked || 0}</span>
+            <span class="text-center ${stats.enterpriseStaked > 0 ? 'text-gray-400' : ''}">${stats.enterpriseStaked || 0}</span>
+            <span class="text-center ${stats.broken > 0 ? 'text-red-400' : ''}">${stats.broken || 0}</span>
+            <span class="text-center ${stats.unbroken > 0 ? 'text-green-400' : ''}">${stats.unbroken || 0}</span>
+            <span class="text-center ${stats.bblListed > 0 ? 'text-green-400' : ''}">${stats.bblListed || 0}</span>
+            <span class="text-center ${stats.boostListed > 0 ? 'text-purple-400' : ''}">${stats.boostListed || 0}</span>
+            <span class="font-bold text-center">${stats.total || 0}</span>
         `;
         item.addEventListener('click', () => {
-            walletSearchAddressInput.value = address;
-            searchWallet();
+            if (address) {
+                walletSearchAddressInput.value = address;
+                searchWallet();
+                // Highlight this row
+                document.querySelectorAll('#leaderboard-table .leaderboard-row').forEach(r => r.classList.remove('selected'));
+                item.classList.add('selected');
+            }
         });
         leaderboardTable.appendChild(item);
     });
@@ -1077,6 +1459,7 @@ const displayHolderPage = (page) => {
 };
 
 const updateHolderPaginationControls = () => {
+    if (!leaderboardPagination) return;
     leaderboardPagination.innerHTML = '';
     const totalPages = Math.ceil(allHolderStats.length / holdersPerPage);
     if (totalPages <= 1) return;
@@ -1102,34 +1485,254 @@ const updateHolderPaginationControls = () => {
 };
 
 // --- Map View Logic ---
-let isMapInitialized = false;
-const initializeStarfield = () => {
-    if (isMapInitialized) return;
-    
-    const canvas = document.getElementById('space-canvas');
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    let stars = [];
-    let mapObjects = [];
-    let animationFrameId;
+// Map listeners
+const handleMapContextMenu = (e) => e.preventDefault();
+const handleMapMouseDown = (e) => {
+    e.preventDefault();
+    if (e.button === 1 || e.ctrlKey || e.metaKey) { // Middle mouse or Ctrl/Cmd click
+        isRotating = true;
+        isPanning = false;
+        if(spaceCanvas) spaceCanvas.style.cursor = 'ew-resize';
+    } else if (e.button === 0) { // Left click
+        isPanning = true;
+        isRotating = false;
+        if(spaceCanvas) spaceCanvas.style.cursor = 'grabbing';
+    }
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
+};
+const handleMapMouseUp = (e) => {
+    e.preventDefault();
+    isPanning = false;
+    isRotating = false;
+    if(spaceCanvas) spaceCanvas.style.cursor = 'grab';
+};
+const handleMapMouseLeave = () => {
+    if (isPanning || isRotating) {
+        isPanning = false;
+        isRotating = false;
+        if(spaceCanvas) spaceCanvas.style.cursor = 'grab';
+    }
+};
+const handleMapMouseMove = (e) => {
+    if (!spaceCanvas) return;
+    const rect = spaceCanvas.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return; // Skip if canvas not visible
 
-    let zoom = 0.15, rotation = 0, offsetX = 0, offsetY = 0;
-    let isPanning = false, isRotating = false;
-    let lastMouseX = 0, lastMouseY = 0;
+    // Check if mouse is inside canvas bounds
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    if (mouseX < 0 || mouseX > spaceCanvas.width || mouseY < 0 || mouseY > spaceCanvas.height) {
+        // Mouse left the canvas area, stop panning/rotating
+        if (isPanning || isRotating) {
+            isPanning = false;
+            isRotating = false;
+            if(spaceCanvas) spaceCanvas.style.cursor = 'grab';
+        }
+        return;
+    }
+
+    // Convert mouse coords to world coords
+    const currentZoom = (mapZoom === 0) ? 0.0001 : mapZoom; // Avoid divide by zero
+    const worldX = (mouseX - (spaceCanvas.width / 2 + mapOffsetX)) / currentZoom;
+    const worldY = (mouseY - (spaceCanvas.height / 2 + mapOffsetY)) / currentZoom;
+    const sinR = Math.sin(-mapRotation);
+    const cosR = Math.cos(-mapRotation);
+    const rotatedX = worldX * cosR - worldY * sinR;
+    const rotatedY = worldX * sinR + worldY * cosR;
+
+    if (isPanning || isRotating) {
+        if (isPanning) {
+            mapOffsetX += e.clientX - lastMouseX;
+            mapOffsetY += e.clientY - lastMouseY;
+        } else if (isRotating) {
+            mapRotation += (e.clientX - lastMouseX) / 300; // Adjust rotation speed
+        }
+    } else {
+        // Hover logic
+        let isAnyObjectHovered = false;
+        // Iterate backwards to check top-most items first
+        for (let i = mapObjects.length - 1; i >= 0; i--) {
+            const obj = mapObjects[i];
+            if (!obj || typeof obj.x !== 'number' || typeof obj.y !== 'number' || typeof obj.width !== 'number' || typeof obj.height !== 'number' || typeof obj.scale !== 'number') continue;
+            
+            const displayWidth = obj.width * obj.scale;
+            const displayHeight = obj.height * obj.scale;
+            const halfWidth = displayWidth / 2;
+            const halfHeight = displayHeight / 2;
+
+            const isHovered = (rotatedX >= obj.x - halfWidth && rotatedX <= obj.x + halfWidth && rotatedY >= obj.y - halfHeight && rotatedY <= obj.y + halfHeight);
+            
+            obj.isFrozen = isHovered; // Freeze rotation on hover
+
+            if (isHovered && (obj.address || ['daodao', 'bbl', 'boost', 'enterprise'].includes(obj.id))) {
+                isAnyObjectHovered = true;
+                break; // Stop checking once we find a clickable hover
+            }
+        }
+        if(spaceCanvas) spaceCanvas.style.cursor = isAnyObjectHovered ? 'pointer' : 'grab';
+    }
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
+};
+const handleMapWheel = (e) => {
+    e.preventDefault();
+    if (!spaceCanvas) return;
+    const rect = spaceCanvas.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    
+    const zoomFactor = 1.1;
+    const minZoom = 0.1, maxZoom = 5;
+    
+    const currentZoom = (mapZoom === 0) ? 0.0001 : mapZoom;
+    
+    // Mouse position in world space before zoom
+    const mouseBeforeZoomX = (mouseX - (spaceCanvas.width / 2 + mapOffsetX)) / currentZoom;
+    const mouseBeforeZoomY = (mouseY - (spaceCanvas.height / 2 + mapOffsetY)) / currentZoom;
+
+    let newZoom;
+    if (e.deltaY < 0) { // Zoom in
+        newZoom = Math.min(maxZoom, currentZoom * zoomFactor);
+    } else { // Zoom out
+        newZoom = Math.max(minZoom, currentZoom / zoomFactor);
+    }
+    if (newZoom <= 0) newZoom = minZoom; // Prevent zero or negative zoom
+
+    // Mouse position in world space after zoom
+    const mouseAfterZoomX = (mouseX - (spaceCanvas.width / 2 + mapOffsetX)) / newZoom;
+    const mouseAfterZoomY = (mouseY - (spaceCanvas.height / 2 + mapOffsetY)) / newZoom;
+
+    // Adjust offset to keep mouse position stable
+    mapOffsetX += (mouseAfterZoomX - mouseBeforeZoomX) * newZoom;
+    mapOffsetY += (mouseAfterZoomY - mouseBeforeZoomY) * newZoom;
+    mapZoom = newZoom;
+};
+const handleMapClick = (e) => {
+    if (!spaceCanvas) return;
+    const rect = spaceCanvas.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    const currentZoom = (mapZoom === 0) ? 0.0001 : mapZoom;
+    const worldX = (mouseX - (spaceCanvas.width / 2 + mapOffsetX)) / currentZoom;
+    const worldY = (mouseY - (spaceCanvas.height / 2 + mapOffsetY)) / currentZoom;
+    const sinR = Math.sin(-mapRotation);
+    const cosR = Math.cos(-mapRotation);
+    const rotatedX = worldX * cosR - worldY * sinR;
+    const rotatedY = worldX * sinR + worldY * cosR;
+
+    let clickedObject = null;
+    // Check in reverse to prioritize clicking top-most items (ships)
+    for (let i = mapObjects.length - 1; i >= 0; i--) {
+        const obj = mapObjects[i];
+         if (!obj || typeof obj.x !== 'number' || typeof obj.y !== 'number' || typeof obj.width !== 'number' || typeof obj.height !== 'number' || typeof obj.scale !== 'number') continue;
+
+        const displayWidth = obj.width * obj.scale;
+        const displayHeight = obj.height * obj.scale;
+        const halfWidth = displayWidth / 2;
+        const halfHeight = displayHeight / 2;
+
+        if (rotatedX >= obj.x - halfWidth && rotatedX <= obj.x + halfWidth && rotatedY >= obj.y - halfHeight && rotatedY <= obj.y + halfHeight) {
+            clickedObject = obj;
+            break; 
+        }
+    }
+
+    if (clickedObject) {
+        console.log("Map click on object:", clickedObject);
+        if (clickedObject.address) {
+            showWalletExplorerModal(clickedObject.address);
+        } else if (['daodao', 'bbl', 'boost', 'enterprise'].includes(clickedObject.id)) {
+             showSystemLeaderboardModal(clickedObject.id);
+        }
+    } else {
+        console.log("Map click on empty space.");
+    }
+};
+const handleMapResize = debounce(() => {
+    console.log("Resize detected, re-initializing map.");
+    isMapInitialized = false; // Force re-init
+    mapOffsetX = 0; // Reset pan
+    mapOffsetY = 0;
+    if (mapView && !mapView.classList.contains('hidden')) {
+        initializeStarfield(); // Only re-init if map is visible
+    }
+}, 250);
+
+let mapListenersAdded = false;
+function addMapListeners() {
+    if (mapListenersAdded || !spaceCanvas) return;
+    console.log("Adding map listeners");
+    spaceCanvas.addEventListener('contextmenu', handleMapContextMenu);
+    spaceCanvas.addEventListener('mousedown', handleMapMouseDown);
+    window.addEventListener('mouseup', handleMapMouseUp); // Listen on window for mouseup
+    spaceCanvas.addEventListener('mouseleave', handleMapMouseLeave);
+    spaceCanvas.addEventListener('mousemove', handleMapMouseMove);
+    spaceCanvas.addEventListener('wheel', handleMapWheel, { passive: false });
+    spaceCanvas.addEventListener('click', handleMapClick);
+    mapListenersAdded = true;
+}
+
+const initializeStarfield = () => {
+    if (!spaceCanvas) { console.error("Canvas not found!"); return; }
+    
+    if (isMapInitialized && globalAnimationFrameId) {
+        console.log("Map already running.");
+        return; // Already initialized and running
+    }
+    
+    if (isMapInitialized && !globalAnimationFrameId) {
+        console.log("Restarting map animation frame.");
+        animate(); // Was initialized but stopped, restart animation
+        return;
+    }
+    
+    console.log("Initializing starfield...");
+    const ctx = spaceCanvas.getContext('2d');
+    if (!ctx) { console.error("Could not get 2D context"); return; }
+    
+    // Reset state
+    mapStars = [];
+    mapObjects = [];
+    mapZoom = 0.15;
+    mapRotation = 0;
+    mapOffsetX = 0;
+    mapOffsetY = 0;
+    isPanning = false;
+    isRotating = false;
+    lastMouseX = 0;
+    lastMouseY = 0;
     const minZoom = 0.1, maxZoom = 5;
 
     function setCanvasSize() {
-        canvas.width = canvas.offsetWidth;
-        canvas.height = canvas.offsetHeight;
+        // Use clientWidth/Height for responsive sizing
+        const dpr = window.devicePixelRatio || 1;
+        const rect = spaceCanvas.getBoundingClientRect();
+        
+        if (spaceCanvas.width !== rect.width * dpr || spaceCanvas.height !== rect.height * dpr) {
+            spaceCanvas.width = rect.width * dpr;
+            spaceCanvas.height = rect.height * dpr;
+            ctx.scale(dpr, dpr); // Scale context for high-DPI
+            console.log(`Canvas resized to: ${spaceCanvas.width}x${spaceCanvas.height} (scaled to ${rect.width}x${rect.height})`);
+            return true; // Size changed
+        }
+        return false; // Size was already correct
     }
     
     function createStars() {
-        stars = [];
-        const starCount = (canvas.width * canvas.height * 4) / 1000; 
+        mapStars = [];
+        const w = spaceCanvas.clientWidth, h = spaceCanvas.clientHeight;
+        if (w === 0 || h === 0) return;
+        const starCount = (w * h * 4) / 1000; 
         for (let i = 0; i < starCount; i++) {
-            stars.push({
-                x: (Math.random() - 0.5) * canvas.width * 10,
-                y: (Math.random() - 0.5) * canvas.height * 10,
+            mapStars.push({
+                x: (Math.random() - 0.5) * w * 10, // Spread stars wide
+                y: (Math.random() - 0.5) * h * 10,
                 radius: Math.random() * 1.5 + 0.5,
                 alpha: Math.random(),
                 twinkleSpeed: Math.random() * 0.03 + 0.005,
@@ -1139,11 +1742,20 @@ const initializeStarfield = () => {
     }
 
     function drawGalaxy() {
+        if (!ctx || !spaceCanvas) return;
+        
+        // Use clientWidth/Height for drawing dimensions
+        const w = spaceCanvas.clientWidth;
+        const h = spaceCanvas.clientHeight;
+        
         ctx.save();
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.translate(canvas.width / 2 + offsetX, canvas.height / 2 + offsetY);
-        ctx.scale(zoom, zoom);
-        ctx.rotate(rotation);
+        ctx.clearRect(0, 0, w, h); // Clear based on CSS size
+        
+        if (w === 0 || h === 0) { ctx.restore(); return; } // Don't draw if hidden
+
+        ctx.translate(w / 2 + mapOffsetX, h / 2 + mapOffsetY);
+        ctx.scale(mapZoom, mapZoom);
+        ctx.rotate(mapRotation);
 
         stars.forEach(star => {
             ctx.beginPath();
@@ -1167,22 +1779,26 @@ const initializeStarfield = () => {
                     ctx.moveTo(obj.x, obj.y);
                     if (obj.lineTargetId === 'enterprise') {
                         const angle = Math.atan2(obj.y - target.y, obj.x - target.x);
-                        const edgeRadius = (target.width * target.scale / 2) * 0.45; 
+                        const targetWidth = (typeof target.width === 'number' && target.width > 0) ? target.width : 100;
+                        const targetScale = (typeof target.scale === 'number' && target.scale > 0) ? target.scale : 0.1;
+                        const edgeRadius = (targetWidth * targetScale / 2) * 0.45; 
                         ctx.lineTo(target.x + Math.cos(angle) * edgeRadius, target.y + Math.sin(angle) * edgeRadius);
                     } else if (obj.id.startsWith('satellite')) {
                         ctx.lineTo(target.x, target.y);
                         const mothership = mapObjects.find(m => m.id === `mothership_${obj.system}_${obj.address}`);
                         if(mothership) ctx.lineTo(mothership.x, mothership.y);
+                    } else {
+                         ctx.lineTo(target.x, target.y);
                     }
-                    ctx.strokeStyle = systemLineColors[obj.system];
-                    ctx.lineWidth = 2 / zoom;
+                    ctx.strokeStyle = systemLineColors[obj.system] || 'grey';
+                    ctx.lineWidth = 2 / mapZoom;
                     ctx.stroke();
                 }
             }
         });
 
         mapObjects.forEach(obj => {
-            if (!obj.img || !obj.img.complete || obj.width === 0) return;
+            if (!obj.img || !obj.img.complete || !(obj.width > 0) || !(obj.height > 0)) return;
             
             let displayWidth = obj.width * obj.scale;
             let displayHeight = obj.height * obj.scale;
@@ -1190,16 +1806,20 @@ const initializeStarfield = () => {
             ctx.save();
             ctx.translate(obj.x, obj.y);
             ctx.rotate(obj.rotation || 0);
-            ctx.drawImage(obj.img, -displayWidth / 2, -displayHeight / 2, displayWidth, displayHeight);
+            try {
+                ctx.drawImage(obj.img, -displayWidth / 2, -displayHeight / 2, displayWidth, displayHeight);
+            } catch (e) {
+                // console.error("Error drawing map image:", e, obj.id);
+            }
             ctx.restore();
 
             if(obj.textAbove || obj.textBelow) {
                 ctx.save();
                 ctx.translate(obj.x, obj.y);
-                ctx.rotate(-rotation);
+                ctx.rotate(-mapRotation); // Counter-rotate text
                 ctx.fillStyle = '#FFFFFF';
                 ctx.textAlign = 'center';
-                const textScale = 1 / zoom;
+                const textScale = 1 / mapZoom;
                 if (obj.textAbove) {
                     ctx.font = `bold ${18 * textScale}px Inter`;
                     ctx.fillText(obj.textAbove, 0, -displayHeight / 2 - (10 * textScale));
@@ -1220,6 +1840,7 @@ const initializeStarfield = () => {
         stars.forEach(star => {
             star.alpha += star.twinkleSpeed * star.twinkleDirection;
             if (star.alpha > 1 || star.alpha < 0) {
+                star.alpha = Math.max(0, Math.min(1, star.alpha)); // Clamp
                 star.twinkleDirection *= -1;
             }
         });
@@ -1228,32 +1849,58 @@ const initializeStarfield = () => {
     function updateObjectRotations() {
         mapObjects.forEach(obj => {
             if (obj.rotationSpeed && !obj.isFrozen) {
-                obj.rotation += obj.rotationSpeed;
+                obj.rotation = (obj.rotation || 0) + obj.rotationSpeed;
             }
         });
     }
 
     function animate() {
+        if (!isMapInitialized || !spaceCanvas || !document.body.contains(spaceCanvas) || mapView.classList.contains('hidden')) {
+            if (globalAnimationFrameId) {
+                cancelAnimationFrame(globalAnimationFrameId);
+                globalAnimationFrameId = null;
+                console.log("Stopping map animation.");
+            }
+            return;
+        }
+        
+        setCanvasSize(); // Check size every frame
         updateStars();
         updateObjectRotations();
         drawGalaxy();
-        animationFrameId = requestAnimationFrame(animate);
+        globalAnimationFrameId = requestAnimationFrame(animate);
     }
     
     function addMapObject(config, preloadedImages) {
         const img = preloadedImages[config.imageId];
-        if (!img) {
-            console.error(`Image with ID ${config.imageId} not preloaded.`);
+        if (!img || !img.width || !img.height) {
+            console.error(`Image with ID ${config.imageId} not preloaded or has no dimensions.`);
             return;
         }
-        mapObjects.push({ ...config, img: img, width: img.width, height: img.height, isFrozen: false });
+        mapObjects.push({ 
+            ...config, 
+            img: img, 
+            width: img.width, 
+            height: img.height, 
+            isFrozen: false, 
+            rotation: config.rotation || 0 
+        });
     }
 
-    function init() {
-        if (animationFrameId) {
-            cancelAnimationFrame(animationFrameId);
+    function initMap() {
+        console.log("initMap called");
+        if (globalAnimationFrameId) {
+            cancelAnimationFrame(globalAnimationFrameId);
+            globalAnimationFrameId = null;
         }
-        setCanvasSize();
+        
+        if (!spaceCanvas) return;
+        setCanvasSize(); // Set size immediately
+        if (spaceCanvas.width === 0 || spaceCanvas.height === 0) {
+            console.error("Canvas has zero dimensions in initMap. Aborting.");
+            return;
+        }
+
         mapObjects = [];
         createStars();
         
@@ -1273,8 +1920,12 @@ const initializeStarfield = () => {
                 const img = new Image();
                 img.crossOrigin = "anonymous";
                 img.onload = () => resolve({ id, img });
-                img.onerror = () => reject(new Error(`Failed to load ${id}`));
-                img.src = url.replace('github.com', 'raw.githubusercontent.com').replace('/blob/', '/');
+                img.onerror = (e) => {
+                    console.error(`Failed to load image: ${id} from ${url}`, e);
+                    reject(new Error(`Failed to load ${id}`));
+                };
+                // Don't do the replace logic, URL is already raw
+                img.src = url;
             });
         });
 
@@ -1284,19 +1935,36 @@ const initializeStarfield = () => {
                 return acc;
             }, {});
             
-            isMapInitialized = true;
+            setCanvasSize(); // Set size again in case it changed during load
+            if (spaceCanvas.width === 0 || spaceCanvas.height === 0) {
+                 console.error("Canvas has zero dimensions after image load. Aborting.");
+                 isMapInitialized = false;
+                 return;
+            }
+            
             buildGalaxySystems(preloadedImages);
-            animate();
+            isMapInitialized = true;
+            console.log("Map initialized, starting animation.");
+            animate(); // Start the animation loop
 
-        }).catch(error => console.error("Error loading system images:", error));
+        }).catch(error => {
+            console.error("Error loading system images:", error);
+            isMapInitialized = false;
+        });
     }
     
     function buildGalaxySystems(preloadedImages) {
+        const w = spaceCanvas.clientWidth, h = spaceCanvas.clientHeight;
+        if (w === 0 || h === 0) {
+            console.error("Canvas zero dimensions, cannot build galaxy");
+            return;
+        }
+
         const systemCenters = {
-            daodao: { x: 0, y: -canvas.height * 2 },
-            bbl: { x: -canvas.width * 2, y: 0 },
-            boost: { x: canvas.width * 2, y: 0 },
-            enterprise: { x: 0, y: canvas.height * 2 }
+            daodao: { x: 0, y: -h * 2 },
+            bbl: { x: -w * 2, y: 0 },
+            boost: { x: w * 2, y: 0 },
+            enterprise: { x: 0, y: h * 2 }
         };
 
         addMapObject({
@@ -1311,14 +1979,19 @@ const initializeStarfield = () => {
                 scale: scale, rotation: 0, rotationSpeed: spin ? (Math.random() - 0.5) * 0.002 : 0
             }, preloadedImages);
         };
+        
+        // Calculate counts for scaling
+        const bblCount = allNfts.filter(n=>n.bbl_market).length;
+        const boostCount = allNfts.filter(n=>n.boost_market).length;
+        const enterpriseCount = allNfts.filter(n=>n.staked_enterprise_legacy).length;
 
         addSystemCenter('daodao', 'daodao', 'planet', 0.5, true);
-        addSystemCenter('bbl', 'bbl', 'planet', (allNfts.filter(n=>n.bbl_market).length / 59) * 0.5, true);
-        addSystemCenter('boost', 'boost', 'ship_main', (allNfts.filter(n=>n.boost_market).length / 59) * 0.5, true);
-        addSystemCenter('enterprise', 'enterprise', 'blackhole', (allNfts.filter(n=>n.staked_enterprise_legacy).length / 515) * 0.5, true);
+        addSystemCenter('bbl', 'bbl', 'planet', bblCount > 0 ? (bblCount / 59) * 0.5 : 0.1, true); // Use count, default 0.1
+        addSystemCenter('boost', 'boost', 'ship_main', boostCount > 0 ? (boostCount / 59) * 0.5 : 0.1, true);
+        addSystemCenter('enterprise', 'enterprise', 'blackhole', enterpriseCount > 0 ? (enterpriseCount / 515) * 0.5 : 0.1, true);
 
 
-        const holderStats = {};
+        const holderStats = {}; // Use allHolderStats if already calculated
         allNfts.forEach(nft => {
             if (nft.owner) {
                 if (!holderStats[nft.owner]) {
@@ -1352,8 +2025,9 @@ const initializeStarfield = () => {
             const minScale = 0.1; const maxScale = 0.3;
             const scaleRange = maxScale - minScale;
             
-            const minRadius = Math.min(canvas.width, canvas.height) * 0.6;
-            const maxRadius = Math.min(canvas.width, canvas.height) * 1.5;
+            const curW = spaceCanvas.clientWidth, curH = spaceCanvas.clientHeight;
+            const minRadius = Math.min(curW, curH) * 0.6;
+            const maxRadius = Math.min(curW, curH) * 1.5;
             const radiusRange = maxRadius - minRadius;
             const angleStep = (2 * Math.PI) / topHolders.length;
 
@@ -1362,7 +2036,7 @@ const initializeStarfield = () => {
                 const platformCount = stats[statKey];
                 const angle = angleStep * index;
                 
-                const normalizedSize = (platformCount - minCount) / countRange;
+                const normalizedSize = countRange === 1 ? 0 : (platformCount - minCount) / countRange;
                 const distance = minRadius + (normalizedSize * radiusRange);
                 const scale = minScale + (normalizedSize * scaleRange);
                 const last4 = address.slice(-4);
@@ -1389,25 +2063,27 @@ const initializeStarfield = () => {
         
         const createEnterpriseSystem = () => {
             const center = systemCenters.enterprise;
+            const statKey = 'enterpriseStaked';
             
              const topStakers = Object.entries(holderStats)
-                .filter(([, stats]) => stats.enterpriseStaked > 0)
-                .sort(([, a], [, b]) => b.enterpriseStaked - a[statKey])
+                .filter(([, stats]) => stats[statKey] > 0)
+                .sort(([, a], [, b]) => b[statKey] - a[statKey])
                 .slice(0, 10)
                 .map(([address, stats]) => ({ address, ...stats }));
             
             if (topStakers.length === 0) return;
 
-            const countList = topStakers.map(s => s.enterpriseStaked);
+            const countList = topStakers.map(s => s[statKey]);
             const minCount = Math.min(...countList);
             const maxCount = Math.max(...countList);
             const countRange = maxCount > minCount ? maxCount - minCount : 1;
 
             const minScale = 0.1; const maxScale = 0.3;
             const scaleRange = maxScale - minScale;
-
-            const minRadius = Math.min(canvas.width, canvas.height) * 0.6;
-            const maxRadius = Math.min(canvas.width, canvas.height) * 1.2;
+            
+            const curW = spaceCanvas.clientWidth, curH = spaceCanvas.clientHeight;
+            const minRadius = Math.min(curW, curH) * 0.6;
+            const maxRadius = Math.min(curW, curH) * 1.2;
             const radiusRange = maxRadius - minRadius;
             const angleStep = (2 * Math.PI) / topStakers.length;
             
@@ -1415,7 +2091,7 @@ const initializeStarfield = () => {
                 const { address, enterpriseStaked } = stats;
                 const angle = angleStep * index;
                 
-                const normalizedSize = (enterpriseStaked - minCount) / countRange;
+                const normalizedSize = countRange === 1 ? 0 : (enterpriseStaked - minCount) / countRange;
                 const distance = minRadius + (normalizedSize * radiusRange);
                 const scale = minScale + (normalizedSize * scaleRange);
                 
@@ -1432,131 +2108,26 @@ const initializeStarfield = () => {
         createFleetSystem('bbl', 'bblListed');
         createFleetSystem('boost', 'boostListed');
         createEnterpriseSystem();
+        console.log("Galaxy built.");
     }
 
-    // --- Event Listeners for Panning and Zooming ---
-    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-    canvas.addEventListener('mousedown', (e) => {
-        e.preventDefault();
-        if (e.button === 1) { isRotating = true; isPanning = false; canvas.style.cursor = 'ew-resize'; } 
-        else if (e.button === 0) { isPanning = true; isRotating = false; canvas.style.cursor = 'grabbing'; }
-        lastMouseX = e.clientX;
-        lastMouseY = e.clientY;
-    });
-    canvas.addEventListener('mouseup', (e) => {
-        e.preventDefault();
-        if (e.button === 0) isPanning = false;
-        if (e.button === 1) isRotating = false;
-        if (e.buttons === 0) canvas.style.cursor = 'grab';
-    });
-    canvas.addEventListener('mouseleave', () => {
-        isPanning = false;
-        isRotating = false;
-        canvas.style.cursor = 'grab';
-    });
-    canvas.addEventListener('mousemove', (e) => {
-        const rect = canvas.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
-        const worldX = (mouseX - (canvas.width / 2 + offsetX)) / zoom;
-        const worldY = (mouseY - (canvas.height / 2 + offsetY)) / zoom;
-        const sinR = Math.sin(-rotation);
-        const cosR = Math.cos(-rotation);
-        const rotatedX = worldX * cosR - worldY * sinR;
-        const rotatedY = worldX * sinR + worldY * cosR;
-
-        if (isPanning || isRotating) {
-            if (isPanning) {
-                offsetX += e.clientX - lastMouseX;
-                offsetY += e.clientY - lastMouseY;
-            } else if (isRotating) {
-                rotation += (e.clientX - lastMouseX) / 300;
-            }
-        } else {
-            let isAnyObjectHovered = false;
-            mapObjects.forEach(obj => {
-                if (!obj.width) return;
-                const displayWidth = obj.width * obj.scale;
-                const displayHeight = obj.height * obj.scale;
-                const isHovered = ( rotatedX >= obj.x - displayWidth / 2 && rotatedX <= obj.x + displayWidth / 2 && rotatedY >= obj.y - displayHeight / 2 && rotatedY <= obj.y + displayHeight / 2);
-
-                obj.isFrozen = isHovered;
-
-                if (isHovered && (obj.address || ['daodao', 'bbl', 'boost', 'enterprise'].includes(obj.id))) {
-                    isAnyObjectHovered = true;
-                }
-            });
-            canvas.style.cursor = isAnyObjectHovered ? 'pointer' : 'grab';
-        }
-        lastMouseX = e.clientX;
-        lastMouseY = e.clientY;
-    });
-    canvas.addEventListener('wheel', (e) => {
-        e.preventDefault();
-        const rect = canvas.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
-        const zoomFactor = 1.1;
-        const mouseBeforeZoomX = (mouseX - (canvas.width / 2 + offsetX)) / zoom;
-        const mouseBeforeZoomY = (mouseY - (canvas.height / 2 + offsetY)) / zoom;
-        if (e.deltaY < 0) { zoom = Math.min(maxZoom, zoom * zoomFactor); } 
-        else { zoom = Math.max(minZoom, zoom / zoomFactor); }
-        const mouseAfterZoomX = (mouseX - (canvas.width / 2 + offsetX)) / zoom;
-        const mouseAfterZoomY = (mouseY - (canvas.height / 2 + offsetY)) / zoom;
-        offsetX += (mouseAfterZoomX - mouseBeforeZoomX) * zoom;
-        offsetY += (mouseAfterZoomY - mouseBeforeZoomY) * zoom;
-    });
-
-    canvas.addEventListener('click', (e) => {
-        const rect = canvas.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
-
-        const worldX = (mouseX - (canvas.width / 2 + offsetX)) / zoom;
-        const worldY = (mouseY - (canvas.height / 2 + offsetY)) / zoom;
-        const sinR = Math.sin(-rotation);
-        const cosR = Math.cos(-rotation);
-        const rotatedX = worldX * cosR - worldY * sinR;
-        const rotatedY = worldX * sinR + worldY * cosR;
-
-        let clickedObject = null;
-        // Check in reverse to prioritize clicking top-most items (ships)
-        for (let i = mapObjects.length - 1; i >= 0; i--) {
-            const obj = mapObjects[i];
-            if (!obj.width) continue;
-            const displayWidth = obj.width * obj.scale;
-            const displayHeight = obj.height * obj.scale;
-            if (rotatedX >= obj.x - displayWidth / 2 && rotatedX <= obj.x + displayWidth / 2 && rotatedY >= obj.y - displayHeight / 2 && rotatedY <= obj.y + displayHeight / 2) {
-                clickedObject = obj;
-                break; 
-            }
-        }
-
-        if (clickedObject) {
-            if (clickedObject.address) {
-                showWalletExplorerModal(clickedObject.address);
-            } else if (['daodao', 'bbl', 'boost', 'enterprise'].includes(clickedObject.id)) {
-                 showSystemLeaderboardModal(clickedObject.id);
-            }
-        }
-    });
-
-    window.addEventListener('resize', debounce(init, 250));
-    init();
+    initMap(); // Call the initializer
 };
 
 // --- Reusable Address Search Handler ---
 const handleAddressInput = (inputEl, suggestionsEl, onSelectCallback, isWallet) => {
     const input = inputEl.value.toLowerCase();
     const reversedInput = input.split('').reverse().join('');
+    if (!suggestionsEl) return;
     suggestionsEl.innerHTML = '';
 
     if (!input) {
         suggestionsEl.classList.add('hidden');
-        if (!isWallet) debouncedFilter();
+        if (!isWallet && searchAddressInput.value === '' && addressDropdown.value === '') debouncedFilter();
         return;
     }
-
+    
+    // Use the master list of all owners for suggestions
     let matches = ownerAddresses.filter(addr => addr.toLowerCase().endsWith(reversedInput));
 
     const sortIndex = reversedInput.length;
@@ -1565,13 +2136,6 @@ const handleAddressInput = (inputEl, suggestionsEl, onSelectCallback, isWallet) 
         const charB = b.charAt(b.length - 1 - sortIndex) || '';
         return charA.localeCompare(charB);
     });
-
-    if (matches.length === 1 && inputEl.value !== matches[0]) {
-        inputEl.value = matches[0];
-        suggestionsEl.classList.add('hidden');
-        onSelectCallback();
-        return;
-    }
 
     if (matches.length > 0) {
         matches.slice(0, 10).forEach(match => {
@@ -1591,13 +2155,14 @@ const handleAddressInput = (inputEl, suggestionsEl, onSelectCallback, isWallet) 
         if (matches.length > 10) {
             const item = document.createElement('div');
             item.className = 'address-suggestion-item text-gray-400';
-            item.textContent = `${matches.length - 10} more... Keep typing`;
+            item.textContent = `${matches.length - 10} more...`;
             suggestionsEl.appendChild(item);
         }
         suggestionsEl.classList.remove('hidden');
     } else {
         suggestionsEl.classList.add('hidden');
     }
+    // Trigger filter *only* for collection view input
     if (!isWallet) debouncedFilter();
 };
 
@@ -1608,6 +2173,8 @@ const showWalletExplorerModal = (address) => {
     const titleEl = document.getElementById('wallet-modal-title');
     const statsEl = document.getElementById('wallet-modal-stats');
     const galleryEl = document.getElementById('wallet-modal-gallery');
+
+    if (!titleEl || !statsEl || !galleryEl) return;
 
     titleEl.textContent = address;
     statsEl.innerHTML = '';
@@ -1620,7 +2187,7 @@ const showWalletExplorerModal = (address) => {
     const broken = walletNfts.filter(n => n.broken).length;
     const total = walletNfts.length;
     const unbroken = total - broken;
-    const liquid = total - (daodaoStaked + enterpriseStaked + boostListed + bblListed);
+    const liquid = walletNfts.filter(n => n.liquid).length; // Recalculate for this specific wallet
 
     const stats = [
         { label: 'Total NFTs', value: total, color: 'text-white' },
@@ -1642,7 +2209,7 @@ const showWalletExplorerModal = (address) => {
         `;
     });
 
-    walletNfts.sort((a,b) => a.rank - b.rank).forEach(nft => {
+    walletNfts.sort((a,b) => (a.rank ?? Infinity) - (b.rank ?? Infinity)).forEach(nft => {
         galleryEl.appendChild(createNftCard(nft, '.wallet-trait-toggle'));
     });
 
@@ -1650,7 +2217,7 @@ const showWalletExplorerModal = (address) => {
 };
 
 const hideWalletExplorerModal = () => {
-    walletExplorerModal.classList.add('hidden');
+    if (walletExplorerModal) walletExplorerModal.classList.add('hidden');
 };
 
 // --- System Leaderboard Modal Logic ---
@@ -1676,6 +2243,8 @@ const showSystemLeaderboardModal = (systemId) => {
 
     const titleEl = document.getElementById('system-modal-title');
     const disclaimerEl = document.getElementById('system-modal-disclaimer');
+    if (!titleEl || !disclaimerEl) return;
+    
     titleEl.textContent = `${systemNameMap[systemId]} Leaderboard`;
 
     if (systemId === 'boost') {
@@ -1692,6 +2261,8 @@ const showSystemLeaderboardModal = (systemId) => {
 const displaySystemLeaderboardPage = (data, statKey, page) => {
     const tableEl = document.getElementById('system-modal-table');
     const paginationEl = document.getElementById('system-modal-pagination');
+    if (!tableEl || !paginationEl) return;
+    
     const itemsPerPage = 10;
     tableEl.innerHTML = '';
     paginationEl.innerHTML = '';
@@ -1705,7 +2276,7 @@ const displaySystemLeaderboardPage = (data, statKey, page) => {
             <div class="leaderboard-row" style="grid-template-columns: 1fr 4fr 1fr;">
                 <span class="text-center font-bold">#${rank}</span>
                 <span class="font-mono text-sm truncate" title="${stats.address}">${stats.address}</span>
-                <span class="text-center font-bold">${stats[statKey]}</span>
+                <span class="text-center font-bold">${stats[statKey] || 0}</span>
             </div>
         `;
     });
@@ -1735,80 +2306,22 @@ const displaySystemLeaderboardPage = (data, statKey, page) => {
 };
 
 const hideSystemLeaderboardModal = () => {
-    systemLeaderboardModal.classList.add('hidden');
+    if (systemLeaderboardModal) systemLeaderboardModal.classList.add('hidden');
 };
 
-
-// --- Event Listeners ---
-document.addEventListener('click', () => closeAllDropdowns());
-modalCloseBtn.addEventListener('click', hideNftDetails);
-nftModal.addEventListener('click', (e) => { if (e.target === nftModal) hideNftDetails(); });
-rarityExplainedBtn.addEventListener('click', () => rarityModal.classList.remove('hidden'));
-rarityModalCloseBtn.addEventListener('click', () => rarityModal.classList.add('hidden'));
-rarityModal.addEventListener('click', (e) => { if (e.target === rarityModal) rarityModal.classList.add('hidden'); });
-badgesExplainedBtn.addEventListener('click', () => badgeModal.classList.remove('hidden'));
-badgeModalCloseBtn.addEventListener('click', () => badgeModal.classList.add('hidden'));
-badgeModal.addEventListener('click', (e) => { if (e.target === badgeModal) badgeModal.classList.add('hidden'); });
-walletModalCloseBtn.addEventListener('click', hideWalletExplorerModal);
-walletExplorerModal.addEventListener('click', (e) => { if (e.target === walletExplorerModal) hideWalletExplorerModal(); });
-systemModalCloseBtn.addEventListener('click', hideSystemLeaderboardModal);
-systemLeaderboardModal.addEventListener('click', (e) => { if (e.target === systemLeaderboardModal) hideSystemLeaderboardModal(); });
-
-
-const debouncedFilter = debounce(handleFilterChange, 300);
-searchInput.addEventListener('input', debouncedFilter);
-sortSelect.addEventListener('change', handleFilterChange);
-resetButton.addEventListener('click', resetAll);
-
-collectionViewBtn.addEventListener('click', () => {
-    collectionView.classList.remove('hidden');
-    walletView.classList.add('hidden');
-    mapView.classList.add('hidden');
-    collectionViewBtn.classList.add('active');
-    walletViewBtn.classList.remove('active');
-    mapViewBtn.classList.remove('active');
-});
-
-walletViewBtn.addEventListener('click', () => {
-    walletView.classList.remove('hidden');
-    collectionView.classList.add('hidden');
-    mapView.classList.add('hidden');
-    walletViewBtn.classList.add('active');
-    collectionViewBtn.classList.remove('active');
-    mapViewBtn.classList.remove('active');
-});
-
- mapViewBtn.addEventListener('click', () => {
-    mapView.classList.remove('hidden');
-    collectionView.classList.add('hidden');
-    walletView.classList.add('hidden');
-    mapViewBtn.classList.add('active');
-    collectionViewBtn.classList.remove('active');
-    walletViewBtn.classList.remove('active');
-    
-    initializeStarfield(); 
-});
-
-
-walletResetBtn.addEventListener('click', () => {
-    walletSearchAddressInput.value = '';
-    walletGallery.innerHTML = '';
-    walletGalleryTitle.textContent = 'Wallet NFTs';
-     document.querySelectorAll('.leaderboard-row').forEach(row => {
-        row.classList.remove('selected');
-    });
-});
-
 const searchWallet = () => {
+    if (!walletSearchAddressInput || !walletGallery || !walletGalleryTitle) return;
+    
     const address = walletSearchAddressInput.value.trim();
-    walletAddressSuggestions.classList.add('hidden');
+    if (walletAddressSuggestions) walletAddressSuggestions.classList.add('hidden');
 
-    document.querySelectorAll('.leaderboard-row').forEach(row => {
+    document.querySelectorAll('#leaderboard-table .leaderboard-row').forEach(row => {
         row.classList.toggle('selected', row.dataset.address === address);
     });
 
     if (!address) {
         showError(walletGallery, 'Please enter a wallet address.');
+        walletGalleryTitle.textContent = 'Wallet NFTs';
         return;
     }
     const walletNfts = allNfts.filter(nft => nft.owner === address);
@@ -1818,43 +2331,43 @@ const searchWallet = () => {
         showLoading(walletGallery, 'No NFTs found for this address.');
         return;
     }
-    walletNfts.sort((a,b) => a.rank - b.rank).forEach(nft => {
+    walletNfts.sort((a,b) => (a.rank ?? Infinity) - (b.rank ?? Infinity)).forEach(nft => {
         walletGallery.appendChild(createNftCard(nft, '.wallet-trait-toggle'));
     });
 };
 
-walletSearchAddressInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') searchWallet();
-});
-
-searchAddressInput.addEventListener('input', () => {
-    handleAddressInput(searchAddressInput, addressSuggestions, handleFilterChange, false);
-});
-
-walletSearchAddressInput.addEventListener('input', () => {
-    handleAddressInput(walletSearchAddressInput, walletAddressSuggestions, searchWallet, true);
-});
-
-leaderboardTable.addEventListener('click', (e) => {
-    const headerCell = e.target.closest('[data-sort-by]');
-    if (!headerCell) return;
-
-    const newColumn = headerCell.dataset.sortBy;
-    if (holderSort.column === newColumn) {
-        holderSort.direction = holderSort.direction === 'desc' ? 'asc' : 'desc';
+// --- Hash Handling ---
+const handleHashChange = () => {
+    console.log("Hash changed:", window.location.hash);
+    const hash = window.location.hash.substring(1);
+    if (hash && /^\d+$/.test(hash)) {
+        const nftId = parseInt(hash, 10);
+        if (allNfts.length > 0) {
+            const nftToShow = allNfts.find(nft => nft.id === nftId);
+            if (nftToShow) {
+                console.log("Found NFT from hash:", nftId);
+                showNftDetails(nftToShow);
+            } else {
+                console.log("NFT ID from hash not found:", nftId);
+                hideNftDetails(); // Hide modal if ID is not valid
+            }
+        } else if (!isInitialLoad) {
+            // Data is loaded, but hash was checked before it was ready.
+            // Now we can hide it if it's not found.
+             hideNftDetails();
+        }
+        // If data isn't loaded yet (isInitialLoad = true), do nothing.
+        // initializeExplorer will call this function again.
     } else {
-        holderSort.column = newColumn;
-        holderSort.direction = (newColumn === 'address') ? 'asc' : 'desc'; // Default text to A-Z
+        hideNftDetails(); // Hide modal if hash is empty or invalid
     }
-    sortAndDisplayHolders();
-});
+};
 
 
- const setupCopyButton = (buttonEl, inputEl) => {
-     buttonEl.addEventListener('click', () => copyToClipboard(inputEl.value));
- };
-
-setupCopyButton(copyAddressBtn, searchAddressInput);
-setupCopyButton(walletCopyAddressBtn, walletSearchAddressInput);
-
-initializeExplorer();
+// --- Initialize Application ---
+// Wait for DOM content to be loaded before running the script
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeExplorer);
+} else {
+    initializeExplorer(); // DOM is already ready
+}
