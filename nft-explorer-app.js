@@ -700,7 +700,7 @@ const applyFiltersAndSort = () => {
     filteredNfts = tempNfts;
     if (resultsCount) resultsCount.textContent = filteredNfts.length;
     updateFilterCounts(filteredNfts);
-    updateFilterCounts(filteredNfts);
+    updateAddressDropdown(filteredNfts);
     displayPage(1);
 };
 
@@ -2414,6 +2414,7 @@ if (document.readyState === 'loading') {
 } else {
     initializeExplorer(); // DOM is already ready
 }
+
 
 
 
