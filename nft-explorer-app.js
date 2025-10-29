@@ -154,10 +154,10 @@ const initializeExplorer = async () => {
         populateTraitFilters();
         populateInhabitantFilters();
         populatePlanetFilters();
-        populateStatusFilters(); // This will now add the Liquid filter
+        populateStatusFilters();
         populateTraitToggles();
         populateWalletTraitToggles();
-        setupAddressFeatures(); // This populates the dropdown
+        updateAddressDropdown(allNfts);
         updateFilterCounts(allNfts);
         addAllEventListeners();
         applyStateFromUrl();
@@ -539,28 +539,58 @@ function switchView(viewName) {
     }
 }
 
-
-const setupAddressFeatures = () => {
-    // This function is now just for populating the dropdown
-    // ownerAddresses is populated in initializeExplorer
+const updateAddressDropdown = (nftList) => {
     const ownerCounts = {};
-    allNfts.forEach(nft => {
+    // Count NFTs *only* from the provided list (filtered or all)
+    nftList.forEach(nft => {
         if (nft.owner) {
             ownerCounts[nft.owner] = (ownerCounts[nft.owner] || 0) + 1;
         }
     });
 
+    // Sort owners by the new counts
     const sortedOwners = Object.entries(ownerCounts)
         .sort(([, countA], [, countB]) => countB - countA);
 
-    if (addressDropdown) {
-        addressDropdown.innerHTML = '<option value="">Holders</option>';
-        sortedOwners.forEach(([address, count]) => {
-            const option = document.createElement('option');
-            option.value = address;
-            option.textContent = `(${count}) ${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
-            addressDropdown.appendChild(option);
-        });
+    // Remember the currently selected value before clearing
+    const currentSelectedAddress = addressDropdown.value;
+    let selectionStillExists = false;
+
+    // Clear existing options (except the first "Holders" option)
+    while (addressDropdown.options.length > 1) {
+        addressDropdown.remove(addressDropdown.options.length - 1);
+    }
+
+    // Populate with new sorted owners and counts
+    sortedOwners.forEach(([address, count]) => {
+        const option = document.createElement('option');
+        option.value = address;
+        option.textContent = `(${count}) ${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
+        addressDropdown.appendChild(option);
+        // Check if the previously selected address is in the new list
+        if (address === currentSelectedAddress) {
+            selectionStillExists = true;
+        }
+    });
+
+    // Re-select the previous address if it still exists in the filtered list
+    if (selectionStillExists) {
+        addressDropdown.value = currentSelectedAddress;
+    } else {
+        // If the previously selected holder is filtered out,
+        // check if the address input field still has a value.
+        // If the input field *also* doesn't match anyone in the new list,
+        // reset the dropdown to the default "Holders".
+        const currentInputAddress = searchAddressInput.value;
+        const inputAddressExists = sortedOwners.some(([adr]) => adr === currentInputAddress);
+        if (!inputAddressExists) {
+             addressDropdown.value = ""; // Reset to default "Holders"
+             // Optionally clear the input field if the dropdown drove the filter
+             // searchAddressInput.value = "";
+        } else {
+            // Keep the dropdown showing the address from the input field if it exists
+            addressDropdown.value = currentInputAddress;
+        }
     }
 };
 
@@ -669,7 +699,8 @@ const applyFiltersAndSort = () => {
 
     filteredNfts = tempNfts;
     if (resultsCount) resultsCount.textContent = filteredNfts.length;
-    updateFilterCounts(filteredNfts); // Pass the filtered list
+    updateFilterCounts(filteredNfts);
+    updateFilterCounts(filteredNfts);
     displayPage(1);
 };
 
@@ -2383,6 +2414,7 @@ if (document.readyState === 'loading') {
 } else {
     initializeExplorer(); // DOM is already ready
 }
+
 
 
 
