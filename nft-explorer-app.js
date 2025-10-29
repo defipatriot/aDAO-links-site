@@ -1,65 +1,309 @@
-// ... (existing code before updateAddressFeatures) ...
+// --- Global Elements ---
+const gallery = document.getElementById('nft-gallery');
+const paginationControls = document.getElementById('pagination-controls');
+const searchInput = document.getElementById('search-id');
+const searchAddressInput = document.getElementById('search-address');
+const addressDropdown = document.getElementById('address-dropdown');
+const sortSelect = document.getElementById('sort-rank');
+const traitFiltersContainer = document.getElementById('trait-filters-container');
+const inhabitantFiltersContainer = document.getElementById('inhabitant-filters-container');
+const planetFiltersContainer = document.getElementById('planet-filters-container');
+const statusFiltersGrid = document.getElementById('status-filters-grid');
+const mintStatusContainer = document.getElementById('mint-status-container');
+const traitTogglesContainer = document.getElementById('trait-toggles-container');
+const resetButton = document.getElementById('reset-filters');
+const resultsCount = document.getElementById('results-count');
+const nftModal = document.getElementById('nft-modal');
+const modalCloseBtn = document.getElementById('modal-close');
+const rarityModal = document.getElementById('rarity-modal');
+const rarityExplainedBtn = document.getElementById('rarity-explained-btn');
+const rarityModalCloseBtn = document.getElementById('rarity-modal-close');
+const badgeModal = document.getElementById('badge-modal');
+const badgesExplainedBtn = document.getElementById('badges-explained-btn');
+const badgeModalCloseBtn = document.getElementById('badge-modal-close');
+const collectionViewBtn = document.getElementById('collection-view-btn');
+const walletViewBtn = document.getElementById('wallet-view-btn');
+const mapViewBtn = document.getElementById('map-view-btn');
+const collectionView = document.getElementById('collection-view');
+const walletView = document.getElementById('wallet-view');
+const mapView = document.getElementById('map-view');
+const walletSearchAddressInput = document.getElementById('wallet-search-address');
+const walletCopyAddressBtn = document.getElementById('wallet-copy-address-btn');
+const walletAddressSuggestions = document.getElementById('wallet-address-suggestions');
+const walletResetBtn = document.getElementById('wallet-reset-btn');
+const leaderboardTable = document.getElementById('leaderboard-table');
+const leaderboardPagination = document.getElementById('leaderboard-pagination');
+const walletTraitTogglesContainer = document.getElementById('wallet-trait-toggles-container');
+const walletGallery = document.getElementById('wallet-gallery');
+const walletGalleryTitle = document.getElementById('wallet-gallery-title');
+const addressSuggestions = document.getElementById('address-suggestions');
+const copyAddressBtn = document.getElementById('copy-address-btn');
+const copyToast = document.getElementById('copy-toast');
+const walletExplorerModal = document.getElementById('wallet-explorer-modal');
+const walletModalCloseBtn = document.getElementById('wallet-modal-close');
+const systemLeaderboardModal = document.getElementById('system-leaderboard-modal');
+const systemModalCloseBtn = document.getElementById('system-modal-close');
+const spaceCanvas = document.getElementById('space-canvas');
 
-// Updates the address dropdown and suggestion list based on provided NFTs
-const updateAddressFeatures = (nftList) => {
-    const ownerCounts = {};
-    nftList.forEach(nft => {
-        if (nft.owner) {
-            ownerCounts[nft.owner] = (ownerCounts[nft.owner] || 0) + 1;
+
+// --- Config ---
+const METADATA_URL = "https://cdn.jsdelivr.net/gh/defipatriot/nft-metadata/all_nfts_metadata.json";
+const STATUS_DATA_URL = "https://deving.zone/en/nfts/alliance_daos.json";
+const DAO_WALLET_ADDRESS = "terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm";
+const DAO_LOCKED_WALLET_SUFFIXES = ["8ywv", "417v", "6ugw"];
+const itemsPerPage = 20;
+const traitOrder = ["Rank", "Rarity", "Planet", "Inhabitant", "Object", "Weather", "Light"];
+const filterLayoutOrder = ["Rarity", "Object", "Weather", "Light"];
+const defaultTraitsOn = ["Rank", "Planet", "Inhabitant", "Object"];
+
+// --- State ---
+let allNfts = [];
+let filteredNfts = []; // The currently displayed NFTs after filters
+let currentPage = 1;
+let traitCounts = {};
+let inhabitantCounts = {};
+let planetCounts = {};
+let ownerAddresses = []; // Master list of all unique owners (from initial load)
+let currentFilteredOwnerAddresses = []; // List of owners currently in filteredNfts
+let allHolderStats = [];
+let holderCurrentPage = 1;
+const holdersPerPage = 10;
+let holderSort = { column: 'total', direction: 'desc' };
+let globalAnimationFrameId;
+let isMapInitialized = false;
+let mapZoom = 0.15, mapRotation = 0, mapOffsetX = 0, mapOffsetY = 0;
+let isPanning = false, isRotating = false;
+let lastMouseX = 0, lastMouseY = 0;
+let mapStars = [];
+let mapObjects = [];
+let isInitialLoad = true; // Flag for initial hash check
+
+
+// --- Utility Functions ---
+const debounce = (func, delay) => { let timeout; return function(...args) { clearTimeout(timeout); timeout = setTimeout(() => func.apply(this, args), delay); }; };
+const showLoading = (container, message) => { if(container) container.innerHTML = `<p class="text-center col-span-full text-cyan-400 text-lg">${message}</p>`; };
+const showError = (container, message) => { if(container) container.innerHTML = `<div class="text-center col-span-full bg-red-900/50 border border-red-700 text-white p-6 rounded-lg"><h3 class="font-bold text-xl">Error</h3><p class="mt-2 text-red-300">${message}</p></div>`; };
+function convertIpfsUrl(ipfsUrl) { if (!ipfsUrl || !ipfsUrl.startsWith('ipfs://')) return ''; return `https://dweb.link/ipfs/${ipfsUrl.replace('ipfs://', '')}`; }
+
+
+// --- Data Fetching and Processing ---
+const mergeNftData = (metadata, statusData) => {
+    const statusMap = new Map(statusData.nfts.map(nft => [String(nft.id), nft]));
+    return metadata.map(nft => {
+        const status = statusMap.get(String(nft.id));
+        let mergedNft = { ...nft };
+
+        if (status) {
+            mergedNft.owner = status.owner;
+            mergedNft.broken = status.broken;
+            mergedNft.staked_daodao = status.daodao;
+            mergedNft.staked_enterprise_legacy = status.enterprise;
+            mergedNft.bbl_market = status.bbl;
+            mergedNft.boost_market = status.boost;
+            const isStaked = status.daodao || status.enterprise;
+            const isListed = status.bbl || status.boost;
+            const isOwnedByMainDAO = status.owner === DAO_WALLET_ADDRESS;
+            const isOwnedByLockedDAO = status.owner ? DAO_LOCKED_WALLET_SUFFIXES.some(suffix => status.owner.endsWith(suffix)) : false;
+            mergedNft.liquid = !isOwnedByMainDAO && !isOwnedByLockedDAO && !isStaked && !isListed;
+            mergedNft.owned_by_alliance_dao = isOwnedByMainDAO || isOwnedByLockedDAO;
+        } else {
+             mergedNft.owner = null;
+             mergedNft.broken = false;
+             mergedNft.staked_daodao = false;
+             mergedNft.staked_enterprise_legacy = false;
+             mergedNft.bbl_market = false;
+             mergedNft.boost_market = false;
+             mergedNft.liquid = true;
+             mergedNft.owned_by_alliance_dao = false;
         }
+        return mergedNft;
     });
+};
 
-    const sortedOwners = Object.entries(ownerCounts)
-        .sort(([, countA], [, countB]) => countB - countA); // Sort by count desc
+const initializeExplorer = async () => {
+    showLoading(gallery, 'Loading collection metadata...');
+    showLoading(leaderboardTable, 'Loading holder data...');
+    showLoading(walletGallery, 'Search for or select a wallet to see owned NFTs.');
+    try {
+        const [metaResponse, statusResponse] = await Promise.all([ fetch(METADATA_URL), fetch(STATUS_DATA_URL) ]);
+        if (!metaResponse.ok || !statusResponse.ok) throw new Error(`Network response error fetching data`);
+        const metadata = await metaResponse.json();
+        const statusData = await statusResponse.json();
+        if (!Array.isArray(metadata) || metadata.length === 0) { showError(gallery, "Invalid or empty metadata received."); return; }
 
-    // --- DEBUG LOGS ---
-    console.log(`updateAddressFeatures: Processing ${nftList.length} NFTs.`);
-    console.log(`updateAddressFeatures: Found ${sortedOwners.length} unique owners in the filtered list.`);
-    if (sortedOwners.length > 0) {
-        console.log(`updateAddressFeatures: Top owner in filtered list: ${sortedOwners[0][0]}, Count: ${sortedOwners[0][1]}`);
-    }
-    // --- END DEBUG LOGS ---
+        allNfts = mergeNftData(metadata, statusData);
+        ownerAddresses = [...new Set(allNfts.map(nft => nft.owner).filter(Boolean))]; // Populate master list of unique owners
 
-    // Update the state variable for live suggestions
-    currentFilteredOwnerAddresses = sortedOwners.map(([address]) => address);
+        calculateRanks();
+        populateTraitFilters();
+        populateInhabitantFilters();
+        populatePlanetFilters();
+        populateStatusFilters();
+        populateTraitToggles();
+        populateWalletTraitToggles();
+        updateAddressFeatures(allNfts); // Initial dropdown population based on ALL NFTs
+        updateFilterCounts(allNfts); // Initial filter counts based on ALL NFTs
+        addAllEventListeners(); // Add listeners including hashchange
+        applyStateFromUrl(); // Read URL params and set initial filter states
+        applyFiltersAndSort(); // Apply filters based on initial states (this re-calls updateAddressFeatures with filtered list)
+        calculateAndDisplayLeaderboard();
 
-    // --- Update Dropdown ---
-    const currentSelectedAddress = addressDropdown.value; // Store current selection
-    addressDropdown.innerHTML = '<option value="">Holders</option>'; // Clear existing options
-    let newSelectionFound = false;
-    sortedOwners.forEach(([address, count]) => {
-        const option = document.createElement('option');
-        option.value = address;
-        // Display count + truncated address
-        option.textContent = `(${count}) ${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
-        addressDropdown.appendChild(option);
-        if (address === currentSelectedAddress) {
-            option.selected = true; // Re-select if still present
-            newSelectionFound = true;
-        }
-    });
+        // Check for hash after data is loaded and initial filters applied
+        handleHashChange(); // Check hash on initial load
+        isInitialLoad = false; // Mark initial load complete
 
-    // If the previously selected address is no longer in the filtered list,
-    // set the dropdown back to the default "Holders" option.
-    if (!newSelectionFound && currentSelectedAddress !== '') {
-         addressDropdown.value = ''; // Set dropdown back to default "Holders"
+    } catch (error) {
+        console.error("Failed to initialize explorer:", error);
+        showError(gallery, `Could not load or process NFT data. Error: ${error.message}`);
+        showError(leaderboardTable, 'Could not load holder data.');
+        showError(walletGallery, 'Could not load wallet data.');
     }
 };
 
+const calculateRanks = () => {
+    traitCounts = {}; inhabitantCounts = {}; planetCounts = {};
+    allNfts.forEach(nft => { if (nft.attributes) { nft.attributes.forEach(attr => {
+        if (!traitCounts[attr.trait_type]) traitCounts[attr.trait_type] = {};
+        traitCounts[attr.trait_type][attr.value] = (traitCounts[attr.trait_type][attr.value] || 0) + 1;
+        if (attr.trait_type === 'Inhabitant') {
+            const base = attr.value.replace(/ (M|F)$/, ''); if (!inhabitantCounts[base]) inhabitantCounts[base] = { total: 0, male: 0, female: 0 };
+            inhabitantCounts[base].total++; if (attr.value.endsWith(' M')) inhabitantCounts[base].male++; else if (attr.value.endsWith(' F')) inhabitantCounts[base].female++;
+        }
+        if (attr.trait_type === 'Planet') {
+            const base = attr.value.replace(/ (North|South)$/, ''); if (!planetCounts[base]) planetCounts[base] = { total: 0, north: 0, south: 0 };
+            planetCounts[base].total++; if (attr.value.endsWith(' North')) planetCounts[base].north++; else if (attr.value.endsWith(' South')) planetCounts[base].south++;
+        }
+    }); } });
+    allNfts.forEach(nft => { let score = 0; if (nft.attributes) { nft.attributes.forEach(attr => { if (traitCounts[attr.trait_type]?.[attr.value] && !['Weather', 'Light'].includes(attr.trait_type)) { const count = traitCounts[attr.trait_type][attr.value]; const rarity = count / allNfts.length; if (rarity > 0) score += 1 / rarity; } }); } nft.rarityScore = score; });
+    allNfts.sort((a, b) => b.rarityScore - a.rarityScore); allNfts.forEach((nft, index) => { nft.rank = index + 1; });
+};
 
-// ... (existing code in applyFiltersAndSort, before the call to updateAddressFeatures) ...
+// --- UI Population Functions ---
+const createFilterItem = (config) => { const cont = document.createElement('div'); cont.className = 'flex items-center justify-between'; const lbl = document.createElement('label'); lbl.className = 'toggle-label'; lbl.innerHTML = `<input type="checkbox" class="toggle-checkbox ${config.toggleClass}" data-key="${config.key}"><span class="toggle-switch mr-2"></span><span class="font-medium">${config.label}</span>`; const sliderCont = document.createElement('div'); sliderCont.className = 'flex flex-col items-center'; sliderCont.innerHTML = `<span class="text-xs text-gray-400 h-4 ${config.countClass||''}" data-count-key="${config.key}">${config.initialCount||'0'}</span><div class="direction-slider-container"><span class="text-xs text-gray-400">${config.left}</span><input type="range" min="0" max="2" value="1" class="direction-slider ${config.sliderClass}" data-slider-key="${config.key}" disabled><span class="text-xs text-gray-400">${config.right}</span></div>`; cont.appendChild(lbl); cont.appendChild(sliderCont); return cont; };
+const populateInhabitantFilters = () => { inhabitantFiltersContainer.innerHTML = ''; Object.keys(inhabitantCounts).sort().forEach(name => { const cont = createFilterItem({toggleClass:'inhabitant-toggle-cb', key:name, label:name, countClass:'inhabitant-count', initialCount:inhabitantCounts[name]?.total||0, sliderClass:'gender-slider', left:'M', right:'F'}); inhabitantFiltersContainer.appendChild(cont); cont.addEventListener('mouseenter', (e)=>showPreviewTile(e,'Inhabitant',name)); cont.addEventListener('mouseleave', hidePreviewTile); }); };
+const populatePlanetFilters = () => { planetFiltersContainer.innerHTML = ''; Object.keys(planetCounts).sort().forEach(name => { const cont = createFilterItem({toggleClass:'planet-toggle-cb', key:name, label:name, countClass:'planet-count', initialCount:planetCounts[name]?.total||0, sliderClass:'planet-slider', left:'N', right:'S'}); planetFiltersContainer.appendChild(cont); cont.addEventListener('mouseenter', (e)=>showPreviewTile(e,'Planet',name)); cont.addEventListener('mouseleave', hidePreviewTile); }); };
+const populateTraitFilters = () => { traitFiltersContainer.innerHTML = ''; const createMulti=(type, vals)=>{ const cont=document.createElement('div'); cont.className='multi-select-container'; let opts=''; vals.forEach(v=>{const style=v==='Phoenix Rising'?'style="color:#f97316;font-weight:bold;"':''; opts+=`<label ${style}><input type="checkbox" class="multi-select-checkbox" data-trait="${type}" value="${v}"> ${v} (<span class="trait-count">0</span>)</label>`;}); cont.innerHTML=`<label class="block text-sm font-medium text-gray-300 mb-1">${type}</label><button type="button" class="multi-select-button"><span>All ${type}s</span><svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg></button><div class="multi-select-dropdown hidden">${opts}</div>`; const btn=cont.querySelector('.multi-select-button'); const drop=cont.querySelector('.multi-select-dropdown'); btn.addEventListener('click',(e)=>{e.stopPropagation(); closeAllDropdowns(drop); drop.classList.toggle('hidden');}); drop.addEventListener('change',()=>{updateMultiSelectButtonText(cont); handleFilterChange();}); if(type==='Object'){drop.querySelectorAll('label').forEach(lbl=>{const cb=lbl.querySelector('input'); if(cb){lbl.addEventListener('mouseenter',(e)=>showPreviewTile(e,'Object',cb.value)); lbl.addEventListener('mouseleave',hidePreviewTile);}});} return cont; }; filterLayoutOrder.forEach(type=>{ let vals=Object.keys(traitCounts[type]||{}).sort(); if(type==='Rarity')vals.sort((a,b)=>Number(b)-Number(a)); else if(['Object','Weather','Light'].includes(type)) vals.sort((a,b)=>(traitCounts[type]?.[a]||0)-(traitCounts[type]?.[b]||0)); if(type==='Object'){const i=vals.indexOf('Phoenix Rising'); if(i>-1){const[p]=vals.splice(i,1); vals.unshift(p);}} traitFiltersContainer.appendChild(createMulti(type,vals)); }); };
+const populateStatusFilters = () => { statusFiltersGrid.innerHTML=''; const cfg=[{key:'staked',label:'Staked',left:'Ent',right:'DAO'},{key:'listed',label:'Listed',left:'Boost',right:'BBL'},{key:'rewards',label:'Rewards',left:'Broken',right:'Unbroken'}]; cfg.forEach(f=>{const c=createFilterItem({...f, toggleClass:'status-toggle-cb', countClass:'status-count', sliderClass:'status-slider'}); statusFiltersGrid.appendChild(c);}); mintStatusContainer.innerHTML=''; const mintF=createFilterItem({toggleClass:'status-toggle-cb',key:'mint_status',label:'Mint Status',countClass:'status-count',sliderClass:'status-slider',left:'Un-Minted',right:'Minted'}); mintStatusContainer.appendChild(mintF); if(mintStatusContainer.parentElement){const liqF=createFilterItem({toggleClass:'status-toggle-cb',key:'liquid_status',label:'Liquid Status',countClass:'status-count',sliderClass:'status-slider',left:'Liquid',right:'Not Liq'}); const grid=mintStatusContainer.closest('.grid')||mintStatusContainer.parentElement; grid.appendChild(liqF);} };
+const populateTraitToggles = () => { traitTogglesContainer.innerHTML=''; traitOrder.forEach(t=>{const l=document.createElement('label'); l.className='toggle-label'; l.innerHTML=`<input type=checkbox class="toggle-checkbox trait-toggle" data-trait="${t}" ${defaultTraitsOn.includes(t)?'checked':''}><span class=toggle-switch mr-2></span><span>${t}</span>`; traitTogglesContainer.appendChild(l);}); };
+const populateWalletTraitToggles = () => { walletTraitTogglesContainer.innerHTML=''; const wTraits=["Rank","Planet","Inhabitant","Object"]; wTraits.forEach(t=>{const l=document.createElement('label'); l.className='toggle-label'; l.innerHTML=`<input type=checkbox class="toggle-checkbox wallet-trait-toggle" data-trait="${t}" checked><span class=toggle-switch mr-2></span><span>${t}</span>`; walletTraitTogglesContainer.appendChild(l);}); };
 
+// --- Event Listeners Setup ---
+const handleMapContextMenu = (e) => e.preventDefault();
+const handleMapMouseDown = (e) => { e.preventDefault(); if (e.button === 1 || e.ctrlKey || e.metaKey) { isRotating = true; isPanning = false; if(spaceCanvas) spaceCanvas.style.cursor = 'ew-resize'; } else if (e.button === 0) { isPanning = true; isRotating = false; if(spaceCanvas) spaceCanvas.style.cursor = 'grabbing'; } lastMouseX = e.clientX; lastMouseY = e.clientY; };
+const handleMapMouseUp = (e) => { e.preventDefault(); isPanning = false; isRotating = false; if (spaceCanvas) spaceCanvas.style.cursor = 'grab'; };
+const handleMapMouseLeave = () => { if (isPanning || isRotating) { isPanning = false; isRotating = false; if (spaceCanvas) spaceCanvas.style.cursor = 'grab'; } };
+const handleMapMouseMove = (e) => { if (!spaceCanvas) return; const rect = spaceCanvas.getBoundingClientRect(); if (rect.width === 0 || rect.height === 0) return; const mX=e.clientX-rect.left; const mY=e.clientY-rect.top; if(mX<0||mX>spaceCanvas.width||mY<0||mY>spaceCanvas.height){if(isPanning||isRotating){isPanning=false; isRotating=false; if(spaceCanvas)spaceCanvas.style.cursor='grab';}return;} const curZ=(mapZoom===0)?0.0001:mapZoom; const wX=(mX-(spaceCanvas.width/2+mapOffsetX))/curZ; const wY=(mY-(spaceCanvas.height/2+mapOffsetY))/curZ; const sR=Math.sin(-mapRotation); const cR=Math.cos(-mapRotation); const rotX=wX*cR-wY*sR; const rotY=wX*sR+wY*cR; if(isPanning||isRotating){if(isPanning){mapOffsetX+=e.clientX-lastMouseX; mapOffsetY+=e.clientY-lastMouseY;}else if(isRotating){mapRotation+=(e.clientX-lastMouseX)/300;}}else{let hovered=false; for(let i=mapObjects.length-1;i>=0;i--){const o=mapObjects[i]; if(!o||typeof o.x!=='number'||typeof o.y!=='number'||typeof o.width!=='number'||typeof o.height!=='number'||typeof o.scale!=='number')continue; const dW=o.width*o.scale,dH=o.height*o.scale,hW=dW/2,hH=dH/2; const isHover=(rotX>=o.x-hW&&rotX<=o.x+hW&&rotY>=o.y-hH&&rotY<=o.y+hH); o.isFrozen=isHover; if(isHover&&(o.address||['daodao','bbl','boost','enterprise'].includes(o.id))){hovered=true; break;}} if(spaceCanvas)spaceCanvas.style.cursor=hovered?'pointer':'grab';} lastMouseX=e.clientX; lastMouseY=e.clientY; };
+const handleMapWheel = (e) => { e.preventDefault(); if (!spaceCanvas) return; const rect = spaceCanvas.getBoundingClientRect(); if (rect.width === 0 || rect.height === 0) return; const mX=e.clientX-rect.left; const mY=e.clientY-rect.top; const zF=1.1; const minZ=0.1, maxZ=5; const curZ=(mapZoom===0)?0.0001:mapZoom; const mBX=(mX-(spaceCanvas.width/2+mapOffsetX))/curZ; const mBY=(mY-(spaceCanvas.height/2+mapOffsetY))/curZ; let newZ; if(e.deltaY<0)newZ=Math.min(maxZ,curZ*zF); else newZ=Math.max(minZ,curZ/zF); if(newZ<=0)newZ=minZ; const mAX=(mX-(spaceCanvas.width/2+mapOffsetX))/newZ; const mAY=(mY-(spaceCanvas.height/2+mapOffsetY))/newZ; mapOffsetX+=(mAX-mBX)*newZ; mapOffsetY+=(mAY-mBY)*newZ; mapZoom=newZ; };
+ const handleMapClick = (e) => { if (!spaceCanvas) return; const rect = spaceCanvas.getBoundingClientRect(); if (rect.width === 0 || rect.height === 0) return; const mX=e.clientX-rect.left; const mY=e.clientY-rect.top; const curZ=(mapZoom===0)?0.0001:mapZoom; const wX=(mX-(spaceCanvas.width/2+mapOffsetX))/curZ; const wY=(mY-(spaceCanvas.height/2+mapOffsetY))/curZ; const sR=Math.sin(-mapRotation); const cR=Math.cos(-mapRotation); const rotX=wX*cR-wY*sR; const rotY=wX*sR+wY*cR; let clicked=null; for(let i=mapObjects.length-1;i>=0;i--){const o=mapObjects[i]; if(!o||typeof o.x!=='number'||typeof o.y!=='number'||typeof o.width!=='number'||typeof o.height!=='number'||typeof o.scale!=='number')continue; const dW=o.width*o.scale,dH=o.height*o.scale,hW=dW/2,hH=dH/2; if(rotX>=o.x-hW&&rotX<=o.x+hW&&rotY>=o.y-hH&&rotY<=o.y+hH){clicked=o; break;}} if(clicked){console.log("Map click:",clicked); if(clicked.address)showWalletExplorerModal(clicked.address); else if(['daodao','bbl','boost','enterprise'].includes(clicked.id))showSystemLeaderboardModal(clicked.id);}else console.log("Map empty click."); };
+const handleMapResize = debounce(() => { console.log("Resize, re-init map."); isMapInitialized = false; mapOffsetX = 0; mapOffsetY = 0; if(mapView && !mapView.classList.contains('hidden')) initializeStarfield(); }, 250); // Only re-init if map is visible
+
+const addAllEventListeners = () => {
+    document.querySelectorAll('.toggle-checkbox').forEach(t=>t.addEventListener('change',(e)=>{ const p=e.target.closest('.justify-between'); if(!p)return; const s=p.querySelector('.direction-slider'); if(s)s.disabled=!e.target.checked; handleFilterChange();}));
+    document.querySelectorAll('.direction-slider').forEach(s=>s.addEventListener('input',handleFilterChange));
+    document.querySelectorAll('.trait-toggle').forEach(el=>el.addEventListener('change',()=>displayPage(currentPage)));
+    addressDropdown.addEventListener('change',()=>{searchAddressInput.value=addressDropdown.value; handleFilterChange();}); // Important: Trigger filter when dropdown changes
+    walletTraitTogglesContainer.addEventListener('change',(e)=>{if(e.target.classList.contains('wallet-trait-toggle')) searchWallet();});
+    document.addEventListener('click',()=>closeAllDropdowns());
+    // Modals
+    if(modalCloseBtn) modalCloseBtn.addEventListener('click',hideNftDetails); if(nftModal) nftModal.addEventListener('click',(e)=>{if(e.target===nftModal)hideNftDetails();});
+    if(rarityExplainedBtn) rarityExplainedBtn.addEventListener('click',()=>{if(rarityModal) rarityModal.classList.remove('hidden');}); if(rarityModalCloseBtn) rarityModalCloseBtn.addEventListener('click',()=>{if(rarityModal) rarityModal.classList.add('hidden');}); if(rarityModal) rarityModal.addEventListener('click',(e)=>{if(e.target===rarityModal)rarityModal.classList.add('hidden');});
+    if(badgesExplainedBtn) badgesExplainedBtn.addEventListener('click',()=>{if(badgeModal) badgeModal.classList.remove('hidden');}); if(badgeModalCloseBtn) badgeModalCloseBtn.addEventListener('click',()=>{if(badgeModal) badgeModal.classList.add('hidden');}); if(badgeModal) badgeModal.addEventListener('click',(e)=>{if(e.target===badgeModal)badgeModal.classList.add('hidden');});
+    if(walletModalCloseBtn) walletModalCloseBtn.addEventListener('click',hideWalletExplorerModal); if(walletExplorerModal) walletExplorerModal.addEventListener('click',(e)=>{if(e.target===walletExplorerModal)hideWalletExplorerModal();});
+    if(systemModalCloseBtn) systemModalCloseBtn.addEventListener('click',hideSystemLeaderboardModal); if(systemLeaderboardModal) systemLeaderboardModal.addEventListener('click',(e)=>{if(e.target===systemLeaderboardModal)hideSystemLeaderboardModal();});
+    // Search/Filter Controls
+    const debouncedFilt=debounce(handleFilterChange,300); if(searchInput) searchInput.addEventListener('input',debouncedFilt); if(sortSelect) sortSelect.addEventListener('change',handleFilterChange); if(resetButton) resetButton.addEventListener('click',resetAll);
+    // View Buttons
+    if(collectionViewBtn) collectionViewBtn.addEventListener('click',()=>switchView('collection')); if(walletViewBtn) walletViewBtn.addEventListener('click',()=>switchView('wallet')); if(mapViewBtn) mapViewBtn.addEventListener('click',()=>switchView('map'));
+    // Wallet Controls
+    if(walletResetBtn) walletResetBtn.addEventListener('click',()=>{walletSearchAddressInput.value=''; walletGallery.innerHTML=''; walletGalleryTitle.textContent='Wallet NFTs'; document.querySelectorAll('#leaderboard-table tbody tr.selected').forEach(r=>r.classList.remove('selected')); showLoading(walletGallery,'Search wallet.');});
+    if(walletSearchAddressInput) walletSearchAddressInput.addEventListener('keypress',(e)=>{if(e.key==='Enter') searchWallet();});
+    // Address Inputs (Suggestions)
+    if(searchAddressInput && addressSuggestions) searchAddressInput.addEventListener('input',()=>handleAddressInput(searchAddressInput,addressSuggestions,handleFilterChange,false));
+    if(walletSearchAddressInput && walletAddressSuggestions) walletSearchAddressInput.addEventListener('input',()=>handleAddressInput(walletSearchAddressInput,walletAddressSuggestions,searchWallet,true));
+    // Leaderboard Sort
+    if(leaderboardTable) leaderboardTable.addEventListener('click',(e)=>{ const span=e.target.closest('th > span[data-sort-by]'); if(!span)return; const col=span.dataset.sortBy; if(holderSort.column===col) holderSort.direction=holderSort.direction==='desc'?'asc':'desc'; else {holderSort.column=col; holderSort.direction=col==='address'?'asc':'desc';} sortAndDisplayHolders();});
+    // Copy Buttons
+    const setupCopy=(btn,inp)=>{if(btn&&inp)btn.addEventListener('click',()=>copyToClipboard(inp.value));}; setupCopy(copyAddressBtn, searchAddressInput); setupCopy(walletCopyAddressBtn, walletSearchAddressInput);
+    // Filter Section Toggles
+    const togInhabBtn=document.getElementById('toggle-inhabitant-filters'); const inhabArrow=document.getElementById('inhabitant-arrow'); const togPlanBtn=document.getElementById('toggle-planet-filters'); const planArrow=document.getElementById('planet-arrow');
+    if(togInhabBtn&&inhabitantFiltersContainer&&inhabArrow) togInhabBtn.addEventListener('click',()=>{inhabitantFiltersContainer.classList.toggle('hidden'); inhabArrow.classList.toggle('rotate-180');});
+    if(togPlanBtn&&planetFiltersContainer&&planArrow) togPlanBtn.addEventListener('click',()=>{planetFiltersContainer.classList.toggle('hidden'); planArrow.classList.toggle('rotate-180');});
+    // Map & Window Listeners (add only once)
+    addMapListeners(); window.addEventListener('resize', handleMapResize); window.addEventListener('hashchange', handleHashChange);
+};
+
+function switchView(viewName) { console.log("Switching view:", viewName); if (viewName !== 'map' && globalAnimationFrameId) { console.log("Stopping map anim."); cancelAnimationFrame(globalAnimationFrameId); globalAnimationFrameId = null; isMapInitialized = false; } collectionView.classList.add('hidden'); walletView.classList.add('hidden'); mapView.classList.add('hidden'); collectionViewBtn.classList.remove('active'); walletViewBtn.classList.remove('active'); mapViewBtn.classList.remove('active'); if (viewName === 'collection') { collectionView.classList.remove('hidden'); collectionViewBtn.classList.add('active'); } else if (viewName === 'wallet') { walletView.classList.remove('hidden'); walletViewBtn.classList.add('active'); } else if (viewName === 'map') { mapView.classList.remove('hidden'); mapViewBtn.classList.add('active'); requestAnimationFrame(()=>initializeStarfield()); } }
+
+
+// --- Address Features (Dropdown and Suggestions) ---
+const updateAddressFeatures = (nftList) => {
+    const ownerCounts = {};
+    nftList.forEach(nft => { if (nft.owner) ownerCounts[nft.owner] = (ownerCounts[nft.owner] || 0) + 1; });
+    const sortedOwners = Object.entries(ownerCounts).sort(([, a], [, b]) => b - a);
+
+    console.log(`updateAddressFeatures: Processing ${nftList.length} NFTs. Found ${sortedOwners.length} owners.`);
+    if (sortedOwners.length > 0) console.log(`Top owner: ${sortedOwners[0][0]}, Count: ${sortedOwners[0][1]}`);
+
+    currentFilteredOwnerAddresses = sortedOwners.map(([adr]) => adr); // Update list for live suggestions
+
+    const currentSelected = addressDropdown.value;
+    // Clear old options more safely
+    while (addressDropdown.options.length > 1) { addressDropdown.remove(addressDropdown.options.length - 1); } // Remove from end
+
+    let selectionFound = false;
+    sortedOwners.forEach(([adr, count]) => {
+        const opt = document.createElement('option');
+        opt.value = adr;
+        opt.textContent = `(${count}) ${adr.substring(0, 6)}...${adr.slice(-4)}`;
+        addressDropdown.appendChild(opt);
+        if (adr === currentSelected) selectionFound = true;
+    });
+
+    if (selectionFound) addressDropdown.value = currentSelected; // Restore selection
+    else addressDropdown.value = ''; // Default to "Holders"
+
+    console.log(`Dropdown updated. Selected: "${addressDropdown.value}"`);
+};
+
+
+// --- Collection View Logic ---
+const applyFiltersAndSort = () => {
+    let tempNfts = [...allNfts];
+    console.log("Apply Filters Start:", tempNfts.length);
+
+    // Apply all non-address filters first
+    // Status, Planet, Inhabitant, Trait, ID...
+    // ... (Filter logic remains the same as previous versions) ...
+     if (document.querySelector('.status-toggle-cb[data-key="staked"]')?.checked) { const s=document.querySelector('.direction-slider[data-slider-key="staked"]'); if(s){ const v=s.value; if(v==='0')tempNfts=tempNfts.filter(n=>n.staked_enterprise_legacy); else if(v==='1')tempNfts=tempNfts.filter(n=>n.staked_enterprise_legacy||n.staked_daodao); else if(v==='2')tempNfts=tempNfts.filter(n=>n.staked_daodao);} }
+     if (document.querySelector('.status-toggle-cb[data-key="listed"]')?.checked) { const s=document.querySelector('.direction-slider[data-slider-key="listed"]'); if(s){ const v=s.value; if(v==='0')tempNfts=tempNfts.filter(n=>n.boost_market); else if(v==='1')tempNfts=tempNfts.filter(n=>n.boost_market||n.bbl_market); else if(v==='2')tempNfts=tempNfts.filter(n=>n.bbl_market);} }
+     if (document.querySelector('.status-toggle-cb[data-key="rewards"]')?.checked) { const s=document.querySelector('.direction-slider[data-slider-key="rewards"]'); if(s){ const v=s.value; if(v==='0')tempNfts=tempNfts.filter(n=>n.broken===true); else if(v==='1')tempNfts=tempNfts.filter(n=>n.broken!==undefined); else if(v==='2')tempNfts=tempNfts.filter(n=>n.broken===false);} }
+     if (document.querySelector('.status-toggle-cb[data-key="liquid_status"]')?.checked) { const s=document.querySelector('.direction-slider[data-slider-key="liquid_status"]'); if(s){ const v=s.value; if(v==='0')tempNfts=tempNfts.filter(n=>n.liquid===true); else if(v==='2')tempNfts=tempNfts.filter(n=>n.liquid===false);} }
+     if (document.querySelector('.status-toggle-cb[data-key="mint_status"]')?.checked) { const s=document.querySelector('.direction-slider[data-slider-key="mint_status"]'); if(s){ const v=s.value; if(v==='0')tempNfts=tempNfts.filter(n=>n.owner===DAO_WALLET_ADDRESS); else if(v==='2')tempNfts=tempNfts.filter(n=>n.owner!==DAO_WALLET_ADDRESS);} }
+     const activePlanetFilters = []; document.querySelectorAll('.planet-toggle-cb:checked').forEach(cb=>{const n=cb.dataset.key; const s=document.querySelector(`.direction-slider[data-slider-key="${n}"]`); if(s)activePlanetFilters.push({name:n, direction:s.value});}); if(activePlanetFilters.length>0) tempNfts=tempNfts.filter(nft=>{const a=nft.attributes?.find(at=>at.trait_type==='Planet'); if(!a)return false; return activePlanetFilters.some(f=>{const v=a.value; if(f.direction==='1')return v.startsWith(f.name); if(f.direction==='0')return v===`${f.name} North`; if(f.direction==='2')return v===`${f.name} South`; return false;});});
+     const activeInhabFilters = []; document.querySelectorAll('.inhabitant-toggle-cb:checked').forEach(cb=>{const n=cb.dataset.key; const s=document.querySelector(`.gender-slider[data-slider-key="${n}"]`); if(s)activeInhabFilters.push({name:n, gender:s.value});}); if(activeInhabFilters.length>0) tempNfts=tempNfts.filter(nft=>{const a=nft.attributes?.find(at=>at.trait_type==='Inhabitant'); if(!a)return false; return activeInhabFilters.some(f=>{if(!a.value.startsWith(f.name))return false; if(f.gender==='1')return true; if(f.gender==='0')return a.value.endsWith(' M'); if(f.gender==='2')return a.value.endsWith(' F'); return false;});});
+     document.querySelectorAll('.multi-select-container').forEach(c=>{const el=c.querySelector('[data-trait]'); if(!el)return; const t=el.dataset.trait; let sel=[]; c.querySelectorAll('.multi-select-checkbox:checked').forEach(cb=>sel.push(cb.value)); if(sel.length===0)return; tempNfts=tempNfts.filter(nft=>nft.attributes?.some(a=>a.trait_type===t&&sel.includes(a.value?.toString())));});
+     const searchTerm=searchInput.value; if(searchTerm) tempNfts=tempNfts.filter(nft=>nft.id?.toString()===searchTerm);
+
+    console.log(`Apply Filters Mid (${addressSearchInput.value ? 'Before Address' : 'No Address'}):`, tempNfts.length);
+
+    // Apply Address Filter (from dropdown or input) AFTER other filters
+    const addressFilterTerm = searchAddressInput.value.trim().toLowerCase();
+    if (addressFilterTerm) {
+        tempNfts = tempNfts.filter(nft =>
+            nft.owner &&
+            (nft.owner.toLowerCase() === addressFilterTerm || // Exact match
+            (addressFilterTerm.length < 42 && nft.owner.toLowerCase().endsWith(addressFilterTerm))) // EndsWith for partial typing
+        );
+         console.log(`Apply Filters After Address ('${addressFilterTerm}'):`, tempNfts.length);
+    }
+
+    // --- Update UI based on the final filtered list 'tempNfts' ---
     filteredNfts = tempNfts; // Update the global state
     resultsCount.textContent = filteredNfts.length;
 
-    // --- DEBUG LOG ---
-    console.log(`applyFiltersAndSort: Final filteredNfts length before updateAddressFeatures: ${filteredNfts.length}`);
-    // --- END DEBUG LOG ---
-
-    // ** Update address features based on the FINAL filtered list **
-    updateAddressFeatures(filteredNfts);
-
-    updateFilterCounts(filteredNfts); // Update counts in filter sections
+    console.log(`Calling updateAddressFeatures with ${filteredNfts.length} NFTs.`);
+    updateAddressFeatures(filteredNfts); // Update dropdown based on the FINAL list
+    updateFilterCounts(filteredNfts);    // Update filter counts based on the FINAL list
 
     // Apply Sorting LAST
     const sortValue = sortSelect.value;
@@ -67,9 +311,92 @@ const updateAddressFeatures = (nftList) => {
     else if (sortValue === 'desc') filteredNfts.sort((a, b) => (b.rank ?? -Infinity) - (a.rank ?? -Infinity));
     else if (sortValue === 'id') filteredNfts.sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
 
-    displayPage(1); // Display the first page of the final, sorted list
+    displayPage(1); // Display the first page
 };
 
+const handleFilterChange = () => { applyFiltersAndSort(); updateUrlState(); };
+const updateUrlState = () => { const p=new URLSearchParams(); if(searchAddressInput.value)p.set('address',searchAddressInput.value); if(searchInput.value)p.set('id',searchInput.value); if(sortSelect.value!=='asc')p.set('sort',sortSelect.value); document.querySelectorAll('.multi-select-container').forEach(c=>{const el=c.querySelector('[data-trait]'); if(!el)return; const t=el.dataset.trait; let sel=[]; c.querySelectorAll('.multi-select-checkbox:checked').forEach(cb=>sel.push(cb.value)); if(sel.length>0)p.set(t.toLowerCase(),sel.join(','));}); document.querySelectorAll('.toggle-checkbox:checked').forEach(t=>{if(['status-toggle-cb','planet-toggle-cb','inhabitant-toggle-cb'].some(cls=>t.classList.contains(cls))){ p.set(t.dataset.key,'true'); const s=document.querySelector(`.direction-slider[data-slider-key="${t.dataset.key}"]`); if(s&&!s.disabled)p.set(`${t.dataset.key}_pos`,s.value);} }); try {history.replaceState({},'',`${window.location.pathname}?${p.toString()}${window.location.hash}`);}catch(e){} };
+const applyStateFromUrl = () => { const p=new URLSearchParams(window.location.search); searchInput.value=p.get('id')||''; searchAddressInput.value=p.get('address')||''; const sortP=p.get('sort'); sortSelect.value=[...sortSelect.options].some(o=>o.value===sortP)?sortP:'asc'; document.querySelectorAll('.multi-select-container').forEach(c=>{const el=c.querySelector('[data-trait]'); if(!el)return; const t=el.dataset.trait.toLowerCase(); if(!p.has(t))return; const vals=p.get(t).split(','); c.querySelectorAll('.multi-select-checkbox').forEach(cb=>{cb.checked=vals.includes(cb.value);}); updateMultiSelectButtonText(c);}); document.querySelectorAll('.toggle-checkbox').forEach(t=>{if(['status-toggle-cb','planet-toggle-cb','inhabitant-toggle-cb'].some(cls=>t.classList.contains(cls))){ const key=t.dataset.key; const s=document.querySelector(`.direction-slider[data-slider-key="${key}"]`); if(p.get(key)==='true'){ t.checked=true; if(s){ s.disabled=false; s.value=p.get(`${key}_pos`)||'1';}} else { t.checked=false; if(s)s.disabled=true;}}}); };
 
-// ... (rest of the code) ...
+const updateMultiSelectButtonText = (container) => { const span=container.querySelector('.multi-select-button span'); const cb=container.querySelector('.multi-select-checkbox'); if(!span||!cb)return; const t=cb.dataset.trait; const chk=container.querySelectorAll('.multi-select-checkbox:checked').length; const tot=container.querySelectorAll('.multi-select-checkbox').length; if(chk===0||chk===tot)span.textContent=`All ${t}s`; else span.textContent=`${chk} ${t}(s) selected`; };
+const closeAllDropdowns = (except = null) => { document.querySelectorAll('.multi-select-dropdown').forEach(d=>{if(d!==except)d.classList.add('hidden');}); if(addressSuggestions)addressSuggestions.classList.add('hidden'); if(walletAddressSuggestions)walletAddressSuggestions.classList.add('hidden'); };
+const displayPage = (page) => { currentPage=page; if(gallery) gallery.innerHTML=''; if(filteredNfts.length===0){showLoading(gallery,'No NFTs match.'); updatePaginationControls(0); return;} const totalPgs=Math.ceil(filteredNfts.length/itemsPerPage); page=Math.max(1,Math.min(page,totalPgs)); currentPage=page; const items=filteredNfts.slice((page-1)*itemsPerPage, page*itemsPerPage); items.forEach(nft=>gallery.appendChild(createNftCard(nft, '.trait-toggle'))); updatePaginationControls(totalPgs); };
+const createNftCard = (nft, toggleSelector) => { const card=document.createElement('div'); card.className='nft-card bg-gray-800 border border-gray-700 rounded-xl overflow-hidden flex flex-col'; card.addEventListener('click',()=>showNftDetails(nft)); const imgUrl=convertIpfsUrl(nft.thumbnail_image||nft.image)||`https://placehold.co/300x300/1f2937/e5e7eb?text=No+Image`; const name=nft.name||`NFT #${nft.id||'?'}`; const title=name.replace('The AllianceDAO NFT','AllianceDAO NFT'); let traitsHtml=''; const visTraits=traitOrder.filter(t=>document.querySelector(`${toggleSelector}[data-trait="${t}"]`)?.checked); visTraits.forEach(t=>{let v='N/A'; if(t==='Rank'&&nft.rank!=null)v=`#${nft.rank}`; else if(t==='Rarity'&&nft.rarityScore!=null)v=nft.rarityScore.toFixed(2); else v=nft.attributes?.find(a=>a.trait_type===t)?.value||'N/A'; traitsHtml+=`<li class="flex justify-between items-center py-2 px-1 border-b border-gray-700 last:border-b-0"><span class="text-xs font-medium text-cyan-400 uppercase">${t}</span><span class="text-sm font-semibold text-white truncate" title="${v}">${v}</span></li>`;}); card.innerHTML=`<div class="image-container aspect-w-1 aspect-h-1 w-full"><img src="${imgUrl}" alt="${name}" class="w-full h-full object-cover" loading="lazy" onerror="this.onerror=null; this.src='https://placehold.co/300x300/1f2937/e5e7eb?text=Error'; this.alt='Image Error';"></div><div class="p-4 flex-grow flex flex-col"><h2 class="text-lg font-bold text-white mb-3 truncate" title="${title}">${title}</h2><ul class="text-sm flex-grow">${traitsHtml}</ul></div>`; const imgCont=card.querySelector('.image-container'); if(!imgCont)return card; const isDao=nft.owner===DAO_WALLET_ADDRESS||(nft.owner&&DAO_LOCKED_WALLET_SUFFIXES.some(s=>nft.owner.endsWith(s))); const hasBadges=nft.broken||nft.staked_daodao||nft.boost_market||nft.bbl_market||nft.staked_enterprise_legacy||isDao; if(hasBadges){const btn=document.createElement('button'); btn.className='top-left-toggle'; btn.title='Toggle badges'; btn.innerHTML=`<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`; btn.type='button'; btn.addEventListener('click',(e)=>{ e.stopPropagation(); const hidden=imgCont.classList.toggle('badges-hidden'); btn.innerHTML=hidden?`<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>`:`<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`;}); imgCont.appendChild(btn);} if(nft.broken){const banner=document.createElement('div'); banner.className='broken-banner'; banner.textContent='BROKEN'; imgCont.appendChild(banner);} const stack=document.createElement('div'); stack.className='top-right-stack'; if(isDao)addBadge(stack,'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Alliance%20DAO%20Logo.png','Owned by DAO'); if(nft.staked_daodao)addBadge(stack,'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/DAODAO.png','Staked on DAODAO'); if(nft.boost_market)addBadge(stack,'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Boost%20Logo.png','Listed on Boost'); if(nft.bbl_market)addBadge(stack,'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/BBL%20No%20Background.png','Listed on BBL'); if(nft.staked_enterprise_legacy)addBadge(stack,'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Enterprise.jpg','Staked on Enterprise'); if(stack.children.length>0)imgCont.appendChild(stack); return card; };
+function addBadge(container, src, alt) { const img = document.createElement('img'); img.src = src; img.alt = alt; img.title = alt; img.className = 'overlay-icon'; container.appendChild(img); }
+const updatePaginationControls = (totalPages) => { if(!paginationControls) return; paginationControls.innerHTML=''; if(totalPages<=1)return; const prev=document.createElement('button'); prev.textContent='Previous'; prev.className='pagination-btn'; prev.disabled=currentPage===1; prev.onclick=()=>displayPage(currentPage-1); paginationControls.appendChild(prev); const info=document.createElement('span'); info.className='text-gray-400'; info.textContent=`Page ${currentPage} of ${totalPages}`; paginationControls.appendChild(info); const next=document.createElement('button'); next.textContent='Next'; next.className='pagination-btn'; next.disabled=currentPage===totalPages; next.onclick=()=>displayPage(currentPage+1); paginationControls.appendChild(next); };
+const resetAll = () => { if(searchInput)searchInput.value=''; if(searchAddressInput)searchAddressInput.value=''; if(addressDropdown)addressDropdown.value=''; if(sortSelect)sortSelect.value='asc'; document.querySelectorAll('.toggle-checkbox').forEach(t=>{if(['status-toggle-cb','planet-toggle-cb','inhabitant-toggle-cb'].some(cls=>t.classList.contains(cls))){ t.checked=false; const s=document.querySelector(`.direction-slider[data-slider-key="${t.dataset.key}"]`); if(s){s.value=1; s.disabled=true;} }}); document.querySelectorAll('.multi-select-container').forEach(c=>{c.querySelectorAll('.multi-select-checkbox').forEach(cb=>cb.checked=false); updateMultiSelectButtonText(c);}); document.querySelectorAll('.trait-toggle').forEach(t=>t.checked=defaultTraitsOn.includes(t.dataset.trait)); handleFilterChange(); };
+const updateFilterCounts = (currentFilteredNfts) => { const newCounts={}; const curInhabCounts={}; const curPlanCounts={}; currentFilteredNfts.forEach(nft=>{if(nft.attributes){nft.attributes.forEach(attr=>{ if(!newCounts[attr.trait_type])newCounts[attr.trait_type]={}; newCounts[attr.trait_type][attr.value]=(newCounts[attr.trait_type][attr.value]||0)+1; if(attr.trait_type==='Inhabitant'){ const b=attr.value.replace(/ (M|F)$/,''); if(!curInhabCounts[b])curInhabCounts[b]={t:0,m:0,f:0}; curInhabCounts[b].t++; if(attr.value.endsWith(' M'))curInhabCounts[b].m++; else if(attr.value.endsWith(' F'))curInhabCounts[b].f++; } if(attr.trait_type==='Planet'){ const b=attr.value.replace(/ (North|South)$/,''); if(!curPlanCounts[b])curPlanCounts[b]={t:0,n:0,s:0}; curPlanCounts[b].t++; if(attr.value.endsWith(' North'))curPlanCounts[b].n++; else if(attr.value.endsWith(' South'))curPlanCounts[b].s++; } });}}); document.querySelectorAll('.multi-select-container').forEach(c=>{ const type=c.querySelector('[data-trait]')?.dataset.trait; if(!type)return; c.querySelectorAll('label').forEach(lbl=>{const cb=lbl.querySelector('input'); if(!cb)return; const v=cb.value; const span=lbl.querySelector('.trait-count'); const count=newCounts[type]?.[v]||0; if(span)span.textContent=count; if(count===0&&!cb.checked){lbl.style.opacity='0.5'; lbl.style.cursor='not-allowed'; cb.disabled=true;}else{lbl.style.opacity='1'; lbl.style.cursor='pointer'; cb.disabled=false;} }); }); document.querySelectorAll('.inhabitant-count').forEach(span=>{ const name=span.dataset.countKey; const s=document.querySelector(`.gender-slider[data-slider-key="${name}"]`); const counts=curInhabCounts[name]||{m:0,f:0}; if(s){ if(s.value==='0')span.textContent=counts.m; else if(s.value==='1')span.textContent=counts.m+counts.f; else if(s.value==='2')span.textContent=counts.f;}else span.textContent=counts.m+counts.f; }); document.querySelectorAll('.planet-count').forEach(span=>{ const name=span.dataset.countKey; const s=document.querySelector(`.direction-slider[data-slider-key="${name}"]`); const counts=curPlanCounts[name]||{n:0,s:0}; if(s){ if(s.value==='0')span.textContent=counts.n; else if(s.value==='1')span.textContent=counts.n+counts.s; else if(s.value==='2')span.textContent=counts.s;}else span.textContent=counts.n+counts.s; }); document.querySelectorAll('.status-count').forEach(span=>{ const key=span.dataset.countKey; const s=document.querySelector(`.direction-slider[data-slider-key="${key}"]`); if(!s)return; let count=0; const list=currentFilteredNfts; if(key==='staked'){const e=list.filter(n=>n.staked_enterprise_legacy).length; const d=list.filter(n=>n.staked_daodao).length; if(s.value==='0')count=e; else if(s.value==='1')count=list.filter(n=>n.staked_enterprise_legacy||n.staked_daodao).length; else if(s.value==='2')count=d;}else if(key==='listed'){const bst=list.filter(n=>n.boost_market).length; const bbl=list.filter(n=>n.bbl_market).length; if(s.value==='0')count=bst; else if(s.value==='1')count=list.filter(n=>n.boost_market||n.bbl_market).length; else if(s.value==='2')count=bbl;}else if(key==='rewards'){const br=list.filter(n=>n.broken===true).length; const un=list.filter(n=>n.broken===false).length; if(s.value==='0')count=br; else if(s.value==='1')count=br+un; else if(s.value==='2')count=un;}else if(key==='liquid_status'){const l=list.filter(n=>n.liquid===true).length; const nl=list.filter(n=>n.liquid===false).length; if(s.value==='0')count=l; else if(s.value==='1')count=list.length; else if(s.value==='2')count=nl;}else if(key==='mint_status'){const u=list.filter(n=>n.owner===DAO_WALLET_ADDRESS).length; const m=list.filter(n=>n.owner!==DAO_WALLET_ADDRESS).length; if(s.value==='0')count=u; else if(s.value==='1')count=list.length; else if(s.value==='2')count=m;} span.textContent=count; }); };
 
+// --- Modal, Preview, Copy Functions ---
+const findHighestRaritySample = (filterFn) => { const match=allNfts.filter(filterFn); if(match.length===0)return null; match.sort((a,b)=>(a.rank??Infinity)-(b.rank??Infinity)); return match[0]; };
+const showPreviewTile = (event, traitType, value) => { const tile=document.getElementById('preview-tile'); const c1=document.getElementById('preview-container-1'); const i1=document.getElementById('preview-image-1'); const n1=document.getElementById('preview-name-1'); const c2=document.getElementById('preview-container-2'); const i2=document.getElementById('preview-image-2'); const n2=document.getElementById('preview-name-2'); let s1=null, s2=null; if(traitType==='Object')s1=findHighestRaritySample(nft=>nft.attributes?.some(a=>a.trait_type==='Object'&&a.value===value)); else if(traitType==='Inhabitant'||traitType==='Planet'){ const slider=event.currentTarget.querySelector('input[type="range"]'); const sliderVal = slider ? slider.value : '1'; if(sliderVal==='1'){ const suf1=traitType==='Inhabitant'?' M':' North'; const suf2=traitType==='Inhabitant'?' F':' South'; s1=findHighestRaritySample(nft=>nft.attributes?.some(a=>a.trait_type===traitType&&a.value===value+suf1)); s2=findHighestRaritySample(nft=>nft.attributes?.some(a=>a.trait_type===traitType&&a.value===value+suf2)); if(!s1&&!s2)s1=findHighestRaritySample(nft=>nft.attributes?.some(a=>a.trait_type===traitType&&a.value.startsWith(value))); else if(!s1)s1=s2; } else { const suf=(traitType==='Inhabitant'?(sliderVal==='0'?' M':' F'):(sliderVal==='0'?' North':' South')); s1=findHighestRaritySample(nft=>nft.attributes?.some(a=>a.trait_type===traitType&&a.value===value+suf)); }} if(s1){i1.src=convertIpfsUrl(s1.thumbnail_image||s1.image)||`ph`; n1.textContent=s1.attributes?.find(a=>a.trait_type===traitType)?.value||value; c1.classList.remove('hidden');}else{c1.classList.add('hidden');i1.src='';n1.textContent='';} if(s2){i2.src=convertIpfsUrl(s2.thumbnail_image||s2.image)||`ph`; n2.textContent=s2.attributes?.find(a=>a.trait_type===traitType)?.value||value; c2.classList.remove('hidden');}else{c2.classList.add('hidden');i2.src='';n2.textContent='';} if(s1||s2){const width=s2?330:160; let x=event.clientX+20; let y=event.clientY+10; if(x+width>window.innerWidth)x=event.clientX-width-20; if(y+tile.offsetHeight>window.innerHeight)y=window.innerHeight-tile.offsetHeight-10; if(x<0)x=10; if(y<0)y=10; tile.style.left=`${x}px`; tile.style.top=`${y}px`; tile.classList.remove('hidden');}else hidePreviewTile(); };
+const hidePreviewTile = () => {if(document.getElementById('preview-tile')) document.getElementById('preview-tile').classList.add('hidden');};
+const showCopyToast = (text) => { if(!copyToast) return; copyToast.textContent = text; copyToast.classList.add('show'); setTimeout(() => { copyToast.classList.remove('show'); }, 2000); };
+const copyToClipboard = (textToCopy, typeName = 'Address') => { if (!textToCopy) return; navigator.clipboard.writeText(textToCopy).then(()=>{const short=textToCopy.length>10?`${textToCopy.slice(0,5)}...${textToCopy.slice(-5)}`:textToCopy; showCopyToast(`Copied ${typeName}: ${short}`);}).catch(err=>{console.error('Copy fail:', err); try {const input=document.createElement('input'); input.value=textToCopy; document.body.appendChild(input); input.select(); document.execCommand('copy'); document.body.removeChild(input); const short=textToCopy.length>10?`...`:textToCopy; showCopyToast(`Copied ${typeName}: ${short}`);}catch(e){showCopyToast(`Failed!`);}}); };
+const showNftDetails = (nft) => { if(!nftModal || !nft) return; const imgEl = document.getElementById('modal-image'); const titleEl = document.getElementById('modal-title'); const traitsEl = document.getElementById('modal-traits'); const linkEl = document.getElementById('modal-link'); const dlBtn = document.getElementById('download-post-btn'); if(!imgEl || !titleEl || !traitsEl || !linkEl || !dlBtn) return; imgEl.src=convertIpfsUrl(nft.image)||`ph`; titleEl.textContent=(nft.name||`NFT #${nft.id||'?'}`).replace('The AllianceDAO NFT','AllianceDAO NFT'); let traitsHtml=`<div class="flex justify-between text-sm"><span class="text-gray-400">Rank:</span><span class="font-semibold text-white">#${nft.rank||'N/A'}</span></div>`; if(nft.rarityScore) traitsHtml+=`<div class="flex justify-between text-sm"><span class="text-gray-400">Rarity Score:</span><span class="font-semibold text-white">${nft.rarityScore.toFixed(2)}</span></div>`; const attrs=(nft.attributes||[]).filter(a=>traitOrder.includes(a.trait_type)&&!['Rank','Rarity'].includes(a.trait_type)).sort((a,b)=>traitOrder.indexOf(a.trait_type)-traitOrder.indexOf(b.trait_type)); traitsHtml+=attrs.map(a=>`<div class="flex justify-between text-sm"><span class="text-gray-400">${a.trait_type}:</span><span class="font-semibold text-white truncate" title="${a.value}">${a.value||'N/A'}</span></div>`).join(''); traitsHtml+=`<div class="pt-2 mt-2 border-t border-gray-600"></div>`; const isStaked=nft.staked_daodao||nft.staked_enterprise_legacy; const isListed=nft.bbl_market||nft.boost_market; let statusTxt='Unknown'; const isDao=nft.owner===DAO_WALLET_ADDRESS||(nft.owner&&DAO_LOCKED_WALLET_SUFFIXES.some(s=>nft.owner.endsWith(s))); if(isDao) statusTxt='DAO Owned'; else if(nft.liquid===true) statusTxt='Liquid (In Wallet)'; else if(isStaked) statusTxt=`Staked (${nft.staked_daodao?'DAODAO':'Enterprise'})`; else if(isListed) statusTxt=`Listed (${nft.bbl_market?'BBL':'Boost'})`; else if(nft.liquid===false) statusTxt='In Wallet (Not Liquid)'; traitsHtml+=`<div class="flex justify-between text-sm"><span class="text-gray-400">Status:</span><span class="font-semibold text-white">${statusTxt}</span></div>`; traitsHtml+=`<div class="flex justify-between text-sm"><span class="text-gray-400">Broken:</span><span class="font-semibold text-white">${nft.broken?'Yes':'No'}</span></div>`; traitsHtml+=`<div class="pt-2 mt-2 border-t border-gray-600"></div>`; traitsHtml+=`<div class="flex justify-between text-sm items-center"><span class="text-gray-400">Owner:</span><span class="owner-address font-mono text-sm font-semibold text-white truncate cursor-pointer" title="Click to copy">${nft.owner||'N/A'}</span></div>`; traitsEl.innerHTML=traitsHtml; const ownerEl=traitsEl.querySelector('.owner-address'); if(nft.owner&&ownerEl){ownerEl.addEventListener('click',()=>copyToClipboard(nft.owner,'Owner Addr'));}else if(ownerEl){ownerEl.style.cursor='default'; ownerEl.removeAttribute('title');} linkEl.href=convertIpfsUrl(nft.image); dlBtn.textContent='Download Post'; dlBtn.onclick=()=>generateShareImage(nft,dlBtn); window.location.hash = nft.id || ''; nftModal.classList.remove('hidden'); };
+const hideNftDetails = () => { if(nftModal) nftModal.classList.add('hidden'); if (window.location.hash) history.replaceState(null, '', window.location.pathname + window.location.search); };
+const findRarestTrait = (nft) => { if (!nft.attributes||!traitCounts) return {value:'N/A', trait_type:'Unknown'}; let rarest=null, min=Infinity; nft.attributes.forEach(a=>{if(traitCounts[a.trait_type]?.[a.value]&&!['Weather','Light'].includes(a.trait_type)){const c=traitCounts[a.trait_type][a.value]; if(c<min){min=c; rarest=a;}}}); return rarest||{value:'N/A', trait_type:'Unknown'}; };
+const generateShareImage = (nft, button) => { if(!button) return; button.textContent='Generating...'; button.disabled=true; const canvas=document.getElementById('share-canvas'); if(!canvas) { button.textContent='Error'; return; } const ctx=canvas.getContext('2d'); const img=new Image(); img.crossOrigin="anonymous"; const imgUrl=convertIpfsUrl(nft.image)||convertIpfsUrl(nft.thumbnail_image)||null; if(!imgUrl){button.textContent='No Image'; setTimeout(()=>{button.textContent='Download Post'; button.disabled=false;},2000); return;} img.src=imgUrl; img.onload=()=>{ canvas.width=1080; canvas.height=1080; ctx.clearRect(0,0,1080,1080); try {ctx.drawImage(img,0,0,1080,1080);}catch(e){button.textContent='Draw Error'; setTimeout(()=>{button.textContent='Download Post'; button.disabled=false;},2000); return;} ctx.fillStyle='white'; ctx.strokeStyle='black'; ctx.lineWidth=8; ctx.font='bold 48px Inter, sans-serif'; ctx.lineJoin='round'; const m=40; const drawTxt=(txt,x,y,align='left')=>{ctx.textAlign=align; ctx.strokeText(txt,x,y); ctx.fillText(txt,x,y);}; drawTxt(`NFT #${nft.id||'?'}`,m,m+48,'left'); drawTxt(`Rank #${nft.rank||'N/A'}`,1080-m,m+48,'right'); const planet=nft.attributes?.find(a=>a.trait_type==='Planet')?.value||'N/A'; drawTxt(planet,m,1080-m,'left'); let inhab=nft.attributes?.find(a=>a.trait_type==='Inhabitant')?.value||'N/A'; if(inhab.endsWith(' M'))inhab=inhab.replace(' M',' Male'); else if(inhab.endsWith(' F'))inhab=inhab.replace(' F',' Female'); drawTxt(inhab,1080-m,1080-m,'right'); const bannerH=120, bannerY=1080-bannerH-80; if(nft.broken){ctx.fillStyle='rgba(220,38,38,0.85)'; ctx.fillRect(0,bannerY,1080,bannerH); ctx.fillStyle='white'; ctx.font='bold 60px Inter'; drawTxt('BROKEN',540,bannerY+85,'center');}else{ctx.fillStyle='rgba(0,0,0,0.7)'; ctx.fillRect(0,bannerY,1080,bannerH); const strength=findRarestTrait(nft); ctx.fillStyle='white'; ctx.font='bold 40px Inter'; drawTxt(`Rarest: ${strength.value||'N/A'}`,540,bannerY+75,'center');} try {const link=document.createElement('a'); link.download=`AllianceDAO_NFT_${nft.id||'Unk'}.png`; link.href=canvas.toDataURL('image/png'); link.click(); button.textContent='Downloaded!';}catch(e){button.textContent='DL Failed';} setTimeout(()=>{button.textContent='Download Post'; button.disabled=false;},2000); }; img.onerror=()=>{button.textContent='Load Err'; setTimeout(()=>{button.textContent='Download Post'; button.disabled=false;},3000);} };
+
+// --- Wallet View Logic ---
+const calculateAndDisplayLeaderboard = () => { if(allNfts.length===0)return; const ownerStats={}; allNfts.forEach(nft=>{if(nft.owner){if(!ownerStats[nft.owner])ownerStats[nft.owner]={address:nft.owner,total:0,liquid:0,daodaoStaked:0,enterpriseStaked:0,broken:0,unbroken:0,bblListed:0,boostListed:0}; const s=ownerStats[nft.owner]; s.total++; if(nft.liquid)s.liquid++; if(nft.staked_daodao)s.daodaoStaked++; if(nft.staked_enterprise_legacy)s.enterpriseStaked++; if(nft.bbl_market)s.bblListed++; if(nft.boost_market)s.boostListed++; if(nft.broken)s.broken++; else s.unbroken++;}}); allHolderStats=Object.values(ownerStats); sortAndDisplayHolders();};
+const sortAndDisplayHolders = () => { const {column, direction}=holderSort; const sorted=[...allHolderStats].sort((a,b)=>{const vA=a[column]; const vB=b[column]; const nA=typeof vA==='number'?vA:-Infinity; const nB=typeof vB==='number'?vB:-Infinity; if(column==='address')return direction==='asc'?(vA||'').localeCompare(vB||''):(vB||'').localeCompare(vA||''); else return direction==='asc'?nA-nB:nB-nA;}); allHolderStats=sorted; displayHolderPage(1);};
+const displayHolderPage = (page) => { if(!leaderboardTable) return; holderCurrentPage=page; leaderboardTable.innerHTML=''; const table=document.createElement('table'); const thead=document.createElement('thead'); const tbody=document.createElement('tbody'); const headerRow=document.createElement('tr'); const createHdr=(lbl,key)=>{const th=document.createElement('th'); const span=document.createElement('span'); span.dataset.sortBy=key; const isSort=holderSort.column===key; const asc=isSort&&holderSort.direction==='asc'; const desc=isSort&&holderSort.direction==='desc'; if(isSort)span.classList.add('sort-active'); span.innerHTML=`${lbl}<svg class="sort-icon w-4 h-4 inline-block ${asc?'active':''}"...></svg><svg class="sort-icon w-4 h-4 inline-block ${desc?'active':''}"...></svg>`; th.appendChild(span); return th;}; const hdrData=[{lbl:'Rank'},{lbl:'Holder',key:'address'},{lbl:'Liquid',key:'liquid'},{lbl:'DAODAO',key:'daodaoStaked'},{lbl:'Enterprise',key:'enterpriseStaked'},{lbl:'Broken',key:'broken'},{lbl:'Unbroken',key:'unbroken'},{lbl:'BBL',key:'bblListed'},{lbl:'Boost',key:'boostListed'},{lbl:'Total',key:'total'}]; hdrData.forEach(h=>{if(h.key)headerRow.appendChild(createHdr(h.lbl,h.key)); else{const th=document.createElement('th'); th.textContent=h.lbl; headerRow.appendChild(th);}}); thead.appendChild(headerRow); table.appendChild(thead); const items=allHolderStats.slice((page-1)*holdersPerPage, page*holdersPerPage); items.forEach(({address,...stats},idx)=>{const row=document.createElement('tr'); row.className='leaderboard-row-item'; row.dataset.address=address; const rank=(page-1)*holdersPerPage+idx+1; const short=address?`terra...${address.slice(-4)}`:'N/A'; const createCell=(val,cls=[],title='')=>{const td=document.createElement('td'); td.textContent=val??'0'; if(cls.length>0)td.classList.add(...cls); if(title)td.title=title; return td;}; row.appendChild(createCell(`#${rank}`,['font-bold'])); row.appendChild(createCell(short,['font-mono','text-sm'],address)); row.appendChild(createCell(stats.liquid)); row.appendChild(createCell(stats.daodaoStaked, stats.daodaoStaked>0?['text-cyan-400']:[]) ); row.appendChild(createCell(stats.enterpriseStaked, stats.enterpriseStaked>0?['text-gray-400']:[]) ); row.appendChild(createCell(stats.broken, stats.broken>0?['text-red-400']:[]) ); row.appendChild(createCell(stats.unbroken, stats.unbroken>0?['text-green-400']:[]) ); row.appendChild(createCell(stats.bblListed, stats.bblListed>0?['text-green-400']:[]) ); row.appendChild(createCell(stats.boostListed, stats.boostListed>0?['text-purple-400']:[]) ); row.appendChild(createCell(stats.total,['font-bold'])); row.addEventListener('click',()=>{if(address){walletSearchAddressInput.value=address; searchWallet(); document.querySelectorAll('#leaderboard-table tbody tr.selected').forEach(r=>r.classList.remove('selected')); row.classList.add('selected');}}); tbody.appendChild(row);}); table.appendChild(tbody); leaderboardTable.appendChild(table); updateHolderPaginationControls();};
+const updateHolderPaginationControls = () => { if(!leaderboardPagination) return; leaderboardPagination.innerHTML=''; const totalPgs=Math.ceil(allHolderStats.length/holdersPerPage); if(totalPgs<=1)return; const prev=document.createElement('button'); prev.textContent='Prev'; prev.className='pagination-btn'; prev.disabled=holderCurrentPage===1; prev.onclick=()=>displayHolderPage(holderCurrentPage-1); leaderboardPagination.appendChild(prev); const info=document.createElement('span'); info.className='text-gray-400'; info.textContent=`Page ${holderCurrentPage} of ${totalPgs}`; leaderboardPagination.appendChild(info); const next=document.createElement('button'); next.textContent='Next'; next.className='pagination-btn'; next.disabled=holderCurrentPage===totalPgs; next.onclick=()=>displayHolderPage(holderCurrentPage+1); leaderboardPagination.appendChild(next); };
+
+// --- Map View Logic ---
+let mapListenersAdded = false;
+function addMapListeners() { if (mapListenersAdded || !spaceCanvas) return; console.log("Adding map listeners."); spaceCanvas.addEventListener('contextmenu', handleMapContextMenu); spaceCanvas.addEventListener('mousedown', handleMapMouseDown); window.addEventListener('mouseup', handleMapMouseUp); spaceCanvas.addEventListener('mouseleave', handleMapMouseLeave); spaceCanvas.addEventListener('mousemove', handleMapMouseMove); spaceCanvas.addEventListener('wheel', handleMapWheel, { passive: false }); spaceCanvas.addEventListener('click', handleMapClick); mapListenersAdded = true; }
+function removeMapListeners() { if (!mapListenersAdded || !spaceCanvas) return; console.log("Removing map listeners."); spaceCanvas.removeEventListener('contextmenu', handleMapContextMenu); spaceCanvas.removeEventListener('mousedown', handleMapMouseDown); window.removeEventListener('mouseup', handleMapMouseUp); spaceCanvas.removeEventListener('mouseleave', handleMapMouseLeave); spaceCanvas.removeEventListener('mousemove', handleMapMouseMove); spaceCanvas.removeEventListener('wheel', handleMapWheel, { passive: false }); spaceCanvas.removeEventListener('click', handleMapClick); mapListenersAdded = false; }
+ const initializeStarfield = () => { if (!spaceCanvas) { console.error("Canvas not found!"); return; } if (isMapInitialized && globalAnimationFrameId) { console.log("Map running."); return; } if (isMapInitialized && !globalAnimationFrameId) { console.log("Restarting map anim."); animate(); return; } console.log("Initializing starfield..."); const ctx = spaceCanvas.getContext('2d'); if (!ctx) { console.error("No context."); return; } mapStars=[]; mapObjects=[]; mapZoom=0.15; mapRotation=0; mapOffsetX=0; mapOffsetY=0; isPanning=false; isRotating=false; lastMouseX=0; lastMouseY=0; const minZ=0.1, maxZ=5; function setCanvasSize() { const dW=spaceCanvas.clientWidth, dH=spaceCanvas.clientHeight; if(spaceCanvas.width!==dW||spaceCanvas.height!==dH){spaceCanvas.width=dW; spaceCanvas.height=dH; console.log(`Canvas resized: ${dW}x${dH}`); return true;} return false; } function createStars() { mapStars=[]; const w=spaceCanvas.width, h=spaceCanvas.height; if(w===0||h===0)return; const count=(w*h*4)/1000; for(let i=0;i<count;i++)mapStars.push({x:(Math.random()-0.5)*w*10,y:(Math.random()-0.5)*h*10, r:Math.random()*1.5+0.5, a:Math.random(), ts:Math.random()*0.03+0.005, td:1}); } function drawGalaxy() { if(!ctx||!spaceCanvas)return; ctx.save(); ctx.clearRect(0,0,spaceCanvas.width,spaceCanvas.height); if(spaceCanvas.width===0||spaceCanvas.height===0){ctx.restore(); return;} ctx.translate(spaceCanvas.width/2+mapOffsetX,spaceCanvas.height/2+mapOffsetY); ctx.scale(mapZoom,mapZoom); ctx.rotate(mapRotation); mapStars.forEach(s=>{ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,Math.PI*2); ctx.fillStyle=`rgba(255,255,255,${s.a})`; ctx.fill();}); const lineColors={daodao:'rgba(56,189,248,0.7)',bbl:'rgba(16,185,129,0.7)',boost:'rgba(168,85,247,0.7)',enterprise:'rgba(56,189,248,0.7)'}; mapObjects.forEach(o=>{if(o.lineTargetId){const t=mapObjects.find(target=>target.id===o.lineTargetId); if(t){ctx.beginPath(); ctx.moveTo(o.x,o.y); if(o.lineTargetId==='enterprise'){const ang=Math.atan2(o.y-t.y,o.x-t.x); const tW=(typeof t.width==='number'&&t.width>0)?t.width:100; const tS=(typeof t.scale==='number'&&t.scale>0)?t.scale:0.1; const edgeR=(tW*tS/2)*0.45; ctx.lineTo(t.x+Math.cos(ang)*edgeR,t.y+Math.sin(ang)*edgeR);}else if(o.id.startsWith('satellite')){ctx.lineTo(t.x,t.y); const m=mapObjects.find(moth=>moth.id===`mothership_${o.system}_${o.address}`); if(m)ctx.lineTo(m.x,m.y);}else ctx.lineTo(t.x,t.y); ctx.strokeStyle=lineColors[o.system]||'grey'; ctx.lineWidth=2/mapZoom; ctx.stroke();}}}); mapObjects.forEach(o=>{if(!o.img||!o.img.complete||!(o.width>0)||!(o.height>0))return; let dW=o.width*o.scale,dH=o.height*o.scale; ctx.save(); ctx.translate(o.x,o.y); ctx.rotate(o.rotation||0); try{ctx.drawImage(o.img,-dW/2,-dH/2,dW,dH);}catch(e){} ctx.restore(); if(o.textAbove||o.textBelow){ctx.save(); ctx.translate(o.x,o.y); ctx.rotate(-mapRotation); ctx.fillStyle='#FFF'; ctx.textAlign='center'; const txtScale=1/mapZoom; if(o.textAbove){ctx.font=`bold ${18*txtScale}px Inter`; ctx.fillText(o.textAbove,0,-dH/2-(10*txtScale));} if(o.textBelow){ctx.font=`${16*txtScale}px Inter`; ctx.fillStyle='#9ca3af'; ctx.fillText(o.textBelow,0,dH/2+(20*txtScale));} ctx.restore();}}); ctx.restore(); } function updateStars() { mapStars.forEach(s=>{s.a+=s.ts*s.td; if(s.a>1||s.a<0){s.a=Math.max(0,Math.min(1,s.a)); s.td*=-1;}}); } function updateObjectRotations() { mapObjects.forEach(o=>{if(o.rotationSpeed&&!o.isFrozen)o.rotation=(o.rotation||0)+o.rotationSpeed;}); } function animate() { if(!isMapInitialized||!spaceCanvas||!document.body.contains(spaceCanvas)||mapView.classList.contains('hidden')){if(globalAnimationFrameId)cancelAnimationFrame(globalAnimationFrameId); globalAnimationFrameId=null; return;} setCanvasSize(); updateStars(); updateObjectRotations(); drawGalaxy(); globalAnimationFrameId=requestAnimationFrame(animate); } function addMapObject(cfg, imgs) { const img=imgs[cfg.imageId]; if(!img||!img.width||!img.height)return; mapObjects.push({...cfg, img:img, width:img.width, height:img.height, isFrozen:false, rotation:cfg.rotation||0}); } function initMap() { console.log("Init Map"); if(globalAnimationFrameId)cancelAnimationFrame(globalAnimationFrameId); globalAnimationFrameId=null; if(!spaceCanvas)return; setCanvasSize(); if(spaceCanvas.width===0||spaceCanvas.height===0){console.error("Canvas zero size in initMap"); return;} mapObjects=[]; createStars(); const assets={daodao:'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/daodao-planet.png', bbl:'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/bbl-planet.png', boost:'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/boost-ship.png', enterprise:'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/enterprise-blackhole.png', allianceLogo:'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/aDAO%20Logo%20No%20Background.png', terra:'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Terra.PNG'}; const promises=Object.entries(assets).map(([id,url])=>new Promise((res,rej)=>{const i=new Image(); i.crossOrigin="anon"; i.onload=()=>res({id,img:i}); i.onerror=rej; i.src=url;})); Promise.all(promises).then(loaded=>{const imgs=loaded.reduce((acc,{id,img})=>{acc[id]=img; return acc;},{}); setCanvasSize(); if(spaceCanvas.width===0||spaceCanvas.height===0){console.error("Canvas zero after img load"); isMapInitialized=false; return;} buildGalaxySystems(imgs); isMapInitialized=true; console.log("Map init done, starting anim."); animate();}).catch(err=>{console.error("Img load err:",err); isMapInitialized=false;}); } function buildGalaxySystems(imgs) { const w=spaceCanvas.width, h=spaceCanvas.height; if(w===0||h===0)return; const centers={daodao:{x:0,y:-h*2},bbl:{x:-w*2,y:0},boost:{x:w*2,y:0},enterprise:{x:0,y:h*2}}; addMapObject({id:'terra',imageId:'terra',type:'planet',x:0,y:0,scale:0.25,rot:0},imgs); const addCenter=(id,imgId,type,scale,spin)=>addMapObject({id,imageId:imgId,type,x:centers[id].x,y:centers[id].y,scale,rot:0,rotationSpeed:spin?(Math.random()-0.5)*0.002:0},imgs); const bblCt=allNfts.filter(n=>n.bbl_market).length, boostCt=allNfts.filter(n=>n.boost_market).length, entCt=allNfts.filter(n=>n.staked_enterprise_legacy).length; addCenter('daodao','daodao','planet',0.5,true); addCenter('bbl','bbl','planet',bblCt>0?(bblCt/59)*0.5:0.1,true); addCenter('boost','boost','ship_main',boostCt>0?(boostCt/59)*0.5:0.1,true); addCenter('enterprise','enterprise','blackhole',entCt>0?(entCt/515)*0.5:0.1,true); const holderStats={}; allNfts.forEach(nft=>{if(nft.owner){if(!holderStats[nft.owner])holderStats[nft.owner]={total:0,daodaoStaked:0,bblListed:0,boostListed:0,enterpriseStaked:0}; const s=holderStats[nft.owner]; s.total++; if(nft.staked_daodao)s.daodaoStaked++; if(nft.bbl_market)s.bblListed++; if(nft.boost_market)s.boostListed++; if(nft.staked_enterprise_legacy)s.enterpriseStaked++;}}); const createFleet=(sysId,statKey)=>{ const center=centers[sysId]; const top=Object.entries(holderStats).filter(([_,s])=>s[statKey]>0).sort(([_,a],[_,b])=>b[statKey]-a[statKey]).slice(0,10).map(([adr,s])=>({address:adr,...s})); if(top.length===0)return; const counts=top.map(s=>s[statKey]); const minC=counts.length>0?Math.min(...counts):1; const maxC=counts.length>0?Math.max(...counts):1; const rangeC=maxC>minC?maxC-minC:1; const minS=0.1, maxS=0.3, rangeS=maxS-minS; const curW=spaceCanvas.width, curH=spaceCanvas.height; const minR=Math.min(curW,curH)*0.6; const maxR=Math.min(curW,curH)*1.5; const rangeR=maxR-minR; const stepA=(2*Math.PI)/top.length; top.forEach((s,i)=>{const{address:adr,total:tot}=s; const platCt=s[statKey]; const ang=stepA*i; const normSize=rangeC===1?0:(platCt-minC)/rangeC; const dist=minR+(normSize*rangeR); const scale=minS+(normSize*rangeS); const last4=adr.slice(-4); const mX=center.x+Math.cos(ang)*dist; const mY=center.y+Math.sin(ang)*dist; addMapObject({id:`mothership_${sysId}_${adr}`,imageId:'allianceLogo',type:'ship',address:adr,system:sysId,lineTargetId:`satellite_${sysId}_${adr}`,x:mX,y:mY,scale:scale,textAbove:`${tot-platCt}`,textBelow:last4},imgs); addMapObject({id:`satellite_${sysId}_${adr}`,imageId:'allianceLogo',type:'ship',address:adr,system:sysId,lineTargetId:sysId,x:(mX+center.x)/2,y:(mY+center.y)/2,scale:scale*0.8,textAbove:`${platCt}`,textBelow:last4},imgs);}); }; const createEnt=()=>{ const curW=spaceCanvas.width, curH=spaceCanvas.height; if(curW===0||curH===0)return; const center=centers.enterprise; const statKey='enterpriseStaked'; const top=Object.entries(holderStats).filter(([_,s])=>s.enterpriseStaked>0).sort(([_,a],[_,b])=>b.enterpriseStaked-a.enterpriseStaked).slice(0,10).map(([adr,s])=>({address:adr,...s})); if(top.length===0)return; const counts=top.map(s=>s.enterpriseStaked); const minC=Math.min(...counts); const maxC=Math.max(...counts); const rangeC=maxC>minC?maxC-minC:1; const minS=0.1,maxS=0.3,rangeS=maxS-minS; const minR=Math.min(curW,curH)*0.6; const maxR=Math.min(curW,curH)*1.2; const rangeR=maxR-minR; const stepA=(2*Math.PI)/top.length; top.forEach((s,i)=>{ const{address:adr,enterpriseStaked:entCt}=s; const ang=stepA*i; const normSize=rangeC===1?0:(entCt-minC)/rangeC; const dist=minR+(normSize*rangeR); const scale=minS+(normSize*rangeS); addMapObject({id:`ship_enterprise_${adr}`,imageId:'allianceLogo',type:'ship',address:adr,system:'enterprise',lineTargetId:'enterprise',x:center.x+Math.cos(ang)*dist,y:center.y+Math.sin(ang)*dist,scale:scale,textAbove:`${entCt}`,textBelow:adr.slice(-4)},imgs); }); }; createFleet('daodao','daodaoStaked'); createFleet('bbl','bblListed'); createFleet('boost','boostListed'); createEnt(); console.log("Galaxy built."); } initMap(); };
+
+// --- Reusable Address Search Handler ---
+const debouncedFilter = debounce(handleFilterChange, 300);
+const handleAddressInput = (inputEl, suggestionsEl, onSelectCallback, isWallet) => {
+    const input = inputEl.value.toLowerCase(); const rev = input.split('').reverse().join(''); if(suggestionsEl) suggestionsEl.innerHTML = ''; // Safety check
+    const source = (!isWallet && currentFilteredOwnerAddresses.length > 0) ? currentFilteredOwnerAddresses : ownerAddresses;
+    if (!input) { if(suggestionsEl) suggestionsEl.classList.add('hidden'); if (!isWallet && searchAddressInput.value === '' && addressDropdown.value === '') debouncedFilter(); return; }
+    let matches = source.filter(addr => addr.toLowerCase().endsWith(rev));
+    const sortIdx = rev.length; matches.sort((a,b)=>{const charA=a.charAt(a.length-1-sortIdx)||''; const charB=b.charAt(b.length-1-sortIdx)||''; return charA.localeCompare(charB);});
+    if (matches.length > 0 && suggestionsEl) { matches.slice(0, 10).forEach(match => { const item = document.createElement('div'); item.className = 'address-suggestion-item'; const startIdx = match.length - rev.length; item.innerHTML = `${match.substring(0, startIdx)}<strong class="text-cyan-400">${match.substring(startIdx)}</strong>`; item.style.direction = 'ltr'; item.style.textAlign = 'left'; item.onclick = () => { inputEl.value = match; suggestionsEl.classList.add('hidden'); onSelectCallback(); }; suggestionsEl.appendChild(item); }); if (matches.length > 10) { const item=document.createElement('div'); item.className='address-suggestion-item text-gray-400'; item.textContent=`${matches.length-10} more...`; suggestionsEl.appendChild(item); } suggestionsEl.classList.remove('hidden'); } else { if(suggestionsEl) suggestionsEl.classList.add('hidden'); }
+    if (!isWallet) debouncedFilter();
+};
+
+// --- Modal Functions (Wallet/System) ---
+const showWalletExplorerModal = (address) => { const nfts=allNfts.filter(n=>n.owner===address); if(nfts.length===0)return; const title=document.getElementById('wallet-modal-title'); const statsEl=document.getElementById('wallet-modal-stats'); const galEl=document.getElementById('wallet-modal-gallery'); if(!title||!statsEl||!galEl)return; title.textContent=address; statsEl.innerHTML=''; galEl.innerHTML=''; const dStaked=nfts.filter(n=>n.staked_daodao).length; const eStaked=nfts.filter(n=>n.staked_enterprise_legacy).length; const bListed=nfts.filter(n=>n.boost_market).length; const bblListed=nfts.filter(n=>n.bbl_market).length; const brkn=nfts.filter(n=>n.broken).length; const tot=nfts.length; const unbrkn=tot-brkn; const liq=nfts.filter(n=>n.liquid).length; const stats=[{lbl:'Total',val:tot,clr:'white'},{lbl:'Liquid',val:liq,clr:'white'},{lbl:'DAODAO',val:dStaked,clr:'cyan-400'},{lbl:'Enterprise',val:eStaked,clr:'gray-400'},{lbl:'Boost',val:bListed,clr:'purple-400'},{lbl:'BBL',val:bblListed,clr:'green-400'},{lbl:'Unbroken',val:unbrkn,clr:'green-400'},{lbl:'Broken',val:brkn,clr:'red-400'}]; stats.forEach(s=>{statsEl.innerHTML+=`<div class="text-center"><div class="text-xs...">${s.lbl}</div><div class="text-2xl...text-${s.clr}">${s.val}</div></div>`;}); nfts.sort((a,b)=>(a.rank??Infinity)-(b.rank??Infinity)).forEach(n=>{galEl.appendChild(createNftCard(n,'.wallet-trait-toggle'));}); walletExplorerModal.classList.remove('hidden'); };
+const hideWalletExplorerModal = () => {if(walletExplorerModal) walletExplorerModal.classList.add('hidden');};
+const showSystemLeaderboardModal = (sysId) => { const keyMap={daodao:'daodaoStaked',bbl:'bblListed',boost:'boostListed',enterprise:'enterpriseStaked'}; const nameMap={daodao:'DAODAO',bbl:'BBL',boost:'Boost',enterprise:'Enterprise'}; const statKey=keyMap[sysId]; if(!statKey)return; const data=Object.values(allHolderStats).filter(s=>s[statKey]>0).sort((a,b)=>b[statKey]-a[statKey]); const title=document.getElementById('system-modal-title'); const disclaimer=document.getElementById('system-modal-disclaimer'); if(!title||!disclaimer)return; title.textContent=`${nameMap[sysId]} Leaderboard`; if(sysId==='boost'){disclaimer.innerHTML=`<strong>Note:</strong> ...Boost contract...`; disclaimer.classList.remove('hidden');} else disclaimer.classList.add('hidden'); displaySystemLeaderboardPage(data,statKey,1); if(systemLeaderboardModal) systemLeaderboardModal.classList.remove('hidden'); };
+const displaySystemLeaderboardPage = (data, statKey, page) => { const tbl=document.getElementById('system-modal-table'); const pag=document.getElementById('system-modal-pagination'); if(!tbl||!pag)return; const ipp=10; tbl.innerHTML=''; pag.innerHTML=''; const pageData=data.slice((page-1)*ipp, page*ipp); let html=`<div class="leaderboard-header"...>...</div>`; pageData.forEach((s,idx)=>{const rank=(page-1)*ipp+idx+1; html+=`<div class="leaderboard-row"...>...${rank}...${s.address}...${s[statKey]??0}...</div>`;}); tbl.innerHTML=html; const totalPgs=Math.ceil(data.length/ipp); if(totalPgs>1){ const prev=document.createElement('button'); prev.textContent='Prev'; prev.className='pagination-btn'; prev.disabled=page===1; prev.onclick=()=>displaySystemLeaderboardPage(data,statKey,page-1); pag.appendChild(prev); const info=document.createElement('span'); info.className='text-gray-400'; info.textContent=`Page ${page} of ${totalPgs}`; pag.appendChild(info); const next=document.createElement('button'); next.textContent='Next'; next.className='pagination-btn'; next.disabled=page===totalPgs; next.onclick=()=>displaySystemLeaderboardPage(data,statKey,page+1); pag.appendChild(next); } };
+const hideSystemLeaderboardModal = () => {if(systemLeaderboardModal) systemLeaderboardModal.classList.add('hidden');};
+const searchWallet = () => { if(!walletSearchAddressInput || !walletGallery || !walletGalleryTitle) return; const adr=walletSearchAddressInput.value.trim(); if(walletAddressSuggestions) walletAddressSuggestions.classList.add('hidden'); document.querySelectorAll('#leaderboard-table tbody tr').forEach(r=>r.classList.toggle('selected',r.dataset.address===adr)); if(!adr){showError(walletGallery,'Enter address.'); walletGalleryTitle.textContent='Wallet NFTs'; return;} const nfts=allNfts.filter(n=>n.owner===adr); walletGalleryTitle.textContent=`Found ${nfts.length} for wallet:`; walletGallery.innerHTML=''; if(nfts.length===0){showLoading(walletGallery,'No NFTs found.'); return;} nfts.sort((a,b)=>(a.rank??Infinity)-(b.rank??Infinity)).forEach(n=>walletGallery.appendChild(createNftCard(n,'.wallet-trait-toggle'))); };
+
+// --- Hash Handling ---
+const handleHashChange = () => {
+    console.log("Hash changed:", window.location.hash);
+    const hash = window.location.hash.substring(1);
+    if (hash && /^\d+$/.test(hash)) {
+        const nftId = parseInt(hash, 10);
+        if (allNfts.length > 0) {
+            const nftToShow = allNfts.find(nft => nft.id === nftId);
+            if (nftToShow) {
+                console.log("Found NFT from hash:", nftId);
+                showNftDetails(nftToShow);
+            } else {
+                console.log("NFT ID from hash not found:", nftId);
+                hideNftDetails();
+            }
+        } else if (!isInitialLoad) {
+             hideNftDetails();
+        }
+    } else {
+        hideNftDetails();
+    }
+};
+
+// --- Initialize Application ---
+// Ensure DOM is ready before initializing
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeExplorer);
+} else {
+    initializeExplorer(); // DOM is already ready
+}
