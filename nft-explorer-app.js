@@ -807,8 +807,8 @@ const createNftCard = (nft, toggleSelector) => {
         let value = 'N/A';
         if (traitType === 'Rank' && nft.rank != null) {
             value = `#${nft.rank}`;
-        } else if (traitType === 'Rarity' && nft.rarityScore != null) {
-            value = nft.rarityScore.toFixed(2);
+        } else if (traitType === 'Rarity') {
+    value = nft.attributes?.find(a => a.trait_type === 'Rarity')?.value || 'N/A';
         } else {
             value = nft.attributes?.find(attr => attr.trait_type === traitType)?.value || 'N/A';
         }
@@ -1172,11 +1172,16 @@ const showNftDetails = (nft) => {
     
     let traitsHtml = `<div class="flex justify-between text-sm"><span class="text-gray-400">Rank:</span><span class="font-semibold text-white">#${nft.rank || 'N/A'}</span></div>`;
     if (nft.rarityScore) {
-        traitsHtml += `<div class="flex justify-between text-sm"><span class="text-gray-400">Rarity Score:</span><span class="font-semibold text-white">${nft.rarityScore.toFixed(2)}</span></div>`;
-    }
-    
-    const attributesToShow = (nft.attributes || [])
-        .filter(a => traitOrder.includes(a.trait_type) && !['Rank', 'Rarity'].includes(a.trait_type))
+   // Get the "Rarity" trait value, default to 'N/A'
+const rarityValue = nft.attributes?.find(a => a.trait_type === 'Rarity')?.value || 'N/A';
+
+let traitsHtml = `<div class="flex justify-between text-sm"><span class="text-gray-400">Rank:</span><span class="font-semibold text-white">#${nft.rank || 'N/A'}</span></div>`;
+// Show the "Rarity" trait value, not the calculated score
+traitsHtml += `<div class="flex justify-between text-sm"><span class="text-gray-400">Rarity:</span><span class="font-semibold text-white">${rarityValue}</span></div>`;
+
+const attributesToShow = (nft.attributes || [])
+    // Filter out Rank AND Rarity, since we manually added them above
+    .filter(a => traitOrder.includes(a.trait_type) && !['Rank', 'Rarity'].includes(a.trait_type))
         .sort((a, b) => traitOrder.indexOf(a.trait_type) - traitOrder.indexOf(b.trait_type));
         
     traitsHtml += attributesToShow.map(attr => 
@@ -2371,4 +2376,5 @@ if (document.readyState === 'loading') {
 } else {
     initializeExplorer(); // DOM is already ready
 }
+
 
