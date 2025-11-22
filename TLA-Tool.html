@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Alliance DAO - Admin</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+    body { font-family: 'Inter', monospace; background: #0D0D0D; color: #EAEAEA; }
+    .input-dark { background: #1A1A1A; border: 1px solid #333; color: white; padding: 8px; border-radius: 6px; width: 100%; font-family: monospace; font-size: 0.75rem; resize: vertical; }
+    .input-dark:focus { border-color: #2dd4bf; outline: none; }
+    .tab-btn { padding: 10px; border-radius: 8px; font-weight: 600; text-align: center; cursor: pointer; background: #1f2937; border: 1px solid #374151; color: #9ca3af; font-size: 0.8rem; }
+    .tab-btn:hover { background: #374151; color: white; }
+    .tab-btn.active { background: #2dd4bf; color: #000; border-color: #2dd4bf; }
+    .workspace { display: none; } .workspace.active { display: block; }
+    .preview-card { background: #111; border: 1px solid #333; border-radius: 12px; padding: 16px; }
+    .btn-action { background: #333; color: white; padding: 6px; border-radius: 6px; font-size: 0.75rem; width: 100%; margin-top: 8px; transition: 0.2s; }
+    .btn-action:hover { background: #444; }
+    .btn-clear { background: 0 0; color: #6b7280; font-size: 0.7rem; text-decoration: underline; cursor: pointer; }
+    .btn-clear:hover { color: #ef4444; }
+    .custom-scroll::-webkit-scrollbar { width: 6px; }
+    .custom-scroll::-webkit-scrollbar-track { background: #0d0d0d; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+    
+    /* Modals */
+    .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 9999; justify-content: center; align-items: center; }
+    .modal-overlay.open { display: flex; }
+    .modal-box { background: #1A1A1A; border: 1px solid #333; padding: 20px; border-radius: 8px; width: 650px; max-height: 80vh; overflow-y: auto; box-shadow: 0 10px 25px rgba(0,0,0,0.5); margin: auto; }
+    
+    /* Link Buttons */
+    .link-btn { display: flex; align-items: center; gap: 4px; font-size: 0.7rem; text-decoration: none; padding: 4px 8px; border-radius: 4px; border: 1px solid #333; color: #9ca3af; transition: all 0.2s; background: #1f2937; white-space: nowrap; }
+    .link-btn:hover { border-color: #4b5563; color: white; background: #374151; }
+</style>
+</head>
+<body class="p-4 w-full max-w-[1600px] mx-auto min-h-screen flex flex-col">
+
+    <!-- HEADER -->
+    <header class="flex flex-col gap-4 mb-4 pb-4 border-b border-gray-800">
+        <div class="flex justify-between items-center">
+            <h1 class="text-xl font-bold text-cyan-400">TLA Admin</h1>
+            <div class="flex gap-2">
+                <button onclick="copyMasterJson()" class="bg-gray-800 hover:bg-gray-700 text-white border border-gray-600 px-4 py-2 rounded text-xs font-bold transition-colors">📋 Copy Epoch JSON</button>
+                <button onclick="downloadMasterJson()" class="bg-cyan-900 hover:bg-cyan-800 text-cyan-200 border border-cyan-700 px-4 py-2 rounded text-xs font-bold transition-colors">⬇️ Download Epoch JSON</button>
+            </div>
+        </div>
+        <!-- External Links -->
+        <div class="flex flex-wrap gap-2">
+            <a href="https://daodao.zone/dao/terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm/apps?url=https%3A%2F%2Fwww.erisprotocol.com" target="_blank" class="link-btn">
+                🏛️ aDAO / TLA
+            </a>
+            <a href="https://daodao.zone/dao/terra1k8ug6dkzntczfzn76wsh24tdjmx944yj6mk063wum7n20cwd7lxq4lppjg/proposals" target="_blank" class="link-btn">
+                🦅 PD DAO
+            </a>
+            <a href="https://votion.money/liquidity-alliance" target="_blank" class="link-btn">
+                🗳️ Votion
+            </a>
+            <a href="https://github.com/defipatriot/tla_json_storage" target="_blank" class="link-btn border-gray-500 text-gray-300">
+                <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path fill-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clip-rule="evenodd"></path></svg>
+                GitHub Repo
+            </a>
+        </div>
+    </header>
+
+    <!-- TABS -->
+    <div class="grid grid-cols-4 gap-2 mb-4">
+        <div class="tab-btn active" onclick="switchTab('liquidity')">1. Liquidity</div>
+        <div class="tab-btn" onclick="switchTab('vote')">2. Vote</div>
+        <div class="tab-btn" onclick="switchTab('locks')">3. Lock</div>
+        <div class="tab-btn" onclick="switchTab('votion')">4. Votion</div>
+    </div>
+    
+    <!-- STATUS -->
+    <div class="mb-6">
+        <div id="status-bar" class="h-1 bg-gray-800 rounded overflow-hidden transition-all duration-500"><div class="h-full bg-cyan-500" style="width: 0%"></div></div>
+        <div id="status-text" class="text-center text-[10px] text-gray-500 mt-1 font-mono">WAITING FOR DATA...</div>
+    </div>
+
+    <!-- WS 1: LIQUIDITY -->
+    <div id="ws-liquidity" class="workspace active">
+        <div class="flex flex-col gap-4">
+            <div class="grid grid-cols-3 gap-4">
+                <div class="bg-[#161616] p-3 rounded border border-gray-800 relative">
+                    <div class="flex justify-between items-center mb-2">
+                        <h3 class="text-cyan-400 font-bold text-xs">1. Liquidity Page (Ctrl+A)</h3>
+                        <label class="flex items-center gap-1 text-[10px] text-gray-400 cursor-pointer bg-gray-900 px-2 py-0.5 rounded border border-gray-700 select-none">
+                            <input type="checkbox" id="liqInactiveToggle" class="rounded border-gray-600 bg-gray-800 text-cyan-500 focus:ring-0 w-3 h-3">
+                            Inactive Pools Data
+                        </label>
+                    </div>
+                    <textarea id="liqFullPage" class="input-dark h-24" placeholder="Paste full page (captures amp numbers based on spacing)"></textarea>
+                    <button onclick="parseLiquidity()" class="btn-action text-cyan-200">Parse Full Page</button>
+                </div>
+                <div class="bg-[#161616] p-3 rounded border border-gray-800">
+                    <h3 class="text-blue-400 font-bold text-xs mb-1">2. Deposits Popup</h3>
+                    <textarea id="liqDeposits" class="input-dark h-24"></textarea>
+                    <button onclick="parseDeposits()" class="btn-action">Parse Deposits</button>
+                </div>
+                <div class="bg-[#161616] p-3 rounded border border-gray-800">
+                    <h3 class="text-green-400 font-bold text-xs mb-1">3. Unclaimed Popup</h3>
+                    <textarea id="liqRewards" class="input-dark h-24" placeholder="zAssets...&#10;3 578.16&#10;Received&#10;2 768.20 ampLUNA"></textarea>
+                    <button onclick="parseRewards()" class="btn-action">Parse Rewards</button>
+                </div>
+            </div>
+
+            <div class="preview-card">
+                <div class="flex justify-between items-start mb-4 border-b border-gray-700 pb-2">
+                    <div class="w-1/3 border-r border-gray-800 pr-4">
+                        <h3 class="text-lg font-bold text-orange-400">TLA Global</h3>
+                        <div class="text-xs text-gray-400 flex justify-between"><span>TVL</span><span id="tla-tvl" class="text-white font-mono font-bold">$0</span></div>
+                        <div class="text-xs text-gray-400 flex justify-between"><span>Rewards Year</span><span id="tla-rew" class="text-green-400 font-mono font-bold">$0</span></div>
+                    </div>
+                    <div class="w-1/3 border-r border-gray-800 px-4">
+                        <div class="flex justify-between items-center mb-1">
+                            <h3 class="text-lg font-bold text-white">DAO TLA Deposits</h3>
+                            <button onclick="togModal('token',1)" class="text-[10px] text-cyan-400 underline bg-gray-800 px-1.5 py-0.5 rounded hover:text-white">Details</button>
+                        </div>
+                        <div class="text-xs text-gray-400 flex justify-between"><span>Total Deposit</span><span id="dao-dep" class="text-white font-mono font-bold">$0</span></div>
+                        <div class="text-xs text-gray-400 flex justify-between"><span>Avg APR</span><span id="dao-apr" class="text-green-400 font-mono font-bold">0%</span></div>
+                    </div>
+                    <div class="w-1/3 pl-4">
+                        <h3 class="text-lg font-bold text-white mb-1">Unclaimed Rewards</h3>
+                        <div class="text-xs text-gray-400 flex justify-between border-b border-gray-800 pb-1 mb-1"><span>Total USD</span><span id="dao-usd" class="text-green-400 font-mono font-bold">$0</span></div>
+                        <div class="text-[10px] text-gray-500 space-y-0.5">
+                            <div class="flex justify-between"><span>zAssets</span><span id="dao-rew-z" class="text-white font-mono">0</span></div>
+                            <div class="flex justify-between"><span>ampLUNA</span><span id="dao-rew-amp" class="text-white font-mono">0</span></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-12 gap-1 text-[9px] text-gray-500 uppercase font-bold px-2 py-2 bg-gray-900 rounded-t border-b border-gray-800">
+                    <div class="col-span-2 flex items-center gap-1">Pool</div> 
+                    <div class="col-span-1">DEX</div> 
+                    <div class="col-span-1">Type</div> 
+                    <div class="col-span-1">DEX Depth</div> 
+                    <div class="col-span-1">TLA Staked</div> 
+                    <div class="col-span-1 text-center text-purple-400">% TLA</div> 
+                    <div class="col-span-1">APR</div> 
+                    <div class="col-span-2 text-right">Rewards</div> 
+                    <div class="col-span-2 text-right">aDAO Deposits</div>
+                </div>
+                <div id="liq-list" class="max-h-[500px] overflow-y-auto text-xs bg-[#0D0D0D] p-2 border border-gray-800 rounded-b custom-scroll space-y-1"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- WS 2: VOTE -->
+    <div id="ws-vote" class="workspace">
+        <div class="flex flex-col gap-4">
+            <div class="grid grid-cols-3 gap-4">
+                <div class="bg-[#161616] p-3 rounded border border-gray-800">
+                    <h3 class="text-cyan-400 font-bold text-xs mb-1">1. Vote Page</h3>
+                    <textarea id="votePaste" class="input-dark h-24" placeholder="Current voting round&#10;ends&#10;in 1 day"></textarea>
+                    <button onclick="parseVote()" class="btn-action bg-cyan-900 text-cyan-100">Parse Page</button>
+                </div>
+                <div class="bg-[#161616] p-3 rounded border border-gray-800">
+                    <h3 class="text-green-400 font-bold text-xs mb-1">2. Rewards Popup</h3>
+                    <textarea id="voteRewardsPaste" class="input-dark h-24"></textarea>
+                    <button onclick="parseVoteRewards()" class="btn-action">Parse Rewards</button>
+                </div>
+                <div class="bg-[#161616] p-3 rounded border border-gray-800">
+                    <h3 class="text-purple-400 font-bold text-xs mb-1">3. Bribes Text</h3>
+                    <textarea id="bribesPaste" class="input-dark h-24" placeholder="Bribes for [160-163]:&#10;Gauge: project..."></textarea>
+                    <button onclick="parseBribes()" class="btn-action bg-purple-900 text-purple-200">Parse Bribes</button>
+                </div>
+            </div>
+
+            <div class="preview-card">
+                <div class="flex justify-between items-start mb-4 border-b border-gray-700 pb-2">
+                    <div>
+                        <h3 class="text-xl font-bold text-white">Vote Dashboard</h3>
+                        <div class="text-xs text-gray-400">Ep: <span id="vote-ep" class="text-white">0</span> | Ends: <span id="vote-end" class="text-white">-</span> | <span id="vote-ph" class="text-yellow-400">-</span></div>
+                    </div>
+                    <div class="flex gap-6 text-center">
+                        <button onclick="togModal('bribes',1)" class="bg-purple-900/30 border border-purple-800 px-3 rounded text-[10px] text-purple-300 h-8 mt-1 hover:bg-purple-900/50">⚔️ Bribes</button>
+                        <div><div class="text-[9px] text-gray-500 uppercase">aDAO Rebase</div><div id="vote-rebase" class="text-sm text-blue-400 font-bold font-mono">0</div></div>
+                        <div><div class="text-[9px] text-gray-500 uppercase">aDAO Unclaimed Rewards</div><div id="vote-claim" class="text-sm text-green-400 font-bold font-mono">$0</div></div>
+                        <div class="text-right min-w-[100px]"><div class="text-[9px] text-gray-500 uppercase">Parsed</div><div id="vote-rew-list" class="text-[9px] max-h-[40px] overflow-y-auto custom-scroll"></div></div>
+                    </div>
+                </div>
+                
+                <!-- Vote Table Header -->
+                <div class="grid grid-cols-12 gap-2 text-[9px] uppercase font-bold px-2 py-1 bg-indigo-900/20 text-indigo-200 rounded-t">
+                    <div class="col-span-2">Pool</div> 
+                    <div class="col-span-2 text-center">TLA Votes</div> 
+                    <div class="col-span-1 text-center">Depth</div>
+                    <div class="col-span-1 text-center text-purple-300">PD Bribes</div> 
+                    <div class="col-span-1 text-center text-gray-400">Other Bribes</div> 
+                    <div class="col-span-1 text-center">Total Bribes</div> 
+                    <div class="col-span-2 text-center">vAPR</div> 
+                    <div class="col-span-2 text-right">aDAO Vote</div>
+                </div>
+                
+                <div id="vote-list" class="max-h-[500px] overflow-y-auto text-xs bg-[#0D0D0D] p-2 border border-gray-800 rounded-b custom-scroll space-y-1"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- WS 3: LOCKS -->
+    <div id="ws-locks" class="workspace">
+        <div class="grid grid-cols-[300px_1fr] gap-4">
+            <div class="bg-[#161616] p-3 rounded border border-gray-800">
+                <h3 class="text-purple-400 font-bold text-xs mb-1">Locks Page</h3>
+                <textarea id="locksPaste" class="input-dark h-96"></textarea>
+                <button onclick="parseLocks()" class="btn-action bg-purple-900/50 text-purple-200">Parse Locks</button>
+            </div>
+            <div class="preview-card">
+                <!-- Header -->
+                <div class="flex justify-between mb-6 border-b border-gray-700 pb-4">
+                    <div class="text-center px-4 border-r border-gray-800 w-1/3">
+                        <div class="text-[10px] text-gray-500 uppercase mb-1">aDAO Voting Power</div>
+                        <div id="locks-vp" class="text-xl font-bold text-purple-400 font-mono">0 VP</div>
+                    </div>
+                    <div class="text-center px-4 border-r border-gray-800 w-1/3">
+                        <div class="text-[10px] text-gray-500 uppercase mb-1">Power Factor</div>
+                        <div id="locks-factor" class="text-xl font-bold text-white font-mono">0 x</div>
+                    </div>
+                    <div class="text-center px-4 w-1/3">
+                        <div class="text-[10px] text-gray-500 uppercase mb-1">Underlying Assets</div>
+                        <div id="locks-assets" class="text-xl font-bold text-white font-mono">0</div>
+                    </div>
+                </div>
+                
+                <!-- Lock List -->
+                <div id="locks-list" class="space-y-4 max-h-[600px] overflow-y-auto custom-scroll pr-2">
+                    <div class="text-center text-gray-600 italic text-xs pt-10">No locks parsed yet...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- WS 4: VOTION -->
+    <div id="ws-votion" class="workspace">
+        <div class="flex flex-col gap-4">
+            <div class="grid grid-cols-2 gap-4">
+                <div class="bg-[#161616] p-3 rounded border border-gray-800">
+                    <div class="flex justify-between"><h3 class="text-cyan-400 font-bold text-xs">1. Votion Pools (Multi Paste)</h3><span onclick="$('votionPaste').value=''" class="btn-clear">Clear</span></div>
+                    <textarea id="votionPaste" class="input-dark h-24" placeholder="Paste pool pages one by one..."></textarea>
+                    <button onclick="parseVotion()" class="btn-action bg-cyan-900/50 text-cyan-200">Parse Pool</button>
+                </div>
+                <div class="bg-[#161616] p-3 rounded border border-gray-800">
+                    <div class="flex justify-between"><h3 class="text-green-400 font-bold text-xs">2. Ratios</h3><span onclick="$('ratioPaste').value=''" class="btn-clear">Clear</span></div>
+                    <textarea id="ratioPaste" class="input-dark h-24" placeholder="1 arbLUNA = 2.4..."></textarea>
+                    <button onclick="parseRatios()" class="btn-action bg-green-900/50 text-green-200">Update Ratios</button>
+                </div>
+            </div>
+            <div class="preview-card">
+                <div class="flex justify-between items-center mb-4 border-b border-gray-800 pb-2">
+                    <h3 class="text-xl font-bold text-white">Votion Opt</h3>
+                    <div class="text-xs text-gray-500" id="votion-ts"></div>
+                </div>
+                <div class="space-y-6">
+                    <div>
+                        <h4 class="text-sm font-bold text-orange-500 border-b border-orange-500 pb-1 mb-2 flex justify-between"><span>arbLUNA</span><span id="ratio-arb" class="font-mono font-normal text-gray-400">Ratio: 0</span></h4>
+                        <div id="votion-arb" class="space-y-4"></div>
+                    </div>
+                    <div>
+                        <h4 class="text-sm font-bold text-blue-500 border-b border-blue-500 pb-1 mb-2 flex justify-between"><span>ampLUNA</span><span id="ratio-amp" class="font-mono font-normal text-gray-400">Ratio: 0</span></h4>
+                        <div id="votion-amp" class="space-y-4"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- FOOTER -->
+    <footer class="mt-auto pt-6 border-t border-gray-800 text-center">
+        <button onclick="togModal('disclaimer',1)" class="text-xs text-gray-500 hover:text-white underline">ℹ️ About & Disclaimer</button>
+        <div class="text-[9px] text-gray-700 mt-2">© 2025 TLA Admin Tool. Data is parsed locally in browser.</div>
+    </footer>
+
+    <!-- MODALS -->
+    <div id="token-modal" class="modal-overlay" onclick="if(event.target===this)togModal('token',0)"><div class="modal-box"><div class="flex justify-between border-b border-gray-700 pb-2 mb-2"><h3 class="font-bold">Tokens</h3><span onclick="togModal('token',0)" class="cursor-pointer">✕</span></div><div id="mod-tok-list" class="space-y-1 text-xs"></div></div></div>
+    
+    <div id="bribes-modal" class="modal-overlay" onclick="if(event.target===this)togModal('bribes',0)"><div class="modal-box"><div class="flex justify-between border-b border-gray-700 pb-2 mb-2"><h3 class="font-bold text-purple-400">Bribes <span id="mod-br-ep" class="text-xs text-gray-500"></span></h3><span onclick="togModal('bribes',0)" class="cursor-pointer">✕</span></div>
+        <div class="grid grid-cols-12 gap-2 text-[9px] uppercase font-bold text-gray-500 border-b border-gray-800 pb-1 mb-2">
+            <div class="col-span-2 text-center">Rank</div>
+            <div class="col-span-4">Pool</div>
+            <div class="col-span-3 text-right">Score %</div>
+            <div class="col-span-3 text-right">Est. Reward</div>
+        </div>
+        <div id="mod-br-list" class="space-y-4 text-xs"></div></div></div>
+
+    <div id="disclaimer-modal" class="modal-overlay" onclick="if(event.target===this)togModal('disclaimer',0)">
+        <div class="modal-box">
+            <div class="flex justify-between border-b border-gray-700 pb-2 mb-4">
+                <h3 class="font-bold text-white">How Data is Collected / Disclaimer</h3>
+                <span onclick="togModal('disclaimer',0)" class="cursor-pointer">✕</span>
+            </div>
+            <div class="text-sm text-gray-300 space-y-3 leading-relaxed">
+                <p><strong>Process:</strong> This tool collects raw data by parsing text copied from the TLA Dashboard and Votion Money. It aggregates this data into a unified, structured JSON file.</p>
+                <p>This JSON file is hosted and used by the main website to power <strong>visual trends, analytics, and historical tracking</strong>. The goal is to bring transparency to the TLA ecosystem, helping users and the DAO understand liquidity flows, voting efficiency, and bribe ROI.</p>
+                <div class="border-t border-gray-700 my-2 pt-2">
+                    <h4 class="text-xs font-bold text-gray-500 uppercase mb-1">Data Sources</h4>
+                    <ul class="list-disc pl-5 space-y-1 text-xs text-gray-400">
+                        <li><strong>Liquidity:</strong> Parses pool depth, staking, APRs, and user deposits directly from the TLA UI.</li>
+                        <li><strong>Vote:</strong> Parses the current epoch, voting power, incentives, and specific user vote allocations.</li>
+                        <li><strong>Locks:</strong> Captures DAO voting power stats and individual lock positions.</li>
+                        <li><strong>Votion:</strong> Extracts optimization data and implied voting power for lockups.</li>
+                    </ul>
+                </div>
+                <p class="text-xs text-red-400 border border-red-900/50 bg-red-900/10 p-3 rounded mt-4">
+                    <strong>⚠️ DISCLAIMER:</strong> This tool relies on specific text formatting from third-party websites (Eris/TLA/Votion). If these sites change their UI or text structure, parsers may break or return incorrect data.<br><br>
+                    Always verify numbers manually before making financial decisions or executing DAO transactions. This tool is for informational purposes to assist with transparency and is not financial advice. The authors are not responsible for any errors in data collection or display.
+                </p>
+            </div>
+        </div>
+    </div>
+
+<script>
+const $ = id => document.getElementById(id);
+const togModal = (id,show) => $(id+'-modal').classList.toggle('open', show);
+const clean = s => { if(!s)return 0; let m=1; if(/[\d\.]\s*[Kk]($|[\s\W])/.test(s))m=1e3; if(/[\d\.]\s*[Mm]($|[\s\W])/.test(s))m=1e6; return parseFloat(s.replace(/amp/gi,'').replace(/[^0-9\.]/g,''))*m; };
+const fmt$ = n => '$'+n.toLocaleString(undefined,{maximumFractionDigits:0});
+
+let store = {
+    dao: { dep:0, apr:0, rew:{z:0,amp:0,usd:0}, toks:[], vRew:{}, vPer:[], locks:[], lVp:0, lAst:'', lFac:0 },
+    tla: { tvl:0, rewYr:0, pools:[], inactivePools: [] },
+    vote: { ep:0, end:'-', ph:'-', vp:0, usd:0, reb:0, pools:[] },
+    bribes: { epStart:0, epEnd:0, epStr:'', items:[], pdActive:false },
+    votion: { pools:[], r:{arb:0, amp:0} }
+};
+
+// --- NAVIGATION ---
+function switchTab(t) {
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    event.target.classList.add('active');
+    document.querySelectorAll('.workspace').forEach(w=>w.classList.remove('active'));
+    $('ws-'+t).classList.add('active');
+}
+
+// --- STATUS UPDATE ---
+function upStat() {
+    // Logic: Check if Arrays have length or Objects have keys
+    let hasLiq = store.tla.pools.length > 0;
+    let hasVote = store.vote.ep > 0;
+    let hasLocks = store.dao.locks.length > 0;
+    let hasVotionPools = store.votion.pools.length > 0;
+    let hasVotionRatios = store.votion.r.arb > 0 && store.votion.r.amp > 0;
+    
+    let checks = [hasLiq, hasVote, hasLocks, hasVotionPools, hasVotionRatios];
+    let completed = checks.filter(Boolean).length;
+    let total = 5; // Increased to 5 to account for Ratios separately
+    
+    let pct = (completed / total) * 100;
+    $('status-bar').firstElementChild.style.width = pct+'%';
+    
+    if(completed === total) {
+        $('status-text').innerText = "✓ READY FOR EXPORT";
+        $('status-bar').firstElementChild.classList.add('bg-green-500');
+    } else {
+        $('status-text').innerText = `${completed}/${total} STEPS COMPLETED`;
+        $('status-bar').firstElementChild.classList.remove('bg-green-500');
+    }
+}
+
+// --- HELPER: VALIDATION ---
+function checkDataCompleteness() {
+    let missing = [];
+    if(store.tla.pools.length === 0) missing.push("- Liquidity Pools (Active)");
+    if(!store.vote.ep) missing.push("- Vote Page Data");
+    if(store.dao.locks.length === 0) missing.push("- Locks Page Data");
+    if(store.votion.pools.length === 0) missing.push("- Votion Pools");
+    if(!store.votion.r.arb || !store.votion.r.amp) missing.push("- Votion Ratios (Arb/Amp)");
+    
+    if(missing.length > 0) {
+        alert("⚠️ Cannot Export. Missing Data:\n\n" + missing.join("\n") + "\n\nPlease parse these sections first.");
+        return false;
+    }
+    return true;
+}
+
+// --- HELPER: MATCH POOL NAMES ---
+function normalizePool(n) {
+    if(!n) return '';
+    return n.replace(/\s*LP/i, '').replace(/[\-\s_]/g, '').toUpperCase().split('').sort().join('');
+}
+
+// --- LIQUIDITY ---
+function parseLiquidity() {
+    let txt = $('liqFullPage').value;
+    let isInactive = $('liqInactiveToggle').checked;
+    
+    let rawLines = txt.split('\n'); 
+    let lines = rawLines.map(l=>l.trim());
+
+    let m;
+    if(!isInactive) {
+        if(m=txt.match(/TVL[\s\n]+([$\d\.\,\s]+[KkMm]?)/i)) store.tla.tvl=clean(m[1]);
+        if(m=txt.match(/Rewards per year[\s\n]+([$\d\.\,\s]+[KkMm]?)/i)) store.tla.rewYr=clean(m[1]);
+        if(m=txt.match(/(Your|Total) Deposit[\s\n]*([$\d\.,\s]+)/i)) store.dao.dep=clean(m[2]);
+        if(m=txt.match(/(est\. APR|Avg APR)[\s\n]*([\d\.]+)\s*%/i)) store.dao.apr=parseFloat(m[2]);
+    }
+    
+    let parsedPools = [];
+    lines.forEach((l,i) => {
+        if(!isInactive && l==='Rewards' && lines[i+1]?.includes('$')) store.dao.rew.usd = clean(lines[i+1]);
+        
+        if(l.match(/^(Astroport|WhiteWhale|Single)/i)) {
+            let p = { name:lines[i-1], dex:l.split('-')[0].trim(), type:l.split('-')[1]?.trim()||'?', depth:0, stk:0, apr:'-', aprC:null, rYr:0, rEp:0, dN:0, dC:0, inactive: isInactive };
+            
+            for(let k=1; k<15; k++) {
+                if (i+k+1 < lines.length && lines[i+k+1].match(/^(Astroport|WhiteWhale|Single)/i)) break;
+                if (lines[i+k] === 'Deposit') break; 
+
+                let nl = lines[i+k];
+                let rawNl = rawLines[i+k]; 
+                if(!nl) break;
+                
+                if(nl.startsWith('Depth')) p.depth=clean(nl);
+                else if(nl.startsWith('$') && !p.stk && !nl.includes('Depth') && !rawLines[i+k-1].includes('Rewards') && !nl.includes('Deposit')) p.stk=clean(nl);
+                else if(nl === '$ 0.00' && !p.stk && !nl.includes('Depth')) p.stk = 0;
+
+                else if(nl.includes('%') && nl.startsWith('$') && !p.stk) { let x=nl.match(/^(\$.*?)(\d+\.\d+)\s*%/); if(x){p.stk=clean(x[1]); p.apr=x[2]+'%';} }
+                else if(nl.includes('%') && p.apr==='-') p.apr=nl; 
+                
+                else if(!nl.includes('%') && !nl.startsWith('$') && /^[\-\d]+\.\d+/.test(nl) && lines[i+k-1].includes('%')) { 
+                    let match = nl.match(/^([\-\d]+\.\d+)/);
+                    if (match) p.aprC = match[1]; 
+                }
+                else if(nl.startsWith('Rewards')) { p.rYr = clean(nl); p.rEp = p.rYr/52; }
+                else if(nl.startsWith('$') && p.rYr > 0) {
+                    let isAmp = rawNl.startsWith(' $') || rawNl.startsWith('\t$') || rawNl.startsWith('  $');
+                    let val = clean(nl);
+                    if(isAmp) p.dC = val; else p.dN = val;
+                }
+            }
+            
+            // STRICTER FILTER: Remove items with 0 Depth AND 0 Staked
+            if (p.depth === 0 && p.stk === 0) return; 
+            // EXTRA FILTER: Remove "connector" or "staking" names if they look like junk (often have 0 depth)
+            if (p.name.toLowerCase().includes('connector') || p.name.toLowerCase().includes('staking')) return;
+
+            parsedPools.push(p);
+        }
+    });
+
+    if (isInactive) {
+        store.tla.inactivePools = parsedPools;
+    } else {
+        store.tla.pools = parsedPools;
+    }
+    
+    renderLiquidityTable();
+    upStat();
+}
+
+function renderLiquidityTable() {
+    $('tla-tvl').innerText=fmt$(store.tla.tvl); $('tla-rew').innerText=fmt$(store.tla.rewYr);
+    $('dao-dep').innerText=fmt$(store.dao.dep); $('dao-apr').innerText=store.dao.apr+'%'; $('dao-usd').innerText=fmt$(store.dao.rew.usd);
+    $('dao-rew-z').innerText = store.dao.rew.z.toLocaleString();
+    $('dao-rew-amp').innerText = store.dao.rew.amp.toLocaleString();
+
+    // Combine Active then Inactive
+    let allPools = [...store.tla.pools, ...store.tla.inactivePools];
+    let lastStatus = '';
+
+    let html = '';
+    if (allPools.length === 0) {
+        html = '<div class="text-center text-gray-500 text-xs py-8">No pools parsed. Paste data above.</div>';
+    } else {
+        allPools.forEach(p => {
+            // Render Header if status changes
+            let currentStatus = p.inactive ? "INACTIVE POOLS" : "ACTIVE POOLS";
+            if (currentStatus !== lastStatus) {
+                let bgClass = p.inactive ? 'bg-red-900/50 text-red-400' : 'bg-green-900/50 text-green-400';
+                html += `<div class="col-span-12 ${bgClass} text-center text-[10px] font-bold py-1 my-1 rounded uppercase tracking-widest border-y border-gray-700">${currentStatus}</div>`;
+                lastStatus = currentStatus;
+            }
+            
+            let pctTla = p.depth > 0 ? (p.stk / p.depth) * 100 : 0;
+
+            html += `
+            <div class="grid grid-cols-12 gap-1 border-b border-gray-800/50 items-center py-2 ${p.dN>0||p.dC>0?'bg-cyan-900/10 border-l-2 border-cyan-400':''}">
+                <div class="col-span-2 truncate text-white text-[10px]" title="${p.name}">
+                    ${p.name}
+                    ${p.inactive ? '<span class="ml-1 text-[8px] px-1 rounded bg-gray-700 text-gray-300">OFF</span>' : ''}
+                </div>
+                <div class="col-span-1 text-[9px] ${p.dex.includes('Astro')?'text-orange-400':'text-green-400'}">${p.dex}</div>
+                <div class="col-span-1 text-[9px] text-gray-500">${p.type}</div>
+                <div class="col-span-1 font-mono text-[10px]">${fmt$(p.depth)}</div>
+                <div class="col-span-1 font-mono text-[10px] text-blue-400">${fmt$(p.stk)}</div>
+                <div class="col-span-1 font-mono text-[10px] text-purple-300 text-center">${pctTla.toFixed(2)}%</div>
+                <div class="col-span-1 flex flex-col leading-tight">
+                    <span class="font-mono text-[10px] text-white">${p.apr} <span class="text-[8px] text-gray-600">Non</span></span>
+                    ${p.aprC ? `<span class="font-mono text-[10px] text-orange-400 font-bold">${p.aprC}% <span class="text-[8px] text-gray-600">Amp</span></span>` : ''}
+                </div>
+                <div class="col-span-2 flex flex-col text-right leading-tight">
+                    <span class="font-mono text-[10px] text-green-400">${fmt$(p.rYr)} <span class="text-[8px] text-gray-600">Year</span></span>
+                    <span class="font-mono text-[10px] text-gray-400">${fmt$(p.rEp)} <span class="text-[8px] text-gray-600">Epoch</span></span>
+                </div>
+                <div class="col-span-2 flex flex-col text-right leading-tight">
+                    ${p.dN>0 ? `<span class="font-mono text-[10px] text-white">${fmt$(p.dN)} <span class="text-[8px] text-gray-600">Non</span></span>` : ''}
+                    ${p.dC>0 ? `<span class="font-mono text-[10px] text-orange-400 font-bold">${fmt$(p.dC)} <span class="text-[8px] text-gray-600">Amp</span></span>` : ''}
+                    ${p.dN===0 && p.dC===0 ? '<span class="text-gray-700">-</span>' : ''}
+                </div>
+            </div>`;
+        });
+    }
+    $('liq-list').innerHTML = html;
+}
+
+function parseDeposits() {
+    store.dao.toks = $('liqDeposits').value.split('\n').map(l=>{let p=l.trim().split(/\s+/); return p.length>1?{s:isNaN(p[0])?p[0]:p[1], a:clean(isNaN(p[0])?p[1]:p[0])}:null}).filter(x=>x);
+    $('mod-tok-list').innerHTML = store.dao.toks.map(t=>`<div class="flex justify-between border-b border-gray-800"><span class="text-gray-400">${t.s}</span><span class="font-mono">${t.a.toLocaleString()}</span></div>`).join('');
+}
+function parseRewards() {
+    let txt = $('liqRewards').value; 
+    let zMatch = txt.match(/zAssets\s*([\d\s\.,]+)/);
+    if(zMatch) store.dao.rew.z = clean(zMatch[1]);
+    let ampMatch = txt.match(/Received\s*([\d\s\.,]+)\s*ampLUNA/);
+    if(ampMatch) store.dao.rew.amp = clean(ampMatch[1]);
+    upStat();
+    if(store.dao.dep > 0) {
+        $('dao-rew-z').innerText = store.dao.rew.z.toLocaleString();
+        $('dao-rew-amp').innerText = store.dao.rew.amp.toLocaleString();
+    }
+}
+
+// --- VOTE ---
+function parseVote() {
+    let txt=$('votePaste').value, lines=txt.split('\n');
+    store.vote.ep = parseInt(txt.match(/For Epoch\s*(\d+)/)?.[1]||0);
+    let endMatch = txt.match(/ends\s*\n?\s*in\s*(\d+)\s*day/i);
+    let end = endMatch ? parseInt(endMatch[1]) : 0;
+    store.vote.end = end+' days'; store.vote.ph = end>5?'Start':end>2?'Mid':'End';
+    store.vote.reb = clean(txt.match(/Rebase\s*([\d\.,]+)/)?.[1]);
+    
+    let rewIndex = lines.findIndex(l => l.includes('Vote Rewards'));
+    if (rewIndex >= 0 && lines[rewIndex+1] && lines[rewIndex+1].trim().startsWith('$')) {
+        store.vote.usd = clean(lines[rewIndex+1]);
+    }
+    
+    store.vote.pools=[];
+    let curB='General', bkts=['STABLE','PROJECT','BLUECHIP','SINGLE','LST','LIQUIDITY'];
+    lines.forEach((l,i)=>{
+        let upL = l.trim().toUpperCase();
+        if(bkts.includes(upL)) curB=upL;
+        
+        if(lines[i+1]?.match(/^(Astro|White|Single)/)) {
+            let p = { n:l, d:lines[i+1], b:curB, tvp:0, vps:0, inc:0, apr:0, mvp:0, ms:0, pd:0, oth:0, pct:0, dp:0 };
+            for(let k=i+2; k<i+25 && k<lines.length; k++) {
+                if(lines[k+1]?.match(/^(Astro|White|Single)/)) break;
+                let x=lines[k];
+                if(x.includes('VP') && x.includes('%') && !x.includes('Your')) { 
+                    let m = x.match(/VP\s*([\d\.]+)([KkMm]?)\s*([\d\.]+)\s*%/);
+                    if(m) { p.tvp = clean(m[1]+m[2]); p.vps = m[3]; }
+                }
+                if(x.startsWith('Depth')) { p.dp = clean(x); }
+                if(x.startsWith('$') && !p.inc && !x.includes('Depth')) p.inc=clean(x);
+                if(x.includes('%') && !x.includes('VP') && !p.apr) p.apr=x;
+                
+                let myVpMatch = x.match(/^[\s\$]*([\d\.,\s]+[KkMm]?)\s*VP\s*$/);
+                if (myVpMatch && !x.trim().startsWith('VP')) {
+                    p.mvp = clean(myVpMatch[1]);
+                    let nextLine = lines[k+1];
+                    if (nextLine && nextLine.includes('%')) {
+                        let pctMatch = nextLine.match(/([\d\.,]+)\s*%/);
+                        if (pctMatch) p.ms = pctMatch[1];
+                    }
+                }
+            }
+            store.vote.pools.push(p);
+        }
+    });
+    calcIncentives();
+    renderVoteTable();
+    upStat();
+}
+
+function parseVoteRewards() {
+    let l=$('voteRewardsPaste').value.split('\n').map(x=>x.trim()).filter(x=>x&&!x.includes('Claim'));
+    store.dao.vRew={}; 
+    l.forEach(x=>{ let m=x.match(/^([\d\.,\s]+)\s+([a-zA-Z]+)/); if(m) store.dao.vRew[m[2]]=clean(m[1]); });
+    $('vote-rew-list').innerHTML = Object.keys(store.dao.vRew).map(k=>`<div class="flex justify-between text-gray-400"><span>${k}</span><span class="text-white">${store.dao.vRew[k].toLocaleString()}</span></div>`).join('');
+}
+
+function parseBribes() {
+    let t=$('bribesPaste').value, l=t.split('\n');
+    let epMatch = t.match(/\[(\d+)-(\d+)\]/);
+    if(epMatch) {
+        store.bribes.epStr = epMatch[0];
+        store.bribes.epStart = parseInt(epMatch[1]);
+        store.bribes.epEnd = parseInt(epMatch[2]);
+    }
+    store.bribes.items=[]; 
+    let g='?';
+    l.forEach(x=>{
+        if(x.match(/Gauge:/i)) g=x.split(':')[1].trim().toLowerCase();
+        let m=x.match(/^([A-Z\.-]+)\s*\(([\d\.]+)%\):\s*\$\s*([\d\.,]+)\s*=\s*([\d\.,]+)/i);
+        if(m) store.bribes.items.push({g, p:m[1], s:parseFloat(m[2]), u:clean(m[3]), l:clean(m[4])});
+    });
+    
+    // Sort Bribes Globally by Score DESC
+    store.bribes.items.sort((a, b) => b.s - a.s);
+    // Assign Ranks
+    store.bribes.items.forEach((item, index) => {
+        item.rank = index + 1;
+    });
+
+    calcIncentives();
+    renderVoteTable();
+    renderBribesModal();
+}
+
+function calcIncentives() {
+    store.bribes.pdActive = (store.vote.ep >= store.bribes.epStart && store.vote.ep <= store.bribes.epEnd);
+    store.vote.pools.forEach(pool => {
+        pool.pd = 0; pool.oth = 0; pool.pct = 0;
+        if(store.bribes.pdActive) {
+            let normName = normalizePool(pool.n);
+            let match = store.bribes.items.find(b => normalizePool(b.p) === normName);
+            if(match) { pool.pd = match.u; pool.pct = match.s; }
+        }
+        if(pool.inc < pool.pd) pool.inc = pool.pd;
+        pool.oth = pool.inc - pool.pd;
+        if(pool.oth < 0) pool.oth = 0;
+    });
+    
+    $('vote-ep').innerText=store.vote.ep; $('vote-end').innerText=store.vote.end; 
+    $('vote-ph').innerText=store.vote.ph; $('vote-ph').className=store.vote.ph==='End'?'text-red-500':'text-yellow-400';
+    $('vote-rebase').innerText=store.vote.reb.toLocaleString() + ' ampLUNA'; 
+    $('vote-claim').innerText=fmt$(store.vote.usd);
+}
+
+function renderVoteTable() {
+    let html = '';
+    let lastBucket = '';
+    store.vote.pools.forEach(p => {
+        if(p.b !== lastBucket) {
+            html += `<div class="col-span-12 bg-gray-800/50 text-center text-[10px] font-bold text-gray-400 py-1 my-1 rounded uppercase tracking-widest">${p.b}</div>`;
+            lastBucket = p.b;
+        }
+        let dexColor = 'text-gray-500';
+        if(p.d.includes('Astro')) dexColor = 'text-orange-400';
+        if(p.d.includes('White')) dexColor = 'text-green-400';
+        
+        html += `
+        <div class="grid grid-cols-12 gap-2 border-b border-gray-800/50 items-center py-1 hover:bg-white/5">
+            <div class="col-span-2 truncate text-white text-[10px]" title="${p.n}">${p.n}<br><span class="text-[8px] ${dexColor}">${p.d}</span></div>
+            <div class="col-span-2 text-center"><div class="font-mono text-white text-[10px]">${(p.tvp/1e6).toFixed(2)}M</div><div class="text-[8px] text-gray-500">${p.vps}%</div></div>
+            <div class="col-span-1 text-center font-mono text-[10px] text-gray-300">${fmt$(p.dp)}</div>
+            <div class="col-span-1 text-center font-mono text-[10px] ${p.pd>0?'text-purple-300 font-bold':''}">${p.pd>0 ? fmt$(p.pd) : '-'}</div>
+            <div class="col-span-1 text-center font-mono text-[10px] text-gray-400">${p.oth>0 ? fmt$(p.oth) : '-'}</div>
+            <div class="col-span-1 text-center text-green-400 font-mono font-bold text-[10px]">${fmt$(p.inc)}</div>
+            <div class="col-span-2 text-center text-blue-400 text-[10px]">${p.apr}</div>
+            <div class="col-span-2 text-right flex flex-col justify-center">${p.mvp > 0 ? `<span class="text-purple-400 font-mono text-[10px] font-bold">${fmt$(p.mvp).replace('$','')} VP</span><span class="text-[8px] text-gray-500">${p.ms} % Of Total</span>` : '<span class="text-gray-700 text-[10px]">-</span>'}</div>
+        </div>`;
+    });
+    $('vote-list').innerHTML = html;
+}
+
+function renderBribesModal() {
+    $('mod-br-ep').innerText = store.bribes.epStr;
+    let buckets = ['project', 'bluechip', 'single', 'stable'];
+    let html = '';
+    buckets.forEach(bk => {
+        let items = store.bribes.items.filter(i => i.g.includes(bk));
+        if(items.length === 0) return;
+        html += `<div class="mb-3"><h4 class="text-[10px] uppercase font-bold text-gray-500 mb-1 border-b border-gray-800">${bk}</h4>`;
+        html += items.map(i => {
+            let dexColor = 'text-white';
+            let vPool = store.vote.pools.find(vp => normalizePool(vp.n) === normalizePool(i.p));
+            if(vPool) {
+                if(vPool.d.includes('Astro')) dexColor = 'text-orange-400';
+                if(vPool.d.includes('White')) dexColor = 'text-green-400';
+            }
+            return `
+            <div class="grid grid-cols-12 gap-2 bg-[#111] p-2 mb-1 rounded border border-gray-800 items-center">
+                <div class="col-span-2 text-center font-mono text-yellow-500 font-bold">#${i.rank}</div>
+                <div class="col-span-4 font-bold ${dexColor} truncate" title="${i.p}">${i.p}</div>
+                <div class="col-span-3 text-right text-gray-400 text-[10px]">${i.s.toFixed(2)}%</div>
+                <div class="col-span-3 text-right">
+                    <div class="text-green-400 font-mono font-bold">$${i.u}</div>
+                    <div class="text-purple-400 font-mono text-[9px]">${i.l.toLocaleString()} LUNA</div>
+                </div>
+            </div>`;
+        }).join('');
+        html += `</div>`;
+    });
+    $('mod-br-list').innerHTML = html;
+}
+
+// --- LOCKS ---
+function parseLocks() {
+    let t=$('locksPaste').value;
+    let factorMatch = t.match(/Factor\s*([\d\.]+)\s*x/);
+    if(factorMatch) store.dao.lFac = parseFloat(factorMatch[1]);
+    let vpMatch = t.match(/Your Voting Power\s*([\d\.\sKkMm]+)\s*VP/);
+    if(vpMatch) store.dao.lVp = clean(vpMatch[1]);
+    let assetMatch = t.match(/Underlying Assets\s*~?([\d\.\sKkMm]+)\s*([a-zA-Z]+)/);
+    if(assetMatch) store.dao.lAst = `${assetMatch[1]} ${assetMatch[2]}`;
+
+    store.dao.locks = [];
+    let chunks = t.split(/Lock #/i); 
+    for(let i=1; i<chunks.length; i++) {
+        let c = chunks[i];
+        let id = c.match(/^(\d+)/)[1];
+        let amt = 0, asset = 'Unknown', usd = 0, vp = 0, status = '-';
+        let amtMatch = c.match(/([\d\.\s]+[KkMm]?)\s+(arbLUNA|ampLUNA|bLUNA|LUNA)/);
+        if(amtMatch) { amt = clean(amtMatch[1]); asset = amtMatch[2]; }
+        let usdMatch = c.match(/\$\s*([\d\s\.,]+)/);
+        if(usdMatch) usd = clean(usdMatch[1]);
+        let lVpMatch = c.match(/([\d\.\s]+[KkMm]?)\s*VP/);
+        if(lVpMatch) vp = clean(lVpMatch[1]);
+        if(c.toLowerCase().includes('auto max-lock')) status = 'Max Lock (Auto)';
+        else if(c.toLowerCase().includes('unlocking')) status = 'Unlocking';
+        else status = 'Manual';
+        store.dao.locks.push({ id, amt, asset, usd, vp, status });
+    }
+    renderLocks();
+    upStat();
+}
+
+function renderLocks() {
+    $('locks-vp').innerText = store.dao.lVp.toLocaleString() + ' VP';
+    $('locks-factor').innerText = store.dao.lFac + ' x';
+    $('locks-assets').innerText = store.dao.lAst;
+    let buckets = {};
+    store.dao.locks.forEach(l => { if(!buckets[l.asset]) buckets[l.asset] = []; buckets[l.asset].push(l); });
+    let html = '';
+    Object.keys(buckets).sort().forEach(asset => {
+        html += `<div class="text-xs font-bold text-gray-500 uppercase mb-2 mt-4 border-b border-gray-800 pb-1">${asset} Locks</div>`;
+        buckets[asset].forEach(l => {
+            html += `
+            <div class="grid grid-cols-12 gap-4 bg-[#1a1a1a] border border-gray-800 p-3 rounded mb-2 items-center">
+                <div class="col-span-2 flex flex-col"><span class="text-purple-400 font-bold text-sm">#${l.id}</span><span class="text-[9px] text-gray-500">${l.status}</span></div>
+                <div class="col-span-4"><div class="text-white font-mono text-sm">${l.amt.toLocaleString()} <span class="text-gray-500 text-xs">${l.asset}</span></div></div>
+                <div class="col-span-3 text-right"><div class="text-green-400 font-mono text-sm">$${l.usd.toLocaleString()}</div></div>
+                <div class="col-span-3 text-right"><div class="text-white font-bold font-mono text-sm">${l.vp.toLocaleString()} VP</div></div>
+            </div>`;
+        });
+    });
+    if(store.dao.locks.length === 0) html = '<div class="text-center text-gray-600 italic text-xs pt-10">No locks parsed yet...</div>';
+    $('locks-list').innerHTML = html;
+}
+
+// --- VOTION ---
+function parseRatios() {
+    let t=$('ratioPaste').value;
+    let rb=t.match(/1\s*arbLUNA\s*=\s*([\d\.]+)/i); if(rb) store.votion.r.arb=parseFloat(rb[1]);
+    let mp=t.match(/1\s*ampLUNA\s*=\s*([\d\.]+)/i); if(mp) store.votion.r.amp=parseFloat(mp[1]);
+    $('ratio-arb').innerText='Ratio: '+store.votion.r.arb; $('ratio-amp').innerText='Ratio: '+store.votion.r.amp;
+    upVotionUI();
+    upStat();
+}
+
+function parseVotion() {
+    let lines = $('votionPaste').value.split('\n').map(x=>x.trim()).filter(x=>x);
+    let p=null, bk='Stable', bkts=['stable','project','bluechip','single'];
+    lines.forEach((l,i)=>{
+        if(l.includes(' - ') && (l.includes('arbLUNA')||l.includes('ampLUNA'))) {
+            if(p) upsertPool(p);
+            let prt=l.split(' - ');
+            p={ id:l, ast:prt[0].trim(), dur:prt[1].trim(), tvT:0, tvU:0, apy:'-', rew:0, ep:'-', votes:[] };
+            bk='Stable'; 
+        }
+        if(p) {
+            if(l==='TVL') { p.tvT=clean(lines[i+1]); p.tvU=clean(lines[i+2]); }
+            if(l==='APY') p.apy=lines[i+1];
+            if(l==='Period') p.ep=lines[i+1];
+            if(l.startsWith('Total Exp')) p.rew=clean(lines[i+1]);
+            if(bkts.includes(l.toLowerCase())) { bk = l.charAt(0).toUpperCase() + l.slice(1).toLowerCase(); }
+            if(l==='→') {
+                let v1=parseFloat(lines[i-1]), v2=parseFloat(lines[i+1]);
+                if(!isNaN(v2) && v2 > 0) { p.votes.push({b:bk, n:lines[i-2], f:v1, t:v2}); }
+            }
+        }
+    });
+    if(p) upsertPool(p);
+    upVotionUI(); upStat();
+}
+
+function upsertPool(p) {
+    let idx = store.votion.pools.findIndex(x=>x.id===p.id);
+    if(idx>=0) store.votion.pools[idx]=p; else store.votion.pools.push(p);
+}
+
+function upVotionUI() {
+    const render = (isArb) => {
+        let rat = isArb ? store.votion.r.arb : store.votion.r.amp;
+        return store.votion.pools.filter(p=>p.ast.includes(isArb?'arb':'amp')).map(p=>{
+            let lvp = p.tvT * rat; 
+            let nextEp = parseInt(p.ep) + 1;
+            let groups = {};
+            p.votes.forEach(v => { if(!groups[v.b]) groups[v.b] = []; groups[v.b].push(v); });
+            let vHtml = Object.keys(groups).map(bucketName => {
+                let items = groups[bucketName].map(v => {
+                    let poolVp = lvp * (v.t / 100); 
+                    return `<div class="flex justify-between text-[10px] mb-1 pl-2 border-l border-gray-800 ml-1"><span class="w-1/3 truncate text-gray-400">${v.n}</span><span class="w-1/4 text-right text-gray-600">${v.f}% <span class="text-gray-700">→</span></span><span class="w-1/4 text-right text-white font-bold">${v.t}%</span><span class="w-1/6 text-right text-purple-400 font-mono font-bold">${rat ? (poolVp/1000).toFixed(1)+'k' : '-'}</span></div>`;
+                }).join('');
+                return `<div class="mt-2"><div class="text-[9px] font-bold text-gray-500 uppercase mb-1 bg-gray-900/50 px-1 rounded">${bucketName}</div>${items}</div>`;
+            }).join('');
+            return `<div class="bg-[#161616] border ${isArb?'border-orange-900':'border-blue-900'} rounded overflow-hidden"><div class="p-3 ${isArb?'bg-orange-900/20':'bg-blue-900/20'} border-b border-gray-800"><div class="flex justify-between items-start mb-1"><h3 class="font-bold text-white text-lg">${p.dur} Lockup</h3><div class="text-right"><div class="text-green-400 font-bold text-lg">${p.apy}</div><div class="text-[8px] text-gray-400 uppercase">Lockup Boosted APY</div></div></div><p class="text-[9px] text-gray-400 leading-tight">Snap taken during epoch <strong class="text-white">${p.ep}</strong>. Votes applied to next epoch so ${p.ep} + 1 = <strong class="text-white">${nextEp}</strong>.</p></div><div class="p-2 grid grid-cols-3 gap-2 border-b border-gray-800 text-[10px] bg-[#111]"><div><div class="text-gray-500 text-[8px] uppercase">TVL</div><div class="font-mono font-bold text-white">${p.tvT.toLocaleString()} ${p.ast}</div><div class="text-gray-500">$${p.tvU.toLocaleString()}</div></div><div class="border-l border-gray-800 pl-2"><div class="text-gray-500 text-[8px] uppercase">Total Lockup VP</div><div class="font-mono font-bold text-purple-400">${rat?lvp.toLocaleString(undefined,{maximumFractionDigits:0}):'-'}</div><div class="text-gray-600 text-[8px]">Ratio: ${rat}</div></div><div class="border-l border-gray-800 pl-2 text-right"><div class="text-gray-500 text-[8px] uppercase">Allocated VP</div><div class="font-mono font-bold text-green-400">See below</div></div></div><div class="p-2 bg-[#0d0d0d]">${vHtml||'<div class="text-[9px] italic text-gray-700 text-center">No Changes</div>'}</div></div>`;
+        }).join('');
+    };
+    $('votion-arb').innerHTML = render(true);
+    $('votion-amp').innerHTML = render(false);
+}
+
+// --- EXPORT ---
+function getMasterData() {
+    if (!checkDataCompleteness()) return null;
+
+    const mapPool = p => ({
+        liquidity_pool_name: p.name,
+        dex_name: p.dex,
+        pool_type: p.type,
+        dex_lp_depth: p.depth,
+        tla_staked: p.stk,
+        percentage_lp_depth_in_tla: p.depth > 0 ? (p.stk / p.depth) * 100 : 0,
+        lp_apr_non_amplified: p.apr,
+        lp_apr_amplified: p.aprC || null,
+        rewards_year: p.rYr,
+        rewards_epoch: p.rEp,
+        adao_deposits_non_amplified: p.dN,
+        adao_deposits_amplified: p.dC,
+        is_inactive: p.inactive
+    });
+
+    return {
+        meta: {
+            timestamp: new Date().toISOString(),
+            epoch: store.vote.ep,
+            tool_version: "1.0.0"
+        },
+        tla_global: {
+            total_tla_value_locked: store.tla.tvl,
+            total_tla_rewards_year: store.tla.rewYr
+        },
+        dao_tla_deposits: {
+            adao_tla_deposits_usd: store.dao.dep,
+            adao_tla_deposits_apr: store.dao.apr,
+            adao_tla_deposits_tokens: store.dao.toks.map(t => ({ token: t.s, amount: t.a })),
+            adao_unclaimed_rewards: {
+                total_usd: store.dao.rew.usd,
+                z_assets: store.dao.rew.z,
+                amp_luna: store.dao.rew.amp
+            }
+        },
+        liquidity_pools: {
+            active: store.tla.pools.map(mapPool),
+            inactive: store.tla.inactivePools.map(mapPool)
+        },
+        vote_data: {
+            epoch: store.vote.ep,
+            ends_in: store.vote.end,
+            adao_rebase: store.vote.reb,
+            adao_unclaimed_rewards: store.vote.usd,
+            pools: store.vote.pools.map(p => ({
+                pool_name: p.n,
+                dex: p.d,
+                bucket: p.b,
+                tla_total_votes: p.tvp,
+                tla_vote_share: p.vps,
+                pool_depth: p.dp,
+                pd_bribes: p.pd,
+                other_bribes: p.oth,
+                total_bribes: p.inc,
+                v_apr: p.apr,
+                adao_vote_vp: p.mvp,
+                adao_vote_share: p.ms
+            }))
+        },
+        bribes: {
+            epoch_range: store.bribes.epStr,
+            is_pd_active: store.bribes.pdActive,
+            items: store.bribes.items.map(b => ({
+                rank: b.rank,
+                bucket: b.g,
+                pool: b.p,
+                score_percent: b.s,
+                usd_amount: b.u,
+                luna_amount: b.l
+            }))
+        },
+        locks: {
+            adao_voting_power: store.dao.lVp,
+            power_factor: store.dao.lFac,
+            underlying_assets: store.dao.lAst,
+            items: store.dao.locks.map(l => ({
+                id: l.id,
+                amount: l.amt,
+                asset: l.asset,
+                usd_value: l.usd,
+                voting_power: l.vp,
+                status: l.status
+            }))
+        },
+        votion_optimization: {
+            ratios: {
+                arb_luna: store.votion.r.arb,
+                amp_luna: store.votion.r.amp
+            },
+            pools: store.votion.pools.map(p => ({
+                id: p.id,
+                asset: p.ast,
+                duration: p.dur,
+                tvl_token: p.tvT,
+                tvl_usd: p.tvU,
+                apy: p.apy,
+                rewards: p.rew,
+                epoch: p.ep,
+                votes: p.votes
+            }))
+        }
+    };
+}
+
+function copyMasterJson() {
+    if (!checkDataCompleteness()) return;
+    let data = getMasterData();
+    navigator.clipboard.writeText(JSON.stringify(data, null, 2)).then(() => alert('Master JSON Copied to Clipboard!'));
+}
+
+function downloadMasterJson() {
+    if (!checkDataCompleteness()) return;
+    let data = getMasterData();
+    let jsonStr = JSON.stringify(data, null, 2);
+    let blob = new Blob([jsonStr], { type: "application/json" });
+    let url = URL.createObjectURL(blob);
+    
+    let a = document.createElement('a');
+    a.href = url;
+    a.download = `tla-data-epoch-${store.vote.ep || 'unknown'}-${store.vote.ph || 'phase'}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>
