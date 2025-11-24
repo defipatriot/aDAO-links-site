@@ -78,11 +78,11 @@
         <div class="flex-shrink-0 text-yellow-500 text-xl"><i class="fas fa-history"></i></div>
         <div class="flex-grow">
             <h3 class="text-xs font-bold text-gray-400 uppercase">Data Manager</h3>
-            <p class="text-[10px] text-gray-600">Load data from GitHub to restore state or view historical data.</p>
+            <p class="text-[10px] text-gray-600" id="load-msg">Checking GitHub for latest snapshot...</p>
         </div>
         <div class="flex items-center gap-2">
             <span class="text-[10px] text-gray-500 uppercase font-bold">Load Epoch:</span>
-            <input type="number" id="historyEpoch" placeholder="161" class="input-dark w-16 text-center font-mono">
+            <input type="number" id="historyEpoch" placeholder="..." class="input-dark w-16 text-center font-mono">
             <select id="historyPhase" class="input-dark w-20 text-xs">
                 <option value="Start">Start</option>
                 <option value="Mid">Mid</option>
@@ -443,32 +443,75 @@ window.onload = function() {
     setInterval(updateTimers, 1000);
     updateTimers(); // Initial call
     
-    // Smart Load Logic
+    // 1. Calculate Current Epoch based on Start Date
+    // Epoch 161 STARTED on Nov 24, 2025 00:00 UTC
+    const startAnchor = new Date(Date.UTC(2025, 10, 24, 0, 0, 0)); // Nov 24 2025 (Month is 0-indexed)
+    const startEpoch = 161;
+    const msPerWeek = 7 * 24 * 60 * 60 * 1000;
+    
     const now = new Date();
-    // Calculate current epoch relative to 161 ending Dec 1 2025
-    const refEpoch = 161;
-    const refDate = new Date(Date.UTC(2025, 11, 1, 0, 0, 0)); // Dec 1 2025
-    const msPerWeek = 604800000;
+    let diff = now - startAnchor;
     
-    // Are we before or after the ref?
-    let diff = now - refDate; 
+    // If now >= startAnchor, we are in 161 or later.
+    // If diff is negative, we are before 161.
     let weeksPassed = Math.floor(diff / msPerWeek);
-    let currentEp = refEpoch + weeksPassed + (diff > 0 ? 1 : 0);
+    let currentEp = startEpoch + weeksPassed;
     
-    // Determine Phase
-    // Days until Next Monday 00:00 UTC
-    const epochEnd = getNextWeeklyEvent(1, 0); 
-    let timeToClose = epochEnd - now;
-    let daysToClose = timeToClose / (1000 * 60 * 60 * 24);
-    
-    let phase = "Start";
-    if (daysToClose < 2) phase = "End";
-    else if (daysToClose < 5) phase = "Mid";
-    
-    // Set Input Values
+    // Set default value to calculated epoch
     $('historyEpoch').value = currentEp;
-    $('historyPhase').value = phase;
+
+    // 2. Scan GitHub for Latest Valid File
+    findLatestSnapshot(currentEp);
 };
+
+async function findLatestSnapshot(ep) {
+    const base = "https://raw.githubusercontent.com/defipatriot/tla_json_storage/main/tla-data-epoch";
+    const phases = ["end", "mid", "start"]; // Priority: End -> Mid -> Start
+    const msg = $('load-msg');
+    
+    msg.innerText = `Checking GitHub for Ep ${ep}...`;
+    msg.className = "text-[10px] text-yellow-500 animate-pulse";
+
+    // Helper to check a single file
+    const check = async (e, p) => {
+        try {
+            let res = await fetch(`${base}-${e}-${p}.json`, { method: 'HEAD' });
+            // GitHub Pages sometimes blocks HEAD or returns 404. 
+            // If HEAD fails due to CORS, we might need GET (but that downloads file).
+            // Let's try simple GET but abort quickly if needed? 
+            // Actually, for small JSONs, GET is fine.
+            if(!res.ok) res = await fetch(`${base}-${e}-${p}.json`); // Fallback to GET
+            return res.ok;
+        } catch(err) { return false; }
+    };
+
+    // Strategy: Check Current Epoch (End, Mid, Start)
+    for (let p of phases) {
+        if (await check(ep, p)) {
+            $('historyEpoch').value = ep;
+            $('historyPhase').value = p.charAt(0).toUpperCase() + p.slice(1); // Capitalize
+            msg.innerText = `Found latest: Epoch ${ep} (${p})`;
+            msg.className = "text-[10px] text-green-400";
+            return;
+        }
+    }
+    
+    // If not found for current, check previous epoch
+    let prevEp = ep - 1;
+    for (let p of phases) {
+        if (await check(prevEp, p)) {
+            $('historyEpoch').value = prevEp;
+            $('historyPhase').value = p.charAt(0).toUpperCase() + p.slice(1);
+            msg.innerText = `Latest available: Epoch ${prevEp} (${p})`;
+            msg.className = "text-[10px] text-blue-400";
+            return;
+        }
+    }
+    
+    msg.innerText = "No recent snapshots found.";
+    msg.className = "text-[10px] text-gray-500";
+}
+
 
 function clearAll() {
     if(!confirm("Are you sure you want to clear all data?")) return;
@@ -1485,143 +1528,6 @@ function downloadAstroResult() {
     const a = document.createElement('a');
     a.href = url;
     a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-}
-
-// --- EXPORT ---
-function getMasterData() {
-    if (!checkDataCompleteness()) return null;
-
-    const mapPool = p => ({
-        liquidity_pool_name: p.name,
-        dex_name: p.dex,
-        pool_type: p.type,
-        dex_lp_depth: p.depth,
-        tla_staked: p.stk,
-        percentage_lp_depth_in_tla: p.depth > 0 ? (p.stk / p.depth) * 100 : 0,
-        lp_apr_non_amplified: p.apr,
-        lp_apr_amplified: p.aprC || null,
-        volume_7d: 0, // Force 0 since we removed parsing
-        rewards_year: p.rYr,
-        rewards_epoch: p.rEp,
-        adao_deposits_non_amplified: p.dN,
-        adao_deposits_amplified: p.dC,
-        is_inactive: p.inactive
-    });
-
-    return {
-        meta: {
-            timestamp: new Date().toISOString(),
-            epoch: store.vote.ep,
-            tool_version: "1.0.0"
-        },
-        tla_global: {
-            total_tla_value_locked: store.tla.tvl,
-            total_tla_rewards_year: store.tla.rewYr,
-            total_lp_trade_volume: 0 // Force 0
-        },
-        dao_tla_deposits: {
-            adao_tla_deposits_usd: store.dao.dep,
-            adao_tla_deposits_apr: store.dao.apr,
-            adao_tla_deposits_tokens: store.dao.toks.map(t => ({ token: t.s, amount: t.a })),
-            adao_unclaimed_rewards: {
-                total_usd: store.dao.rew.usd,
-                z_assets: store.dao.rew.z,
-                amp_luna: store.dao.rew.amp
-            }
-        },
-        liquidity_pools: {
-            active: store.tla.pools.map(mapPool),
-            inactive: store.tla.inactivePools.map(mapPool)
-        },
-        vote_data: {
-            epoch: store.vote.ep,
-            ends_in: store.vote.end,
-            adao_rebase: store.vote.reb,
-            adao_unclaimed_rewards: store.vote.usd,
-            pools: store.vote.pools.map(p => ({
-                pool_name: p.n,
-                dex: p.d,
-                bucket: p.b,
-                tla_total_votes: p.tvp,
-                tla_vote_share: p.vps,
-                pool_depth: p.dp,
-                pd_bribes: p.pd,
-                other_bribes: p.oth,
-                total_bribes: p.inc,
-                v_apr: p.apr,
-                adao_vote_vp: p.mvp,
-                adao_vote_share: p.ms
-            }))
-        },
-        bribes: {
-            epoch_range: store.bribes.epStr,
-            is_pd_active: store.bribes.pdActive,
-            items: store.bribes.items.map(b => ({
-                rank: b.rank,
-                bucket: b.g,
-                pool: b.p,
-                score_percent: b.s,
-                usd_amount: b.u,
-                luna_amount: b.l
-            }))
-        },
-        locks: {
-            adao_voting_power: store.dao.lVp,
-            power_factor: store.dao.lFac,
-            underlying_assets: store.dao.lAst,
-            items: store.dao.locks.map(l => ({
-                id: l.id,
-                amount: l.amt,
-                asset: l.asset,
-                usd_value: l.usd,
-                voting_power: l.vp,
-                status: l.status
-            }))
-        },
-        votion_optimization: {
-            ratios: {
-                arb_luna: store.votion.r.arb,
-                amp_luna: store.votion.r.amp
-            },
-            pools: store.votion.pools.map(p => ({
-                id: p.id,
-                asset: p.ast,
-                duration: p.dur,
-                tvl_token: p.tvT,
-                tvl_usd: p.tvU,
-                apy: p.apy,
-                rewards: p.rew,
-                epoch: p.ep,
-                votes: p.votes
-            }))
-        }
-    };
-}
-
-function copyMasterJson() {
-    if (!checkDataCompleteness()) return;
-    let data = getMasterData();
-    navigator.clipboard.writeText(JSON.stringify(data, null, 2)).then(() => alert('Master JSON Copied to Clipboard!'));
-}
-
-function downloadMasterJson() {
-    if (!checkDataCompleteness()) return;
-    let data = getMasterData();
-    let jsonStr = JSON.stringify(data, null, 2);
-    let blob = new Blob([jsonStr], { type: "application/json" });
-    let url = URL.createObjectURL(blob);
-    
-    let a = document.createElement('a');
-    a.href = url;
-    
-    // Ensure phase is lowercase: "End" -> "end"
-    let phaseLower = (store.vote.ph || 'phase').toLowerCase();
-    a.download = `tla-data-epoch-${store.vote.ep || 'unknown'}-${phaseLower}.json`;
-    
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
