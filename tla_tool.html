@@ -50,6 +50,7 @@
                 </div>
             </div>
             <div class="flex gap-2">
+                <button onclick="clearAll()" class="bg-red-900/30 hover:bg-red-900/50 text-red-400 border border-red-900 px-4 py-2 rounded text-xs font-bold transition-colors">🗑️ Clear All</button>
                 <button onclick="copyMasterJson()" class="bg-gray-800 hover:bg-gray-700 text-white border border-gray-600 px-4 py-2 rounded text-xs font-bold transition-colors">📋 Copy JSON</button>
                 <button onclick="downloadMasterJson()" class="bg-cyan-900 hover:bg-cyan-800 text-cyan-200 border border-cyan-700 px-4 py-2 rounded text-xs font-bold transition-colors">⬇️ Download JSON</button>
             </div>
@@ -76,18 +77,19 @@
     <div class="bg-[#161616] border border-gray-800 rounded-lg p-3 mb-6 flex items-center gap-4">
         <div class="flex-shrink-0 text-yellow-500 text-xl"><i class="fas fa-history"></i></div>
         <div class="flex-grow">
-            <h3 class="text-xs font-bold text-gray-400 uppercase">Load Previous Epoch Data</h3>
-            <p class="text-[10px] text-gray-600">Pre-load bribes and liquidity from GitHub history.</p>
+            <h3 class="text-xs font-bold text-gray-400 uppercase">Data Manager</h3>
+            <p class="text-[10px] text-gray-600">Load data from GitHub to restore state or view historical data.</p>
         </div>
         <div class="flex items-center gap-2">
-            <input type="number" id="historyEpoch" placeholder="159" class="input-dark w-16 text-center font-mono">
+            <span class="text-[10px] text-gray-500 uppercase font-bold">Load Epoch:</span>
+            <input type="number" id="historyEpoch" placeholder="161" class="input-dark w-16 text-center font-mono">
             <select id="historyPhase" class="input-dark w-20 text-xs">
-                <option value="End">End</option>
-                <option value="Mid">Mid</option>
                 <option value="Start">Start</option>
+                <option value="Mid">Mid</option>
+                <option value="End">End</option>
             </select>
             <button onclick="fetchHistory()" class="bg-yellow-900/50 hover:bg-yellow-800 text-yellow-200 border border-yellow-700 px-3 py-1.5 rounded text-xs font-bold transition-colors">
-                Load
+                Load Data
             </button>
         </div>
     </div>
@@ -440,21 +442,97 @@ window.onload = function() {
     fetchBribeHistory();
     setInterval(updateTimers, 1000);
     updateTimers(); // Initial call
-};
-
-function updateTimers() {
+    
+    // Smart Load Logic
     const now = new Date();
-    
-    // 1. Epoch Timer (Ends Next Monday 00:00 UTC)
-    const epochEnd = getNextWeeklyEvent(1, 0); 
-    let diffE = epochEnd - now;
-    
-    // Calculate Epoch Number based on Ref (Epoch 161 ends Dec 1 2025 00:00 UTC)
+    // Calculate current epoch relative to 161 ending Dec 1 2025
     const refEpoch = 161;
     const refDate = new Date(Date.UTC(2025, 11, 1, 0, 0, 0)); // Dec 1 2025
     const msPerWeek = 604800000;
-    let weeksDiff = Math.floor((epochEnd.getTime() - refDate.getTime()) / msPerWeek);
-    let currentEp = refEpoch + weeksDiff; 
+    
+    // Are we before or after the ref?
+    let diff = now - refDate; 
+    let weeksPassed = Math.floor(diff / msPerWeek);
+    let currentEp = refEpoch + weeksPassed + (diff > 0 ? 1 : 0);
+    
+    // Determine Phase
+    // Days until Next Monday 00:00 UTC
+    const epochEnd = getNextWeeklyEvent(1, 0); 
+    let timeToClose = epochEnd - now;
+    let daysToClose = timeToClose / (1000 * 60 * 60 * 24);
+    
+    let phase = "Start";
+    if (daysToClose < 2) phase = "End";
+    else if (daysToClose < 5) phase = "Mid";
+    
+    // Set Input Values
+    $('historyEpoch').value = currentEp;
+    $('historyPhase').value = phase;
+};
+
+function clearAll() {
+    if(!confirm("Are you sure you want to clear all data?")) return;
+    
+    // Reset Store
+    store = {
+        dao: { dep:0, apr:0, rew:{z:0,amp:0,usd:0}, toks:[], vRew:{}, vPer:[], locks:[], lVp:0, lAst:'', lFac:0 },
+        tla: { tvl:0, rewYr:0, vol:0, pools:[], inactivePools: [] },
+        vote: { ep:0, end:'-', ph:'-', vp:0, usd:0, reb:0, pools:[] },
+        bribes: { epStart:0, epEnd:0, epStr:'', items:[], pdActive:false, history: store.bribes.history }, // Keep history cache
+        votion: { pools:[], r:{arb:0, amp:0} },
+        astroDone: []
+    };
+    
+    // Clear Inputs
+    const inputs = document.querySelectorAll('textarea, input[type="text"]');
+    inputs.forEach(i => i.value = '');
+    
+    // Clear UI
+    $('liq-list').innerHTML = '';
+    $('vote-list').innerHTML = '';
+    $('locks-list').innerHTML = '<div class="text-center text-gray-600 italic text-xs pt-10">No locks parsed yet...</div>';
+    $('votion-arb').innerHTML = '';
+    $('votion-amp').innerHTML = '';
+    
+    // Reset Header Stats
+    ['tla-tvl','tla-rew','dao-dep','dao-apr','dao-usd','dao-rew-z','dao-rew-amp','vote-ep','vote-end','vote-ph','vote-rebase','vote-claim','locks-vp','locks-factor','locks-assets'].forEach(id => {
+        const el = $(id);
+        if(el) el.innerText = '-';
+    });
+    
+    // Re-populate dropdowns
+    populateAstroPools();
+    
+    // Reset Progress Bars/Status
+    $('status-bar').firstElementChild.style.width = '0%';
+    $('status-text').innerText = "WAITING FOR DATA...";
+    $('status-bar').firstElementChild.classList.remove('bg-green-500');
+    
+    // Reload Bribes if epoch was set (but we just cleared it, so wait for parse)
+}
+
+function updateTimers() {
+    const now = new Date();
+    const epochEnd = getNextWeeklyEvent(1, 0); 
+    let diffE = epochEnd - now;
+    
+    const refEpoch = 161;
+    const refDate = new Date(Date.UTC(2025, 11, 1, 0, 0, 0)); 
+    const msPerWeek = 604800000;
+    
+    // Determine epoch based on time difference
+    // If now < refDate, diff is negative. 
+    let diffTime = now.getTime() - refDate.getTime();
+    // If we are exactly on the week ending Dec 1, diffTime is negative (e.g. -2 days)
+    // We want Dec 1 00:00 to mark the transition from 161 to 162
+    // So if time < refDate, we are in 161 (or earlier).
+    // weeks passed = floor(diff / week)
+    // if diff = -1 day, weeks = -1. Epoch = 161 + (-1) + 1 = 161.
+    let weeksPassed = Math.floor(diffTime / msPerWeek);
+    let currentEp = refEpoch + weeksPassed + (diffTime > 0 ? 1 : 0); // Logic fix for forward time
+    // Actually simpler: RefDate is END of 161.
+    // So if now < RefDate, we are in 161 (assuming within 1 week).
+    // Let's stick to the relative week calc.
     
     let d = Math.floor(diffE / (1000 * 60 * 60 * 24));
     let h = Math.floor((diffE % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
@@ -463,15 +541,11 @@ function updateTimers() {
     $('live-epoch').innerText = `Epoch ${currentEp}`;
     $('epoch-timer').innerText = `${d}d ${h}h ${m}m`;
     
-    // 2. Rewards Timer (Updates Tuesday 00:00 UTC)
-    // Tuesday = 2, 00:00 = 0
     const rewUpdate = getNextWeeklyEvent(2, 0);
     let diffR = rewUpdate - now;
-    
     let rd = Math.floor(diffR / (1000 * 60 * 60 * 24));
     let rh = Math.floor((diffR % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
     let rm = Math.floor((diffR % (1000 * 60 * 60)) / (1000 * 60));
-    
     $('reward-timer').innerText = `${rd}d ${rh}h ${rm}m`;
 }
 
@@ -479,16 +553,11 @@ function getNextWeeklyEvent(dayOfWeek, hourUTC) {
     const now = new Date();
     const result = new Date(now);
     result.setUTCHours(hourUTC, 0, 0, 0);
-    
     const currentDay = now.getUTCDay();
-    // Days until target
     let daysUntil = (dayOfWeek + 7 - currentDay) % 7;
-    
-    // If today is the target day, check if hour has passed
     if (daysUntil === 0 && now.getUTCHours() >= hourUTC) {
-        daysUntil = 7; // Move to next week if passed
+        daysUntil = 7; 
     }
-    
     result.setUTCDate(now.getUTCDate() + daysUntil);
     return result;
 }
@@ -497,27 +566,18 @@ function getNextWeeklyEvent(dayOfWeek, hourUTC) {
 async function fetchBribeHistory() {
     const url = 'https://raw.githubusercontent.com/defipatriot/tla_json_storage/main/tla_pd_bribes.json';
     try {
-        $('bribe-status').innerText = "Loading GitHub data...";
         let res = await fetch(url);
         if(res.ok) {
             store.bribes.history = await res.json();
-            $('bribe-status').innerText = "GitHub data loaded.";
-            if(store.vote.ep > 0) matchBribesFromHistory();
-        } else {
-            $('bribe-status').innerText = "GitHub load failed.";
         }
     } catch(e) {
         console.error("Failed to load GitHub bribes", e);
-        $('bribePaste').value = "Auto-load blocked by browser security.\n\nPush this HTML file to GitHub Pages or run a local server to enable auto-fetching.";
-        $('bribe-status').innerText = "GitHub Blocked (CORS)";
-        $('bribe-status').className = "text-[9px] text-red-400 mb-1 flex justify-between items-center";
     }
 }
 
 function matchBribesFromHistory() {
     if(!store.bribes.history.length) return;
     let ep = store.vote.ep;
-    
     let match = store.bribes.history.find(item => ep >= item.start_epoch && ep <= item.end_epoch);
     
     if(match) {
@@ -532,21 +592,15 @@ function matchBribesFromHistory() {
         store.bribes.epStr = match.epoch_range;
         store.bribes.epStart = match.start_epoch;
         store.bribes.epEnd = match.end_epoch;
-        
         store.bribes.items.sort((a, b) => b.s - a.s);
         store.bribes.items.forEach((item, index) => item.rank = index + 1);
         
         calcIncentives();
         renderVoteTable();
         renderBribesModal();
-        
         $('bribesPaste').value = `✅ Auto-loaded from GitHub for Epoch ${ep} (${match.epoch_range})`;
-        $('bribe-status').innerText = "Data Applied.";
-        $('bribe-status').className = "text-[9px] text-green-400 mb-1 flex justify-between items-center";
     } else {
         $('bribesPaste').value = `⚠️ Missing data for Epoch ${ep}.\n\nPlease find the new proposal, use Tab 5 to generate the JSON, and update your GitHub file.`;
-        $('bribe-status').innerText = `No data for Ep ${ep}`;
-        $('bribe-status').className = "text-[9px] text-red-400 mb-1 flex justify-between items-center";
     }
 }
 
@@ -556,302 +610,131 @@ function switchTab(t) {
     event.target.classList.add('active');
     document.querySelectorAll('.workspace').forEach(w=>w.classList.remove('active'));
     $('ws-'+t).classList.add('active');
-    
-    if(t === 'astro') {
-        populateAstroPools();
-    }
+    if(t === 'astro') populateAstroPools();
 }
 
-// --- ASTRO POOL LOGIC ---
-function updateAstroProgress() {
-    let all = [...store.tla.pools, ...store.tla.inactivePools];
-    let total = all.length;
-    let doneCount = store.astroDone.length;
-    
-    const el = $('astro-progress');
-    if(el) el.innerText = `(${doneCount}/${total} Done)`;
-}
-
-function getPoolBucket(poolName) {
-    // Normalize for matching
-    const norm = normalizePool(poolName);
-    
-    // Check active vote pools first
-    const vPool = store.vote.pools.find(p => normalizePool(p.n) === norm);
-    if(vPool && vPool.b) return vPool.b; // e.g. "STABLE", "PROJECT"
-    
-    return 'UNCATEGORIZED';
-}
-
-function populateAstroPools() {
-    const select = $('astro-pool-select');
-    select.innerHTML = '<option value="">Select Pool...</option>';
-    
-    let allPools = [...store.tla.pools, ...store.tla.inactivePools];
-    
-    if(allPools.length === 0) {
-        const opt = document.createElement('option');
-        opt.text = "No pools loaded (Parse Tab 1 first)";
-        opt.disabled = true;
-        select.add(opt);
-        updateAstroProgress();
-        return;
-    }
-
-    // 1. Assign Buckets & Filter Done
-    let available = allPools.filter(p => !store.astroDone.includes(p.name)).map(p => {
-        return {
-            name: p.name,
-            bucket: getPoolBucket(p.name),
-            inactive: p.inactive
-        };
-    });
-    
-    // 2. Sort Order
-    const bucketOrder = ['STABLE', 'PROJECT', 'BLUECHIP', 'SINGLE', 'LST', 'LIQUIDITY', 'UNCATEGORIZED'];
-    
-    available.sort((a, b) => {
-        // Sort by Bucket Index
-        let idxA = bucketOrder.indexOf(a.bucket);
-        let idxB = bucketOrder.indexOf(b.bucket);
-        if(idxA === -1) idxA = 99;
-        if(idxB === -1) idxB = 99;
-        
-        if(idxA !== idxB) return idxA - idxB;
-        
-        // Then by Name
-        return a.name.localeCompare(b.name);
-    });
-    
-    if(available.length === 0) {
-         const opt = document.createElement('option');
-         opt.text = "All pools completed! 🎉";
-         opt.disabled = true;
-         select.add(opt);
-    } else {
-        // 3. Group by Bucket using <optgroup>
-        let currentGroup = null;
-        let groupLabel = "";
-        
-        available.forEach(p => {
-            if(p.bucket !== groupLabel) {
-                groupLabel = p.bucket;
-                currentGroup = document.createElement('optgroup');
-                currentGroup.label = groupLabel;
-                select.appendChild(currentGroup);
-            }
-            
-            const opt = document.createElement('option');
-            opt.value = p.name;
-            opt.text = p.name + (p.inactive ? " (Inactive)" : "");
-            currentGroup.appendChild(opt);
-        });
-    }
-    updateAstroProgress();
-}
-
-function resetAstroFields(keepResult = false) {
-    $('astro-liq').value = '';
-    $('astro-vol').value = '';
-    $('astro-pool-addr').value = '';
-    if (!keepResult) {
-        $('astro-result').value = '';
-        $('astro-result-area').style.display = 'none';
-        $('astro-result-label').innerText = "Resulting File Content";
-    }
-}
-
-function processAstroData() {
-    const pName = $('astro-pool-select').value.trim();
-    if(!pName) return alert("Please select a Pool Name from the dropdown.");
-    const pAddr = $('astro-pool-addr').value.trim() || "N/A";
-    
-    const liqRaw = $('astro-liq').value.trim();
-    const volRaw = $('astro-vol').value.trim();
-    
-    let liqPoints = [];
-    let volPoints = [];
-    
-    try {
-        if(liqRaw) {
-            const lData = JSON.parse(liqRaw);
-            const lSeries = lData?.result?.data?.json?.[0]?.liquidity || lData?.result?.data?.json?.[0]?.series;
-            if(lSeries && Array.isArray(lSeries)) {
-                liqPoints = lSeries.map(pt => ({ t: pt.time, v: pt.value }));
-            }
-        }
-    } catch(e) { console.error(e); alert("Liquidity JSON invalid"); return; }
-    
-    try {
-        if(volRaw) {
-            const vData = JSON.parse(volRaw);
-            const vSeries = vData?.result?.data?.json?.[0]?.volume || vData?.result?.data?.json?.[0]?.series;
-            if(vSeries && Array.isArray(vSeries)) {
-                volPoints = vSeries.map(pt => ({ t: pt.time, v: pt.value }));
-            }
-        }
-    } catch(e) { console.error(e); alert("Volume JSON invalid"); return; }
-    
-    if(!liqPoints.length && !volPoints.length) return alert("No valid data found in either JSON.");
-    
-    // Merge logic
-    const historyMap = new Map();
-    const addToMap = (points, type) => {
-        points.forEach(pt => {
-            const date = new Date(pt.t * 1000).toISOString().split('T')[0];
-            if(!historyMap.has(date)) {
-                historyMap.set(date, { time: pt.t, liquidity: 0, volume_7d: 0 });
-            }
-            const entry = historyMap.get(date);
-            if(type === 'liq') entry.liquidity = pt.v;
-            if(type === 'vol') entry.volume_7d = pt.v; 
-        });
-    };
-    addToMap(liqPoints, 'liq');
-    addToMap(volPoints, 'vol');
-    
-    const history = Array.from(historyMap.values())
-        .sort((a, b) => a.time - b.time)
-        .map(item => ({
-            ...item,
-            date_utc: new Date(item.time * 1000).toISOString().replace('T', ' ').split('.')[0] + ' UTC'
-        }));
-    
-    const finalObj = {
-        pool_name: pName,
-        pool_address: pAddr,
-        last_updated: Math.floor(Date.now() / 1000),
-        history: history
-    };
-    
-    // 1. Show Result
-    $('astro-result').value = JSON.stringify(finalObj, null, 2);
-    $('astro-result-area').style.display = 'block';
-    $('astro-result-label').innerText = `Result: ${pName} (Done)`;
-    
-    // 2. Mark as Done
-    if(!store.astroDone.includes(pName)) {
-        store.astroDone.push(pName);
-    }
-    
-    // 3. Re-populate Dropdown (removes current) & Select Next
-    populateAstroPools();
-    
-    // Select next available (index 1, because 0 is "Select Pool...")
-    const select = $('astro-pool-select');
-    // options[0] is default, options[1] is first group label, options[2] is first item
-    // We need to find the first non-disabled option
-    for(let i=0; i<select.options.length; i++) {
-        if(!select.options[i].disabled && select.options[i].value !== "") {
-            select.selectedIndex = i;
-            break;
-        }
-    }
-    
-    // 4. Clear Inputs (but keep Result visible)
-    resetAstroFields(true);
-}
-
-function copyAstroResult() {
-    const el = $('astro-result');
-    el.select();
-    document.execCommand('copy');
-    alert("Pool JSON copied!");
-}
-
-function downloadAstroResult() {
-    const content = $('astro-result').value;
-    if(!content) return alert("No content to download");
-    
-    let pName = "pool";
-    let pType = "unknown";
-    let duration = "0d";
-    let dateRange = "";
-    let bucket = "unknown";
-    
-    try {
-        const parsed = JSON.parse(content);
-        if(parsed.pool_name) {
-            pName = parsed.pool_name;
-            
-            // Lookup Type from Store
-            let poolObj = [...store.tla.pools, ...store.tla.inactivePools].find(p => normalizePool(p.name) === normalizePool(pName));
-            if(poolObj && poolObj.type) {
-                pType = poolObj.type.toLowerCase();
-            }
-            
-            // Get Bucket
-            bucket = getPoolBucket(pName).toLowerCase();
-        }
-        
-        if(parsed.history && parsed.history.length > 0) {
-            const first = parsed.history[0];
-            const last = parsed.history[parsed.history.length - 1];
-            
-            // Calculate Duration
-            const diffSeconds = last.time - first.time;
-            const days = Math.round(diffSeconds / (60 * 60 * 24));
-            duration = `${days}d`;
-            
-            // Calculate Date Range
-            const startStr = new Date(first.time * 1000).toISOString().split('T')[0];
-            const endStr = new Date(last.time * 1000).toISOString().split('T')[0];
-            dateRange = `${startStr}-${endStr}`;
-        }
-        
-    } catch(e) { console.error("Filename generation error", e); }
-    
-    // Format: astroport_{type}_{bucket}_{pool}_{duration}_{start}-{end}.json
-    // Sanitize pool name: replace spaces with underscores, remove weird chars, lowercase
-    // STRIP TRAILING " LP"
-    const safeName = pName.toLowerCase()
-        .replace(/\s+lp$/, '') // Remove trailing " lp"
-        .replace(/[\s\/]/g, '-')
-        .replace(/[^a-z0-9\-]/g, '');
-    
-    const filename = `astroport_${pType}_${bucket}_${safeName}_${duration}_${dateRange}.json`;
-    
-    const blob = new Blob([content], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-}
-
-// --- HISTORY LOADER (LEGACY FULL LOAD) ---
+// --- HISTORY LOADER (FULL RESTORE) ---
 async function fetchHistory() {
     const ep = $('historyEpoch').value;
     const ph = $('historyPhase').value.toLowerCase();
     if(!ep) return alert("Enter Epoch number");
+    
     const url = `https://raw.githubusercontent.com/defipatriot/tla_json_storage/main/tla-data-epoch-${ep}-${ph}.json`;
+    
     try {
         const res = await fetch(url);
-        if(!res.ok) throw new Error("File not found");
+        if(!res.ok) throw new Error("File not found. Check Epoch/Phase or ensure file exists on GitHub.");
         const data = await res.json();
-        if(data.bribes) {
-            store.bribes.items = data.bribes.items.map(i => ({g:i.bucket, p:i.pool, s:i.score_percent, u:i.usd_amount, l:i.luna_amount, rank:i.rank}));
-            store.bribes.epStr = data.bribes.epoch_range;
-            let epMatch = store.bribes.epStr.match(/\[(\d+)-(\d+)\]/);
-            if(epMatch) {
-                store.bribes.epStart = parseInt(epMatch[1]);
-                store.bribes.epEnd = parseInt(epMatch[2]);
+        
+        // 1. Restore Liquidity Pools
+        if(data.liquidity_pools) {
+            const mapBack = p => ({
+                name: p.liquidity_pool_name,
+                dex: p.dex_name,
+                type: p.pool_type,
+                depth: p.dex_lp_depth,
+                stk: p.tla_staked,
+                apr: p.lp_apr_non_amplified,
+                aprC: p.lp_apr_amplified,
+                rYr: p.rewards_year,
+                rEp: p.rewards_epoch,
+                dN: p.adao_deposits_non_amplified,
+                dC: p.adao_deposits_amplified,
+                inactive: p.is_inactive
+            });
+            store.tla.pools = (data.liquidity_pools.active || []).map(mapBack);
+            store.tla.inactivePools = (data.liquidity_pools.inactive || []).map(mapBack);
+            
+            // Restore Global TLA Stats
+            if(data.tla_global) {
+                store.tla.tvl = data.tla_global.total_tla_value_locked;
+                store.tla.rewYr = data.tla_global.total_tla_rewards_year;
+                store.tla.vol = data.tla_global.total_lp_trade_volume;
             }
-            renderBribesModal();
-            alert(`Loaded History: Epoch ${ep}. Bribes restored.`);
+            
+            // Restore DAO Deposits
+            if(data.dao_tla_deposits) {
+                store.dao.dep = data.dao_tla_deposits.adao_tla_deposits_usd;
+                store.dao.apr = data.dao_tla_deposits.adao_tla_deposits_apr;
+                store.dao.toks = (data.dao_tla_deposits.adao_tla_deposits_tokens || []).map(t => ({s: t.token, a: t.amount}));
+                if(data.dao_tla_deposits.adao_unclaimed_rewards) {
+                    store.dao.rew.usd = data.dao_tla_deposits.adao_unclaimed_rewards.total_usd;
+                    store.dao.rew.z = data.dao_tla_deposits.adao_unclaimed_rewards.z_assets;
+                    store.dao.rew.amp = data.dao_tla_deposits.adao_unclaimed_rewards.amp_luna;
+                }
+            }
+            renderLiquidityTable();
+            if(store.dao.toks.length > 0) $('mod-tok-list').innerHTML = store.dao.toks.map(t=>`<div class="flex justify-between border-b border-gray-800"><span class="text-gray-400">${t.s}</span><span class="font-mono">${t.a.toLocaleString()}</span></div>`).join('');
         }
-        if(data.votion_optimization?.ratios) {
-            store.votion.r.arb = data.votion_optimization.ratios.arb_luna;
-            store.votion.r.amp = data.votion_optimization.ratios.amp_luna;
-            $('ratioPaste').value = `Restored from Ep ${ep}`;
+        
+        // 2. Restore Vote Data
+        if(data.vote_data) {
+            store.vote.ep = data.vote_data.epoch;
+            store.vote.end = data.vote_data.ends_in;
+            store.vote.reb = data.vote_data.adao_rebase;
+            store.vote.usd = data.vote_data.adao_unclaimed_rewards;
+            
+            store.vote.pools = (data.vote_data.pools || []).map(p => ({
+                n: p.pool_name,
+                d: p.dex,
+                b: p.bucket,
+                tvp: p.tla_total_votes,
+                vps: p.tla_vote_share,
+                dp: p.pool_depth,
+                pd: p.pd_bribes,
+                oth: p.other_bribes,
+                inc: p.total_bribes,
+                apr: p.v_apr,
+                mvp: p.adao_vote_vp,
+                ms: p.adao_vote_share
+            }));
+            
+            // Bribes (from separate object in JSON or re-fetch?)
+            // The JSON has a bribes section
+            if(data.bribes) {
+                store.bribes.epStr = data.bribes.epoch_range;
+                store.bribes.pdActive = data.bribes.is_pd_active;
+                store.bribes.items = (data.bribes.items || []).map(b => ({
+                    g: b.bucket, p: b.pool, s: b.score_percent, u: b.usd_amount, l: b.luna_amount, rank: b.rank
+                }));
+                renderBribesModal();
+            }
+            
+            calcIncentives(); // Recalc totals
+            renderVoteTable();
+        }
+        
+        // 3. Restore Locks
+        if(data.locks) {
+            store.dao.lVp = data.locks.adao_voting_power;
+            store.dao.lFac = data.locks.power_factor;
+            store.dao.lAst = data.locks.underlying_assets;
+            store.dao.locks = (data.locks.items || []).map(l => ({
+                id: l.id, amt: l.amount, asset: l.asset, usd: l.usd_value, vp: l.voting_power, status: l.status
+            }));
+            renderLocks();
+        }
+        
+        // 4. Restore Votion
+        if(data.votion_optimization) {
+            if(data.votion_optimization.ratios) {
+                store.votion.r.arb = data.votion_optimization.ratios.arb_luna;
+                store.votion.r.amp = data.votion_optimization.ratios.amp_luna;
+                $('ratio-arb').innerText='Ratio: '+store.votion.r.arb; 
+                $('ratio-amp').innerText='Ratio: '+store.votion.r.amp;
+            }
+            store.votion.pools = (data.votion_optimization.pools || []).map(p => ({
+                id: p.id, ast: p.asset, dur: p.duration, tvT: p.tvl_token, tvU: p.tvl_usd, 
+                apy: p.apy, rew: p.rewards, ep: p.epoch, votes: p.votes
+            }));
             upVotionUI();
         }
+        
         upStat();
+        alert(`Successfully restored state from Epoch ${ep} (${ph}).`);
+        
     } catch(e) {
-        alert(`Failed to load history for Epoch ${ep} (${ph}): ${e.message}`);
+        alert(`Failed to load history: ${e.message}`);
     }
 }
 
@@ -1438,6 +1321,7 @@ function resetAstroFields(keepResult = false) {
 }
 
 function processAstroData() {
+    // Use select value instead of input
     const pName = $('astro-pool-select').value.trim();
     if(!pName) return alert("Please select a Pool Name from the dropdown.");
     const pAddr = $('astro-pool-addr').value.trim() || "N/A";
@@ -1451,6 +1335,7 @@ function processAstroData() {
     try {
         if(liqRaw) {
             const lData = JSON.parse(liqRaw);
+            // Handle nested structure result.data.json[0].liquidity OR result.data.json[0].series
             const lSeries = lData?.result?.data?.json?.[0]?.liquidity || lData?.result?.data?.json?.[0]?.series;
             if(lSeries && Array.isArray(lSeries)) {
                 liqPoints = lSeries.map(pt => ({ t: pt.time, v: pt.value }));
@@ -1470,12 +1355,16 @@ function processAstroData() {
     
     if(!liqPoints.length && !volPoints.length) return alert("No valid data found in either JSON.");
     
-    // Merge logic
+    // Merge logic: Key by date string to handle slight time differences
     const historyMap = new Map();
+    
     const addToMap = (points, type) => {
         points.forEach(pt => {
+            // Convert unix seconds to YYYY-MM-DD for alignment
             const date = new Date(pt.t * 1000).toISOString().split('T')[0];
+            
             if(!historyMap.has(date)) {
+                // Store original timestamp too
                 historyMap.set(date, { time: pt.t, liquidity: 0, volume_7d: 0 });
             }
             const entry = historyMap.get(date);
@@ -1483,13 +1372,17 @@ function processAstroData() {
             if(type === 'vol') entry.volume_7d = pt.v; 
         });
     };
+    
     addToMap(liqPoints, 'liq');
     addToMap(volPoints, 'vol');
     
+    // Convert map to sorted array
+    // And add date_utc field
     const history = Array.from(historyMap.values())
         .sort((a, b) => a.time - b.time)
         .map(item => ({
             ...item,
+            // Add readable UTC string
             date_utc: new Date(item.time * 1000).toISOString().replace('T', ' ').split('.')[0] + ' UTC'
         }));
     
@@ -1515,12 +1408,12 @@ function processAstroData() {
     
     // Select next available (index 1, because 0 is "Select Pool...")
     const select = $('astro-pool-select');
-    if (select.options.length > 1) {
-        for(let i=0; i<select.options.length; i++) {
-             if(!select.options[i].disabled && select.options[i].value !== "") {
-                 select.selectedIndex = i;
-                 break;
-             }
+    // options[0] is default, options[1] is first group label, options[2] is first item
+    // We need to find the first non-disabled option
+    for(let i=0; i<select.options.length; i++) {
+        if(!select.options[i].disabled && select.options[i].value !== "") {
+            select.selectedIndex = i;
+            break;
         }
     }
     
@@ -1555,6 +1448,7 @@ function downloadAstroResult() {
             if(poolObj && poolObj.type) {
                 pType = poolObj.type.toLowerCase();
             }
+            
             // Get Bucket
             bucket = getPoolBucket(pName).toLowerCase();
         }
@@ -1591,6 +1485,143 @@ function downloadAstroResult() {
     const a = document.createElement('a');
     a.href = url;
     a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+// --- EXPORT ---
+function getMasterData() {
+    if (!checkDataCompleteness()) return null;
+
+    const mapPool = p => ({
+        liquidity_pool_name: p.name,
+        dex_name: p.dex,
+        pool_type: p.type,
+        dex_lp_depth: p.depth,
+        tla_staked: p.stk,
+        percentage_lp_depth_in_tla: p.depth > 0 ? (p.stk / p.depth) * 100 : 0,
+        lp_apr_non_amplified: p.apr,
+        lp_apr_amplified: p.aprC || null,
+        volume_7d: 0, // Force 0 since we removed parsing
+        rewards_year: p.rYr,
+        rewards_epoch: p.rEp,
+        adao_deposits_non_amplified: p.dN,
+        adao_deposits_amplified: p.dC,
+        is_inactive: p.inactive
+    });
+
+    return {
+        meta: {
+            timestamp: new Date().toISOString(),
+            epoch: store.vote.ep,
+            tool_version: "1.0.0"
+        },
+        tla_global: {
+            total_tla_value_locked: store.tla.tvl,
+            total_tla_rewards_year: store.tla.rewYr,
+            total_lp_trade_volume: 0 // Force 0
+        },
+        dao_tla_deposits: {
+            adao_tla_deposits_usd: store.dao.dep,
+            adao_tla_deposits_apr: store.dao.apr,
+            adao_tla_deposits_tokens: store.dao.toks.map(t => ({ token: t.s, amount: t.a })),
+            adao_unclaimed_rewards: {
+                total_usd: store.dao.rew.usd,
+                z_assets: store.dao.rew.z,
+                amp_luna: store.dao.rew.amp
+            }
+        },
+        liquidity_pools: {
+            active: store.tla.pools.map(mapPool),
+            inactive: store.tla.inactivePools.map(mapPool)
+        },
+        vote_data: {
+            epoch: store.vote.ep,
+            ends_in: store.vote.end,
+            adao_rebase: store.vote.reb,
+            adao_unclaimed_rewards: store.vote.usd,
+            pools: store.vote.pools.map(p => ({
+                pool_name: p.n,
+                dex: p.d,
+                bucket: p.b,
+                tla_total_votes: p.tvp,
+                tla_vote_share: p.vps,
+                pool_depth: p.dp,
+                pd_bribes: p.pd,
+                other_bribes: p.oth,
+                total_bribes: p.inc,
+                v_apr: p.apr,
+                adao_vote_vp: p.mvp,
+                adao_vote_share: p.ms
+            }))
+        },
+        bribes: {
+            epoch_range: store.bribes.epStr,
+            is_pd_active: store.bribes.pdActive,
+            items: store.bribes.items.map(b => ({
+                rank: b.rank,
+                bucket: b.g,
+                pool: b.p,
+                score_percent: b.s,
+                usd_amount: b.u,
+                luna_amount: b.l
+            }))
+        },
+        locks: {
+            adao_voting_power: store.dao.lVp,
+            power_factor: store.dao.lFac,
+            underlying_assets: store.dao.lAst,
+            items: store.dao.locks.map(l => ({
+                id: l.id,
+                amount: l.amt,
+                asset: l.asset,
+                usd_value: l.usd,
+                voting_power: l.vp,
+                status: l.status
+            }))
+        },
+        votion_optimization: {
+            ratios: {
+                arb_luna: store.votion.r.arb,
+                amp_luna: store.votion.r.amp
+            },
+            pools: store.votion.pools.map(p => ({
+                id: p.id,
+                asset: p.ast,
+                duration: p.dur,
+                tvl_token: p.tvT,
+                tvl_usd: p.tvU,
+                apy: p.apy,
+                rewards: p.rew,
+                epoch: p.ep,
+                votes: p.votes
+            }))
+        }
+    };
+}
+
+function copyMasterJson() {
+    if (!checkDataCompleteness()) return;
+    let data = getMasterData();
+    navigator.clipboard.writeText(JSON.stringify(data, null, 2)).then(() => alert('Master JSON Copied to Clipboard!'));
+}
+
+function downloadMasterJson() {
+    if (!checkDataCompleteness()) return;
+    let data = getMasterData();
+    let jsonStr = JSON.stringify(data, null, 2);
+    let blob = new Blob([jsonStr], { type: "application/json" });
+    let url = URL.createObjectURL(blob);
+    
+    let a = document.createElement('a');
+    a.href = url;
+    
+    // Ensure phase is lowercase: "End" -> "end"
+    let phaseLower = (store.vote.ph || 'phase').toLowerCase();
+    a.download = `tla-data-epoch-${store.vote.ep || 'unknown'}-${phaseLower}.json`;
+    
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
