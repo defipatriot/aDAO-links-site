@@ -551,21 +551,24 @@
                         <h4 class="text-sm font-bold text-white">Assets</h4>
                         <div class="flex gap-2">
                             <input type="text" id="meta-search" placeholder="Search assets..." 
-                                class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs w-40"
+                                class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs w-32"
                                 oninput="filterMetaAssets()">
-                            <button onclick="addNewAsset()" class="text-[10px] bg-cyan-800 hover:bg-cyan-700 px-2 py-1 rounded">+ Add Asset</button>
+                            <button onclick="addNewAsset()" class="text-[10px] bg-cyan-800 hover:bg-cyan-700 px-2 py-1 rounded">+ Add</button>
                         </div>
                     </div>
-                    <div class="grid grid-cols-6 gap-1 text-[9px] uppercase text-gray-500 font-bold mb-2 px-2">
+                    <div class="grid grid-cols-12 gap-1 text-[7px] uppercase text-gray-500 font-bold mb-2 px-2">
                         <div class="col-span-2">Asset</div>
-                        <div class="text-center">CoinGecko</div>
-                        <div class="text-center">Category</div>
-                        <div class="text-center">Bridge</div>
-                        <div class="text-center">Actions</div>
+                        <div class="col-span-1 text-center" title="Naming matches actual path">Name</div>
+                        <div class="col-span-1 text-center" title="CoinGecko status">CG</div>
+                        <div class="col-span-1 text-center" title="Easy to find in Skip.go">Skip</div>
+                        <div class="col-span-1 text-center" title="On multiple DEXs">DEX</div>
+                        <div class="col-span-2 text-center" title="Value to chain treasury">Treasury</div>
+                        <div class="col-span-1 text-center">Score</div>
+                        <div class="col-span-2 text-center">Actions</div>
                     </div>
-                    <div id="meta-asset-list" class="max-h-[300px] overflow-y-auto custom-scroll space-y-1">
+                    <div id="meta-asset-list" class="max-h-[350px] overflow-y-auto custom-scroll space-y-1">
                         <div class="text-center text-gray-600 italic text-xs py-4">
-                            Assets will auto-populate from parsed data, or load from GitHub
+                            Load from GitHub or extract from parsed pools
                         </div>
                     </div>
                 </div>
@@ -593,14 +596,45 @@
                     </div>
                     
                     <div class="bg-gray-900/50 rounded border border-gray-700 p-3">
-                        <h4 class="text-sm font-bold text-white mb-2">Categories</h4>
-                        <div class="text-[9px] space-y-1">
-                            <div><span class="text-yellow-300">🏆 bluechip</span> - BTC, ETH, PAXG</div>
-                            <div><span class="text-green-300">💵 stable</span> - USDC, USDT, EURe</div>
-                            <div><span class="text-purple-300">⚛️ core</span> - LUNA, ATOM, INJ</div>
-                            <div><span class="text-orange-300">🏠 native</span> - ROAR, CAPA, SOLID</div>
-                            <div><span class="text-cyan-300">🔄 lsd</span> - ampLUNA, arbLUNA</div>
-                            <div><span class="text-gray-300">🌉 cross</span> - wBNB, wstETH</div>
+                        <h4 class="text-sm font-bold text-white mb-2">Origin Types</h4>
+                        <div class="text-[8px] space-y-0.5">
+                            <div><span class="text-green-400">🏠 terra_native</span> - Built on Terra (80)</div>
+                            <div><span class="text-cyan-400">🔄 terra_lsd</span> - Terra LSDs (85)</div>
+                            <div><span class="text-purple-400">⚛️ ibc</span> - Standard IBC (70)</div>
+                            <div><span class="text-yellow-400">🌉 bridge_eureka</span> - Skip (.atom) (55)</div>
+                            <div><span class="text-orange-400">🔶 bridge_axelar</span> - Axelar (.axl) (50)</div>
+                            <div><span class="text-orange-300">🟠 bridge_osmosis</span> - Osmosis (.osmo) (50)</div>
+                            <div><span class="text-blue-400">💵 stable_native</span> - Native stables (65)</div>
+                            <div><span class="text-gray-500">❓ unknown</span> - Not classified (30)</div>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-gray-900/50 rounded border border-gray-700 p-3">
+                        <h4 class="text-sm font-bold text-white mb-2">Scoring</h4>
+                        <div class="text-[8px] space-y-0.5">
+                            <div><span class="text-green-400">✓ Name</span> - TLA = Actual (+10)</div>
+                            <div><span class="text-red-400">✗ Name</span> - Mismatch (-10)</div>
+                            <div><span class="text-green-400">✓ Skip</span> - Easy to find (+5)</div>
+                            <div><span class="text-red-400">✗ Skip</span> - Confusing (-5)</div>
+                            <div><span class="text-purple-400">☑ DEX</span> - Multi-DEX (+5)</div>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-gray-900/50 rounded border border-gray-700 p-3">
+                        <h4 class="text-sm font-bold text-white mb-2">Treasury Value</h4>
+                        <div class="text-[8px] space-y-0.5">
+                            <div><span class="text-yellow-400">🏆 High</span> - BTC, ETH, stables (+5)</div>
+                            <div><span class="text-blue-400">👍 Medium</span> - LSDs, useful (+0)</div>
+                            <div><span class="text-gray-400">👎 Low</span> - Protocol tokens (-5)</div>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-gray-900/50 rounded border border-gray-700 p-3">
+                        <h4 class="text-sm font-bold text-white mb-2">CoinGecko</h4>
+                        <div class="text-[8px] space-y-0.5">
+                            <div><span class="text-green-400">✓</span> - Terra ID (+15)</div>
+                            <div><span class="text-yellow-400">○</span> - Chain only (+5)</div>
+                            <div><span class="text-red-400">✗</span> - Not listed (-15)</div>
                         </div>
                     </div>
                 </div>
@@ -609,7 +643,7 @@
             <!-- GitHub Info -->
             <div class="mt-3 p-2 bg-gray-800/50 rounded border border-gray-700 text-[10px] text-gray-400">
                 <strong>GitHub:</strong> After editing, download the JSON and replace <code class="bg-gray-900 px-1 rounded">tla_metadata.json</code> in your repository.
-                Expected URL: <code class="bg-gray-900 px-1 rounded">https://raw.githubusercontent.com/defipatriot/tla-ext_json_storage/main/tla_metadata.json</code>
+                Expected URL: <code class="bg-gray-900 px-1 rounded">https://raw.githubusercontent.com/defipatriot/tla_json_storage/main/tla_metadata.json</code>
             </div>
         </div>
     </div>
@@ -801,7 +835,13 @@ async function loadExtData() {
             data: null
         },
         epochExt: {
-            url: extBaseUrl + `tla-ext-epoch-${epoch}-${phase}.json`,
+            // Try all phases in order: end, mid, start
+            urls: [
+                extBaseUrl + `tla-ext-epoch-${epoch}-end.json`,
+                extBaseUrl + `tla-ext-epoch-${epoch}-mid.json`,
+                extBaseUrl + `tla-ext-epoch-${epoch}-start.json`
+            ],
+            url: extBaseUrl + `tla-ext-epoch-${epoch}-${phase}.json`, // Default
             statusEl: $('status-epoch-ext'),
             dateEl: $('status-epoch-ext-date'),
             dateField: 'meta.generated_at',
@@ -887,6 +927,56 @@ async function loadExtData() {
     
     // Check each file
     for (let [key, file] of Object.entries(files)) {
+        // Special handling for epochExt - try multiple phase URLs
+        if (key === 'epochExt' && file.urls) {
+            let found = false;
+            for (let tryUrl of file.urls) {
+                let filename = tryUrl.split('/').pop();
+                setFileStatus(file.statusEl, file.dateEl, 'loading', filename, null);
+                
+                try {
+                    let fetchUrl = tryUrl + '?t=' + Date.now();
+                    console.log('Trying epochExt:', tryUrl);
+                    let res = await fetch(fetchUrl, { cache: 'no-store' });
+                    
+                    if (res.ok) {
+                        let jsonData;
+                        try {
+                            jsonData = await res.json();
+                        } catch (parseErr) {
+                            console.warn('JSON parse failed for', filename, parseErr);
+                            continue; // Try next URL
+                        }
+                        
+                        // Validate structure
+                        if (!jsonData.meta || !jsonData.votion) {
+                            console.warn('epochExt missing expected structure:', Object.keys(jsonData));
+                            continue; // Try next URL
+                        }
+                        
+                        file.data = jsonData;
+                        file.loaded = true;
+                        file.url = tryUrl; // Store which URL worked
+                        
+                        let dateStr = jsonData.meta?.generated_at || null;
+                        setFileStatus(file.statusEl, file.dateEl, 'found', filename, dateStr);
+                        console.log('Found epochExt:', filename);
+                        found = true;
+                        break;
+                    }
+                } catch(e) {
+                    console.log('Failed to fetch', tryUrl, e.message);
+                }
+            }
+            
+            if (!found) {
+                let filename = `tla-ext-epoch-${epoch}-*.json`;
+                setFileStatus(file.statusEl, file.dateEl, 'missing', filename, null);
+                console.log('No epochExt found for epoch', epoch);
+            }
+            continue; // Skip normal processing for epochExt
+        }
+        
         let filename = file.url.split('/').pop();
         setFileStatus(file.statusEl, file.dateEl, 'loading', filename, null);
         
@@ -2012,22 +2102,48 @@ function showPoolScoreDetails(poolName, dex) {
 let assetMetadata = {};
 const METADATA_GITHUB_URL = 'https://raw.githubusercontent.com/defipatriot/tla_json_storage/main/tla_metadata.json';
 
-const ASSET_CATEGORIES = {
-    bluechip: { label: '🏆 Blue Chip', color: 'text-yellow-300' },
-    stable: { label: '💵 Stable', color: 'text-green-300' },
-    core: { label: '⚛️ Core', color: 'text-purple-300' },
-    native: { label: '🏠 Native Terra', color: 'text-orange-300' },
-    lsd: { label: '🔄 LSD', color: 'text-cyan-300' },
-    cross: { label: '🌉 Cross-chain', color: 'text-gray-300' },
-    unknown: { label: '❓ Unknown', color: 'text-gray-500' }
+// Origin types - how does asset get to Terra?
+const ORIGIN_TYPES = {
+    terra_native:    { label: '🏠 Terra Native', color: 'text-green-400', baseScore: 80 },
+    terra_lsd:       { label: '🔄 Terra LSD', color: 'text-cyan-400', baseScore: 85 },
+    ibc:             { label: '⚛️ IBC', color: 'text-purple-400', baseScore: 70 },
+    bridge_eureka:   { label: '🌉 Eureka', color: 'text-yellow-400', baseScore: 55 },
+    bridge_axelar:   { label: '🔶 Axelar', color: 'text-orange-400', baseScore: 50 },
+    bridge_osmosis:  { label: '🟠 Osmosis', color: 'text-orange-300', baseScore: 50 },
+    stable_native:   { label: '💵 Stable', color: 'text-blue-400', baseScore: 65 },
+    unknown:         { label: '❓ Unknown', color: 'text-gray-500', baseScore: 30 }
 };
 
-const BRIDGE_TYPES = {
-    native: 'Native',
-    '.atom': 'IBC/Skip',
-    '.axl': 'Axelar',
-    '.osmo': 'Osmosis',
-    '.wh': 'Wormhole'
+// Asset classes
+const ASSET_CLASSES = {
+    stable:    { label: 'Stable', desc: 'USDC, USDT, EURe', color: 'text-green-300', bonus: 5 },
+    bluechip:  { label: 'Bluechip', desc: 'BTC, ETH, PAXG', color: 'text-yellow-300', bonus: 5 },
+    lsd:       { label: 'LSD', desc: 'Liquid staking', color: 'text-cyan-300', bonus: 5 },
+    core:      { label: 'Core', desc: 'LUNA, ATOM', color: 'text-purple-300', bonus: 0 },
+    native:    { label: 'Native', desc: 'Terra ecosystem', color: 'text-orange-300', bonus: 0 },
+    defi:      { label: 'DeFi', desc: 'Protocol tokens', color: 'text-blue-300', bonus: 0 },
+    unknown:   { label: 'Unknown', desc: 'Not classified', color: 'text-gray-500', bonus: 0 }
+};
+
+// CoinGecko status
+const CG_STATUS = {
+    cg_terra:  { label: '✓ Terra', color: 'text-green-400', score: 15 },
+    cg_chain:  { label: '○ Chain', color: 'text-yellow-400', score: 5 },
+    cg_none:   { label: '✗ None', color: 'text-red-400', score: -15 }
+};
+
+// Acquisition difficulty
+const ACQUISITION = {
+    easy:   { label: '✓ Easy', color: 'text-green-400', desc: 'Simple IBC or already on Terra' },
+    medium: { label: '◐ Medium', color: 'text-yellow-400', desc: 'Bridge with clear path' },
+    hard:   { label: '✗ Hard', color: 'text-red-400', desc: 'Multiple steps, confusing options' }
+};
+
+// Treasury value
+const TREASURY_VALUE = {
+    high:   { label: '🏆 High', color: 'text-yellow-400', score: 5, desc: 'BTC, ETH, stables - chain wants these' },
+    medium: { label: '👍 Medium', color: 'text-blue-400', score: 0, desc: 'Useful assets' },
+    low:    { label: '👎 Low', color: 'text-gray-400', score: -5, desc: 'Protocol/ecosystem tokens' }
 };
 
 function toggleMetadataPanel() {
@@ -2044,166 +2160,166 @@ function toggleMetadataPanel() {
 
 function extractAssetsFromPools() {
     let assets = new Set();
-    
-    // Extract from vote pools
     store.vote.pools.forEach(p => {
-        let parts = p.n.split('-');
-        parts.forEach(asset => {
-            if (asset && asset.length > 0) {
-                assets.add(asset.trim());
-            }
-        });
+        p.n.split('-').forEach(a => { if (a && a.length > 0) assets.add(a.trim()); });
     });
-    
-    // Extract from liquidity pools
     store.tla.pools.forEach(p => {
-        let parts = p.normName ? p.normName.split('-') : p.name.split('-');
-        parts.forEach(asset => {
-            if (asset && asset.length > 0) {
-                assets.add(asset.trim());
-            }
-        });
+        (p.normName || p.name).split('-').forEach(a => { if (a && a.length > 0) assets.add(a.trim()); });
     });
-    
-    // Add each unique asset to metadata if not already present
     assets.forEach(asset => {
-        if (!assetMetadata[asset]) {
-            assetMetadata[asset] = {
-                coingecko: false,
-                coingecko_id: '',
-                category: detectCategory(asset),
-                bridge: detectBridge(asset),
-                multiDex: false,
-                notes: ''
-            };
-        }
+        if (!assetMetadata[asset]) assetMetadata[asset] = createDefaultAssetMeta(asset);
     });
-    
     renderMetaAssetList();
     updateMetaStatus();
     alert(`Extracted ${assets.size} unique assets from parsed pools`);
 }
 
-function detectCategory(asset) {
+function createDefaultAssetMeta(asset) {
+    return {
+        tla_name: asset,
+        actual_path: '',  // Blank - user must fill in
+        origin: 'unknown',
+        acquisition: 'hard',
+        acquisition_note: '',
+        cg_status: 'cg_none',  // Default to worst case
+        skip_clear: false,
+        asset_class: 'unknown',
+        treasury_value: 'low',
+        multi_dex: false,
+        notes: ''
+    };
+}
+
+// Naming accurate is ALWAYS calculated, not stored
+function isNamingAccurate(meta) {
+    if (!meta.actual_path || meta.actual_path === '') return false;
+    return meta.tla_name === meta.actual_path;
+}
+
+function detectOrigin(asset) {
     let base = asset.replace(/\.(atom|axl|osmo|wh)$/i, '').toUpperCase();
-    
-    if (['BTC', 'WBTC', 'ETH', 'WETH', 'PAXG'].includes(base)) return 'bluechip';
-    if (['USDC', 'USDT', 'EURE', 'DAI'].includes(base)) return 'stable';
-    if (['LUNA', 'ATOM', 'INJ'].includes(base)) return 'core';
-    if (['ROAR', 'CAPA', 'SOLID', 'ASTRO', 'FUEL', 'XASTRO'].includes(base)) return 'native';
-    if (['AMPLUNA', 'ARBLUNA', 'BLUNA', 'STLUNA', 'STATOM', 'BONELUNA', 'AMPCAPA'].includes(base)) return 'lsd';
-    if (['WBNB', 'WSTETH', 'SWTH'].includes(base)) return 'cross';
+    if (asset.match(/\.atom$/i)) return 'bridge_eureka';
+    if (asset.match(/\.axl$/i)) return 'bridge_axelar';
+    if (asset.match(/\.osmo$/i)) return 'bridge_osmosis';
+    if (['AMPLUNA', 'ARBLUNA', 'BLUNA', 'STLUNA', 'BONELUNA', 'AMPROAR', 'AMPCAPA'].includes(base)) return 'terra_lsd';
+    if (['ROAR', 'CAPA', 'SOLID', 'FUEL', 'SWTH'].includes(base)) return 'terra_native';
+    if (['USDC', 'USDT', 'EURE'].includes(base)) return 'stable_native';
+    if (['ATOM', 'INJ', 'ASTRO', 'XASTRO', 'STATOM', 'LUNA'].includes(base)) return 'ibc';
+    if (['BTC', 'WBTC', 'ETH', 'WETH', 'PAXG'].includes(base)) return 'bridge_eureka';
     return 'unknown';
 }
 
-function detectBridge(asset) {
-    if (asset.match(/\.atom$/i)) return '.atom';
-    if (asset.match(/\.axl$/i)) return '.axl';
-    if (asset.match(/\.osmo$/i)) return '.osmo';
-    if (asset.match(/\.wh$/i)) return '.wh';
-    return 'native';
+function detectAssetClass(asset) {
+    let base = asset.replace(/\.(atom|axl|osmo|wh)$/i, '').toUpperCase();
+    if (['BTC', 'WBTC', 'ETH', 'WETH', 'PAXG'].includes(base)) return 'bluechip';
+    if (['USDC', 'USDT', 'EURE', 'DAI', 'SOLID'].includes(base)) return 'stable';
+    if (['LUNA', 'ATOM'].includes(base)) return 'core';
+    if (['ROAR', 'CAPA', 'FUEL', 'SWTH'].includes(base)) return 'native';
+    if (['AMPLUNA', 'ARBLUNA', 'BLUNA', 'STLUNA', 'BONELUNA', 'STATOM', 'AMPROAR', 'AMPCAPA', 'XASTRO'].includes(base)) return 'lsd';
+    if (['ASTRO', 'INJ'].includes(base)) return 'defi';
+    return 'unknown';
+}
+
+function detectActualPath(asset) {
+    if (asset.match(/\.(atom|axl|osmo|wh|noble)$/i)) return asset;
+    let base = asset.toUpperCase();
+    if (['USDC', 'USDT'].includes(base)) return asset + '.noble';
+    if (['PAXG'].includes(base)) return asset + '.atom';
+    if (['WSTETH', 'WETH', 'WBNB'].includes(base)) return asset + '.axl';
+    return asset;
+}
+
+function detectNamingAccurate(asset) {
+    return asset === detectActualPath(asset);
+}
+
+function detectAcquisition(origin) {
+    if (['terra_native', 'terra_lsd', 'ibc'].includes(origin)) return 'easy';
+    if (['bridge_eureka', 'bridge_axelar', 'bridge_osmosis'].includes(origin)) return 'medium';
+    if (origin === 'stable_native') return 'hard';
+    return 'hard';
+}
+
+function detectTreasuryValue(assetClass) {
+    if (['bluechip', 'stable', 'core'].includes(assetClass)) return 'high';
+    if (['lsd'].includes(assetClass)) return 'medium';
+    return 'low';
+}
+
+function calculateAccessScore(meta) {
+    let origin = ORIGIN_TYPES[meta.origin] || ORIGIN_TYPES.unknown;
+    let assetClass = ASSET_CLASSES[meta.asset_class] || ASSET_CLASSES.unknown;
+    let cg = CG_STATUS[meta.cg_status] || CG_STATUS.cg_none;
+    let treasury = TREASURY_VALUE[meta.treasury_value] || TREASURY_VALUE.medium;
+    let score = origin.baseScore + assetClass.bonus + cg.score + treasury.score;
+    
+    // Naming accurate is calculated, not stored
+    if (isNamingAccurate(meta)) score += 10; else score -= 10;
+    
+    if (meta.skip_clear) score += 5; else score -= 5;
+    if (meta.multi_dex) score += 5;
+    return Math.max(0, Math.min(100, score));
 }
 
 function renderMetaAssetList() {
     let container = $('meta-asset-list');
     if (!container) return;
-    
     let search = $('meta-search')?.value?.toLowerCase() || '';
     let assets = Object.keys(assetMetadata).sort();
-    
-    if (search) {
-        assets = assets.filter(a => a.toLowerCase().includes(search));
-    }
-    
+    if (search) assets = assets.filter(a => a.toLowerCase().includes(search));
     if (assets.length === 0) {
         container.innerHTML = '<div class="text-center text-gray-600 italic text-xs py-4">No assets found</div>';
         return;
     }
-    
     let html = '';
     assets.forEach(asset => {
         let meta = assetMetadata[asset];
-        let catInfo = ASSET_CATEGORIES[meta.category] || ASSET_CATEGORIES.unknown;
-        let bridgeLabel = BRIDGE_TYPES[meta.bridge] || meta.bridge;
-        
+        let score = calculateAccessScore(meta);
+        let namingOk = isNamingAccurate(meta);
+        let scoreColor = score >= 80 ? 'text-green-400' : score >= 60 ? 'text-yellow-400' : 'text-red-400';
+        let namingColor = namingOk ? 'text-green-400' : 'text-red-400';
+        let namingIcon = namingOk ? '✓' : '✗';
+        let skipColor = meta.skip_clear ? 'text-green-400' : 'text-red-400';
+        let skipIcon = meta.skip_clear ? '✓' : '✗';
+        let treasuryInfo = TREASURY_VALUE[meta.treasury_value] || TREASURY_VALUE.medium;
+        let cgInfo = CG_STATUS[meta.cg_status] || CG_STATUS.cg_none;
+        let needsSetup = !meta.actual_path || meta.origin === 'unknown' || meta.asset_class === 'unknown';
         html += `
-        <div class="grid grid-cols-6 gap-1 items-center px-2 py-1 hover:bg-gray-800/50 rounded text-[10px]">
-            <div class="col-span-2 font-mono text-white font-bold">${asset}</div>
-            <div class="text-center">
-                <input type="checkbox" ${meta.coingecko ? 'checked' : ''} 
-                    onchange="toggleMetaField('${asset}', 'coingecko', this.checked)"
-                    class="w-4 h-4 accent-green-500">
+        <div class="grid grid-cols-12 gap-1 items-center px-2 py-1 hover:bg-gray-800/50 rounded text-[8px] ${needsSetup ? 'bg-yellow-900/20' : !namingOk ? 'bg-red-900/10' : ''}">
+            <div class="col-span-2">
+                <div class="font-mono text-white font-bold">${needsSetup ? '⚠️ ' : ''}${asset}</div>
+                ${meta.actual_path && !namingOk ? '<div class="text-[7px] text-gray-500">→ ' + meta.actual_path + '</div>' : ''}
+                ${!meta.actual_path ? '<div class="text-[7px] text-yellow-500 italic">needs setup</div>' : ''}
             </div>
-            <div class="text-center">
-                <select onchange="updateMetaField('${asset}', 'category', this.value)" 
-                    class="bg-gray-800 border border-gray-700 rounded px-1 py-0.5 text-[9px] ${catInfo.color}">
-                    ${Object.entries(ASSET_CATEGORIES).map(([k, v]) => 
-                        `<option value="${k}" ${meta.category === k ? 'selected' : ''}>${v.label}</option>`
-                    ).join('')}
-                </select>
+            <div class="col-span-1 text-center ${namingColor}" title="${namingOk ? 'Name matches' : meta.actual_path ? 'Should be: ' + meta.actual_path : 'Path not set'}">${namingIcon}</div>
+            <div class="col-span-1 text-center ${cgInfo.color}" title="CoinGecko: ${cgInfo.label}">${cgInfo.label.charAt(0)}</div>
+            <div class="col-span-1 text-center ${skipColor}" title="Skip.go ${meta.skip_clear ? 'clear' : 'confusing'}">${skipIcon}</div>
+            <div class="col-span-1 text-center" title="Multi-DEX">
+                <input type="checkbox" ${meta.multi_dex ? 'checked' : ''} 
+                    onchange="toggleMetaField('${asset}', 'multi_dex', this.checked); renderMetaAssetList();"
+                    class="w-3 h-3 accent-purple-500">
             </div>
-            <div class="text-center">
-                <select onchange="updateMetaField('${asset}', 'bridge', this.value)"
-                    class="bg-gray-800 border border-gray-700 rounded px-1 py-0.5 text-[9px]">
-                    ${Object.entries(BRIDGE_TYPES).map(([k, v]) => 
-                        `<option value="${k}" ${meta.bridge === k ? 'selected' : ''}>${v}</option>`
-                    ).join('')}
-                </select>
-            </div>
-            <div class="text-center">
-                <button onclick="editAssetDetails('${asset}')" class="text-blue-400 hover:text-white text-[9px]">✏️</button>
-                <button onclick="deleteAsset('${asset}')" class="text-red-400 hover:text-white text-[9px] ml-1">🗑️</button>
+            <div class="col-span-2 text-center text-[7px] ${treasuryInfo.color}">${treasuryInfo.label}</div>
+            <div class="col-span-1 text-center font-bold ${scoreColor}">${score}</div>
+            <div class="col-span-2 text-center">
+                <button onclick="editAssetDetails('${asset}')" class="text-blue-400 hover:text-white">✏️</button>
+                <button onclick="deleteAsset('${asset}')" class="text-red-400 hover:text-white ml-1">🗑️</button>
             </div>
         </div>`;
     });
-    
     container.innerHTML = html;
 }
 
-function filterMetaAssets() {
-    renderMetaAssetList();
-}
-
-function toggleMetaField(asset, field, value) {
-    if (assetMetadata[asset]) {
-        assetMetadata[asset][field] = value;
-    }
-}
-
-function updateMetaField(asset, field, value) {
-    if (assetMetadata[asset]) {
-        assetMetadata[asset][field] = value;
-        renderMetaAssetList();
-    }
-}
-
-function deleteAsset(asset) {
-    if (confirm(`Delete ${asset} from metadata?`)) {
-        delete assetMetadata[asset];
-        renderMetaAssetList();
-        updateMetaStatus();
-    }
-}
-
+function filterMetaAssets() { renderMetaAssetList(); }
+function toggleMetaField(asset, field, value) { if (assetMetadata[asset]) assetMetadata[asset][field] = value; }
+function updateMetaField(asset, field, value) { if (assetMetadata[asset]) { assetMetadata[asset][field] = value; renderMetaAssetList(); } }
+function deleteAsset(asset) { if (confirm('Delete ' + asset + '?')) { delete assetMetadata[asset]; renderMetaAssetList(); updateMetaStatus(); } }
 function addNewAsset() {
     let asset = prompt('Enter asset symbol (e.g., LUNA, wBTC.axl):');
     if (!asset) return;
-    
     asset = asset.trim();
-    if (assetMetadata[asset]) {
-        alert('Asset already exists!');
-        return;
-    }
-    
-    assetMetadata[asset] = {
-        coingecko: false,
-        coingecko_id: '',
-        category: detectCategory(asset),
-        bridge: detectBridge(asset),
-        multiDex: false,
-        notes: ''
-    };
-    
+    if (assetMetadata[asset]) { alert('Asset already exists!'); return; }
+    assetMetadata[asset] = createDefaultAssetMeta(asset);
     renderMetaAssetList();
     updateMetaStatus();
 }
@@ -2211,102 +2327,238 @@ function addNewAsset() {
 function editAssetDetails(asset) {
     let meta = assetMetadata[asset];
     if (!meta) return;
-    
+    let score = calculateAccessScore(meta);
+    let namingOk = isNamingAccurate(meta);
     let modal = document.createElement('div');
     modal.className = 'modal-overlay open';
     modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
     modal.innerHTML = `
-        <div class="modal-box max-w-md">
+        <div class="modal-box max-w-xl">
             <div class="flex justify-between items-center mb-4 border-b border-gray-700 pb-2">
                 <h3 class="text-lg font-bold text-white">Edit: ${asset}</h3>
                 <button onclick="this.closest('.modal-overlay').remove()" class="text-gray-500 hover:text-white text-xl">&times;</button>
             </div>
-            <div class="space-y-3 text-sm">
-                <div>
-                    <label class="block text-gray-400 text-xs mb-1">CoinGecko ID (if listed)</label>
-                    <input type="text" id="edit-cg-id" value="${meta.coingecko_id || ''}" 
-                        placeholder="e.g., terra-luna-2"
-                        class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm">
+            <div class="grid grid-cols-3 gap-4 mb-4">
+                <div class="bg-gray-900 p-3 rounded border border-gray-800 text-center">
+                    <div class="text-gray-500 text-[10px]">Access Score</div>
+                    <div id="edit-score-display" class="text-2xl font-bold ${score >= 80 ? 'text-green-400' : score >= 60 ? 'text-yellow-400' : 'text-red-400'}">${score}</div>
                 </div>
-                <div class="flex items-center gap-2">
-                    <input type="checkbox" id="edit-multi-dex" ${meta.multiDex ? 'checked' : ''} class="accent-green-500">
-                    <label class="text-gray-300 text-xs">Available on multiple DEXs</label>
+                <div class="bg-gray-900 p-3 rounded border border-gray-800 text-center">
+                    <div class="text-gray-500 text-[10px]">TLA Name</div>
+                    <div class="text-lg font-mono text-white">${meta.tla_name}</div>
                 </div>
-                <div>
-                    <label class="block text-gray-400 text-xs mb-1">Notes</label>
-                    <textarea id="edit-notes" rows="2" 
-                        class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm">${meta.notes || ''}</textarea>
+                <div class="bg-gray-900 p-3 rounded border border-gray-800 text-center">
+                    <div class="text-gray-500 text-[10px]">Naming Status</div>
+                    <div id="edit-naming-status" class="text-lg font-bold ${namingOk ? 'text-green-400' : 'text-red-400'}">${namingOk ? '✓ Match' : '✗ Mismatch'}</div>
                 </div>
-                <button onclick="saveAssetDetails('${asset}')" 
-                    class="w-full bg-green-700 hover:bg-green-600 py-2 rounded font-bold">Save</button>
             </div>
-        </div>
-    `;
+            <div class="bg-gray-900/50 p-3 rounded border border-gray-700 mb-3">
+                <h4 class="text-xs font-bold text-white mb-2">🏷️ Identity</h4>
+                <div>
+                    <label class="block text-gray-400 text-[10px] mb-1">Actual Path (what it really is - leave same as TLA if accurate)</label>
+                    <input type="text" id="edit-actual-path" value="${meta.actual_path || ''}" 
+                        placeholder="e.g., USDC.noble, wBTC.atom, or same as TLA name if accurate"
+                        oninput="updateNamingStatus('${asset}')"
+                        class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm font-mono">
+                    <div class="text-[9px] text-gray-500 mt-1">
+                        If TLA shows "USDC" but it's really "USDC.noble", enter "USDC.noble" here.
+                        If TLA shows "wBTC.atom" and that's accurate, enter "wBTC.atom".
+                    </div>
+                </div>
+            </div>
+            <div class="bg-gray-900/50 p-3 rounded border border-gray-700 mb-3">
+                <h4 class="text-xs font-bold text-white mb-2">🛒 Acquisition</h4>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-gray-400 text-[10px] mb-1">Origin</label>
+                        <select id="edit-origin" class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm">
+                            ${Object.entries(ORIGIN_TYPES).map(([k, v]) => '<option value="' + k + '" ' + (meta.origin === k ? 'selected' : '') + '>' + v.label + ' (' + v.baseScore + ')</option>').join('')}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-gray-400 text-[10px] mb-1">Difficulty</label>
+                        <select id="edit-acquisition" class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm">
+                            ${Object.entries(ACQUISITION).map(([k, v]) => '<option value="' + k + '" ' + (meta.acquisition === k ? 'selected' : '') + '>' + v.label + ' - ' + v.desc + '</option>').join('')}
+                        </select>
+                    </div>
+                </div>
+                <div class="mt-2">
+                    <input type="text" id="edit-acquisition-note" value="${meta.acquisition_note || ''}" placeholder="Acquisition notes (e.g., Must select Noble, route to Terra)" class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs">
+                </div>
+            </div>
+            <div class="bg-gray-900/50 p-3 rounded border border-gray-700 mb-3">
+                <h4 class="text-xs font-bold text-white mb-2">🔍 Discoverability</h4>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-gray-400 text-[10px] mb-1">CoinGecko</label>
+                        <select id="edit-cg" class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm">
+                            ${Object.entries(CG_STATUS).map(([k, v]) => '<option value="' + k + '" ' + (meta.cg_status === k ? 'selected' : '') + '>' + v.label + ' (' + (v.score >= 0 ? '+' : '') + v.score + ')</option>').join('')}
+                        </select>
+                    </div>
+                    <div class="flex items-end">
+                        <div class="flex items-center gap-2 bg-gray-800 p-2 rounded w-full">
+                            <input type="checkbox" id="edit-skip-clear" ${meta.skip_clear ? 'checked' : ''} class="accent-green-500">
+                            <label class="text-xs">Skip.go Clear (+5/-5)</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-gray-900/50 p-3 rounded border border-yellow-900/50 mb-3">
+                <h4 class="text-xs font-bold text-yellow-400 mb-2">💰 Value to Chain (10% take rate)</h4>
+                <div class="grid grid-cols-3 gap-3">
+                    <div>
+                        <label class="block text-gray-400 text-[10px] mb-1">Asset Class</label>
+                        <select id="edit-class" class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm">
+                            ${Object.entries(ASSET_CLASSES).map(([k, v]) => '<option value="' + k + '" ' + (meta.asset_class === k ? 'selected' : '') + '>' + v.label + ' - ' + v.desc + ' (+' + v.bonus + ')</option>').join('')}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-gray-400 text-[10px] mb-1">Treasury Value</label>
+                        <select id="edit-treasury" class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm">
+                            ${Object.entries(TREASURY_VALUE).map(([k, v]) => '<option value="' + k + '" ' + (meta.treasury_value === k ? 'selected' : '') + '>' + v.label + ' (' + (v.score >= 0 ? '+' : '') + v.score + ')</option>').join('')}
+                        </select>
+                    </div>
+                    <div class="flex items-end">
+                        <div class="flex items-center gap-2 bg-gray-800 p-2 rounded w-full">
+                            <input type="checkbox" id="edit-multi-dex" ${meta.multi_dex ? 'checked' : ''} class="accent-purple-500">
+                            <label class="text-xs text-purple-400">Multi-DEX (+5)</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="mb-3">
+                <textarea id="edit-notes" rows="2" placeholder="General notes..." class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs">${meta.notes || ''}</textarea>
+            </div>
+            <button onclick="saveAssetDetails('${asset}')" class="w-full bg-green-700 hover:bg-green-600 py-2 rounded font-bold">Save</button>
+        </div>`;
     document.body.appendChild(modal);
+}
+
+function updateNamingStatus(asset) {
+    let tlaName = asset;
+    let actualPath = $('edit-actual-path')?.value || '';
+    let namingOk = actualPath && tlaName === actualPath;
+    let statusEl = $('edit-naming-status');
+    if (statusEl) {
+        statusEl.textContent = namingOk ? '✓ Match' : '✗ Mismatch';
+        statusEl.className = 'text-lg font-bold ' + (namingOk ? 'text-green-400' : 'text-red-400');
+    }
 }
 
 function saveAssetDetails(asset) {
     let meta = assetMetadata[asset];
     if (!meta) return;
-    
-    meta.coingecko_id = $('edit-cg-id')?.value || '';
-    meta.coingecko = meta.coingecko_id.length > 0;
-    meta.multiDex = $('edit-multi-dex')?.checked || false;
+    meta.actual_path = $('edit-actual-path')?.value || '';
+    // naming_accurate is calculated from tla_name === actual_path, not stored
+    meta.origin = $('edit-origin')?.value || 'unknown';
+    meta.acquisition = $('edit-acquisition')?.value || 'hard';
+    meta.acquisition_note = $('edit-acquisition-note')?.value || '';
+    meta.cg_status = $('edit-cg')?.value || 'cg_none';
+    meta.skip_clear = $('edit-skip-clear')?.checked || false;
+    meta.asset_class = $('edit-class')?.value || 'unknown';
+    meta.treasury_value = $('edit-treasury')?.value || 'medium';
+    meta.multi_dex = $('edit-multi-dex')?.checked || false;
     meta.notes = $('edit-notes')?.value || '';
-    
     document.querySelector('.modal-overlay.open')?.remove();
     renderMetaAssetList();
+    updateMetaStatus();
 }
 
 function updateMetaStatus() {
     let count = Object.keys(assetMetadata).length;
-    let cgCount = Object.values(assetMetadata).filter(m => m.coingecko).length;
-    setTxt('meta-status', `${count} assets (${cgCount} on CG)`);
+    let needsSetup = Object.values(assetMetadata).filter(m => !m.actual_path || m.origin === 'unknown' || m.asset_class === 'unknown').length;
+    let namingIssues = Object.values(assetMetadata).filter(m => !isNamingAccurate(m)).length;
+    let avg = count > 0 ? Math.round(Object.values(assetMetadata).reduce((s, m) => s + calculateAccessScore(m), 0) / count) : 0;
+    setTxt('meta-status', count + ' assets (' + needsSetup + ' need setup, ' + namingIssues + ' naming issues, avg: ' + avg + ')');
 }
 
 async function loadMetadataFromGitHub() {
     try {
-        let resp = await fetch(METADATA_GITHUB_URL);
-        if (!resp.ok) throw new Error('Failed to fetch');
+        let resp = await fetch(METADATA_GITHUB_URL + '?t=' + Date.now());
+        if (!resp.ok) throw new Error('Failed');
         let data = await resp.json();
-        
-        assetMetadata = data.assets || {};
+        if (data.assets) {
+            Object.entries(data.assets).forEach(([asset, meta]) => {
+                // v4 format has actual_path
+                if (meta.actual_path !== undefined) {
+                    assetMetadata[asset] = {
+                        tla_name: meta.tla_name || asset,
+                        actual_path: meta.actual_path,
+                        origin: meta.origin || 'unknown',
+                        acquisition: meta.acquisition || 'hard',
+                        acquisition_note: meta.acquisition_note || '',
+                        cg_status: meta.cg_status || 'cg_none',
+                        skip_clear: meta.skip_clear || false,
+                        asset_class: meta.asset_class || 'unknown',
+                        treasury_value: meta.treasury_value || 'low',
+                        multi_dex: meta.multi_dex || false,
+                        notes: meta.notes || ''
+                    };
+                }
+                // Older formats - create with basic info
+                else {
+                    assetMetadata[asset] = {
+                        tla_name: asset,
+                        actual_path: asset, // Assume accurate if not specified
+                        origin: meta.origin || 'unknown',
+                        acquisition: 'hard',
+                        acquisition_note: '',
+                        cg_status: meta.cg_status || 'cg_none',
+                        skip_clear: false,
+                        asset_class: meta.asset_class || 'unknown',
+                        treasury_value: 'low',
+                        multi_dex: false,
+                        notes: meta.notes || ''
+                    };
+                }
+            });
+        }
         renderMetaAssetList();
         updateMetaStatus();
-        alert(`Loaded ${Object.keys(assetMetadata).length} assets from GitHub`);
+        alert('Loaded ' + Object.keys(assetMetadata).length + ' assets');
     } catch (e) {
-        console.error('Failed to load metadata:', e);
-        alert('Failed to load from GitHub. Repository may not exist yet or file is missing.');
+        console.error('Load error:', e);
+        alert('Failed to load from GitHub');
     }
 }
 
 function downloadMetadata() {
-    let data = {
-        version: 1,
-        updated: new Date().toISOString(),
-        assets: assetMetadata
-    };
-    
+    let assets = {};
+    Object.entries(assetMetadata).forEach(([a, m]) => { 
+        assets[a] = { 
+            ...m, 
+            naming_accurate: isNamingAccurate(m),
+            access_score: calculateAccessScore(m) 
+        }; 
+    });
+    let data = { version: 4, updated: new Date().toISOString(), score_formula: 'origin + class + cg + treasury + naming(±10) + skip(±5) + multidex(+5)', assets };
     let blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     let url = URL.createObjectURL(blob);
-    let a = document.createElement('a');
-    a.href = url;
-    a.download = 'tla_metadata.json';
-    a.click();
+    let a = document.createElement('a'); a.href = url; a.download = 'tla_metadata.json'; a.click();
     URL.revokeObjectURL(url);
 }
 
 function copyMetadata() {
-    let data = {
-        version: 1,
-        updated: new Date().toISOString(),
-        assets: assetMetadata
-    };
-    
-    navigator.clipboard.writeText(JSON.stringify(data, null, 2)).then(() => {
-        alert('Metadata copied to clipboard!');
+    let assets = {};
+    Object.entries(assetMetadata).forEach(([a, m]) => { 
+        assets[a] = { 
+            ...m, 
+            naming_accurate: isNamingAccurate(m),
+            access_score: calculateAccessScore(m) 
+        }; 
     });
+    let data = { version: 4, updated: new Date().toISOString(), score_formula: 'origin + class + cg + treasury + naming(±10) + skip(±5) + multidex(+5)', assets };
+    navigator.clipboard.writeText(JSON.stringify(data, null, 2)).then(() => alert('Copied!'));
 }
+
+function getPoolAccessScore(poolName) {
+    let parts = poolName.split('-');
+    if (parts.length < 2) return 50;
+    let s1 = assetMetadata[parts[0]] ? calculateAccessScore(assetMetadata[parts[0]]) : 30;
+    let s2 = assetMetadata[parts[1]] ? calculateAccessScore(assetMetadata[parts[1]]) : 30;
+    return Math.min(s1, s2);
+}
+
 
 // ============ ADAO STRATEGY ============
 
@@ -3978,13 +4230,82 @@ function buildExportData() {
             included_in_grade: p.includedInGrade ?? true
         })),
         dao: {
+            // Locked voting power
             locked_vp: store.dao.lVp || 0,
-            allocations: store.dao.allocations || []
+            power_factor: store.dao.lFac || 0,
+            underlying_assets: store.dao.lAst || 0,
+            // Deposits
+            deposit_usd: store.dao.dep || 0,
+            deposit_apr: store.dao.apr || 0,
+            // Unclaimed rewards
+            rewards: {
+                usd: store.dao.rew?.usd || 0,
+                zAssets: store.dao.rew?.z || 0,
+                ampLUNA: store.dao.rew?.amp || 0
+            },
+            // Vote rewards
+            vote_rewards: store.dao.vRew || {},
+            vote_reward_periods: store.dao.vRewPeriods || [],
+            // Tokens/Rebase
+            tokens: store.dao.toks || [],
+            // Individual locks
+            locks: (store.dao.locks || []).map(l => ({
+                id: l.id,
+                amount: l.amt,
+                asset: l.asset,
+                bucket: l.bucket,
+                vp: l.vp,
+                usd: l.usd,
+                status: l.status
+            })),
+            // Vote allocations - computed from pool data (pools where aDAO has votes)
+            allocations: store.vote.pools
+                .filter(p => p.mvp > 0)
+                .map(p => ({
+                    pool: p.n,
+                    dex: p.d.includes('Astro') ? 'Astroport' : p.d.includes('Single') ? 'Single' : 'WhiteWhale',
+                    bucket: p.b,
+                    vp: p.mvp,
+                    pct: p.ms
+                }))
+                .sort((a, b) => b.vp - a.vp)
         },
         tla: {
             tvl: store.tla.tvl || 0,
             rewards_yr: store.tla.rewYr || 0,
-            pool_count: store.tla.pools?.length || 0
+            rewards_per_epoch: (store.tla.rewYr || 0) / 52,
+            // Active pools with full data
+            pools: (store.tla.pools || []).map(p => ({
+                name: p.name,
+                normalized_name: p.normName,
+                dex: p.dex,
+                type: p.type,
+                bucket: p.bucket,
+                depth: p.depth || 0,
+                tla_staked: p.stk || 0,
+                apr_non_amp: p.aprNon || 0,
+                apr_amplified: p.aprAmp || 0,
+                rewards_per_year: p.rYr || 0,
+                adao_deposit_non_amp: p.adaoNon || 0,
+                adao_deposit_amplified: p.adaoAmp || 0
+            })),
+            // Inactive pools
+            inactive_pools: (store.tla.inactivePools || []).map(p => ({
+                name: p.name,
+                normalized_name: p.normName,
+                dex: p.dex,
+                type: p.type,
+                bucket: p.bucket,
+                depth: p.depth || 0,
+                tla_staked: p.stk || 0,
+                apr_non_amp: p.aprNon || 0,
+                apr_amplified: p.aprAmp || 0,
+                rewards_per_year: p.rYr || 0,
+                adao_deposit_non_amp: p.adaoNon || 0,
+                adao_deposit_amplified: p.adaoAmp || 0
+            })),
+            pool_count: store.tla.pools?.length || 0,
+            inactive_pool_count: store.tla.inactivePools?.length || 0
         },
         // Include ext data summary
         ext_data: {
