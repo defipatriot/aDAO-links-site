@@ -22,7 +22,7 @@
     .custom-scroll::-webkit-scrollbar-track { background: #0d0d0d; }
     .custom-scroll::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
     .filter-checkbox { accent-color: #2dd4bf; cursor: pointer; }
-    .vote-grid { display: grid; grid-template-columns: 180px 65px 100px 100px 70px 80px 70px 85px 85px 85px 60px 120px 110px 80px; gap: 8px; align-items: center; }
+    .vote-grid { display: grid; grid-template-columns: 180px 65px 100px 100px 70px 80px 70px 85px 85px 70px 85px 60px 120px 110px 80px; gap: 8px; align-items: center; }
     .liq-grid { display: grid; grid-template-columns: 190px 100px 65px 110px 110px 75px 85px 85px 110px 110px 110px 110px; gap: 8px; align-items: center; }
     .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 50; justify-content: center; align-items: center; }
     .modal-overlay.open { display: flex; }
@@ -42,13 +42,32 @@
             <div class="flex gap-4 mt-1 text-[10px] font-mono text-gray-500">
                 <span class="flex items-center gap-1"><i class="far fa-clock text-cyan-600"></i> Ends: <span id="epoch-timer" class="text-gray-300">...</span> <span id="epoch-phase" class="text-yellow-400 font-bold ml-1">...</span></span>
                 <span class="flex items-center gap-1"><i class="fas fa-sync text-green-600"></i> Rewards: <span id="reward-timer" class="text-gray-300">...</span></span>
-                <div class="flex gap-2 ml-4 border-l border-gray-700 pl-4">
+                <div class="flex gap-3 ml-4 border-l border-gray-700 pl-4 text-[10px]">
                     <span id="status-epoch-file" class="text-red-500 font-bold">Epoch File</span>
-                    <span id="status-ext-data" class="text-red-500 font-bold">Ext Data</span>
+                    <span class="text-gray-600">|</span>
+                    <div class="flex gap-3">
+                        <div class="flex flex-col items-center">
+                            <span id="status-historical" class="text-gray-500 cursor-pointer font-semibold" title="tla_ext_historical.json">Historical</span>
+                            <span id="status-historical-date" class="text-[8px] text-gray-600">-</span>
+                        </div>
+                        <div class="flex flex-col items-center">
+                            <span id="status-archive" class="text-gray-500 cursor-pointer font-semibold" title="tla_ext_archive.json">Archive</span>
+                            <span id="status-archive-date" class="text-[8px] text-gray-600">-</span>
+                        </div>
+                        <div class="flex flex-col items-center">
+                            <span id="status-epoch-ext" class="text-gray-500 cursor-pointer font-semibold" title="tla-ext-epoch-{ep}-{phase}.json">Ep Ext</span>
+                            <span id="status-epoch-ext-date" class="text-[8px] text-gray-600">-</span>
+                        </div>
+                        <div class="flex flex-col items-center">
+                            <span id="status-pd-bribes" class="text-gray-500 cursor-pointer font-semibold" title="tla_pd_bribes.json">PD Bribes</span>
+                            <span id="status-pd-bribes-date" class="text-[8px] text-gray-600">-</span>
+                        </div>
+                        <div class="flex flex-col items-center">
+                            <span id="status-metadata" class="text-gray-500 cursor-pointer font-semibold" title="tla_metadata.json">Metadata</span>
+                            <span id="status-metadata-date" class="text-[8px] text-gray-600">-</span>
+                        </div>
+                    </div>
                 </div>
-                <a id="github-link" href="#" target="_blank" class="flex items-center gap-1 ml-4 text-gray-500 hover:text-cyan-400 transition-colors">
-                    <i class="fab fa-github"></i> <span id="github-filename">tla-data-epoch-...</span>
-                </a>
             </div>
         </div>
         <div class="flex gap-2">
@@ -56,7 +75,7 @@
                 📊 Extensions
             </a>
             <button onclick="clearAll()" class="bg-red-900/20 hover:bg-red-900/40 text-red-400 border border-red-900/50 px-3 py-1.5 rounded text-xs font-bold transition-colors">Clear All</button>
-            <button onclick="copyCoreJson()" class="bg-gray-800 hover:bg-gray-700 text-white border border-gray-600 px-3 py-1.5 rounded text-xs font-bold transition-colors">Copy JSON</button>
+            <button onclick="copyExportJson()" class="bg-gray-800 hover:bg-gray-700 text-white border border-gray-600 px-3 py-1.5 rounded text-xs font-bold transition-colors">Copy JSON</button>
             <button onclick="downloadCoreJson()" class="bg-cyan-900/50 hover:bg-cyan-800 text-cyan-200 border border-cyan-700 px-3 py-1.5 rounded text-xs font-bold transition-colors">Download JSON</button>
         </div>
     </div>
@@ -117,13 +136,28 @@
         <div class="flex justify-between items-center">
             <div>
                 <div class="text-[9px] text-red-400 uppercase font-bold mb-1">⚠️ JSON Export - Data Exclusion</div>
-                <div class="text-[8px] text-red-400/70">Unchecked items will be DELETED from JSON export, not just hidden</div>
+                <div class="text-[8px] text-gray-400">Grade Against controls scoring comparisons. Export controls JSON output.</div>
             </div>
-            <div class="flex gap-3 text-[10px] font-bold text-gray-400 bg-red-900/20 px-3 py-1.5 rounded border border-red-900/50">
-                <label class="flex items-center gap-1 hover:text-white cursor-pointer"><input type="checkbox" id="export-astro" class="filter-checkbox" checked onchange="renderVoteTable()"> Astroport</label>
-                <label class="flex items-center gap-1 hover:text-white cursor-pointer"><input type="checkbox" id="export-ww" class="filter-checkbox" checked onchange="renderVoteTable()"> WhiteWhale</label>
-                <label class="flex items-center gap-1 hover:text-white cursor-pointer"><input type="checkbox" id="export-inactive" class="filter-checkbox" checked onchange="renderVoteTable()"> Inactive</label>
-                <label class="flex items-center gap-1 hover:text-white cursor-pointer text-cyan-400"><input type="checkbox" id="export-adao" class="filter-checkbox" checked onchange="renderVoteTable()"> aDAO</label>
+            <div class="flex gap-4">
+                <!-- Grade Against Filters -->
+                <div class="flex flex-col gap-1">
+                    <span class="text-[8px] text-purple-400 font-bold uppercase">Grade Against</span>
+                    <div class="flex gap-2 text-[10px] font-bold text-gray-400 bg-purple-900/20 px-2 py-1 rounded border border-purple-900/50">
+                        <label class="flex items-center gap-1 hover:text-white cursor-pointer"><input type="checkbox" id="grade-astro" class="filter-checkbox" checked onchange="renderVoteTable()"> Astro</label>
+                        <label class="flex items-center gap-1 hover:text-white cursor-pointer"><input type="checkbox" id="grade-ww" class="filter-checkbox" checked onchange="renderVoteTable()"> WW</label>
+                        <label class="flex items-center gap-1 hover:text-white cursor-pointer"><input type="checkbox" id="grade-inactive" class="filter-checkbox" checked onchange="renderVoteTable()"> Inactive</label>
+                    </div>
+                </div>
+                <!-- Export Filters -->
+                <div class="flex flex-col gap-1">
+                    <span class="text-[8px] text-red-400 font-bold uppercase">Include in Export</span>
+                    <div class="flex gap-2 text-[10px] font-bold text-gray-400 bg-red-900/20 px-2 py-1 rounded border border-red-900/50">
+                        <label class="flex items-center gap-1 hover:text-white cursor-pointer"><input type="checkbox" id="export-astro" class="filter-checkbox" checked> Astro</label>
+                        <label class="flex items-center gap-1 hover:text-white cursor-pointer"><input type="checkbox" id="export-ww" class="filter-checkbox" checked> WW</label>
+                        <label class="flex items-center gap-1 hover:text-white cursor-pointer"><input type="checkbox" id="export-inactive" class="filter-checkbox" checked> Inactive</label>
+                        <label class="flex items-center gap-1 hover:text-white cursor-pointer text-cyan-400"><input type="checkbox" id="export-adao" class="filter-checkbox" checked onchange="renderVoteTable()"> aDAO</label>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -216,6 +250,24 @@
                             <span class="text-blue-400">🔵-20</span> Supported |
                             <span class="text-red-400">🔴-50</span> Over-hyped
                         </div>
+                        <!-- Votion Summary -->
+                        <div id="votion-summary" class="col-span-2 mt-2 p-2 bg-purple-900/20 border border-purple-800/50 rounded hidden">
+                            <div class="flex justify-between items-center text-[10px]">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-purple-400 font-bold">⚡ VOTION</span>
+                                    <span class="text-gray-400">Total VP:</span>
+                                    <span id="votion-total-vp" class="text-purple-300 font-mono font-bold">-</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-gray-400">% of TLA:</span>
+                                    <span id="votion-tla-pct" class="text-purple-300 font-mono font-bold">-</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-gray-400">Source:</span>
+                                    <span id="votion-source" class="text-gray-500 font-mono">-</span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     
                     <!-- Right: aDAO Stats -->
@@ -250,6 +302,7 @@
                     <div class="text-right text-cyan-400 cursor-help" title="Access Score (asset + bridge + LUNA)" onclick="showScoreInfo('access')">Access</div>
                     <div class="text-right text-purple-400" title="Votion Current Epoch (VP + %)">Vot Now</div>
                     <div class="text-right text-purple-300" title="Votion Next Epoch Optimization (VP + %)">Vot Next</div>
+                    <div class="text-right text-blue-400" title="Expected Vote Change (Next - Now)">Δ Vote</div>
                     <div class="text-right text-green-400" title="Bribes: PD (green) / Total (yellow)">Bribes</div>
                     <div class="text-right text-orange-300 cursor-help" title="Support Score" onclick="showScoreInfo('support')">Supp</div>
                     <div class="text-right text-orange-400" title="TLA VP + Vote %">TLA Vote</div>
@@ -711,25 +764,236 @@ async function loadEpochData() {
 }
 
 async function loadExtData() {
-    const url = 'https://raw.githubusercontent.com/defipatriot/tla-ext_json_storage/main/tla_ext_combined.json';
-    const statusEl = $('status-ext-data');
+    // Build URL based on current epoch and phase
+    let epoch = currentEpochInfo?.epoch || store.vote.ep || 161;
+    let endTime = currentEpochInfo?.end_time ? new Date(currentEpochInfo.end_time) : null;
+    let phase = 'mid'; // Default
     
-    try {
-        let res = await fetch(url);
-        if (!res.ok) throw new Error("Failed to fetch");
-        let data = await res.json();
-        
-        store.ext.lps = data.lps || {};
-        store.ext.meta = data.meta || {};
-        store.ext.loaded = true;
-        
-        // Success - turn green
-        if (statusEl) {
-            statusEl.className = 'text-green-500 font-bold';
-            statusEl.innerText = 'Ext Data ✓';
+    if (endTime) {
+        let msUntilEnd = endTime - new Date();
+        let daysLeft = msUntilEnd / 86400000; // Decimal days (not floored)
+        if (daysLeft >= 5) phase = 'start';
+        else if (daysLeft > 2) phase = 'mid';
+        else phase = 'end';
+    }
+    
+    console.log('Ext data: epoch=' + epoch + ', phase=' + phase);
+    
+    const extBaseUrl = 'https://raw.githubusercontent.com/defipatriot/tla-ext_json_storage/main/';
+    const mainBaseUrl = 'https://raw.githubusercontent.com/defipatriot/tla_json_storage/main/';
+    
+    // Check each file individually
+    const files = {
+        historical: {
+            url: extBaseUrl + 'tla_ext_historical.json',
+            statusEl: $('status-historical'),
+            dateEl: $('status-historical-date'),
+            dateField: 'meta.epoch_start,meta.epoch_end', // Special: show epoch range
+            loaded: false,
+            data: null
+        },
+        archive: {
+            url: extBaseUrl + 'tla_ext_archive.json',
+            statusEl: $('status-archive'),
+            dateEl: $('status-archive-date'),
+            dateField: 'meta.epoch_start,meta.epoch_end', // Special: show epoch range
+            loaded: false,
+            data: null
+        },
+        epochExt: {
+            url: extBaseUrl + `tla-ext-epoch-${epoch}-${phase}.json`,
+            statusEl: $('status-epoch-ext'),
+            dateEl: $('status-epoch-ext-date'),
+            dateField: 'meta.generated_at',
+            loaded: false,
+            data: null
+        },
+        pdBribes: {
+            url: extBaseUrl + 'tla_pd_bribes.json',
+            statusEl: $('status-pd-bribes'),
+            dateEl: $('status-pd-bribes-date'),
+            dateField: null, // Array, check last item
+            loaded: false,
+            data: null
+        },
+        metadata: {
+            url: mainBaseUrl + 'tla_metadata.json',
+            statusEl: $('status-metadata'),
+            dateEl: $('status-metadata-date'),
+            dateField: 'updated',
+            loaded: false,
+            data: null
         }
+    };
+    
+    // Format date helper
+    function formatDate(dateStr) {
+        if (!dateStr) return '-';
+        // If it looks like an epoch range like "[160-163]", return as-is
+        if (dateStr.startsWith('[') || dateStr.startsWith('Ep ')) {
+            return dateStr;
+        }
+        try {
+            let d = new Date(dateStr);
+            if (isNaN(d.getTime())) return dateStr; // Not a valid date, return as-is
+            let now = new Date();
+            let diffDays = Math.floor((now - d) / 86400000);
+            let dateShort = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            if (diffDays === 0) return 'today';
+            if (diffDays === 1) return 'yesterday';
+            if (diffDays < 7) return diffDays + 'd ago';
+            return dateShort;
+        } catch(e) {
+            return dateStr || '-';
+        }
+    }
+    
+    // Update status element helper
+    function setFileStatus(el, dateEl, status, filename, dateStr) {
+        if (el) {
+            if (status === 'loading') {
+                el.className = 'text-yellow-500 cursor-pointer font-semibold';
+                el.title = 'Loading ' + filename + '...';
+            } else if (status === 'found') {
+                el.className = 'text-green-500 font-bold cursor-pointer';
+                el.title = filename + ' ✓';
+            } else if (status === 'missing') {
+                el.className = 'text-red-500 cursor-pointer font-semibold';
+                el.title = filename + ' ✗ (not found)';
+            } else if (status === 'none') {
+                el.className = 'text-gray-500 cursor-pointer font-semibold';
+                el.title = filename + ' (none yet)';
+            } else if (status === 'error') {
+                el.className = 'text-orange-500 cursor-pointer font-semibold';
+                el.title = filename + ' (error loading)';
+            }
+        }
+        if (dateEl) {
+            if (status === 'found' && dateStr) {
+                dateEl.innerText = formatDate(dateStr);
+                dateEl.className = 'text-[8px] text-gray-400';
+            } else if (status === 'missing') {
+                dateEl.innerText = 'missing';
+                dateEl.className = 'text-[8px] text-red-600';
+            } else if (status === 'none') {
+                dateEl.innerText = 'none';
+                dateEl.className = 'text-[8px] text-gray-600';
+            } else {
+                dateEl.innerText = '-';
+                dateEl.className = 'text-[8px] text-gray-600';
+            }
+        }
+    }
+    
+    // Check each file
+    for (let [key, file] of Object.entries(files)) {
+        let filename = file.url.split('/').pop();
+        setFileStatus(file.statusEl, file.dateEl, 'loading', filename, null);
         
-        // Show legend
+        try {
+            // Add cache-busting parameter
+            let fetchUrl = file.url + '?t=' + Date.now();
+            console.log('Fetching:', file.url);
+            let res = await fetch(fetchUrl, { cache: 'no-store' });
+            console.log('Response:', filename, 'status=' + res.status, 'ok=' + res.ok);
+            if (res.ok) {
+                let jsonData;
+                try {
+                    jsonData = await res.json();
+                } catch (parseErr) {
+                    console.error('JSON parse failed for', filename, parseErr);
+                    setFileStatus(file.statusEl, file.dateEl, 'error', filename + ' (invalid JSON)', null);
+                    continue;
+                }
+                
+                // Validate epochExt has expected structure
+                if (key === 'epochExt') {
+                    if (!jsonData.meta || !jsonData.votion) {
+                        console.warn('epochExt missing expected structure:', Object.keys(jsonData));
+                        setFileStatus(file.statusEl, file.dateEl, 'error', filename + ' (invalid format)', null);
+                        continue;
+                    }
+                }
+                
+                file.data = jsonData;
+                file.loaded = true;
+                
+                // Extract date from data
+                let dateStr = null;
+                if (file.dateField && file.dateField.includes(',')) {
+                    // Special case: epoch range like "meta.epoch_start,meta.epoch_end"
+                    let [startField, endField] = file.dateField.split(',');
+                    let startParts = startField.split('.');
+                    let endParts = endField.split('.');
+                    let startVal = file.data;
+                    let endVal = file.data;
+                    for (let p of startParts) startVal = startVal?.[p];
+                    for (let p of endParts) endVal = endVal?.[p];
+                    if (startVal && endVal) {
+                        dateStr = `Ep ${startVal}-${endVal}`;
+                    }
+                } else if (file.dateField) {
+                    let parts = file.dateField.split('.');
+                    let val = file.data;
+                    for (let p of parts) {
+                        val = val?.[p];
+                    }
+                    dateStr = val;
+                } else if (key === 'pdBribes' && Array.isArray(file.data) && file.data.length > 0) {
+                    // For PD bribes array, show the last epoch range covered
+                    let lastRange = file.data[file.data.length - 1];
+                    dateStr = lastRange?.epoch_range || ('Ep ' + lastRange?.start_epoch + '-' + lastRange?.end_epoch);
+                }
+                
+                setFileStatus(file.statusEl, file.dateEl, 'found', filename, dateStr);
+                console.log('Found:', filename);
+            } else {
+                // For archive, show "none" instead of "missing" since it's expected
+                let displayStatus = key === 'archive' ? 'none' : 'missing';
+                setFileStatus(file.statusEl, file.dateEl, displayStatus, filename + ' (HTTP ' + res.status + ')', null);
+                console.log('Missing:', filename, 'HTTP', res.status);
+            }
+        } catch(e) {
+            setFileStatus(file.statusEl, file.dateEl, 'error', filename + ' (' + e.message + ')', null);
+            console.error('Error loading:', file.url, e);
+        }
+    }
+    
+    // Apply historical data (has lps for 4Ep averages)
+    if (files.historical.loaded && files.historical.data?.lps) {
+        store.ext.lps = files.historical.data.lps;
+        store.ext.meta = files.historical.data.meta || {};
+        store.ext.loaded = true;
+        console.log('Applied historical lps:', Object.keys(store.ext.lps).length, 'LPs');
+    }
+    
+    // Apply archive data (older epochs)
+    if (files.archive.loaded && files.archive.data?.lps) {
+        store.ext.archive = files.archive.data;
+        console.log('Applied archive:', Object.keys(files.archive.data.lps).length, 'LPs');
+    }
+    
+    // Apply epoch ext data (votion, pd_bribes)
+    if (files.epochExt.loaded && files.epochExt.data) {
+        store.ext.votion = files.epochExt.data.votion || null;
+        store.ext.pdBribesEpoch = files.epochExt.data.pd_bribes || null;
+        console.log('Applied epoch ext data: votion=' + !!store.ext.votion + ', pd_bribes=' + !!store.ext.pdBribesEpoch);
+    }
+    
+    // Apply PD bribes master file
+    if (files.pdBribes.loaded && files.pdBribes.data) {
+        store.ext.pdBribesMaster = files.pdBribes.data;
+        console.log('Applied PD bribes master:', store.ext.pdBribesMaster.length, 'ranges');
+    }
+    
+    // Apply metadata
+    if (files.metadata.loaded && files.metadata.data) {
+        store.ext.metadata = files.metadata.data;
+        console.log('Applied metadata:', Object.keys(store.ext.metadata.assets || {}).length, 'assets');
+    }
+    
+    // Show legend if we have lps data
+    if (store.ext.loaded) {
         let legend = $('ext-data-legend');
         if (legend) legend.classList.remove('hidden');
         
@@ -738,18 +1002,6 @@ async function loadExtData() {
             applyExtDataToPools();
             renderVoteTable();
         }
-        
-        console.log('Ext data loaded:', Object.keys(store.ext.lps).length, 'LPs');
-    } catch(e) {
-        console.error("Failed to load ext data:", e);
-        if (statusEl) {
-            statusEl.className = 'text-yellow-500 font-bold cursor-pointer';
-            statusEl.innerText = 'Ext Data ✗';
-            statusEl.title = 'Click to load manually';
-            statusEl.onclick = showExtManualLoad;
-        }
-        // Show manual load option
-        showExtManualLoad();
     }
 }
 
@@ -799,14 +1051,7 @@ function applyExtData(data) {
     store.ext.meta = data.meta || {};
     store.ext.loaded = true;
     
-    // Update status
-    let statusEl = $('status-ext-data');
-    if (statusEl) {
-        statusEl.className = 'text-green-500 font-bold';
-        statusEl.innerText = 'Ext Data ✓';
-        statusEl.onclick = null;
-    }
-    
+    // Update paste progress status
     updatePasteStatus('ps-ext', true);
     
     // Show legend
@@ -827,24 +1072,154 @@ function applyExtData(data) {
 }
 
 function applyExtDataToPools() {
-    if (!store.ext.loaded) return;
+    if (!store.ext.loaded && !store.ext.votion && !store.ext.pdBribesEpoch) return;
     
     // Get current epoch for looking up data
     let targetEpoch = store.vote.ep || currentEpochInfo?.epoch || 0;
     
+    // Get votion data - handle both old (lockups) and new (pools) formats
+    let votionTotalVp = store.ext.votion?.total_vp || 0;
+    let votionPools = store.ext.votion?.pools || {};
+    let votionRatios = store.ext.votion?.ratios || {};
+    
+    // If we have lockups but no pools, aggregate from lockups (old format)
+    if (store.ext.votion?.lockups && Object.keys(votionPools).length === 0) {
+        store.ext.votion.lockups.forEach(lockup => {
+            votionTotalVp += lockup.vp || 0;
+            
+            lockup.buckets?.forEach(bucket => {
+                bucket.pools?.forEach(pool => {
+                    let poolName = pool.name
+                        .replace(' LP', '')
+                        .replace(/\.(atom|axl|osmo|wh)/gi, '')
+                        .trim();
+                    
+                    // Normalize LUNA position
+                    if (poolName.includes('-')) {
+                        let parts = poolName.split('-');
+                        if (['LUNA', 'bLUNA', 'ampLUNA'].includes(parts[1])) {
+                            poolName = `${parts[1]}-${parts[0]}`;
+                        }
+                    }
+                    
+                    let lpKey = `${poolName}|Astroport`;
+                    
+                    if (!votionPools[lpKey]) {
+                        votionPools[lpKey] = { current_pct: 0, current_vp: 0, optimized_pct: 0, optimized_vp: 0 };
+                    }
+                    
+                    let lockupVp = lockup.vp || 0;
+                    votionPools[lpKey].current_vp += lockupVp * (pool.current / 100);
+                    votionPools[lpKey].optimized_vp += lockupVp * (pool.optimized / 100);
+                });
+            });
+        });
+        
+        // Calculate percentages
+        Object.keys(votionPools).forEach(key => {
+            if (votionTotalVp > 0) {
+                votionPools[key].current_pct = (votionPools[key].current_vp / votionTotalVp) * 100;
+                votionPools[key].optimized_pct = (votionPools[key].optimized_vp / votionTotalVp) * 100;
+            }
+            votionPools[key].current_vp = Math.round(votionPools[key].current_vp);
+            votionPools[key].optimized_vp = Math.round(votionPools[key].optimized_vp);
+        });
+        
+        console.log('Aggregated votion from lockups:', Object.keys(votionPools).length, 'pools, total VP:', votionTotalVp.toLocaleString());
+    }
+    
+    // Get PD bribes from epoch ext file (not master)
+    let pdBribesEpoch = store.ext.pdBribesEpoch || {};
+    
+    // Helper to find votion pool with flexible matching
+    function findVotionPool(poolName, dexName) {
+        // Normalize for comparison - lowercase, ensure dot before suffix
+        function normalize(name) {
+            // Handle suffix attached without dot (WBTCaxl -> wbtc.axl)
+            // Only add dot if not preceded by one
+            name = name.replace(/([^.])(atom|axl|osmo|wh)$/gi, (m, p1, p2) => p1 + '.' + p2.toLowerCase());
+            // Lowercase the dot-suffix
+            name = name.replace(/\.(ATOM|AXL|OSMO|WH)/g, (m) => m.toLowerCase());
+            // Lowercase everything for comparison
+            return name.toLowerCase();
+        }
+        
+        function hasBridgeSuffix(name) {
+            return /\.(atom|axl|osmo|wh)$/i.test(name);
+        }
+        
+        function stripSuffix(name) {
+            return name.replace(/\.(atom|axl|osmo|wh)$/gi, '');
+        }
+        
+        let normPoolName = normalize(poolName);
+        let poolHasSuffix = hasBridgeSuffix(normPoolName);
+        
+        // Build list of search variations (exact + swapped order)
+        let searchVariants = [normPoolName];
+        if (normPoolName.includes('-')) {
+            let parts = normPoolName.split('-');
+            searchVariants.push(`${parts[1]}-${parts[0]}`);
+        }
+        
+        // PASS 1: Try exact match (including suffix)
+        for (let key of Object.keys(votionPools)) {
+            let [keyPool, keyDex] = key.split('|');
+            if (keyDex !== dexName) continue;
+            
+            let normKeyPool = normalize(keyPool);
+            for (let variant of searchVariants) {
+                if (normKeyPool === variant) {
+                    return votionPools[key];
+                }
+            }
+        }
+        
+        // PASS 2: If vote pool has NO suffix, try matching against votion pools WITH suffix
+        // This handles cases like Vote: "LUNA-PAXG" matching Votion: "LUNA-PAXG.atom"
+        if (!poolHasSuffix) {
+            let matches = [];
+            for (let key of Object.keys(votionPools)) {
+                let [keyPool, keyDex] = key.split('|');
+                if (keyDex !== dexName) continue;
+                
+                let normKeyPool = normalize(keyPool);
+                let normKeyNoSuffix = stripSuffix(normKeyPool);
+                
+                for (let variant of searchVariants) {
+                    if (normKeyNoSuffix === variant) {
+                        matches.push({ key, pool: votionPools[key] });
+                    }
+                }
+            }
+            
+            // Only use fallback if exactly one match found
+            if (matches.length === 1) {
+                console.log(`Votion fallback: ${poolName} -> ${matches[0].key} (vote has no suffix)`);
+                return matches[0].pool;
+            } else if (matches.length > 1) {
+                console.log(`Votion ambiguous: ${poolName} matches ${matches.length} pools, skipping`);
+            }
+        }
+        
+        return null;
+    }
+    
     store.vote.pools.forEach(p => {
         // Create key to match ext data: "LUNA-USDC|Astroport"
-        let dexName = p.d.includes('Astro') ? 'Astroport' : p.d.includes('White') ? 'WhiteWhale' : null;
+        // Single-sided assets (ampCAPA, xASTRO) are still on Astroport
+        let dexName = p.d.includes('Astro') ? 'Astroport' : 
+                      p.d.includes('White') ? 'WhiteWhale' : 
+                      p.d.includes('Single') ? 'Astroport' : null;
         if (!dexName) return;
         
         let lpKey = `${p.n}|${dexName}`;
-        let extLp = store.ext.lps[lpKey];
+        let extLp = store.ext.lps?.[lpKey];
         
+        // === APPLY LIQUIDITY/VOLUME FROM HISTORICAL ===
         if (extLp && !extLp.notAvailable) {
-            // Get epoch-specific data, fall back to previous epochs if not available
             let liqData = null, volData = null;
             
-            // Try current epoch, then go back up to 5 epochs
             for (let ep = targetEpoch; ep >= targetEpoch - 5 && ep > 0; ep--) {
                 if (!liqData && extLp.liquidity?.epochs?.[ep]) {
                     liqData = extLp.liquidity.epochs[ep];
@@ -855,18 +1230,137 @@ function applyExtDataToPools() {
                 if (liqData && volData) break;
             }
             
-            // Apply to pool - only if we have ext data and no existing paste data
             if (liqData && (!p.dp || p.dp === 0)) {
                 p.dp = liqData.avg;
                 p.dpSource = 'ext';
-                p.dpEpoch = Object.keys(extLp.liquidity.epochs).find(k => extLp.liquidity.epochs[k] === liqData);
             }
             if (volData && (!p.vol || p.vol === 0)) {
                 p.vol = volData.avg;
                 p.volSource = 'ext';
             }
         }
+        
+        // === APPLY VOTION DATA FROM EPOCH EXT ===
+        let votionPool = findVotionPool(p.n, dexName);
+        if (votionPool) {
+            p.votNowVp = votionPool.current_vp || 0;
+            p.votNowPct = votionPool.current_pct || 0;
+            p.votNextVp = votionPool.optimized_vp || 0;
+            p.votNextPct = votionPool.optimized_pct || 0;
+            p.votionSource = 'ext';
+        }
+        
+        // === APPLY PD BRIBES FROM EPOCH EXT ===
+        // PD bribes are stored per-LP in ext file (e.g., "LUNA-USDC|Astroport")
+        // Try exact match first, then flexible matching
+        let pdBribe = pdBribesEpoch[lpKey];
+        
+        if (!pdBribe) {
+            // Try flexible matching - normalize and compare
+            let normPoolName = p.n.toLowerCase().replace(/\.(atom|axl|osmo|wh)/gi, '');
+            for (let pdKey of Object.keys(pdBribesEpoch)) {
+                let [pdPool, pdDex] = pdKey.split('|');
+                if (pdDex !== dexName) continue;
+                
+                let normPdPool = pdPool.toLowerCase().replace(/\.(atom|axl|osmo|wh)/gi, '');
+                if (normPdPool === normPoolName) {
+                    pdBribe = pdBribesEpoch[pdKey];
+                    console.log(`PD bribe match: ${p.n} -> ${pdPool}`);
+                    break;
+                }
+                // Try swapped order
+                if (normPoolName.includes('-')) {
+                    let parts = normPoolName.split('-');
+                    let swapped = `${parts[1]}-${parts[0]}`;
+                    if (normPdPool === swapped) {
+                        pdBribe = pdBribesEpoch[pdKey];
+                        console.log(`PD bribe match (swapped): ${p.n} -> ${pdPool}`);
+                        break;
+                    }
+                }
+            }
+        }
+        
+        if (pdBribe) {
+            p.incPD = pdBribe.usd || 0;
+            p.incPDPct = pdBribe.pct || 0;
+            p.incPDSource = 'ext';
+        }
+        
+        // === CALCULATE OTHER BRIBES ===
+        // incTotal = total bribes from Vote page
+        // incPD = PD bribes from ext file
+        // incOther = incTotal - incPD (other non-PD bribes)
+        if (p.incTotal > 0 && p.incPD > 0) {
+            p.incOther = Math.max(0, p.incTotal - p.incPD);
+        } else if (p.incTotal > 0 && !p.incPD) {
+            // Have total but no PD data - can't determine breakdown
+            p.incOther = 0;
+        }
+        
+        // === APPLY INCENTIVES FROM LIQUIDITY PASTE ===
+        // Case-insensitive matching for pool names
+        let pnLower = p.n.toLowerCase().replace(/\.(atom|axl|osmo|wh)/gi, '');
+        let liqPool = store.tla.pools?.find(lp => {
+            let lpNormLower = (lp.normName || '').toLowerCase().replace(/\.(atom|axl|osmo|wh)/gi, '');
+            return lpNormLower === pnLower && lp.dex.includes(dexName.substring(0,5));
+        });
+        if (!liqPool) {
+            liqPool = store.tla.inactivePools?.find(lp => {
+                let lpNormLower = (lp.normName || '').toLowerCase().replace(/\.(atom|axl|osmo|wh)/gi, '');
+                return lpNormLower === pnLower && lp.dex.includes(dexName.substring(0,5));
+            });
+        }
+        
+        if (liqPool) {
+            // Apply APR from liquidity data
+            if (!p.aprNon || p.aprNon === 0) p.aprNon = liqPool.aprNon || 0;
+            if (!p.aprAmp || p.aprAmp === 0) p.aprAmp = liqPool.aprAmp || 0;
+            
+            // Note: liqPool.rYr is TOTAL yearly rewards which includes all incentives
+            // We don't use it for incOther because we can't distinguish sources
+            // incPD comes from the Vote page or ext file and is the weekly PD bribe amount
+        } else if (store.tla.pools?.length > 0) {
+            // Debug: log failed matches
+            console.log(`APR no match: ${p.n} (${dexName}) - searched ${store.tla.pools.length} pools`);
+        }
     });
+    
+    if (votionRatios.arbLUNA || votionRatios.ampLUNA) {
+        store.ext.votionRatios = votionRatios;
+    }
+    
+    // Update Votion summary display
+    updateVotionSummary(votionTotalVp, Object.keys(votionPools).length);
+    
+    console.log('Applied ext data to pools: votion=' + Object.keys(votionPools).length + 
+                ', pdBribes=' + Object.keys(pdBribesEpoch).length);
+}
+
+function updateVotionSummary(totalVp, poolCount) {
+    let summaryEl = $('votion-summary');
+    if (!summaryEl) return;
+    
+    if (totalVp > 0) {
+        summaryEl.classList.remove('hidden');
+        
+        // Format VP
+        let vpStr = totalVp >= 1000000 ? (totalVp / 1000000).toFixed(2) + 'M' :
+                    totalVp >= 1000 ? (totalVp / 1000).toFixed(0) + 'K' : 
+                    totalVp.toLocaleString();
+        setTxt('votion-total-vp', vpStr);
+        
+        // Calculate % of TLA
+        let tlaPct = store.vote.tvp > 0 ? (totalVp / store.vote.tvp * 100).toFixed(1) + '%' : '-';
+        setTxt('votion-tla-pct', tlaPct);
+        
+        // Show source info
+        let phase = store.ext.votion?.phase || store.ext.meta?.phase || 'ext';
+        let epoch = store.ext.votion?.epoch || store.ext.meta?.epoch || store.vote.ep;
+        setTxt('votion-source', `Ep ${epoch} ${phase} (${poolCount} pools)`);
+    } else {
+        summaryEl.classList.add('hidden');
+    }
 }
 
 // ============ aDAO SCORING SYSTEM ============
@@ -901,13 +1395,17 @@ function get4EpochAverage(lpKey, type) {
 
 function getPoolApr(poolName, dex) {
     // Find APR from liquidity paste data
-    let liqPool = store.tla.pools.find(p => 
-        p.normName === poolName && p.dex.includes(dex.substring(0,5))
-    );
+    // Case-insensitive matching
+    let poolNameLower = poolName.toLowerCase().replace(/\.(atom|axl|osmo|wh)/gi, '');
+    let liqPool = store.tla.pools.find(p => {
+        let pnLower = (p.normName || '').toLowerCase().replace(/\.(atom|axl|osmo|wh)/gi, '');
+        return pnLower === poolNameLower && p.dex.includes(dex.substring(0,5));
+    });
     if (!liqPool) {
-        liqPool = store.tla.inactivePools?.find(p => 
-            p.normName === poolName && p.dex.includes(dex.substring(0,5))
-        );
+        liqPool = store.tla.inactivePools?.find(p => {
+            let pnLower = (p.normName || '').toLowerCase().replace(/\.(atom|axl|osmo|wh)/gi, '');
+            return pnLower === poolNameLower && p.dex.includes(dex.substring(0,5));
+        });
     }
     return {
         non: liqPool?.aprNon || 0,
@@ -1095,14 +1593,30 @@ function calculateAccessScore(poolName) {
     };
 }
 
-function calculateScoresForBucket(bucketName) {
+function calculateScoresForBucket(bucketName, filterSettings = null) {
     // Get all pools in this bucket
     let bucketPools = store.vote.pools.filter(p => p.b === bucketName);
     if (bucketPools.length === 0) return;
     
+    // Apply filters if provided (for relative ranking)
+    let poolsForRanking = bucketPools;
+    if (filterSettings) {
+        poolsForRanking = bucketPools.filter(p => {
+            let isAct = p.vps >= 1;
+            let isAstroOrSingle = p.d.includes('Astro') || p.d.includes('Single');
+            if (isAstroOrSingle && !filterSettings.showAstro) return false;
+            if (p.d.includes('White') && !filterSettings.showWW) return false;
+            if (!isAct && !filterSettings.showInactive) return false;
+            return true;
+        });
+    }
+    
     // Calculate 4Ep averages, efficiency, and access score for each pool
     bucketPools.forEach(p => {
-        let dexName = p.d.includes('Astro') ? 'Astroport' : p.d.includes('White') ? 'WhiteWhale' : null;
+        // Single-sided assets (ampCAPA, xASTRO) are still on Astroport
+        let dexName = p.d.includes('Astro') ? 'Astroport' : 
+                      p.d.includes('White') ? 'WhiteWhale' : 
+                      p.d.includes('Single') ? 'Astroport' : null;
         if (!dexName) return;
         
         let lpKey = `${p.n}|${dexName}`;
@@ -1127,13 +1641,14 @@ function calculateScoresForBucket(bucketName) {
         p.accessScore = p.accessData.total;
     });
     
-    // Rank within bucket (for relative scoring)
-    let withLiq = bucketPools.filter(p => (p.liq4Ep?.avg || p.dp) > 0);
-    let withVol = bucketPools.filter(p => (p.vol4Ep?.avg || p.vol) > 0);
-    let withEff = bucketPools.filter(p => p.efficiency > 0);
-    let withInc = bucketPools.filter(p => p.inc > 0);
-    let withVot = bucketPools.filter(p => (p.votNowPct || 0) > 0);
-    let withTla = bucketPools.filter(p => p.vps > 0);
+    // Rank within filtered pool set (for relative scoring)
+    // This makes rankings relative to what's currently visible
+    let withLiq = poolsForRanking.filter(p => (p.liq4Ep?.avg || p.dp) > 0);
+    let withVol = poolsForRanking.filter(p => (p.vol4Ep?.avg || p.vol) > 0);
+    let withEff = poolsForRanking.filter(p => p.efficiency > 0);
+    let withInc = poolsForRanking.filter(p => p.inc > 0);
+    let withVot = poolsForRanking.filter(p => (p.votNowPct || 0) > 0);
+    let withTla = poolsForRanking.filter(p => p.vps > 0);
     
     // Sort and assign ranks (higher value = higher rank)
     withLiq.sort((a, b) => (b.liq4Ep?.avg || b.dp) - (a.liq4Ep?.avg || a.dp));
@@ -1191,9 +1706,9 @@ function calculateScoresForBucket(bucketName) {
     });
 }
 
-function calculateAllScores() {
+function calculateAllScores(filterSettings = null) {
     BUCKET_ORDER.forEach(bucket => {
-        calculateScoresForBucket(bucket);
+        calculateScoresForBucket(bucket, filterSettings);
     });
 }
 
@@ -2013,7 +2528,7 @@ function generateActivationTargets() {
             <div class="flex items-center gap-2">
                 <span class="text-white font-bold">${p.n}</span>
                 ${nativeBadge}
-                <span class="text-[9px] text-gray-500">${p.d.includes('Astro') ? 'Astro' : 'WW'}</span>
+                <span class="text-[9px] text-gray-500">${p.d.includes('Astro') ? 'Astro' : p.d.includes('Single') ? 'Single' : 'WW'}</span>
             </div>
             <div class="text-right text-[10px]">
                 <span class="text-teal-400">${fmt$(liq)}</span>
@@ -2112,17 +2627,20 @@ function updateTimers() {
         // Calculate time until epoch ends
         const endTime = new Date(currentEpochInfo.end_time);
         const msUntilEnd = endTime - now;
-        const daysLeft = Math.floor(msUntilEnd / 86400000);
+        const daysLeft = msUntilEnd / 86400000; // Decimal days (not floored)
         
         setTxt('epoch-timer', formatTimeDiff(msUntilEnd));
         
-        // Calculate phase: 6+ = Start, 5-3 = Mid, 2-0 = End
+        // Calculate phase based on days REMAINING until epoch ends:
+        // 5-7 days remaining = 0-2 days into epoch = START
+        // 2-5 days remaining = 2-5 days into epoch = MID  
+        // 0-2 days remaining = 5-7 days into epoch = END
         let phase = 'End';
         let phaseColor = 'text-red-400';
-        if (daysLeft >= 6) {
+        if (daysLeft >= 5) {
             phase = 'Start';
             phaseColor = 'text-green-400';
-        } else if (daysLeft >= 3) {
+        } else if (daysLeft > 2) {
             phase = 'Mid';
             phaseColor = 'text-yellow-400';
         }
@@ -2305,10 +2823,14 @@ function parseVote() {
             let l = lines[i];
             if (!l) continue;
 
-            // Bucket headers
+            // Bucket headers - only if next line is "Pool" (to avoid confusing with "Single" DEX type)
             if (BUCKET_ORDER.includes(l.toUpperCase())) {
-                currentBucket = l.toUpperCase();
-                continue;
+                // Check next line to confirm it's a bucket header, not a DEX
+                let nextLine = lines[i + 1]?.trim();
+                if (nextLine === 'Pool') {
+                    currentBucket = l.toUpperCase();
+                    continue;
+                }
             }
 
             // Skip nav/junk lines
@@ -2319,6 +2841,11 @@ function parseVote() {
             if (dexMatch && i > 0) {
                 let poolName = lines[i-1];
                 if (!poolName || /^icon/i.test(poolName)) continue;
+                
+                // Debug: log single asset detection
+                if (dexMatch[1].toLowerCase() === 'single') {
+                    console.log('Found Single asset:', poolName, '-> DEX line:', l);
+                }
                 
                 let p = { 
                     n: normalizeName(poolName.replace(' LP', '')), 
@@ -2350,12 +2877,12 @@ function parseVote() {
                     else if (x.startsWith('Depth')) {
                         p.dp = parseNum(x);
                     }
-                    // Incentives: "$ 16.94" (starts with $)
+                    // Incentives: "$ 16.94" (starts with $) - This is TOTAL bribes from Vote page
                     else if (x.startsWith('$')) {
                         let bribeVal = parseNum(x);
                         p.inc = bribeVal;
-                        p.incPD = bribeVal; // PD bribes from Vote tab
-                        p.incTotal = bribeVal; // Will be updated if we have other bribes
+                        p.incTotal = bribeVal; // Total bribes from Vote page
+                        // incPD will be set from ext file, incOther = incTotal - incPD
                     }
                     // After "Extend locks" comes user VP
                     else if (x === 'Extend locks') {
@@ -2377,6 +2904,18 @@ function parseVote() {
                 store.vote.pools.push(p);
             }
         }
+        
+        // Debug: log all parsed pools
+        console.log('Vote parsing complete. Pools by DEX:');
+        let byDex = {};
+        store.vote.pools.forEach(p => {
+            let dex = p.d.includes('Astro') ? 'Astroport' : p.d.includes('Single') ? 'Single' : 'WhiteWhale';
+            if (!byDex[dex]) byDex[dex] = [];
+            byDex[dex].push(p.n);
+        });
+        Object.entries(byDex).forEach(([dex, pools]) => {
+            console.log(`  ${dex}: ${pools.length} pools -`, pools.join(', '));
+        });
         
         setTxt('status-vote-page', "PARSED");
         $('status-vote-page').className = "text-[9px] text-green-400 font-bold";
@@ -2403,27 +2942,54 @@ function renderVoteTable() {
         setTxt('vote-adao-pct', '-');
     }
     
-    // Calculate phase from ends string (e.g., "5 days")
-    let daysMatch = store.vote.end.match(/(\d+)/);
-    if (daysMatch) {
-        let days = parseInt(daysMatch[1]);
-        let phase = 'End', phaseColor = 'text-red-400';
-        if (days >= 6) { phase = 'Start'; phaseColor = 'text-green-400'; }
-        else if (days >= 3) { phase = 'Mid'; phaseColor = 'text-yellow-400'; }
-        const phaseEl = $('vote-phase');
-        if (phaseEl) { phaseEl.innerText = phase; phaseEl.className = phaseColor + ' font-bold'; }
+    // Calculate phase from epoch end time (most accurate) or ends string
+    let totalDays = 0;
+    
+    if (currentEpochInfo?.end_time) {
+        // Use exact epoch end time for precision
+        let endTime = new Date(currentEpochInfo.end_time);
+        let msUntilEnd = endTime - new Date();
+        totalDays = msUntilEnd / 86400000; // Decimal days
+    } else {
+        // Fallback to parsed ends string
+        let daysMatch = store.vote.end.match(/(\d+)\s*d/i);
+        let hoursMatch = store.vote.end.match(/(\d+)\s*h/i);
+        if (daysMatch) totalDays += parseInt(daysMatch[1]);
+        if (hoursMatch) totalDays += parseInt(hoursMatch[1]) / 24;
+    }
+    
+    let phase = 'End', phaseColor = 'text-red-400';
+    if (totalDays >= 5) { phase = 'Start'; phaseColor = 'text-green-400'; }
+    else if (totalDays > 2) { phase = 'Mid'; phaseColor = 'text-yellow-400'; }
+    
+    const phaseEl = $('vote-phase');
+    if (phaseEl) { 
+        // Show phase and ext file status
+        let extPhase = store.ext.votion ? (store.ext.meta?.phase || 'loaded') : 'none';
+        let extIndicator = store.ext.votion ? ` <span class="text-[9px] text-gray-500">(ext: ${extPhase})</span>` : '';
+        phaseEl.innerHTML = phase + extIndicator; 
+        phaseEl.className = phaseColor + ' font-bold'; 
     }
     
     setTxt('vote-rebase', store.vote.reb.toLocaleString() + ' amp');
     setTxt('vote-claim', fmt$(store.vote.usd));
 
-    // Calculate all aDAO scores
-    calculateAllScores();
-
-    let showAstro = $('export-astro')?.checked ?? true;
-    let showWW = $('export-ww')?.checked ?? true;
-    let showInactive = $('export-inactive')?.checked ?? true;
+    // Read GRADE filter settings (affects scoring/ranking)
+    let gradeAstro = $('grade-astro')?.checked ?? true;
+    let gradeWW = $('grade-ww')?.checked ?? true;
+    let gradeInactive = $('grade-inactive')?.checked ?? true;
+    
+    // Read EXPORT filter settings (affects JSON output only)
+    let exportAstro = $('export-astro')?.checked ?? true;
+    let exportWW = $('export-ww')?.checked ?? true;
+    let exportInactive = $('export-inactive')?.checked ?? true;
     let showADAO = $('export-adao')?.checked ?? true;
+    
+    let gradeSettings = { showAstro: gradeAstro, showWW: gradeWW, showInactive: gradeInactive };
+
+    // Calculate all aDAO scores with current GRADE filter settings
+    // Scores are ranked relative to what's selected for grading
+    calculateAllScores(gradeSettings);
 
     // === CALCULATE DEX STATS ===
     let dexStats = {
@@ -2439,7 +3005,7 @@ function renderVoteTable() {
         totalTlaVp += p.tvp;
         totalAdaoVp += p.mvp;
         
-        if (p.d.includes('Astro')) {
+        if (p.d.includes('Astro') || p.d.includes('Single')) {
             if (isActive) dexStats.astro.active++; else dexStats.astro.inactive++;
             dexStats.astro.depth += p.dp;
             dexStats.astro.tlaVp += p.tvp;
@@ -2490,6 +3056,19 @@ function renderVoteTable() {
         let bucketPools = sortedPools.filter(p => p.b === bucketName);
         if (bucketPools.length === 0) return;
 
+        // Determine which pools are included in grading (for visual indicator)
+        bucketPools.forEach(p => {
+            let isAct = p.vps >= 1;
+            let isAstroOrSingle = p.d.includes('Astro') || p.d.includes('Single');
+            let isWW = p.d.includes('White');
+            
+            p.includedInGrade = true;
+            if (isAstroOrSingle && !gradeAstro) p.includedInGrade = false;
+            if (isWW && !gradeWW) p.includedInGrade = false;
+            if (!isAct && !gradeInactive) p.includedInGrade = false;
+        });
+
+        // Calculate totals from ALL pools in bucket
         let bTlaVp = bucketPools.reduce((s, p) => s + p.tvp, 0);
         let bAdaoVp = bucketPools.reduce((s, p) => s + p.mvp, 0);
         let bVoteShare = bucketPools.reduce((s, p) => s + p.vps, 0);
@@ -2498,13 +3077,16 @@ function renderVoteTable() {
 
         finalHtml += `<div class="bg-[#1f2937] border-y border-gray-700 py-1 mt-2 mb-1"><div class="flex justify-between items-center px-2"><span class="text-gray-300 font-bold text-[10px] tracking-widest uppercase">${bucketName}</span></div></div>`;
 
+        // Render ALL pools (not filtered)
         bucketPools.forEach(p => {
             let isAct = p.vps >= 1;
-            if (p.d.includes('Astro') && !showAstro) return;
-            if (p.d.includes('White') && !showWW) return;
-            if (!isAct && !showInactive) return;
+            let isAstroOrSingle = p.d.includes('Astro') || p.d.includes('Single');
+            
+            // Dim pools not included in grading
+            let rowOpacity = p.includedInGrade ? '' : 'opacity-40';
+            let gradeIndicator = p.includedInGrade ? '' : '<span class="text-[8px] text-gray-500 ml-1">(not graded)</span>';
 
-            let dexColor = p.d.includes('Astro') ? 'text-blue-600' : 'text-green-400';
+            let dexColor = isAstroOrSingle ? 'text-blue-600' : 'text-green-400';
             let inactiveText = p.vps < 1 ? '<span class="text-red-500 font-bold text-[11px]">INACT</span>' : '';
             
             // 4Ep averages
@@ -2522,8 +3104,8 @@ function renderVoteTable() {
             // Access score
             let accStr = p.accessScore ? p.accessScore.toFixed(0) : '-';
             let accColor = p.accessScore >= 70 ? 'text-green-400' : p.accessScore >= 50 ? 'text-cyan-400' : p.accessScore >= 30 ? 'text-yellow-400' : 'text-gray-500';
-            let accTitle = p.accessData?.breakdown ? 
-                `${p.accessData.breakdown.lunaBenefit.label} | Bridge: ${p.accessData.breakdown.bridge.label}` : 
+            let accTitle = p.accessData?.breakdown?.lunaBenefit?.label ? 
+                `${p.accessData.breakdown.lunaBenefit.label} | Bridge: ${p.accessData.breakdown.bridge?.label || 'N/A'}` : 
                 'No access data';
             
             // Support score
@@ -2540,13 +3122,17 @@ function renderVoteTable() {
             let aprAmpStr = p.aprAmp > 0 ? p.aprAmp.toFixed(0) + '%' : '';
             let aprColor = p.aprNon < 40 ? 'text-red-400' : p.aprNon < 55 ? 'text-green-400' : p.aprNon < 70 ? 'text-yellow-400' : 'text-orange-400';
             
-            let dexShort = p.d.includes('Astro') ? 'Astro' : 'WW';
+            let dexShort = p.d.includes('Astro') ? 'Astro' : p.d.includes('Single') ? 'Single' : 'WW';
+            let dexFull = p.d.includes('Astro') ? 'Astroport' : p.d.includes('Single') ? 'Single' : 'WhiteWhale';
             
             finalHtml += `
-            <div class="vote-grid border-b border-gray-800/50 py-2 hover:bg-white/5 px-2 cursor-pointer" onclick="showPoolScoreDetails('${p.n}', '${dexShort}')">
+            <div class="vote-grid border-b border-gray-800/50 py-2 hover:bg-white/5 px-2 cursor-pointer ${rowOpacity}" onclick="showPoolScoreDetails('${p.n}', '${dexShort}')">
                 <div class="flex flex-col justify-center">
-                    <span class="text-white text-[12px] font-bold truncate" title="${p.n}">${p.n}</span>
-                    <span class="text-[10px] ${dexColor}">${p.d.includes('Astro') ? 'Astroport' : 'WhiteWhale'}</span>
+                    <div class="flex items-center gap-1">
+                        <span class="text-white text-[12px] font-bold truncate" title="${p.n}">${p.n}</span>
+                        ${gradeIndicator}
+                    </div>
+                    <span class="text-[10px] ${dexColor}">${dexFull}</span>
                 </div>
                 <div class="text-center text-[11px]">${inactiveText}</div>
                 <div class="text-right font-mono text-teal-400 text-[11px]" title="${liq4EpTitle}">${liq4EpStr}</div>
@@ -2563,9 +3149,25 @@ function renderVoteTable() {
                 <div class="text-right flex flex-col leading-tight" title="Votion Next Epoch Optimization">
                     ${p.votNextVp > 0 ? `<span class="text-purple-300 font-mono text-[11px] font-bold">${fmtVp(p.votNextVp)}</span><span class="text-purple-300/70 font-mono text-[10px]">${p.votNextPct.toFixed(2)}%</span>` : '<span class="text-gray-600 text-[11px]">-</span>'}
                 </div>
-                <div class="text-right flex flex-col leading-tight" title="PD Bribes: ${fmt$(p.incPD)} | Other: ${fmt$(p.incOther)} | Total: ${fmt$(p.incTotal)}">
-                    <span class="text-green-400 font-mono text-[11px]">${fmt$(p.incPD)}</span>
-                    ${p.incTotal > p.incPD ? `<span class="text-yellow-400 font-mono text-[10px]">Σ${fmt$(p.incTotal)}</span>` : ''}
+                <div class="text-right flex flex-col leading-tight" title="Vote Change">
+                    ${(() => {
+                        let changeVp = (p.votNextVp || 0) - (p.votNowVp || 0);
+                        let changePct = (p.votNextPct || 0) - (p.votNowPct || 0);
+                        if (changeVp === 0 && changePct === 0 && p.votNowVp === 0) return '<span class="text-gray-600 text-[11px]">-</span>';
+                        let color = changeVp > 0 ? 'text-green-400' : changeVp < 0 ? 'text-red-400' : 'text-gray-500';
+                        let sign = changeVp > 0 ? '+' : '';
+                        return `<span class="${color} font-mono text-[11px] font-bold">${sign}${fmtVp(changeVp)}</span><span class="${color}/70 font-mono text-[10px]">${sign}${changePct.toFixed(2)}%</span>`;
+                    })()}
+                </div>
+                <div class="text-right flex flex-col leading-tight" title="Total: ${fmt$(p.incTotal || 0)} | PD: ${fmt$(p.incPD || 0)} | Other: ${fmt$(p.incOther || 0)}">
+                    ${p.incTotal > 0 ? `
+                        <span class="text-green-400 font-mono text-[11px]">${fmt$(p.incTotal)}</span>
+                        ${p.incPD > 0 && p.incOther > 0 ? `<span class="text-gray-500 font-mono text-[9px]">${fmt$(p.incPD)} PD</span>` : 
+                          p.incPD > 0 ? `<span class="text-green-600 font-mono text-[9px]">PD</span>` : ''}
+                    ` : (p.incPD > 0 ? `
+                        <span class="text-green-400 font-mono text-[11px]">${fmt$(p.incPD)}</span>
+                        <span class="text-green-600 font-mono text-[9px]">PD</span>
+                    ` : '<span class="text-gray-600 text-[11px]">-</span>')}
                 </div>
                 <div class="text-right font-mono ${suppColor} text-[11px]" title="Support score">${suppStr}</div>
                 <div class="text-right flex flex-col leading-tight">
@@ -2579,13 +3181,13 @@ function renderVoteTable() {
             </div>`;
         });
 
-        // Calculate Votion totals for bucket
+        // Calculate Votion totals for bucket (from ALL pools)
         let bVotNowVp = bucketPools.reduce((s, p) => s + (p.votNowVp || 0), 0);
         let bVotNowPct = bucketPools.reduce((s, p) => s + (p.votNowPct || 0), 0);
         let bVotNextVp = bucketPools.reduce((s, p) => s + (p.votNextVp || 0), 0);
         let bVotNextPct = bucketPools.reduce((s, p) => s + (p.votNextPct || 0), 0);
         
-        // Calculate bucket averages for new metrics
+        // Calculate bucket averages for new metrics (from ALL pools)
         let poolsWithScores = bucketPools.filter(p => p.adaoScore !== undefined);
         let avgScore = poolsWithScores.length > 0 
             ? poolsWithScores.reduce((s, p) => s + p.adaoScore, 0) / poolsWithScores.length 
@@ -2601,10 +3203,20 @@ function renderVoteTable() {
             <div></div>
             <div></div>
             <div class="text-right flex flex-col leading-tight">
-                ${bVotNowVp > 0 ? `<span class="text-purple-300 font-mono text-[10px]">${fmtVp(bVotNowVp)}</span><span class="text-purple-300/70 font-mono text-[9px]">${bVotNowPct.toFixed(1)}%</span>` : '<span class="text-gray-600">-</span>'}
+                ${bVotNowVp > 0 ? `<span class="text-purple-300 font-mono text-[10px]">${fmtVp(bVotNowVp)}</span><span class="text-purple-300/70 font-mono text-[9px]">${bVotNowPct.toFixed(2)}%</span>` : '<span class="text-gray-600">-</span>'}
             </div>
             <div class="text-right flex flex-col leading-tight">
-                ${bVotNextVp > 0 ? `<span class="text-purple-200 font-mono text-[10px]">${fmtVp(bVotNextVp)}</span><span class="text-purple-200/70 font-mono text-[9px]">${bVotNextPct.toFixed(1)}%</span>` : '<span class="text-gray-600">-</span>'}
+                ${bVotNextVp > 0 ? `<span class="text-purple-200 font-mono text-[10px]">${fmtVp(bVotNextVp)}</span><span class="text-purple-200/70 font-mono text-[9px]">${bVotNextPct.toFixed(2)}%</span>` : '<span class="text-gray-600">-</span>'}
+            </div>
+            <div class="text-right flex flex-col leading-tight">
+                ${(() => {
+                    let changeVp = bVotNextVp - bVotNowVp;
+                    let changePct = bVotNextPct - bVotNowPct;
+                    if (changeVp === 0 && bVotNowVp === 0) return '<span class="text-gray-600">-</span>';
+                    let color = changeVp > 0 ? 'text-green-400' : changeVp < 0 ? 'text-red-400' : 'text-gray-500';
+                    let sign = changeVp > 0 ? '+' : '';
+                    return `<span class="${color} font-mono text-[10px]">${sign}${fmtVp(changeVp)}</span><span class="${color}/70 font-mono text-[9px]">${sign}${changePct.toFixed(2)}%</span>`;
+                })()}
             </div>
             <div class="text-right font-mono text-[11px] text-green-400">${fmt$(bIncentives)}</div>
             <div></div>
@@ -2888,6 +3500,12 @@ function parseLiquidity() {
         updatePasteStatus('ps-liq-active', true);
     }
     renderLiquidityTable();
+    
+    // Re-apply ext data to update APR on vote pools
+    if (store.ext.loaded) {
+        applyExtDataToPools();
+        renderVoteTable();
+    }
 }
 
 function renderLiquidityTable() {
@@ -3266,12 +3884,204 @@ function clearAll() {
     if (confirm("Clear all data?")) location.reload();
 }
 
-function copyCoreJson() {
-    alert("Copy JSON - TODO");
+function getPhaseString() {
+    if (!currentEpochInfo) return 'unknown';
+    let now = new Date();
+    let endTime = new Date(currentEpochInfo.end_time);
+    let daysLeft = (endTime - now) / 86400000;
+    if (daysLeft >= 5) return 'start';
+    if (daysLeft > 2) return 'mid';
+    return 'end';
+}
+
+function buildExportData() {
+    // Get export filter settings
+    let exportAstro = $('export-astro')?.checked ?? true;
+    let exportWW = $('export-ww')?.checked ?? true;
+    let exportInactive = $('export-inactive')?.checked ?? true;
+    
+    // Filter pools based on export settings
+    let exportPools = store.vote.pools.filter(p => {
+        let isAct = p.vps >= 1;
+        let isAstroOrSingle = p.d.includes('Astro') || p.d.includes('Single');
+        let isWW = p.d.includes('White');
+        
+        if (isAstroOrSingle && !exportAstro) return false;
+        if (isWW && !exportWW) return false;
+        if (!isAct && !exportInactive) return false;
+        return true;
+    });
+    
+    return {
+        meta: {
+            version: '2.0',
+            epoch: store.vote.ep,
+            phase: getPhaseString(),
+            generated_at: new Date().toISOString(),
+            source: 'TLA Admin Core',
+            export_filters: {
+                astroport: exportAstro,
+                whitewhale: exportWW,
+                inactive: exportInactive
+            }
+        },
+        vote: {
+            epoch: store.vote.ep,
+            tvp: store.vote.tvp,
+            rebase: store.vote.reb,
+            rewards_usd: store.vote.usd,
+            end_time: store.vote.end,
+            pool_count: exportPools.length,
+            total_pool_count: store.vote.pools.length
+        },
+        pools: exportPools.map(p => ({
+            name: p.n,
+            dex: p.d.includes('Astro') ? 'Astroport' : p.d.includes('Single') ? 'Single' : 'WhiteWhale',
+            dex_raw: p.d,
+            bucket: p.b,
+            is_active: p.vps >= 1,
+            // TLA Vote data
+            vp: p.tvp,
+            vote_pct: p.vps,
+            depth: p.dp,
+            // aDAO data
+            adao_vp: p.mvp,
+            adao_pct: p.ms,
+            // APR data
+            apr_non: p.aprNon || 0,
+            apr_amp: p.aprAmp || 0,
+            apr_factor: p.aprFactor || 0,
+            // Bribes
+            bribes_total: p.incTotal || 0,
+            bribes_pd: p.incPD || 0,
+            bribes_other: p.incOther || 0,
+            // Votion
+            votion_now_vp: p.votNowVp || 0,
+            votion_now_pct: p.votNowPct || 0,
+            votion_next_vp: p.votNextVp || 0,
+            votion_next_pct: p.votNextPct || 0,
+            votion_change_vp: (p.votNextVp || 0) - (p.votNowVp || 0),
+            votion_change_pct: (p.votNextPct || 0) - (p.votNowPct || 0),
+            // 4-Epoch averages
+            liq_4ep_avg: p.liq4Ep?.avg || 0,
+            liq_4ep_count: p.liq4Ep?.count || 0,
+            vol_4ep_avg: p.vol4Ep?.avg || 0,
+            vol_4ep_count: p.vol4Ep?.count || 0,
+            efficiency: p.efficiency || 0,
+            // Scoring
+            access_score: p.accessScore || 0,
+            performance_score: p.performanceScore || 0,
+            support_score: p.supportScore || 0,
+            adao_score: p.adaoScore || 0,
+            included_in_grade: p.includedInGrade ?? true
+        })),
+        dao: {
+            locked_vp: store.dao.lVp || 0,
+            allocations: store.dao.allocations || []
+        },
+        tla: {
+            tvl: store.tla.tvl || 0,
+            rewards_yr: store.tla.rewYr || 0,
+            pool_count: store.tla.pools?.length || 0
+        },
+        // Include ext data summary
+        ext_data: {
+            loaded: store.ext.loaded || false,
+            votion_available: !!store.ext.votion,
+            votion_total_vp: store.ext.votion?.total_vp || 0,
+            votion_pool_count: Object.keys(store.ext.votion?.pools || {}).length,
+            pd_bribes_available: !!store.ext.pdBribesEpoch,
+            historical_lp_count: Object.keys(store.ext.lps || {}).length
+        },
+        // Validation summary
+        validation: validateExportData()
+    };
+}
+
+function validateExportData() {
+    let issues = [];
+    let warnings = [];
+    
+    // Check Vote data
+    if (!store.vote.ep) issues.push('No epoch detected from Vote page');
+    if (!store.vote.tvp) issues.push('No total voting power detected');
+    if (store.vote.pools.length === 0) issues.push('No pools parsed from Vote page');
+    
+    // Check ext data
+    if (!store.ext.loaded) warnings.push('Ext data not loaded from GitHub');
+    if (!store.ext.votion) warnings.push('No Votion data available');
+    if (!store.ext.pdBribesEpoch) warnings.push('No PD bribes data for this epoch');
+    if (Object.keys(store.ext.lps || {}).length === 0) warnings.push('No historical LP data available');
+    
+    // Check for pools with missing data
+    let poolsWithoutVotion = store.vote.pools.filter(p => !p.votNowVp && !p.votNowPct).length;
+    let poolsWithoutApr = store.vote.pools.filter(p => !p.aprNon).length;
+    let poolsWithout4Ep = store.vote.pools.filter(p => !p.liq4Ep).length;
+    
+    if (poolsWithoutVotion > store.vote.pools.length * 0.5) {
+        warnings.push(`${poolsWithoutVotion}/${store.vote.pools.length} pools missing Votion data`);
+    }
+    if (poolsWithoutApr > store.vote.pools.length * 0.5) {
+        warnings.push(`${poolsWithoutApr}/${store.vote.pools.length} pools missing APR data`);
+    }
+    if (poolsWithout4Ep > store.vote.pools.length * 0.5) {
+        warnings.push(`${poolsWithout4Ep}/${store.vote.pools.length} pools missing 4-epoch averages`);
+    }
+    
+    // Check DAO allocations
+    if (!store.dao.lVp) warnings.push('No aDAO voting power detected');
+    
+    return {
+        valid: issues.length === 0,
+        ready_for_export: issues.length === 0 && warnings.length <= 2,
+        issues: issues,
+        warnings: warnings,
+        summary: {
+            vote_parsed: !!store.vote.ep,
+            ext_loaded: store.ext.loaded,
+            votion_matched: store.vote.pools.filter(p => p.votNowVp > 0).length,
+            apr_matched: store.vote.pools.filter(p => p.aprNon > 0).length,
+            historical_matched: store.vote.pools.filter(p => p.liq4Ep).length
+        }
+    };
 }
 
 function downloadCoreJson() {
-    alert("Download JSON - TODO");
+    let data = buildExportData();
+    
+    // Check validation
+    if (!data.validation.valid) {
+        let msg = 'Export has critical issues:\n\n' + data.validation.issues.join('\n');
+        if (!confirm(msg + '\n\nExport anyway?')) return;
+    } else if (!data.validation.ready_for_export) {
+        let msg = 'Export has warnings:\n\n' + data.validation.warnings.join('\n');
+        if (!confirm(msg + '\n\nContinue with export?')) return;
+    }
+    
+    let jsonStr = JSON.stringify(data, null, 2);
+    let blob = new Blob([jsonStr], { type: 'application/json' });
+    let url = URL.createObjectURL(blob);
+    let a = document.createElement('a');
+    a.href = url;
+    a.download = `tla-data-epoch-${store.vote.ep || 'unknown'}-${getPhaseString() || 'unknown'}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    // Show summary
+    alert(`Export complete!\n\nPools: ${data.pools.length}\nVotion matched: ${data.validation.summary.votion_matched}\nAPR matched: ${data.validation.summary.apr_matched}\nHistorical: ${data.validation.summary.historical_matched}`);
+}
+
+function copyExportJson() {
+    let data = buildExportData();
+    let jsonStr = JSON.stringify(data, null, 2);
+    navigator.clipboard.writeText(jsonStr).then(() => {
+        alert('JSON copied to clipboard!\n\nPools: ' + data.pools.length);
+    }).catch(err => {
+        console.error('Copy failed:', err);
+        alert('Copy failed - check console');
+    });
 }
 
 
