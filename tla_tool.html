@@ -1094,11 +1094,11 @@ function applyExtDataToPools() {
                         .replace(/\.(atom|axl|osmo|wh)/gi, '')
                         .trim();
                     
-                    // Normalize LUNA position
+                    // Normalize LUNA position - only swap if LUNA itself is second
                     if (poolName.includes('-')) {
                         let parts = poolName.split('-');
-                        if (['LUNA', 'bLUNA', 'ampLUNA'].includes(parts[1])) {
-                            poolName = `${parts[1]}-${parts[0]}`;
+                        if (parts[1] === 'LUNA') {
+                            poolName = `LUNA-${parts[0]}`;
                         }
                     }
                     
@@ -2797,7 +2797,9 @@ function switchTab(t) {
 function normalizeName(name) {
     if (!name.includes('-')) return name;
     let parts = name.split('-');
-    if (['LUNA', 'bLUNA', 'ampLUNA'].includes(parts[1])) return `${parts[1]}-${parts[0]}`;
+    // Only swap if LUNA itself is second (to put LUNA first)
+    // Don't swap for ampLUNA, bLUNA - they stay as LUNA-ampLUNA, LUNA-bLUNA
+    if (parts[1] === 'LUNA') return `LUNA-${parts[0]}`;
     return name;
 }
 
