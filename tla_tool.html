@@ -1624,61 +1624,171 @@ function getLunaBenefit(asset1, asset2) {
     return { points: 0.5, label: 'Non-LUNA Pair', reason: 'Minimal ecosystem benefit' };
 }
 
+// Get detailed score breakdown for a single asset
+function getAssetScoreDetails(assetName, meta) {
+    if (!meta || !meta.actual_path) {
+        return {
+            name: assetName,
+            score: 30,
+            source: 'no_metadata',
+            issues: ['⚠️ No metadata configured'],
+            positives: [],
+            breakdown: {}
+        };
+    }
+    
+    let origin = ORIGIN_TYPES[meta.origin] || ORIGIN_TYPES.unknown;
+    let assetClass = ASSET_CLASSES[meta.asset_class] || ASSET_CLASSES.unknown;
+    let cg = CG_STATUS[meta.cg_status] || CG_STATUS.cg_none;
+    let treasury = TREASURY_VALUE[meta.treasury_value] || TREASURY_VALUE.medium;
+    let namingOk = isNamingAccurate(meta);
+    
+    let breakdown = {
+        origin: { label: origin.label, base: origin.baseScore },
+        assetClass: { label: assetClass.label, bonus: assetClass.bonus },
+        cg: { label: cg.label, score: cg.score },
+        treasury: { label: treasury.label, score: treasury.score },
+        naming: { accurate: namingOk, score: namingOk ? 10 : -10, actual: meta.actual_path },
+        skip: { clear: meta.skip_clear, score: meta.skip_clear ? 5 : -5 },
+        multiDex: { enabled: meta.multi_dex, score: meta.multi_dex ? 5 : 0 }
+    };
+    
+    let total = origin.baseScore + assetClass.bonus + cg.score + treasury.score + 
+                breakdown.naming.score + breakdown.skip.score + breakdown.multiDex.score;
+    total = Math.max(0, Math.min(100, total));
+    
+    // Identify issues (things that hurt the score)
+    let issues = [];
+    let positives = [];
+    
+    // Origin issues
+    if (origin.baseScore < 50) {
+        issues.push(`🔴 ${origin.label} origin (-${85 - origin.baseScore} from native)`);
+    } else if (origin.baseScore < 70) {
+        issues.push(`🟡 ${origin.label} origin (not native)`);
+    } else {
+        positives.push(`✅ ${origin.label} origin`);
+    }
+    
+    // CoinGecko
+    if (cg.score < 0) {
+        issues.push(`🔴 Not on CoinGecko (${cg.score})`);
+    } else if (cg.score > 5) {
+        positives.push(`✅ Listed on CG Terra (${cg.score > 0 ? '+' : ''}${cg.score})`);
+    } else if (cg.score > 0) {
+        positives.push(`✅ Listed on CG (${cg.score > 0 ? '+' : ''}${cg.score})`);
+    }
+    
+    // Naming
+    if (!namingOk) {
+        issues.push(`🔴 Name mismatch: shows "${assetName}" but is "${meta.actual_path}" (-10)`);
+    } else {
+        positives.push(`✅ Naming accurate (+10)`);
+    }
+    
+    // Skip.go clarity
+    if (!meta.skip_clear) {
+        issues.push(`🟡 Skip.go routing confusing (-5)`);
+    }
+    
+    // Treasury value
+    if (treasury.score < 0) {
+        issues.push(`🟡 Low treasury value (${treasury.score})`);
+    } else if (treasury.score > 0) {
+        positives.push(`✅ High treasury value (+${treasury.score})`);
+    }
+    
+    // Multi-DEX
+    if (meta.multi_dex) {
+        positives.push(`✅ Multi-DEX available (+5)`);
+    }
+    
+    // Add acquisition note if present
+    let notes = [];
+    if (meta.acquisition_note) {
+        notes.push(`📝 ${meta.acquisition_note}`);
+    }
+    if (meta.acquisition === 'hard') {
+        issues.push(`🔴 Hard to acquire`);
+    } else if (meta.acquisition === 'medium') {
+        issues.push(`🟡 Medium difficulty to acquire`);
+    }
+    
+    return {
+        name: assetName,
+        score: total,
+        source: 'metadata',
+        origin: meta.origin,
+        assetClass: meta.asset_class,
+        issues: issues,
+        positives: positives,
+        notes: notes,
+        breakdown: breakdown
+    };
+}
+
 function calculatePoolAccessScore(poolName) {
     // Parse pool name: "LUNA-USDC" or "wBTC.axl-wBTC.osmo"
     let parts = poolName.split('-');
-    if (parts.length !== 2) return { total: 5, breakdown: { error: 'Could not parse pool name' } };
+    if (parts.length !== 2) return { total: 50, breakdown: { error: 'Could not parse pool name' } };
     
     let [asset1, asset2] = parts;
     
-    // 1. Asset Quality (average of both sides)
-    let tier1 = getAssetTier(asset1);
-    let tier2 = getAssetTier(asset2);
-    let assetAvg = (tier1.points + tier2.points) / 2;
-    
-    // 2. Bridge Quality (use worst bridge - chain is only as strong as weakest link)
-    let bridge1 = getBridgeQuality(asset1);
-    let bridge2 = getBridgeQuality(asset2);
-    let bridgeScore = Math.min(bridge1.points, bridge2.points);
-    let bridgeLabel = bridge1.points <= bridge2.points ? bridge1.label : bridge2.label;
-    
-    // 3. LUNA Ecosystem Benefit
-    let lunaBenefit = getLunaBenefit(asset1, asset2);
-    
-    // 4. Ecosystem factors (from metadata if available)
-    let ecosystemBonus = 0;
-    let ecosystemFactors = [];
-    
-    // Check CoinGecko listing from metadata
+    // Check if we have metadata for these assets
     let meta1 = assetMetadata[asset1];
     let meta2 = assetMetadata[asset2];
-    if (meta1?.coingecko || meta2?.coingecko) {
-        ecosystemBonus += 0.5;
-        ecosystemFactors.push('CoinGecko listed');
+    
+    // Get detailed breakdown for each asset
+    let details1 = getAssetScoreDetails(asset1, meta1);
+    let details2 = getAssetScoreDetails(asset2, meta2);
+    
+    let hasMetadata = details1.source === 'metadata' && details2.source === 'metadata';
+    let avgScore = (details1.score + details2.score) / 2;
+    
+    // LUNA benefit bonus
+    let lunaBenefit = 0;
+    let lunaLabel = '';
+    let lunaAssets = ['LUNA', 'ampLUNA', 'stLUNA', 'boneLUNA', 'arbLUNA', 'bLUNA'];
+    let hasLuna = lunaAssets.includes(asset1) || lunaAssets.includes(asset2);
+    
+    if (hasLuna && hasMetadata) {
+        let otherMeta = lunaAssets.includes(asset1) ? meta2 : meta1;
+        
+        if (otherMeta?.asset_class === 'stable') {
+            lunaBenefit = 5;
+            lunaLabel = 'LUNA + Stable (+5)';
+        } else if (otherMeta?.asset_class === 'bluechip') {
+            lunaBenefit = 5;
+            lunaLabel = 'LUNA + Bluechip (+5)';
+        } else if (otherMeta?.asset_class === 'lsd') {
+            lunaBenefit = 3;
+            lunaLabel = 'LUNA + LSD (+3)';
+        } else {
+            lunaBenefit = 2;
+            lunaLabel = 'LUNA pair (+2)';
+        }
     }
     
-    // Check multi-DEX from metadata
-    if (meta1?.multiDex || meta2?.multiDex) {
-        ecosystemBonus += 0.5;
-        ecosystemFactors.push('Multi-DEX');
-    }
+    let total = Math.min(100, avgScore + lunaBenefit);
     
-    // Total (max ~10 points, normalize to 0-100 for ranking)
-    let rawTotal = assetAvg + bridgeScore + lunaBenefit.points + ecosystemBonus;
-    let maxPossible = 3 + 3 + 3 + 1; // 10 points max
-    let normalized = (rawTotal / maxPossible) * 100;
+    // Combine all issues and notes
+    let allIssues = [...details1.issues, ...details2.issues];
+    let allPositives = [...details1.positives, ...details2.positives];
+    let allNotes = [...details1.notes, ...details2.notes];
     
     return {
-        total: normalized,
-        raw: rawTotal,
-        max: maxPossible,
+        total: total,
+        raw: avgScore,
+        max: 100,
+        source: hasMetadata ? 'metadata' : 'fallback',
         breakdown: {
-            asset1: { name: asset1, tier: tier1.label, points: tier1.points },
-            asset2: { name: asset2, tier: tier2.label, points: tier2.points },
-            assetAvg: assetAvg,
-            bridge: { label: bridgeLabel, points: bridgeScore, asset1Bridge: bridge1.label, asset2Bridge: bridge2.label },
-            lunaBenefit: lunaBenefit,
-            ecosystem: { factors: ecosystemFactors, bonus: ecosystemBonus }
+            asset1: details1,
+            asset2: details2,
+            assetAvg: avgScore,
+            lunaBenefit: { label: lunaLabel, points: lunaBenefit },
+            allIssues: allIssues,
+            allPositives: allPositives,
+            allNotes: allNotes
         }
     };
 }
@@ -1711,19 +1821,25 @@ function calculateScoresForBucket(bucketName, filterSettings = null) {
         
         let lpKey = `${p.n}|${dexName}`;
         
-        // Get 4-epoch averages
-        p.liq4Ep = get4EpochAverage(lpKey, 'liquidity');
-        p.vol4Ep = get4EpochAverage(lpKey, 'volume');
+        // Get 4-epoch averages - but PRESERVE existing data if already loaded from file
+        if (!p.liq4Ep) {
+            p.liq4Ep = get4EpochAverage(lpKey, 'liquidity');
+        }
+        if (!p.vol4Ep) {
+            p.vol4Ep = get4EpochAverage(lpKey, 'volume');
+        }
         
         // Calculate efficiency (vol/liq ratio)
         let liqAvg = p.liq4Ep?.avg || p.dp || 0;
         let volAvg = p.vol4Ep?.avg || p.vol || 0;
         p.efficiency = liqAvg > 0 ? (volAvg / liqAvg) : 0;
         
-        // Get APR from liquidity data
-        let aprData = getPoolApr(p.n, dexName);
-        p.aprNon = aprData.non;
-        p.aprAmp = aprData.amp;
+        // Get APR from liquidity data - but PRESERVE existing if already loaded
+        if (!p.aprNon || p.aprNon === 0) {
+            let aprData = getPoolApr(p.n, dexName);
+            if (aprData.non > 0) p.aprNon = aprData.non;
+            if (aprData.amp > 0) p.aprAmp = aprData.amp;
+        }
         p.aprFactor = calculateAprFactor(p.aprNon);
         
         // Calculate Access Score
@@ -1802,6 +1918,91 @@ function calculateAllScores(filterSettings = null) {
     });
 }
 
+// Recalculate scores after loading historical data from file
+// Uses raw metrics already in pools but recalculates access/performance/adao scores using current metadata
+function recalculateScoresFromLoadedData() {
+    console.log('Recalculating scores from loaded data...');
+    
+    BUCKET_ORDER.forEach(bucketName => {
+        let bucketPools = store.vote.pools.filter(p => p.b === bucketName);
+        if (bucketPools.length === 0) return;
+        
+        // Step 1: Recalculate access score for each pool using current metadata
+        bucketPools.forEach(p => {
+            p.accessData = calculatePoolAccessScore(p.n);
+            p.accessScore = p.accessData.total;
+            
+            // Recalculate efficiency from loaded 4ep data
+            let liqAvg = p.liq4Ep?.avg || p.dp || 0;
+            let volAvg = p.vol4Ep?.avg || p.vol || 0;
+            if (liqAvg > 0) {
+                p.efficiency = volAvg / liqAvg;
+            }
+            
+            // Calculate APR factor
+            if (p.aprNon > 0) {
+                p.aprFactor = calculateAprFactor(p.aprNon);
+            }
+        });
+        
+        // Step 2: Rank within bucket (active pools only for ranking)
+        let poolsForRanking = bucketPools.filter(p => p.vps >= 1);
+        
+        let withLiq = poolsForRanking.filter(p => (p.liq4Ep?.avg || p.dp) > 0);
+        let withVol = poolsForRanking.filter(p => (p.vol4Ep?.avg || p.vol) > 0);
+        let withEff = poolsForRanking.filter(p => p.efficiency > 0);
+        let withInc = poolsForRanking.filter(p => p.inc > 0);
+        let withVot = poolsForRanking.filter(p => (p.votNowPct || 0) > 0);
+        let withTla = poolsForRanking.filter(p => p.vps > 0);
+        
+        // Sort by value (higher = better rank)
+        withLiq.sort((a, b) => (b.liq4Ep?.avg || b.dp) - (a.liq4Ep?.avg || a.dp));
+        withVol.sort((a, b) => (b.vol4Ep?.avg || b.vol) - (a.vol4Ep?.avg || a.vol));
+        withEff.sort((a, b) => b.efficiency - a.efficiency);
+        withInc.sort((a, b) => b.inc - a.inc);
+        withVot.sort((a, b) => (b.votNowPct || 0) - (a.votNowPct || 0));
+        withTla.sort((a, b) => b.vps - a.vps);
+        
+        // Assign percentile ranks
+        bucketPools.forEach(p => {
+            p.liqRank = withLiq.length > 0 && withLiq.indexOf(p) !== -1 ? (1 - withLiq.indexOf(p) / withLiq.length) * 100 : 0;
+            p.volRank = withVol.length > 0 && withVol.indexOf(p) !== -1 ? (1 - withVol.indexOf(p) / withVol.length) * 100 : 0;
+            p.effRank = withEff.length > 0 && withEff.indexOf(p) !== -1 ? (1 - withEff.indexOf(p) / withEff.length) * 100 : 0;
+            p.incRank = withInc.length > 0 && withInc.indexOf(p) !== -1 ? (1 - withInc.indexOf(p) / withInc.length) * 100 : 0;
+            p.votRank = withVot.length > 0 && withVot.indexOf(p) !== -1 ? (1 - withVot.indexOf(p) / withVot.length) * 100 : 0;
+            p.tlaRank = withTla.length > 0 && withTla.indexOf(p) !== -1 ? (1 - withTla.indexOf(p) / withTla.length) * 100 : 0;
+        });
+        
+        // Step 3: Calculate composite scores
+        bucketPools.forEach(p => {
+            // Performance Score: 35% Efficiency, 25% Volume, 20% Liquidity, 15% Access, 5% History
+            p.performanceScore = 
+                (p.effRank * 0.35) +
+                (p.volRank * 0.25) +
+                (p.liqRank * 0.20) +
+                (p.accessScore * 0.15) +
+                (0 * 0.05);  // History placeholder
+            
+            // Support Score: 40% Bribes, 30% TLA Vote, 30% Votion Dominance
+            let votionDominance = p.vps > 0 ? Math.min(100, (p.votNowPct / p.vps) * 100) : 0;
+            p.votionDominance = votionDominance;
+            
+            p.supportScore = 
+                (p.incRank * 0.40) +
+                (p.tlaRank * 0.30) +
+                (votionDominance * 0.30);
+            
+            // aDAO Opportunity Score
+            p.adaoScore = p.performanceScore - p.supportScore + (p.aprFactor || 0);
+            p.adaoScore = Math.max(-100, Math.min(100, p.adaoScore));
+        });
+        
+        console.log(`  ${bucketName}: ${bucketPools.length} pools recalculated`);
+    });
+    
+    console.log('Score recalculation complete');
+}
+
 function getScoreColor(score) {
     if (score >= 50) return 'text-green-400';
     if (score >= 20) return 'text-yellow-400';
@@ -1869,37 +2070,54 @@ function showScoreInfo(type) {
         case 'access':
             title = 'Access Score (15% of Performance)';
             content = `
-                <p class="mb-3">Measures how valuable this LP is to the Terra ecosystem based on asset quality, bridge safety, and LUNA benefit.</p>
+                <p class="mb-3">Measures how accessible and valuable this LP is based on asset metadata. Each asset is scored 0-100, then averaged for the pool.</p>
                 
-                <p class="mb-2 font-bold text-white">1. Asset Quality (0-3 pts avg)</p>
+                <p class="mb-2 font-bold text-white">1. Origin Base Score (30-85 pts)</p>
                 <div class="text-[10px] mb-3 pl-2 border-l border-gray-600">
-                    <div>🏆 <span class="text-yellow-300">Blue Chip (3)</span>: BTC, ETH, PAXG</div>
-                    <div>💵 <span class="text-green-300">Major Stable (2.5)</span>: USDC, USDT, EURe</div>
-                    <div>⚛️ <span class="text-purple-300">Ecosystem Core (2.5)</span>: LUNA, ATOM, INJ</div>
-                    <div>🏠 <span class="text-orange-300">Native Terra (2)</span>: ROAR, CAPA, SOLID, ASTRO, FUEL</div>
-                    <div>🔄 <span class="text-cyan-300">Protocol LSD (1.5)</span>: ampLUNA, arbLUNA, bLUNA, stLUNA</div>
-                    <div>🌉 <span class="text-gray-300">Cross-chain (1)</span>: wBNB, wstETH, SWTH</div>
+                    <div>🏠 <span class="text-green-400">Terra Native (85)</span>: LUNA, ROAR, CAPA, SOLID</div>
+                    <div>🔒 <span class="text-green-300">Terra LSD (80)</span>: ampLUNA, stLUNA, bLUNA</div>
+                    <div>⚛️ <span class="text-cyan-300">IBC (70)</span>: ATOM, ASTRO via IBC</div>
+                    <div>💵 <span class="text-blue-300">Stable Native (65)</span>: USDC.noble, USDT.kava</div>
+                    <div>🌉 <span class="text-yellow-300">Bridge Eureka (50)</span>: .atom suffix</div>
+                    <div>🔗 <span class="text-orange-300">Bridge Axelar (45)</span>: .axl suffix</div>
+                    <div>📦 <span class="text-red-300">Bridge Osmosis (40)</span>: .osmo suffix</div>
+                    <div>❓ <span class="text-gray-500">Unknown (30)</span>: Not configured</div>
                 </div>
                 
-                <p class="mb-2 font-bold text-white">2. Bridge Quality (0-3 pts)</p>
+                <p class="mb-2 font-bold text-white">2. Asset Class Bonus (+0 to +5)</p>
                 <div class="text-[10px] mb-3 pl-2 border-l border-gray-600">
-                    <div><span class="text-green-400">Native (3)</span>: No bridge risk</div>
-                    <div><span class="text-green-300">.atom (2.5)</span>: IBC/Skip - cleanest path</div>
-                    <div><span class="text-yellow-300">.axl (2)</span>: Axelar - established</div>
-                    <div><span class="text-orange-300">.osmo (1.5)</span>: Osmosis - extra hops</div>
-                    <div><span class="text-red-300">.wh (1)</span>: Wormhole - complex</div>
+                    <div>🏆 <span class="text-yellow-300">Bluechip (+5)</span>: BTC, ETH, PAXG</div>
+                    <div>💵 <span class="text-green-300">Stable (+5)</span>: USDC, USDT, EURe</div>
+                    <div>⚛️ <span class="text-purple-300">Core (+5)</span>: LUNA, ATOM</div>
+                    <div>🔒 <span class="text-cyan-300">LSD (+3)</span>: ampLUNA, stLUNA</div>
+                    <div>🔧 <span class="text-gray-300">DeFi/Native (0)</span>: Protocol tokens</div>
                 </div>
                 
-                <p class="mb-2 font-bold text-white">3. LUNA Ecosystem Benefit (0-3 pts)</p>
+                <p class="mb-2 font-bold text-white">3. CoinGecko Status (-15 to +15)</p>
                 <div class="text-[10px] mb-3 pl-2 border-l border-gray-600">
-                    <div><span class="text-green-400">LUNA + Blue Chip (3)</span>: Attracts value TO Luna</div>
-                    <div><span class="text-green-300">LUNA + Stable/Native (2.5)</span>: Infrastructure & ecosystem</div>
-                    <div><span class="text-yellow-300">LUNA + Other (2)</span>: Still benefits LUNA</div>
-                    <div><span class="text-orange-300">LSD Pair (1.5)</span>: Indirect LUNA support</div>
-                    <div><span class="text-gray-300">Non-LUNA (0.5-1)</span>: Minimal ecosystem benefit</div>
+                    <div>✅ <span class="text-green-400">Listed on Terra (+15)</span>: Best visibility</div>
+                    <div>✓ <span class="text-blue-300">Listed Other Chain (+5)</span>: Has CG presence</div>
+                    <div>❌ <span class="text-red-400">Not Listed (-15)</span>: Hard to find info</div>
                 </div>
                 
-                <p class="text-emerald-400">aDAO prioritizes LPs that bring value to LUNA and Terra! 🏠</p>
+                <p class="mb-2 font-bold text-white">4. Other Factors</p>
+                <div class="text-[10px] mb-3 pl-2 border-l border-gray-600">
+                    <div>📛 <span class="text-green-400">Naming Accurate (+10)</span> / <span class="text-red-400">Mismatch (-10)</span></div>
+                    <div>🧭 <span class="text-green-400">Skip.go Clear (+5)</span> / <span class="text-red-400">Confusing (-5)</span></div>
+                    <div>🔄 <span class="text-blue-300">Multi-DEX Available (+5)</span></div>
+                    <div>💰 <span class="text-yellow-300">Treasury Value High (+5)</span> / <span class="text-gray-400">Low (-5)</span></div>
+                </div>
+                
+                <p class="mb-2 font-bold text-white">5. LUNA Pair Bonus (+2 to +5)</p>
+                <div class="text-[10px] mb-3 pl-2 border-l border-gray-600">
+                    <div><span class="text-green-400">LUNA + Stable/Bluechip (+5)</span></div>
+                    <div><span class="text-cyan-300">LUNA + LSD (+3)</span></div>
+                    <div><span class="text-gray-300">Other LUNA pair (+2)</span></div>
+                </div>
+                
+                <div class="bg-emerald-900/30 border border-emerald-700 p-2 rounded mt-3">
+                    <p class="text-emerald-400 text-[10px]"><strong>Click on any pool row</strong> to see detailed breakdown with specific issues that hurt the score and what could be fixed!</p>
+                </div>
             `;
             break;
         case 'support':
@@ -1996,17 +2214,80 @@ function showPoolScoreDetails(poolName, dex) {
     let accessHtml = '';
     if (p.accessData && p.accessData.breakdown) {
         let b = p.accessData.breakdown;
-        accessHtml = `
-            <div class="space-y-1 text-[10px]">
-                <div class="flex justify-between"><span class="text-gray-500">${b.asset1.name}:</span><span class="text-white">${b.asset1.tier} (${b.asset1.points})</span></div>
-                <div class="flex justify-between"><span class="text-gray-500">${b.asset2.name}:</span><span class="text-white">${b.asset2.tier} (${b.asset2.points})</span></div>
-                <div class="flex justify-between"><span class="text-gray-500">Asset Avg:</span><span class="text-yellow-300">${b.assetAvg.toFixed(1)}/3</span></div>
-                <div class="flex justify-between"><span class="text-gray-500">Bridge:</span><span class="text-cyan-300">${b.bridge.label} (${b.bridge.points}/3)</span></div>
-                <div class="flex justify-between"><span class="text-gray-500">LUNA Benefit:</span><span class="text-green-300">${b.lunaBenefit.label} (${b.lunaBenefit.points}/3)</span></div>
-                ${b.ecosystem.bonus > 0 ? `<div class="flex justify-between"><span class="text-gray-500">Ecosystem:</span><span class="text-blue-300">+${b.ecosystem.bonus} (${b.ecosystem.factors.join(', ')})</span></div>` : ''}
-                <div class="text-[9px] text-gray-500 italic mt-1">${b.lunaBenefit.reason}</div>
-            </div>
-        `;
+        
+        if (p.accessData.source === 'metadata') {
+            // Detailed metadata-based scoring
+            let a1 = b.asset1;
+            let a2 = b.asset2;
+            
+            accessHtml = `
+                <div class="space-y-2 text-[10px]">
+                    <!-- Asset 1 -->
+                    <div class="bg-gray-900/50 p-1.5 rounded">
+                        <div class="flex justify-between font-bold">
+                            <span class="text-white">${a1.name}</span>
+                            <span class="text-cyan-400">${a1.score}/100</span>
+                        </div>
+                        <div class="text-[9px] text-gray-400">${a1.origin || 'unknown'} • ${a1.assetClass || 'unknown'}</div>
+                    </div>
+                    
+                    <!-- Asset 2 -->
+                    <div class="bg-gray-900/50 p-1.5 rounded">
+                        <div class="flex justify-between font-bold">
+                            <span class="text-white">${a2.name}</span>
+                            <span class="text-cyan-400">${a2.score}/100</span>
+                        </div>
+                        <div class="text-[9px] text-gray-400">${a2.origin || 'unknown'} • ${a2.assetClass || 'unknown'}</div>
+                    </div>
+                    
+                    <!-- Average and LUNA Benefit -->
+                    <div class="flex justify-between border-t border-gray-700 pt-1">
+                        <span class="text-gray-500">Asset Avg:</span>
+                        <span class="text-yellow-300">${b.assetAvg.toFixed(0)}/100</span>
+                    </div>
+                    ${b.lunaBenefit && b.lunaBenefit.points > 0 ? `
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">LUNA Benefit:</span>
+                        <span class="text-green-300">${b.lunaBenefit.label}</span>
+                    </div>` : ''}
+                    
+                    <!-- Issues Section -->
+                    ${b.allIssues && b.allIssues.length > 0 ? `
+                    <div class="mt-2 pt-1 border-t border-red-900/50">
+                        <div class="text-red-400 font-bold text-[9px] mb-1">Issues:</div>
+                        ${b.allIssues.map(i => `<div class="text-[9px] text-red-300/80">${i}</div>`).join('')}
+                    </div>` : ''}
+                    
+                    <!-- Notes Section -->
+                    ${b.allNotes && b.allNotes.length > 0 ? `
+                    <div class="mt-1 pt-1 border-t border-yellow-900/50">
+                        <div class="text-yellow-400 font-bold text-[9px] mb-1">Notes:</div>
+                        ${b.allNotes.map(n => `<div class="text-[9px] text-yellow-300/80">${n}</div>`).join('')}
+                    </div>` : ''}
+                    
+                    <!-- Positives Section (collapsed) -->
+                    ${b.allPositives && b.allPositives.length > 0 ? `
+                    <div class="mt-1 pt-1 border-t border-green-900/50">
+                        <div class="text-green-400 font-bold text-[9px] mb-1">Positives:</div>
+                        ${b.allPositives.slice(0, 3).map(p => `<div class="text-[9px] text-green-300/80">${p}</div>`).join('')}
+                        ${b.allPositives.length > 3 ? `<div class="text-[9px] text-gray-500">+${b.allPositives.length - 3} more...</div>` : ''}
+                    </div>` : ''}
+                </div>
+            `;
+        } else {
+            // Fallback when no metadata
+            accessHtml = `
+                <div class="space-y-1 text-[10px]">
+                    <div class="flex justify-between"><span class="text-gray-500">${b.asset1?.name || 'Asset 1'}:</span><span class="text-white">${b.asset1?.score || '?'}/100</span></div>
+                    <div class="flex justify-between"><span class="text-gray-500">${b.asset2?.name || 'Asset 2'}:</span><span class="text-white">${b.asset2?.score || '?'}/100</span></div>
+                    <div class="flex justify-between"><span class="text-gray-500">Asset Avg:</span><span class="text-yellow-300">${b.assetAvg?.toFixed(0) || '?'}/100</span></div>
+                    <div class="mt-2 pt-1 border-t border-yellow-900/50">
+                        <div class="text-yellow-400 text-[9px]">⚠️ No metadata configured for one or both assets</div>
+                        <div class="text-gray-500 text-[9px]">Using fallback scoring - configure metadata in Asset Metadata Manager for accurate scores</div>
+                    </div>
+                </div>
+            `;
+        }
     }
     
     let modal = document.createElement('div');
@@ -3022,14 +3303,27 @@ async function fetchCoreData() {
                 votNowPct: p.votion_now_pct || 0,
                 votNextVp: p.votion_next_vp || 0,
                 votNextPct: p.votion_next_pct || 0,
-                liq4Ep: p.liq_4ep_avg > 0 ? { avg: p.liq_4ep_avg, count: p.liq_4ep_count } : null,
-                vol4Ep: p.vol_4ep_avg > 0 ? { avg: p.vol_4ep_avg, count: p.vol_4ep_count } : null,
+                liq4Ep: p.liq_4ep_avg > 0 ? { avg: p.liq_4ep_avg, count: p.liq_4ep_count || 4 } : null,
+                vol4Ep: p.vol_4ep_avg > 0 ? { avg: p.vol_4ep_avg, count: p.vol_4ep_count || 4 } : null,
                 efficiency: p.efficiency || 0,
-                accessScore: p.access_score || 0,
-                performanceScore: p.performance_score || 0,
-                supportScore: p.support_score || 0,
-                adaoScore: p.adao_score || 0
+                // DON'T load scores from file - will be recalculated with current metadata
+                // Old file values preserved for reference:
+                _oldAccessScore: p.access_score || 0,
+                _oldAdaoScore: p.adao_score || 0,
+                // These are still valid from file (don't depend on access score):
+                performanceScore: null, // Will be recalculated
+                supportScore: p.support_score || 0  // Support doesn't depend on access, can keep
             }));
+            
+            // Debug: Log 4ep data loading
+            let poolsWithLiq4Ep = store.vote.pools.filter(p => p.liq4Ep).length;
+            let poolsWithVol4Ep = store.vote.pools.filter(p => p.vol4Ep).length;
+            console.log(`Loaded pools: ${store.vote.pools.length}`);
+            console.log(`Pools with liq4Ep: ${poolsWithLiq4Ep}`);
+            console.log(`Pools with vol4Ep: ${poolsWithVol4Ep}`);
+            if (store.vote.pools[0]) {
+                console.log('First pool:', store.vote.pools[0].n, 'liq4Ep:', store.vote.pools[0].liq4Ep);
+            }
             
             // Load DAO data if present
             if (d.dao) {
@@ -3113,11 +3407,49 @@ async function fetchCoreData() {
             store.ext.loaded = true;
             store.ext.source = 'epoch_file';
             
+            // Check what data was actually in the file and set flags
+            let hasVotionData = store.vote.pools.some(p => p.votNowVp > 0 || p.votNextVp > 0);
+            let hasBribesData = store.vote.pools.some(p => p.incPD > 0 || p.incTotal > 0);
+            let has4EpData = store.vote.pools.some(p => p.liq4Ep || p.vol4Ep);
+            
+            // Set flags so validation knows we have this data
+            if (hasVotionData) {
+                store.ext.votion = { loaded_from_file: true };
+            }
+            if (hasBribesData) {
+                store.ext.pdBribesEpoch = { loaded_from_file: true };
+            }
+            if (has4EpData) {
+                store.ext.lps = { loaded_from_file: true };
+            }
+            
+            // Auto-load metadata for access scoring (silent, no alert)
+            let metaLoaded = 0;
+            try {
+                let metaResp = await fetch(METADATA_GITHUB_URL + '?t=' + Date.now());
+                if (metaResp.ok) {
+                    let metaData = await metaResp.json();
+                    if (metaData.assets) {
+                        Object.entries(metaData.assets).forEach(([asset, meta]) => {
+                            assetMetadata[asset] = meta;
+                        });
+                        metaLoaded = Object.keys(assetMetadata).length;
+                        console.log(`Loaded metadata: ${metaLoaded} assets`);
+                    }
+                }
+            } catch (e) {
+                console.log('Metadata not loaded - using fallback scoring');
+            }
+            
+            // RECALCULATE all scores using fresh metadata
+            // This ignores old access_score/adao_score from file and recalculates
+            recalculateScoresFromLoadedData();
+            
             // Update UI
             updatePasteStatus('ps-vote', true, 'from file');
             updatePasteStatus('ps-liq-active', true, 'from file');
             
-            // Render all tables
+            // Render all tables (after scores recalculated)
             renderVoteTable();
             renderLocks();
             renderLiquidityTable();
@@ -3128,7 +3460,9 @@ async function fetchCoreData() {
             alert(`✅ Loaded Epoch ${ep} (${ph}) - v2.0 format\n\n` +
                   `📊 ${d.pools.length} pools\n` +
                   `🔒 ${d.dao?.locks?.length || 0} locks\n` +
-                  `💧 ${d.tla?.pools?.length || 0} TLA pools`);
+                  `💧 ${d.tla?.pools?.length || 0} TLA pools\n` +
+                  `🏷️ ${metaLoaded} asset metadata\n` +
+                  `🔄 Scores recalculated with current metadata`);
             
         } else {
             // OLD FORMAT (v1)
@@ -3554,9 +3888,15 @@ function renderVoteTable() {
             // Access score
             let accStr = p.accessScore ? p.accessScore.toFixed(0) : '-';
             let accColor = p.accessScore >= 70 ? 'text-green-400' : p.accessScore >= 50 ? 'text-cyan-400' : p.accessScore >= 30 ? 'text-yellow-400' : 'text-gray-500';
-            let accTitle = p.accessData?.breakdown?.lunaBenefit?.label ? 
-                `${p.accessData.breakdown.lunaBenefit.label} | Bridge: ${p.accessData.breakdown.bridge?.label || 'N/A'}` : 
-                'No access data';
+            let accTitle = 'No access data';
+            if (p.accessData?.source === 'metadata') {
+                let b = p.accessData.breakdown;
+                let issueCount = b.allIssues?.length || 0;
+                accTitle = `${b.asset1.name}: ${b.asset1.score} | ${b.asset2.name}: ${b.asset2.score}`;
+                if (issueCount > 0) accTitle += ` | ⚠️ ${issueCount} issues`;
+            } else if (p.accessData?.breakdown) {
+                accTitle = 'No metadata - using fallback scoring';
+            }
             
             // Support score
             let suppStr = p.supportScore?.toFixed(0) || '0';
@@ -4523,25 +4863,29 @@ function validateExportData() {
     if (!store.vote.tvp) issues.push('No total voting power detected');
     if (store.vote.pools.length === 0) issues.push('No pools parsed from Vote page');
     
-    // Check ext data
+    // Check ext data - but recognize data loaded from file is valid
     if (!store.ext.loaded) warnings.push('Ext data not loaded from GitHub');
     if (!store.ext.votion) warnings.push('No Votion data available');
     if (!store.ext.pdBribesEpoch) warnings.push('No PD bribes data for this epoch');
-    if (Object.keys(store.ext.lps || {}).length === 0) warnings.push('No historical LP data available');
+    if (Object.keys(store.ext.lps || {}).length === 0 && !store.ext.lps?.loaded_from_file) {
+        warnings.push('No historical LP data available');
+    }
     
     // Check for pools with missing data
-    let poolsWithoutVotion = store.vote.pools.filter(p => !p.votNowVp && !p.votNowPct).length;
-    let poolsWithoutApr = store.vote.pools.filter(p => !p.aprNon).length;
-    let poolsWithout4Ep = store.vote.pools.filter(p => !p.liq4Ep).length;
+    // Note: Many pools legitimately have 0 Votion votes - only warn if NO pools have votion data
+    let poolsWithVotion = store.vote.pools.filter(p => p.votNowVp > 0 || p.votNextVp > 0).length;
+    let poolsWithApr = store.vote.pools.filter(p => p.aprNon > 0).length;
+    let poolsWith4Ep = store.vote.pools.filter(p => p.liq4Ep).length;
     
-    if (poolsWithoutVotion > store.vote.pools.length * 0.5) {
-        warnings.push(`${poolsWithoutVotion}/${store.vote.pools.length} pools missing Votion data`);
+    // Only warn about missing data if we have VERY little data
+    if (poolsWithVotion === 0 && store.ext.votion) {
+        warnings.push('Votion data loaded but no pools matched');
     }
-    if (poolsWithoutApr > store.vote.pools.length * 0.5) {
-        warnings.push(`${poolsWithoutApr}/${store.vote.pools.length} pools missing APR data`);
+    if (poolsWithApr < store.vote.pools.length * 0.3) {
+        warnings.push(`Only ${poolsWithApr}/${store.vote.pools.length} pools have APR data`);
     }
-    if (poolsWithout4Ep > store.vote.pools.length * 0.5) {
-        warnings.push(`${poolsWithout4Ep}/${store.vote.pools.length} pools missing 4-epoch averages`);
+    if (poolsWith4Ep < store.vote.pools.length * 0.3) {
+        warnings.push(`Only ${poolsWith4Ep}/${store.vote.pools.length} pools have 4-epoch averages`);
     }
     
     // Check DAO allocations
@@ -4564,14 +4908,34 @@ function validateExportData() {
 
 function downloadCoreJson() {
     let data = buildExportData();
+    let s = data.validation.summary;
+    
+    // Build a helpful summary message
+    let summaryLines = [
+        `📊 ${store.vote.pools.length} pools`,
+        `🎯 ${s.votion_matched} with Votion data`,
+        `📈 ${s.apr_matched} with APR data`,
+        `📉 ${s.historical_matched} with 4-epoch history`,
+        `🔒 ${store.dao.locks?.length || 0} aDAO locks`,
+        `💧 ${store.tla.pools?.length || 0} TLA liquidity pools`,
+        `🏷️ ${Object.keys(assetMetadata).length} asset metadata`,
+        `🔄 Scores recalculated with current metadata`
+    ];
     
     // Check validation
     if (!data.validation.valid) {
-        let msg = 'Export has critical issues:\n\n' + data.validation.issues.join('\n');
+        let msg = '❌ Export has critical issues:\n\n' + data.validation.issues.join('\n');
         if (!confirm(msg + '\n\nExport anyway?')) return;
-    } else if (!data.validation.ready_for_export) {
-        let msg = 'Export has warnings:\n\n' + data.validation.warnings.join('\n');
-        if (!confirm(msg + '\n\nContinue with export?')) return;
+    } else if (data.validation.warnings.length > 0) {
+        let msg = '⚠️ Export warnings:\n' + data.validation.warnings.join('\n');
+        msg += '\n\n✅ Data summary:\n' + summaryLines.join('\n');
+        msg += '\n\nContinue with export?';
+        if (!confirm(msg)) return;
+    } else {
+        // All good - show summary
+        let msg = '✅ Export ready!\n\n' + summaryLines.join('\n');
+        msg += '\n\nProceed with download?';
+        if (!confirm(msg)) return;
     }
     
     let jsonStr = JSON.stringify(data, null, 2);
