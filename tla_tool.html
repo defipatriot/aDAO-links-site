@@ -1624,7 +1624,7 @@ function getLunaBenefit(asset1, asset2) {
     return { points: 0.5, label: 'Non-LUNA Pair', reason: 'Minimal ecosystem benefit' };
 }
 
-function calculateAccessScore(poolName) {
+function calculatePoolAccessScore(poolName) {
     // Parse pool name: "LUNA-USDC" or "wBTC.axl-wBTC.osmo"
     let parts = poolName.split('-');
     if (parts.length !== 2) return { total: 5, breakdown: { error: 'Could not parse pool name' } };
@@ -1727,7 +1727,7 @@ function calculateScoresForBucket(bucketName, filterSettings = null) {
         p.aprFactor = calculateAprFactor(p.aprNon);
         
         // Calculate Access Score
-        p.accessData = calculateAccessScore(p.n);
+        p.accessData = calculatePoolAccessScore(p.n);
         p.accessScore = p.accessData.total;
     });
     
@@ -2993,47 +2993,243 @@ async function fetchCoreData() {
         if (!res.ok) throw new Error("File not found");
         let d = await res.json();
         
-        // Load vote data
-        if (d.vote_data) {
-            store.vote.ep = d.vote_data.epoch;
-            store.vote.end = d.vote_data.ends_in;
-            store.vote.tvp = d.vote_data.total_voting_power;
-            store.vote.reb = d.vote_data.adao_rebase || 0;
-            store.vote.usd = d.vote_data.adao_unclaimed_rewards || 0;
-            store.vote.pools = (d.vote_data.pools || []).map(p => ({
-                n: p.pool_name,
-                d: p.dex || p.dex_name,
+        // Check if it's new v2 format or old format
+        if (d.meta && d.meta.version === "2.0") {
+            // NEW FORMAT (v2.0)
+            store.vote.ep = d.vote.epoch;
+            store.vote.end = d.vote.end_time || 'Loaded from file';
+            store.vote.tvp = d.vote.tvp;
+            store.vote.reb = d.vote.rebase || 0;
+            store.vote.usd = d.vote.rewards_usd || 0;
+            
+            store.vote.pools = (d.pools || []).map(p => ({
+                n: p.name,
+                d: p.dex === 'Astroport' ? 'Astroport' : p.dex === 'WhiteWhale' ? 'WhiteWhale' : p.dex === 'Single' ? 'Single (Astroport)' : p.dex,
                 b: p.bucket || "UNKNOWN",
-                tvp: p.tla_total_votes || 0,
-                dp: p.pool_depth || 0,
-                mvp: p.adao_vote_vp || 0,
-                vps: parseFloat(p.tla_vote_share || 0),
-                ms: parseFloat(p.adao_vote_share || 0),
-                inc: p.total_bribes || 0,
-                apr: '-'
+                tvp: p.vp || 0,
+                dp: p.depth || 0,
+                mvp: p.adao_vp || 0,
+                vps: p.vote_pct || 0,
+                ms: p.adao_pct || 0,
+                inc: p.bribes_total || 0,
+                incTotal: p.bribes_total || 0,
+                incPD: p.bribes_pd || 0,
+                incOther: p.bribes_other || 0,
+                aprNon: p.apr_non || 0,
+                aprAmp: p.apr_amp || 0,
+                aprFactor: p.apr_factor || 0,
+                votNowVp: p.votion_now_vp || 0,
+                votNowPct: p.votion_now_pct || 0,
+                votNextVp: p.votion_next_vp || 0,
+                votNextPct: p.votion_next_pct || 0,
+                liq4Ep: p.liq_4ep_avg > 0 ? { avg: p.liq_4ep_avg, count: p.liq_4ep_count } : null,
+                vol4Ep: p.vol_4ep_avg > 0 ? { avg: p.vol_4ep_avg, count: p.vol_4ep_count } : null,
+                efficiency: p.efficiency || 0,
+                accessScore: p.access_score || 0,
+                performanceScore: p.performance_score || 0,
+                supportScore: p.support_score || 0,
+                adaoScore: p.adao_score || 0
             }));
+            
+            // Load DAO data if present
+            if (d.dao) {
+                store.dao.lVp = d.dao.locked_vp || 0;
+                store.dao.lFac = d.dao.power_factor || 0;
+                store.dao.lAst = d.dao.underlying_assets || 0;
+                store.dao.dep = d.dao.deposit_usd || 0;
+                store.dao.apr = d.dao.deposit_apr || 0;
+                
+                if (d.dao.rewards) {
+                    store.dao.rew = {
+                        usd: d.dao.rewards.usd || 0,
+                        z: d.dao.rewards.zAssets || 0,
+                        amp: d.dao.rewards.ampLUNA || 0
+                    };
+                }
+                
+                if (d.dao.locks) {
+                    store.dao.locks = d.dao.locks.map(l => ({
+                        id: l.id,
+                        amt: l.amount,
+                        asset: l.asset || 'LUNA',
+                        bucket: l.bucket,
+                        vp: l.vp,
+                        usd: l.usd,
+                        status: l.status || 'Unknown'
+                    }));
+                }
+                
+                if (d.dao.tokens) {
+                    store.dao.toks = d.dao.tokens;
+                }
+                
+                // Load vote rewards
+                if (d.dao.vote_rewards) {
+                    store.dao.vRew = d.dao.vote_rewards;
+                }
+                if (d.dao.vote_reward_periods) {
+                    store.dao.vRewPeriods = d.dao.vote_reward_periods;
+                }
+            }
+            
+            // Load TLA liquidity data if present
+            if (d.tla) {
+                store.tla.tvl = d.tla.tvl || 0;
+                store.tla.rewYr = d.tla.rewards_yr || 0;
+                
+                if (d.tla.pools) {
+                    store.tla.pools = d.tla.pools.map(p => ({
+                        name: p.name,
+                        normName: p.normalized_name || p.name,
+                        dex: p.dex,
+                        type: p.type,
+                        bucket: p.bucket,
+                        depth: p.depth || 0,
+                        stk: p.tla_staked || 0,
+                        aprNon: p.apr_non_amp || 0,
+                        aprAmp: p.apr_amplified || 0,
+                        rYr: p.rewards_per_year || 0,
+                        adaoNon: p.adao_deposit_non_amp || 0,
+                        adaoAmp: p.adao_deposit_amplified || 0
+                    }));
+                }
+                
+                if (d.tla.inactive_pools) {
+                    store.tla.inactivePools = d.tla.inactive_pools.map(p => ({
+                        name: p.name,
+                        normName: p.normalized_name || p.name,
+                        dex: p.dex,
+                        type: p.type,
+                        bucket: p.bucket,
+                        depth: p.depth || 0,
+                        stk: p.tla_staked || 0,
+                        aprNon: p.apr_non_amp || 0,
+                        aprAmp: p.apr_amplified || 0
+                    }));
+                }
+            }
+            
+            // Mark ext data as loaded from file
+            store.ext.loaded = true;
+            store.ext.source = 'epoch_file';
+            
+            // Update UI
+            updatePasteStatus('ps-vote', true, 'from file');
+            updatePasteStatus('ps-liq-active', true, 'from file');
+            
+            // Render all tables
             renderVoteTable();
-        }
-        
-        // Load locks data
-        if (d.locks) {
-            store.dao.lVp = d.locks.adao_voting_power || 0;
-            store.dao.lFac = d.locks.power_factor || 0;
-            store.dao.lAst = d.locks.underlying_assets || 0;
-            store.dao.locks = (d.locks.items || []).map(l => ({
-                id: l.id,
-                amt: l.amount,
-                asset: l.asset || 'LUNA',
-                vp: l.voting_power,
-                usd: l.usd_value,
-                status: l.status || 'Unknown'
-            }));
             renderLocks();
+            renderLiquidityTable();
+            
+            // Update additional UI elements
+            updateDaoUIFromLoad();
+            
+            alert(`✅ Loaded Epoch ${ep} (${ph}) - v2.0 format\n\n` +
+                  `📊 ${d.pools.length} pools\n` +
+                  `🔒 ${d.dao?.locks?.length || 0} locks\n` +
+                  `💧 ${d.tla?.pools?.length || 0} TLA pools`);
+            
+        } else {
+            // OLD FORMAT (v1)
+            if (d.vote_data) {
+                store.vote.ep = d.vote_data.epoch;
+                store.vote.end = d.vote_data.ends_in;
+                store.vote.tvp = d.vote_data.total_voting_power;
+                store.vote.reb = d.vote_data.adao_rebase || 0;
+                store.vote.usd = d.vote_data.adao_unclaimed_rewards || 0;
+                store.vote.pools = (d.vote_data.pools || []).map(p => ({
+                    n: p.pool_name,
+                    d: p.dex || p.dex_name,
+                    b: p.bucket || "UNKNOWN",
+                    tvp: p.tla_total_votes || 0,
+                    dp: p.pool_depth || 0,
+                    mvp: p.adao_vote_vp || 0,
+                    vps: parseFloat(p.tla_vote_share || 0),
+                    ms: parseFloat(p.adao_vote_share || 0),
+                    inc: p.total_bribes || 0,
+                    apr: '-'
+                }));
+                
+                updatePasteStatus('ps-vote', true, 'v1');
+                renderVoteTable();
+            }
+            
+            if (d.locks) {
+                store.dao.lVp = d.locks.adao_voting_power || 0;
+                store.dao.lFac = d.locks.power_factor || 0;
+                store.dao.lAst = d.locks.underlying_assets || 0;
+                store.dao.locks = (d.locks.items || []).map(l => ({
+                    id: l.id,
+                    amt: l.amount,
+                    asset: l.asset || 'LUNA',
+                    vp: l.voting_power,
+                    usd: l.usd_value,
+                    status: l.status || 'Unknown'
+                }));
+                renderLocks();
+            }
+            
+            alert(`✅ Loaded Epoch ${ep} (${ph}) - v1 format`);
         }
         
-        alert("Loaded Epoch " + ep + " (" + ph + ")");
     } catch(e) {
-        alert("Could not load: " + e.message);
+        console.error('Load error:', e);
+        alert("❌ Could not load: " + e.message);
+    }
+}
+
+// Helper to update paste status with optional label
+function updatePasteStatus(id, success, label = '') {
+    let el = $(id);
+    if (!el) return;
+    if (success) {
+        el.classList.remove('bg-gray-800', 'text-gray-500', 'border-gray-700');
+        el.classList.add('bg-green-900/50', 'text-green-400', 'border-green-700');
+        if (label) {
+            el.textContent = el.textContent.split(' ')[0] + ' ✓';
+        }
+    } else {
+        el.classList.remove('bg-green-900/50', 'text-green-400', 'border-green-700');
+        el.classList.add('bg-gray-800', 'text-gray-500', 'border-gray-700');
+    }
+}
+
+// Update DAO UI elements after loading from file
+function updateDaoUIFromLoad() {
+    // Update unclaimed rewards details
+    if (store.dao.rew) {
+        setTxt('dao-rew-z', (store.dao.rew.z || 0).toLocaleString());
+        setTxt('dao-rew-amp', (store.dao.rew.amp || 0).toLocaleString());
+        setTxt('dao-usd', fmt$(store.dao.rew.usd || 0));
+    }
+    
+    // Update vote rewards modal
+    if (store.dao.vRewPeriods && store.dao.vRewPeriods.length > 0) {
+        let first = Math.min(...store.dao.vRewPeriods);
+        let last = Math.max(...store.dao.vRewPeriods);
+        let count = store.dao.vRewPeriods.length;
+        setTxt('mod-vote-periods', `${first} - ${last}`);
+        setTxt('mod-vote-epoch-count', `${count} Epochs`);
+    } else {
+        setTxt('mod-vote-periods', '-');
+        setTxt('mod-vote-epoch-count', '-');
+    }
+    
+    // Update vote rewards list in modal
+    if (store.dao.vRew && Object.keys(store.dao.vRew).length > 0) {
+        let html = Object.entries(store.dao.vRew).map(([token, amount]) => {
+            let formatted = amount < 1 ? amount.toFixed(6) : amount.toLocaleString(undefined, {maximumFractionDigits: 2});
+            return `<div class="flex justify-between py-1"><span class="text-gray-400">${token}</span><span class="text-green-400 font-mono">${formatted}</span></div>`;
+        }).join('');
+        setHtml('mod-vote-list', html);
+    }
+    
+    // Update tokens modal
+    if (store.dao.toks && store.dao.toks.length > 0) {
+        setHtml('mod-tok-list', store.dao.toks.map(t => 
+            `<div class="flex justify-between py-1"><span class="text-gray-400">${t.s}</span><span class="font-mono text-white">${t.a?.toLocaleString() || t.a}</span></div>`
+        ).join(''));
     }
 }
 
@@ -3770,12 +3966,9 @@ function renderLiquidityTable() {
     setTxt('dao-apr', store.dao.apr + '%');
     setTxt('dao-usd', fmt$(store.dao.rew.usd || 0));
     
-    // Combine all pools
-    let allPools = [...store.tla.pools, ...store.tla.inactivePools];
-    
-    // Separate active and inactive
-    let activePools = allPools.filter(p => !p.inactive);
-    let inactivePools = allPools.filter(p => p.inactive);
+    // Use arrays directly - don't combine and re-filter
+    let activePools = [...(store.tla.pools || [])];
+    let inactivePools = [...(store.tla.inactivePools || [])];
     
     // Calculate DEX stats from active pools only
     let dexStats = {
@@ -3811,7 +4004,7 @@ function renderLiquidityTable() {
     setTxt('liq-astro-tvl', totalDexStk > 0 ? ((dexStats.astro.stk / totalDexStk) * 100).toFixed(1) + '%' : '0%');
     setTxt('liq-ww-tvl', totalDexStk > 0 ? ((dexStats.ww.stk / totalDexStk) * 100).toFixed(1) + '%' : '0%');
     
-    // Sort active by bucket, then alphabetically
+    // Sort active by bucket, then alphabetically within bucket
     activePools.sort((a, b) => {
         let biA = BUCKET_ORDER.indexOf(a.bucket); if (biA === -1) biA = 99;
         let biB = BUCKET_ORDER.indexOf(b.bucket); if (biB === -1) biB = 99;
@@ -3819,8 +4012,8 @@ function renderLiquidityTable() {
         return a.name.localeCompare(b.name);
     });
     
-    // Sort inactive by TLA Deposits (stk) descending
-    inactivePools.sort((a, b) => b.stk - a.stk);
+    // Sort inactive by TLA Staked (stk) descending - most deposits first
+    inactivePools.sort((a, b) => (b.stk || 0) - (a.stk || 0));
     
     let html = '';
     let grandTotals = { depth: 0, stk: 0, rYr: 0, adaoNon: 0, adaoAmp: 0 };
