@@ -174,7 +174,7 @@
                     <span class="text-[8px] text-purple-400 font-bold uppercase">Grade Against</span>
                     <div class="flex gap-2 text-[10px] font-bold text-gray-400 bg-purple-900/20 px-2 py-1 rounded border border-purple-900/50">
                         <label class="flex items-center gap-1 hover:text-white cursor-pointer"><input type="checkbox" id="grade-astro" class="filter-checkbox" checked onchange="renderVoteTable()"> Astro</label>
-                        <label class="flex items-center gap-1 hover:text-white cursor-pointer"><input type="checkbox" id="grade-ww" class="filter-checkbox" checked onchange="renderVoteTable()"> SS</label>
+                        <label class="flex items-center gap-1 hover:text-white cursor-pointer"><input type="checkbox" id="grade-ww" class="filter-checkbox" checked onchange="renderVoteTable()">WW</label>
                         <label class="flex items-center gap-1 hover:text-white cursor-pointer"><input type="checkbox" id="grade-inactive" class="filter-checkbox" checked onchange="renderVoteTable()"> Inactive</label>
                     </div>
                 </div>
@@ -183,7 +183,7 @@
                     <span class="text-[8px] text-red-400 font-bold uppercase">Include in Export</span>
                     <div class="flex gap-2 text-[10px] font-bold text-gray-400 bg-red-900/20 px-2 py-1 rounded border border-red-900/50">
                         <label class="flex items-center gap-1 hover:text-white cursor-pointer"><input type="checkbox" id="export-astro" class="filter-checkbox" checked> Astro</label>
-                        <label class="flex items-center gap-1 hover:text-white cursor-pointer"><input type="checkbox" id="export-ww" class="filter-checkbox" checked> SS</label>
+                        <label class="flex items-center gap-1 hover:text-white cursor-pointer"><input type="checkbox" id="export-ww" class="filter-checkbox" checked>WW</label>
                         <label class="flex items-center gap-1 hover:text-white cursor-pointer"><input type="checkbox" id="export-inactive" class="filter-checkbox" checked> Inactive</label>
                         <label class="flex items-center gap-1 hover:text-white cursor-pointer text-cyan-400"><input type="checkbox" id="export-adao" class="filter-checkbox" checked onchange="renderVoteTable()"> aDAO</label>
                     </div>
@@ -198,6 +198,7 @@
     <div class="tab-btn active" onclick="switchTab('vote')">1. Vote</div>
     <div class="tab-btn" onclick="switchTab('liquidity')">2. Liquidity</div>
     <div class="tab-btn" onclick="switchTab('locks')">3. Locks</div>
+    <div class="tab-btn" onclick="switchTab('config')">⚙️ Config</div>
 </div>
 
 <!-- WS 1: VOTE -->
@@ -501,6 +502,188 @@
             <div id="locks-list" class="space-y-0 max-h-[550px] overflow-y-auto custom-scroll pr-2 bg-[#0D0D0D] border border-gray-800 rounded-b p-2">
                 <div class="text-center text-gray-600 italic text-xs pt-10">No locks parsed yet...</div>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- WS 4: CONFIG -->
+<div id="ws-config" class="workspace">
+    <div class="flex flex-col gap-4">
+        <div class="bg-amber-900/20 border border-amber-700/50 rounded-lg p-4 mb-2">
+            <div class="flex items-center gap-2 text-amber-400 font-bold text-sm mb-2">
+                <span>⚙️</span> Site Configuration Editor
+            </div>
+            <p class="text-gray-400 text-xs">Edit key values below, then click "Copy Config JSON" to get the updated configuration. Replace the config in your GitHub repo to update the site.</p>
+        </div>
+        
+        <!-- Config Sections -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            
+            <!-- General Settings -->
+            <div class="bg-[#161616] p-4 rounded border border-gray-800">
+                <h3 class="text-cyan-400 font-bold text-sm mb-3 border-b border-gray-700 pb-2">📊 General Settings</h3>
+                <div class="space-y-3">
+                    <div>
+                        <label class="text-[10px] text-gray-500 uppercase">Current Epoch</label>
+                        <input type="number" id="cfg-epoch" class="input-dark w-full" value="161">
+                    </div>
+                    <div>
+                        <label class="text-[10px] text-gray-500 uppercase">Default Phase</label>
+                        <select id="cfg-phase" class="input-dark w-full">
+                            <option value="end" selected>End (Snapshot)</option>
+                            <option value="start">Start</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- GitHub URLs -->
+            <div class="bg-[#161616] p-4 rounded border border-gray-800">
+                <h3 class="text-purple-400 font-bold text-sm mb-3 border-b border-gray-700 pb-2">🔗 GitHub Data URLs</h3>
+                <div class="space-y-3">
+                    <div>
+                        <label class="text-[10px] text-gray-500 uppercase">Main Data Repo</label>
+                        <input type="text" id="cfg-baseUrl" class="input-dark w-full text-xs" value="https://raw.githubusercontent.com/defipatriot/tla_json_storage/main">
+                    </div>
+                    <div>
+                        <label class="text-[10px] text-gray-500 uppercase">Extensions Repo</label>
+                        <input type="text" id="cfg-extUrl" class="input-dark w-full text-xs" value="https://raw.githubusercontent.com/defipatriot/tla-ext_json_storage/main">
+                    </div>
+                    <div>
+                        <label class="text-[10px] text-gray-500 uppercase">aDAO Repo</label>
+                        <input type="text" id="cfg-adaoUrl" class="input-dark w-full text-xs" value="https://raw.githubusercontent.com/defipatriot/adao_json_storage/main">
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Scoring Weights -->
+            <div class="bg-[#161616] p-4 rounded border border-gray-800">
+                <h3 class="text-green-400 font-bold text-sm mb-3 border-b border-gray-700 pb-2">⚖️ Scoring Weights</h3>
+                <p class="text-[10px] text-gray-500 mb-3">aDAO Score = (Access × W1) + (Performance × W2) + ((100-Support) × W3)</p>
+                <div class="space-y-3">
+                    <div class="flex items-center gap-2">
+                        <label class="text-[10px] text-gray-400 w-28">Access Weight</label>
+                        <input type="number" id="cfg-accessWeight" class="input-dark w-20 text-center" value="0.15" step="0.05" min="0" max="1">
+                        <span class="text-gray-500 text-xs">(15%)</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <label class="text-[10px] text-gray-400 w-28">Performance Weight</label>
+                        <input type="number" id="cfg-perfWeight" class="input-dark w-20 text-center" value="0.55" step="0.05" min="0" max="1">
+                        <span class="text-gray-500 text-xs">(55%)</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <label class="text-[10px] text-gray-400 w-28">Support Weight</label>
+                        <input type="number" id="cfg-supportWeight" class="input-dark w-20 text-center" value="0.30" step="0.05" min="0" max="1">
+                        <span class="text-gray-500 text-xs">(30%)</span>
+                    </div>
+                    <div id="weight-total" class="text-[10px] text-gray-500 mt-2">Total: 100%</div>
+                </div>
+            </div>
+            
+            <!-- Origin Scores -->
+            <div class="bg-[#161616] p-4 rounded border border-gray-800">
+                <h3 class="text-amber-400 font-bold text-sm mb-3 border-b border-gray-700 pb-2">🌍 Origin Base Scores</h3>
+                <div class="space-y-2">
+                    <div class="flex items-center gap-2">
+                        <label class="text-[10px] text-cyan-400 w-32">🔄 Terra LSD</label>
+                        <input type="number" id="cfg-origin-lsd" class="input-dark w-16 text-center" value="85">
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <label class="text-[10px] text-green-400 w-32">🏠 Terra Native</label>
+                        <input type="number" id="cfg-origin-native" class="input-dark w-16 text-center" value="80">
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <label class="text-[10px] text-purple-400 w-32">⚛️ IBC Native</label>
+                        <input type="number" id="cfg-origin-ibc" class="input-dark w-16 text-center" value="70">
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <label class="text-[10px] text-blue-400 w-32">💵 Bridged Stable</label>
+                        <input type="number" id="cfg-origin-stable" class="input-dark w-16 text-center" value="65">
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <label class="text-[10px] text-yellow-400 w-32">🌉 Eureka Bridge</label>
+                        <input type="number" id="cfg-origin-eureka" class="input-dark w-16 text-center" value="55">
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <label class="text-[10px] text-orange-400 w-32">🔶 Axelar/Osmosis</label>
+                        <input type="number" id="cfg-origin-axelar" class="input-dark w-16 text-center" value="50">
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Asset Class Bonuses -->
+            <div class="bg-[#161616] p-4 rounded border border-gray-800">
+                <h3 class="text-blue-400 font-bold text-sm mb-3 border-b border-gray-700 pb-2">🏷️ Asset Class Bonuses</h3>
+                <div class="space-y-2">
+                    <div class="flex items-center gap-2">
+                        <label class="text-[10px] text-gray-400 w-32">Stablecoin</label>
+                        <input type="number" id="cfg-class-stable" class="input-dark w-16 text-center" value="5">
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <label class="text-[10px] text-gray-400 w-32">Bluechip (BTC/ETH)</label>
+                        <input type="number" id="cfg-class-bluechip" class="input-dark w-16 text-center" value="5">
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <label class="text-[10px] text-gray-400 w-32">LSD</label>
+                        <input type="number" id="cfg-class-lsd" class="input-dark w-16 text-center" value="5">
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <label class="text-[10px] text-gray-400 w-32">RWA (PAXG)</label>
+                        <input type="number" id="cfg-class-rwa" class="input-dark w-16 text-center" value="5">
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <label class="text-[10px] text-gray-400 w-32">Core/DeFi</label>
+                        <input type="number" id="cfg-class-core" class="input-dark w-16 text-center" value="0">
+                    </div>
+                </div>
+            </div>
+            
+            <!-- DEX Configuration -->
+            <div class="bg-[#161616] p-4 rounded border border-gray-800">
+                <h3 class="text-red-400 font-bold text-sm mb-3 border-b border-gray-700 pb-2">🏦 DEX Configuration</h3>
+                <div class="space-y-3">
+                    <div>
+                        <label class="text-[10px] text-gray-500 uppercase">Primary DEX Name</label>
+                        <input type="text" id="cfg-dex1-name" class="input-dark w-full" value="Astroport">
+                    </div>
+                    <div>
+                        <label class="text-[10px] text-gray-500 uppercase">Primary DEX Link</label>
+                        <input type="text" id="cfg-dex1-link" class="input-dark w-full text-xs" value="https://app.astroport.fi/pools">
+                    </div>
+                    <div>
+                        <label class="text-[10px] text-gray-500 uppercase">Secondary DEX Name</label>
+                        <input type="text" id="cfg-dex2-name" class="input-dark w-full" value="WhiteWhale">
+                    </div>
+                    <div>
+                        <label class="text-[10px] text-gray-500 uppercase">Secondary DEX Link</label>
+                        <input type="text" id="cfg-dex2-link" class="input-dark w-full text-xs" value="https://app.whitewhale.money/terra/pools">
+                    </div>
+                    <div class="flex items-center gap-2 mt-2">
+                        <input type="checkbox" id="cfg-dex2-enabled" class="filter-checkbox">
+                        <label class="text-[10px] text-gray-400">Secondary DEX Link Enabled</label>
+                    </div>
+                </div>
+            </div>
+            
+        </div>
+        
+        <!-- Export Buttons -->
+        <div class="flex gap-3 mt-4">
+            <button onclick="copyConfigJSON()" class="btn-action bg-emerald-900/50 text-emerald-300 border border-emerald-700 flex items-center gap-2">
+                <span>📋</span> Copy Config JSON
+            </button>
+            <button onclick="resetConfigDefaults()" class="btn-action bg-gray-800 text-gray-400 border border-gray-700">
+                Reset to Defaults
+            </button>
+        </div>
+        
+        <!-- JSON Preview -->
+        <div class="bg-[#0D0D0D] p-4 rounded border border-gray-800 mt-2">
+            <div class="flex justify-between items-center mb-2">
+                <h4 class="text-gray-400 font-bold text-xs">Generated Config JSON</h4>
+                <span id="config-copy-status" class="text-[10px] text-emerald-400 hidden">✓ Copied!</span>
+            </div>
+            <pre id="config-preview" class="text-[10px] text-gray-500 font-mono overflow-x-auto max-h-60 overflow-y-auto">Click "Copy Config JSON" to generate...</pre>
         </div>
     </div>
 </div>
@@ -3093,7 +3276,7 @@ function generateActivationTargets() {
             <div class="flex items-center gap-2">
                 <span class="text-white font-bold">${p.n}</span>
                 ${nativeBadge}
-                <span class="text-[9px] text-gray-500">${p.d.includes('Astro') ? 'Astro' : p.d.includes('Single') ? 'Single' : 'SS'}</span>
+                <span class="text-[9px] text-gray-500">${p.d.includes('Astro') ? 'Astro' : p.d.includes('Single') ? 'Single' : 'WW'}</span>
             </div>
             <div class="text-right text-[10px]">
                 <span class="text-teal-400">${fmt$(liq)}</span>
@@ -3608,6 +3791,131 @@ function switchTab(t) {
     $('ws-' + t)?.classList.add('active');
 }
 
+// === CONFIG EDITOR ===
+function generateConfigJSON() {
+    const config = {
+        version: 1,
+        updated: new Date().toISOString().split('T')[0],
+        general: {
+            currentEpoch: parseInt($('cfg-epoch')?.value) || 161,
+            defaultPhase: $('cfg-phase')?.value || 'end'
+        },
+        urls: {
+            baseUrl: $('cfg-baseUrl')?.value || '',
+            extUrl: $('cfg-extUrl')?.value || '',
+            adaoUrl: $('cfg-adaoUrl')?.value || ''
+        },
+        scoring: {
+            weights: {
+                access: parseFloat($('cfg-accessWeight')?.value) || 0.15,
+                performance: parseFloat($('cfg-perfWeight')?.value) || 0.55,
+                support: parseFloat($('cfg-supportWeight')?.value) || 0.30
+            },
+            origin: {
+                terra_lsd: parseInt($('cfg-origin-lsd')?.value) || 85,
+                terra_native: parseInt($('cfg-origin-native')?.value) || 80,
+                ibc_native: parseInt($('cfg-origin-ibc')?.value) || 70,
+                bridged_stable: parseInt($('cfg-origin-stable')?.value) || 65,
+                bridge_eureka: parseInt($('cfg-origin-eureka')?.value) || 55,
+                bridge_axelar: parseInt($('cfg-origin-axelar')?.value) || 50
+            },
+            assetClass: {
+                stable: parseInt($('cfg-class-stable')?.value) || 5,
+                bluechip: parseInt($('cfg-class-bluechip')?.value) || 5,
+                lsd: parseInt($('cfg-class-lsd')?.value) || 5,
+                rwa: parseInt($('cfg-class-rwa')?.value) || 5,
+                core: parseInt($('cfg-class-core')?.value) || 0
+            }
+        },
+        dex: {
+            primary: {
+                name: $('cfg-dex1-name')?.value || 'Astroport',
+                link: $('cfg-dex1-link')?.value || ''
+            },
+            secondary: {
+                name: $('cfg-dex2-name')?.value || 'WhiteWhale',
+                link: $('cfg-dex2-link')?.value || '',
+                enabled: $('cfg-dex2-enabled')?.checked || false
+            }
+        }
+    };
+    return config;
+}
+
+function copyConfigJSON() {
+    const config = generateConfigJSON();
+    const jsonStr = JSON.stringify(config, null, 2);
+    
+    // Show in preview
+    $('config-preview').textContent = jsonStr;
+    
+    // Copy to clipboard
+    navigator.clipboard.writeText(jsonStr).then(() => {
+        const status = $('config-copy-status');
+        status.classList.remove('hidden');
+        setTimeout(() => status.classList.add('hidden'), 2000);
+    });
+}
+
+function resetConfigDefaults() {
+    // General
+    $('cfg-epoch').value = 161;
+    $('cfg-phase').value = 'end';
+    
+    // URLs
+    $('cfg-baseUrl').value = 'https://raw.githubusercontent.com/defipatriot/tla_json_storage/main';
+    $('cfg-extUrl').value = 'https://raw.githubusercontent.com/defipatriot/tla-ext_json_storage/main';
+    $('cfg-adaoUrl').value = 'https://raw.githubusercontent.com/defipatriot/adao_json_storage/main';
+    
+    // Weights
+    $('cfg-accessWeight').value = 0.15;
+    $('cfg-perfWeight').value = 0.55;
+    $('cfg-supportWeight').value = 0.30;
+    
+    // Origin scores
+    $('cfg-origin-lsd').value = 85;
+    $('cfg-origin-native').value = 80;
+    $('cfg-origin-ibc').value = 70;
+    $('cfg-origin-stable').value = 65;
+    $('cfg-origin-eureka').value = 55;
+    $('cfg-origin-axelar').value = 50;
+    
+    // Asset class
+    $('cfg-class-stable').value = 5;
+    $('cfg-class-bluechip').value = 5;
+    $('cfg-class-lsd').value = 5;
+    $('cfg-class-rwa').value = 5;
+    $('cfg-class-core').value = 0;
+    
+    // DEX
+    $('cfg-dex1-name').value = 'Astroport';
+    $('cfg-dex1-link').value = 'https://app.astroport.fi/pools';
+    $('cfg-dex2-name').value = 'WhiteWhale';
+    $('cfg-dex2-link').value = 'https://app.whitewhale.money/terra/pools';
+    $('cfg-dex2-enabled').checked = false;
+    
+    $('config-preview').textContent = 'Click "Copy Config JSON" to generate...';
+}
+
+// Update weight total display
+document.addEventListener('DOMContentLoaded', () => {
+    const updateWeightTotal = () => {
+        const a = parseFloat($('cfg-accessWeight')?.value) || 0;
+        const p = parseFloat($('cfg-perfWeight')?.value) || 0;
+        const s = parseFloat($('cfg-supportWeight')?.value) || 0;
+        const total = ((a + p + s) * 100).toFixed(0);
+        const el = $('weight-total');
+        if (el) {
+            el.textContent = `Total: ${total}%`;
+            el.className = total == 100 ? 'text-[10px] text-green-400 mt-2' : 'text-[10px] text-red-400 mt-2';
+        }
+    };
+    
+    ['cfg-accessWeight', 'cfg-perfWeight', 'cfg-supportWeight'].forEach(id => {
+        $(id)?.addEventListener('input', updateWeightTotal);
+    });
+});
+
 // === VOTE PARSING ===
 function normalizeName(name) {
     if (!name.includes('-')) return name;
@@ -3945,7 +4253,7 @@ function renderVoteTable() {
             let aprAmpStr = p.aprAmp > 0 ? p.aprAmp.toFixed(0) + '%' : '';
             let aprColor = p.aprNon < 40 ? 'text-red-400' : p.aprNon < 55 ? 'text-green-400' : p.aprNon < 70 ? 'text-yellow-400' : 'text-orange-400';
             
-            let dexShort = p.d.includes('Astro') ? 'Astro' : p.d.includes('Single') ? 'Single' : 'SS';
+            let dexShort = p.d.includes('Astro') ? 'Astro' : p.d.includes('Single') ? 'Single' : 'WW';
             let dexFull = p.d.includes('Astro') ? 'Astroport' : p.d.includes('Single') ? 'Single' : 'WhiteWhale';
             
             finalHtml += `
@@ -4498,7 +4806,7 @@ function renderLiquidityTable() {
                     <span class="text-white text-[11px] font-bold truncate" title="${p.name}">${p.normName || p.name}</span>
                     <span class="text-gray-600 text-[9px]">${p.bucket}</span>
                 </div>
-                <div class="text-center text-[10px] ${dexColor}">${p.dex === 'Single' ? 'Single' : p.dex.includes('Astro') ? 'Astro' : 'SS'}</div>
+                <div class="text-center text-[10px] ${dexColor}">${p.dex === 'Single' ? 'Single' : p.dex.includes('Astro') ? 'Astro' : 'WW'}</div>
                 <div class="text-center text-[10px] text-gray-500">${p.type}</div>
                 <div class="text-right font-mono text-[10px] text-gray-400">${fmt$(p.depth)}</div>
                 <div class="text-right font-mono text-[10px] text-orange-400">${fmt$(p.stk)}</div>
