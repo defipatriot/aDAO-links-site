@@ -3,10 +3,28 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TLA Admin (Extensions)</title>
+<title>TLA Admin (Extensions) | Alliance DAO</title>
+<meta name="description" content="Internal admin tool for TLA extension data - Votion, PD Bribes, historical tracking. Not the public dashboard.">
+<meta name="robots" content="noindex, nofollow">
+
+<!-- Favicon -->
+<link rel="icon" type="image/x-icon" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/favicon.ico">
+<link rel="icon" type="image/png" sizes="16x16" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/favicon-16x16.png">
+<link rel="icon" type="image/png" sizes="32x32" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/favicon-32x32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/apple-touch-icon.png">
+
+<!-- OG Meta -->
+<meta property="og:title" content="TLA Admin Extensions | Alliance DAO">
+<meta property="og:description" content="Internal admin tool for TLA extension data collection">
+<meta property="og:image" content="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/android-chrome-512x512.png">
+<meta property="og:type" content="website">
+
 <script src="https://cdn.tailwindcss.com"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+<!-- Vercel Analytics -->
+<script defer src="/_vercel/insights/script.js"></script>
 <style>
     body { font-family: 'Inter', monospace; background: #0D0D0D; color: #EAEAEA; }
     .input-dark { background: #1A1A1A; border: 1px solid #333; color: white; padding: 8px; border-radius: 6px; width: 100%; font-family: monospace; font-size: 0.75rem; resize: vertical; }
@@ -25,6 +43,18 @@
 </style>
 </head>
 <body class="p-4 w-full max-w-[1600px] mx-auto min-h-screen flex flex-col">
+
+<!-- ADMIN TOOL NOTICE -->
+<div class="bg-amber-900/30 border border-amber-600/50 rounded-lg px-4 py-2 mb-4 flex items-center gap-3">
+    <i class="fas fa-tools text-amber-400"></i>
+    <div class="flex-grow">
+        <span class="text-amber-400 font-bold text-xs">INTERNAL ADMIN TOOL</span>
+        <span class="text-amber-200/70 text-xs ml-2">Extension data (Votion, PD Bribes, Historical). Looking for the dashboard?</span>
+    </div>
+    <a href="https://www.thealliancedao.com/tla-stats.html" target="_blank" class="bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-1 rounded text-xs font-bold transition-colors flex items-center gap-1">
+        <i class="fas fa-chart-line"></i> View TLA Stats
+    </a>
+</div>
 
 <!-- HEADER -->
 <header class="flex flex-col gap-4 mb-4 pb-4 border-b border-gray-800">
@@ -1528,7 +1558,7 @@ function renderLpRegistry() {
             .filter(([key, lp]) => !showActive || lp.active)
             .filter(([key, lp]) => {
                 if (lp.dex === 'Astroport' && !showAstro) return false;
-                if (lp.dex === 'WhiteWhale' && !showWW) return false;
+                if ((lp.dex === 'WhiteWhale' || lp.dex === 'WhiteWhale') && !showWW) return false;
                 return true;
             })
             .sort((a, b) => b[1].vote_pct - a[1].vote_pct);
@@ -1544,7 +1574,7 @@ function renderLpRegistry() {
         bucketLps.forEach(([key, lp]) => {
             let activeClass = lp.active ? 'text-white' : 'text-gray-500';
             let dexColor = lp.dex === 'Astroport' ? 'text-cyan-400' : 'text-blue-400';
-            let dexLabel = lp.dex === 'Astroport' ? 'Astro' : 'WW';
+            let dexLabel = lp.dex === 'Astroport' ? 'Astro' : 'SS';
             
             html += `<div class="flex items-center justify-between py-1 px-2 bg-[#0D0D0D] rounded text-[10px]">
                 <span class="${activeClass} font-mono">${lp.lp}</span>
@@ -1564,7 +1594,7 @@ function updateLpSummary() {
     let total = Object.keys(store.lpRegistry).length;
     let active = Object.values(store.lpRegistry).filter(lp => lp.active).length;
     let astro = Object.values(store.lpRegistry).filter(lp => lp.dex === 'Astroport').length;
-    let ww = Object.values(store.lpRegistry).filter(lp => lp.dex === 'WhiteWhale').length;
+    let ww = Object.values(store.lpRegistry).filter(lp => lp.dex === 'WhiteWhale' || lp.dex === 'WhiteWhale').length;
     
     setTxt('lp-total', total);
     setTxt('lp-active', active);

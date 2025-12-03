@@ -3,10 +3,28 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TLA Admin (Core)</title>
+<title>TLA Admin (Core) | Alliance DAO</title>
+<meta name="description" content="Internal admin tool for managing TLA data collection and epoch snapshots. Not the public dashboard.">
+<meta name="robots" content="noindex, nofollow">
+
+<!-- Favicon -->
+<link rel="icon" type="image/x-icon" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/favicon.ico">
+<link rel="icon" type="image/png" sizes="16x16" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/favicon-16x16.png">
+<link rel="icon" type="image/png" sizes="32x32" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/favicon-32x32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/apple-touch-icon.png">
+
+<!-- OG Meta -->
+<meta property="og:title" content="TLA Admin Tool | Alliance DAO">
+<meta property="og:description" content="Internal admin tool for TLA data collection">
+<meta property="og:image" content="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/android-chrome-512x512.png">
+<meta property="og:type" content="website">
+
 <script src="https://cdn.tailwindcss.com"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+<!-- Vercel Analytics -->
+<script defer src="/_vercel/insights/script.js"></script>
 <style>
     body { font-family: 'Inter', monospace; background: #0D0D0D; color: #EAEAEA; }
     .input-dark { background: #1A1A1A; border: 1px solid #333; color: white; padding: 8px; border-radius: 6px; width: 100%; font-family: monospace; font-size: 0.75rem; resize: vertical; }
@@ -30,6 +48,18 @@
 </style>
 </head>
 <body class="p-4 w-full max-w-[1600px] mx-auto min-h-screen flex flex-col">
+
+<!-- ADMIN TOOL NOTICE -->
+<div class="bg-amber-900/30 border border-amber-600/50 rounded-lg px-4 py-2 mb-4 flex items-center gap-3">
+    <i class="fas fa-tools text-amber-400"></i>
+    <div class="flex-grow">
+        <span class="text-amber-400 font-bold text-xs">INTERNAL ADMIN TOOL</span>
+        <span class="text-amber-200/70 text-xs ml-2">For data collection & epoch snapshots. Looking for the dashboard?</span>
+    </div>
+    <a href="https://www.thealliancedao.com/tla-stats.html" target="_blank" class="bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-1 rounded text-xs font-bold transition-colors flex items-center gap-1">
+        <i class="fas fa-chart-line"></i> View TLA Stats
+    </a>
+</div>
 
 <!-- HEADER -->
 <header class="flex flex-col gap-4 mb-4 pb-4 border-b border-gray-800">
@@ -144,7 +174,7 @@
                     <span class="text-[8px] text-purple-400 font-bold uppercase">Grade Against</span>
                     <div class="flex gap-2 text-[10px] font-bold text-gray-400 bg-purple-900/20 px-2 py-1 rounded border border-purple-900/50">
                         <label class="flex items-center gap-1 hover:text-white cursor-pointer"><input type="checkbox" id="grade-astro" class="filter-checkbox" checked onchange="renderVoteTable()"> Astro</label>
-                        <label class="flex items-center gap-1 hover:text-white cursor-pointer"><input type="checkbox" id="grade-ww" class="filter-checkbox" checked onchange="renderVoteTable()"> WW</label>
+                        <label class="flex items-center gap-1 hover:text-white cursor-pointer"><input type="checkbox" id="grade-ww" class="filter-checkbox" checked onchange="renderVoteTable()"> SS</label>
                         <label class="flex items-center gap-1 hover:text-white cursor-pointer"><input type="checkbox" id="grade-inactive" class="filter-checkbox" checked onchange="renderVoteTable()"> Inactive</label>
                     </div>
                 </div>
@@ -153,7 +183,7 @@
                     <span class="text-[8px] text-red-400 font-bold uppercase">Include in Export</span>
                     <div class="flex gap-2 text-[10px] font-bold text-gray-400 bg-red-900/20 px-2 py-1 rounded border border-red-900/50">
                         <label class="flex items-center gap-1 hover:text-white cursor-pointer"><input type="checkbox" id="export-astro" class="filter-checkbox" checked> Astro</label>
-                        <label class="flex items-center gap-1 hover:text-white cursor-pointer"><input type="checkbox" id="export-ww" class="filter-checkbox" checked> WW</label>
+                        <label class="flex items-center gap-1 hover:text-white cursor-pointer"><input type="checkbox" id="export-ww" class="filter-checkbox" checked> SS</label>
                         <label class="flex items-center gap-1 hover:text-white cursor-pointer"><input type="checkbox" id="export-inactive" class="filter-checkbox" checked> Inactive</label>
                         <label class="flex items-center gap-1 hover:text-white cursor-pointer text-cyan-400"><input type="checkbox" id="export-adao" class="filter-checkbox" checked onchange="renderVoteTable()"> aDAO</label>
                     </div>
@@ -1298,8 +1328,9 @@ function applyExtDataToPools() {
     store.vote.pools.forEach(p => {
         // Create key to match ext data: "LUNA-USDC|Astroport"
         // Single-sided assets (ampCAPA, xASTRO) are still on Astroport
+        // Support both WhiteWhale (legacy) and WhiteWhale (new) detection
         let dexName = p.d.includes('Astro') ? 'Astroport' : 
-                      p.d.includes('White') ? 'WhiteWhale' : 
+                      (p.d.includes('White')) ? 'WhiteWhale' : 
                       p.d.includes('Single') ? 'Astroport' : null;
         if (!dexName) return;
         
@@ -1805,7 +1836,7 @@ function calculateScoresForBucket(bucketName, filterSettings = null) {
             let isAct = p.vps >= 1;
             let isAstroOrSingle = p.d.includes('Astro') || p.d.includes('Single');
             if (isAstroOrSingle && !filterSettings.showAstro) return false;
-            if (p.d.includes('White') && !filterSettings.showWW) return false;
+            if ((p.d.includes('White')) && !filterSettings.showWW) return false;
             if (!isAct && !filterSettings.showInactive) return false;
             return true;
         });
@@ -1814,8 +1845,9 @@ function calculateScoresForBucket(bucketName, filterSettings = null) {
     // Calculate 4Ep averages, efficiency, and access score for each pool
     bucketPools.forEach(p => {
         // Single-sided assets (ampCAPA, xASTRO) are still on Astroport
+        // Support both WhiteWhale (legacy) and WhiteWhale (new) detection
         let dexName = p.d.includes('Astro') ? 'Astroport' : 
-                      p.d.includes('White') ? 'WhiteWhale' : 
+                      (p.d.includes('White')) ? 'WhiteWhale' : 
                       p.d.includes('Single') ? 'Astroport' : null;
         if (!dexName) return;
         
@@ -3061,7 +3093,7 @@ function generateActivationTargets() {
             <div class="flex items-center gap-2">
                 <span class="text-white font-bold">${p.n}</span>
                 ${nativeBadge}
-                <span class="text-[9px] text-gray-500">${p.d.includes('Astro') ? 'Astro' : p.d.includes('Single') ? 'Single' : 'WW'}</span>
+                <span class="text-[9px] text-gray-500">${p.d.includes('Astro') ? 'Astro' : p.d.includes('Single') ? 'Single' : 'SS'}</span>
             </div>
             <div class="text-right text-[10px]">
                 <span class="text-teal-400">${fmt$(liq)}</span>
@@ -3285,7 +3317,8 @@ async function fetchCoreData() {
             
             store.vote.pools = (d.pools || []).map(p => ({
                 n: p.name,
-                d: p.dex === 'Astroport' ? 'Astroport' : p.dex === 'WhiteWhale' ? 'WhiteWhale' : p.dex === 'Single' ? 'Single (Astroport)' : p.dex,
+                // Support both WhiteWhale (legacy) and WhiteWhale (new) - normalize to WhiteWhale
+                d: p.dex === 'Astroport' ? 'Astroport' : (p.dex === 'WhiteWhale' || p.dex === 'WhiteWhale') ? 'WhiteWhale' : p.dex === 'Single' ? 'Single (Astroport)' : p.dex,
                 b: p.bucket || "UNKNOWN",
                 tvp: p.vp || 0,
                 dp: p.depth || 0,
@@ -3912,7 +3945,7 @@ function renderVoteTable() {
             let aprAmpStr = p.aprAmp > 0 ? p.aprAmp.toFixed(0) + '%' : '';
             let aprColor = p.aprNon < 40 ? 'text-red-400' : p.aprNon < 55 ? 'text-green-400' : p.aprNon < 70 ? 'text-yellow-400' : 'text-orange-400';
             
-            let dexShort = p.d.includes('Astro') ? 'Astro' : p.d.includes('Single') ? 'Single' : 'WW';
+            let dexShort = p.d.includes('Astro') ? 'Astro' : p.d.includes('Single') ? 'Single' : 'SS';
             let dexFull = p.d.includes('Astro') ? 'Astroport' : p.d.includes('Single') ? 'Single' : 'WhiteWhale';
             
             finalHtml += `
@@ -4157,7 +4190,7 @@ function parseLiquidity() {
 
     let parsedPools = [];
     lines.forEach((l, i) => {
-        // Match DEX line format: "Astroport - pcl" or "WhiteWhale - stable"
+        // Match DEX line format: "Astroport - pcl" or "WhiteWhale - stable" or "WhiteWhale - stable"
         if (l.match(/^(Astroport|WhiteWhale|Single)/i)) {
             let dexParts = l.split('-').map(x => x.trim());
             let dex = dexParts[0];
@@ -4465,7 +4498,7 @@ function renderLiquidityTable() {
                     <span class="text-white text-[11px] font-bold truncate" title="${p.name}">${p.normName || p.name}</span>
                     <span class="text-gray-600 text-[9px]">${p.bucket}</span>
                 </div>
-                <div class="text-center text-[10px] ${dexColor}">${p.dex === 'Single' ? 'Single' : p.dex.includes('Astro') ? 'Astro' : 'WW'}</div>
+                <div class="text-center text-[10px] ${dexColor}">${p.dex === 'Single' ? 'Single' : p.dex.includes('Astro') ? 'Astro' : 'SS'}</div>
                 <div class="text-center text-[10px] text-gray-500">${p.type}</div>
                 <div class="text-right font-mono text-[10px] text-gray-400">${fmt$(p.depth)}</div>
                 <div class="text-right font-mono text-[10px] text-orange-400">${fmt$(p.stk)}</div>

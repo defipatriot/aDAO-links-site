@@ -494,6 +494,38 @@
             
             .glass-card { padding: 2rem !important; }
         }
+        
+        /* Docs Tab Styles */
+        .docs-card .docs-header {
+            user-select: none;
+        }
+        
+        .docs-card .docs-header:hover {
+            opacity: 0.8;
+        }
+        
+        .docs-card .fa-chevron-down {
+            transition: transform 0.3s ease;
+        }
+        
+        .docs-expanded {
+            animation: fadeIn 0.3s ease;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Smooth scrolling for docs */
+        html {
+            scroll-behavior: smooth;
+        }
+        
+        /* Docs section anchor offset */
+        #docs-basics, #docs-glossary, #docs-scores, #docs-access, #docs-ecosystem, #docs-faq {
+            scroll-margin-top: 100px;
+        }
     </style>
 </head>
 <body>
@@ -504,10 +536,11 @@
         <div class="max-w-7xl mx-auto px-4 py-4">
             <div class="flex items-center justify-between flex-wrap gap-4">
                 <div class="flex items-center gap-3">
-                    <a href="https://www.thealliancedao.com/" title="Back to aDAO Dashboard" class="hover:opacity-80 transition-opacity">
+                    <a href="https://www.thealliancedao.com/" title="Back to aDAO Dashboard" class="hover:opacity-80 transition-opacity flex flex-col items-center">
                         <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/aDAO%20Logo%20No%20Background.png" 
                              alt="Alliance DAO" 
                              class="h-10 min-h-[40px] object-contain">
+                        <span class="text-[9px] text-gray-500 hover:text-cyan-400 mt-0.5"><i class="fas fa-arrow-left mr-1"></i>Dashboard</span>
                     </a>
                     <div>
                         <h1 class="text-xl font-bold">Terra Liquidity Alliance Tracker</h1>
@@ -533,12 +566,24 @@
                         </select>
                     </div>
                     <div class="h-8 w-px bg-white/10 hidden md:block"></div>
-                    <div class="text-right">
-                        <div class="text-xs text-gray-500">Current Epoch</div>
-                        <div id="current-epoch" class="text-lg font-bold mono text-cyan-400">-</div>
+                    <div class="text-center">
+                        <div class="text-xs text-gray-500">Live Epoch</div>
+                        <div id="live-epoch" class="text-lg font-bold mono text-cyan-400">-</div>
                     </div>
-                    <div id="load-status" class="text-xs text-gray-500">
-                        <i class="fas fa-circle-notch fa-spin mr-1"></i> Loading...
+                    <div class="h-8 w-px bg-white/10 hidden md:block"></div>
+                    <div class="text-center">
+                        <div class="text-xs text-gray-500">Epoch Ends In</div>
+                        <div id="epoch-countdown" class="text-sm font-bold mono text-amber-400">-</div>
+                    </div>
+                    <div class="h-8 w-px bg-white/10 hidden md:block"></div>
+                    <div class="text-center">
+                        <div id="load-status" class="text-xs text-gray-500">
+                            <i class="fas fa-circle-notch fa-spin mr-1"></i> Loading...
+                        </div>
+                        <!-- Historical Data Notice - now under snapshot info -->
+                        <div id="data-notice" class="hidden mt-1 px-2 py-1 bg-amber-500/10 border border-amber-500/30 rounded text-[10px] text-amber-400">
+                            <span id="data-notice-text">Viewing historical data</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -593,6 +638,9 @@
             </div>
             <div class="tab-btn" data-tab="dao">
                 <i class="fas fa-landmark mr-2"></i>aDAO
+            </div>
+            <div class="tab-btn" data-tab="docs">
+                <i class="fas fa-book mr-2"></i>Docs
             </div>
         </div>
     </nav>
@@ -1077,6 +1125,45 @@
             </div>
         </div>
         
+        <!-- DOCS TAB -->
+        <div id="tab-docs" class="tab-content">
+            <div class="flex flex-col items-center justify-center py-20">
+                <div class="w-24 h-24 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-purple-500/20 flex items-center justify-center mb-6">
+                    <i class="fas fa-book-open text-4xl text-cyan-400"></i>
+                </div>
+                <h2 class="text-3xl font-bold mb-3">Documentation</h2>
+                <div class="flex items-center gap-2 mb-6">
+                    <span class="px-3 py-1 bg-amber-500/20 text-amber-400 text-sm font-semibold rounded-full">
+                        <i class="fas fa-hard-hat mr-1"></i>Coming Soon
+                    </span>
+                </div>
+                <p class="text-gray-400 text-center max-w-md mb-8">
+                    We're building comprehensive documentation to help you understand TLA, 
+                    our scoring methodology, and how to make the most of this dashboard.
+                </p>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-2xl">
+                    <div class="glass-card p-4 text-center">
+                        <i class="fas fa-seedling text-cyan-400 text-xl mb-2"></i>
+                        <h3 class="font-semibold text-sm mb-1">The Basics</h3>
+                        <p class="text-xs text-gray-500">What is TLA, liquidity, epochs</p>
+                    </div>
+                    <div class="glass-card p-4 text-center">
+                        <i class="fas fa-calculator text-purple-400 text-xl mb-2"></i>
+                        <h3 class="font-semibold text-sm mb-1">Scoring System</h3>
+                        <p class="text-xs text-gray-500">How we calculate scores</p>
+                    </div>
+                    <div class="glass-card p-4 text-center">
+                        <i class="fas fa-question-circle text-amber-400 text-xl mb-2"></i>
+                        <h3 class="font-semibold text-sm mb-1">FAQ</h3>
+                        <p class="text-xs text-gray-500">Common questions answered</p>
+                    </div>
+                </div>
+                <p class="text-xs text-gray-600 mt-8">
+                    Questions? DM <a href="https://x.com/defi_patriot" target="_blank" class="text-cyan-400 hover:underline">@defi_patriot</a> on X
+                </p>
+            </div>
+        </div>
+        
     </main>
     
     <!-- Bribes Modal -->
@@ -1210,7 +1297,7 @@
                             <div class="text-xl font-bold text-purple-400">15%</div>
                         </div>
                         <div class="text-sm text-gray-400">
-                            <span class="text-white">How easy to use</span> — Can new users easily deposit? Clear naming? Good CoinGecko coverage?
+                            <span class="text-white">How easy to use</span> — Can new users easily deposit? Is naming consistent across TLA, CoinGecko, DEXs, and wallets (Skip.go)? Users always know what they need & what they're getting.
                         </div>
                     </div>
                 </div>
@@ -1409,9 +1496,15 @@
                             <div class="flex justify-between"><span class="text-cyan-400">🔄 Terra LSD</span><span class="text-green-400">+85</span></div>
                             <div class="flex justify-between"><span class="text-green-400">🏠 Terra Native</span><span class="text-green-400">+80</span></div>
                             <div class="flex justify-between"><span class="text-purple-400">⚛️ IBC</span><span class="text-yellow-400">+70</span></div>
-                            <div class="flex justify-between"><span class="text-blue-400">💵 Stable Native</span><span class="text-yellow-400">+65</span></div>
+                            <div class="flex justify-between"><span class="text-blue-400">💵 Bridged Stable</span><span class="text-yellow-400">+65</span></div>
                             <div class="flex justify-between"><span class="text-yellow-400">🌉 Eureka Bridge</span><span class="text-orange-400">+55</span></div>
                             <div class="flex justify-between"><span class="text-orange-400">🔶 Axelar/Osmosis</span><span class="text-red-400">+50</span></div>
+                        </div>
+                        <div class="text-[10px] text-gray-500 mt-2 space-y-1">
+                            <div><span class="text-cyan-400">LSD</span> = LSDs like ampLUNA directly benefit Terra staking</div>
+                            <div><span class="text-green-400">Native</span> = Built on Terra, fully integrated</div>
+                            <div><span class="text-purple-400">IBC</span> = Cosmos native, reliable bridging</div>
+                            <div><span class="text-blue-400">Bridged Stable</span> = Lower score due to bridge/route complexity, multiple variants (USDC.axl, USDC.noble, etc.) can confuse users</div>
                         </div>
                     </div>
                     
@@ -1425,7 +1518,10 @@
                             <div class="flex justify-between"><span class="text-yellow-400">○ Other Chain</span><span class="text-yellow-400">+5</span></div>
                             <div class="flex justify-between"><span class="text-red-400">✗ Not Listed</span><span class="text-red-400">-15</span></div>
                         </div>
-                        <div class="text-[10px] text-gray-500 mt-2">CoinGecko helps users find & track prices</div>
+                        <div class="text-[10px] text-gray-500 mt-2 space-y-1">
+                            <div>Provides reliable price oracles for LP balancing & transparency</div>
+                            <div>Public pricing ensures you know asset value without relying solely on DEX data</div>
+                        </div>
                     </div>
                     
                     <!-- Asset Class -->
@@ -1436,8 +1532,13 @@
                         <div class="space-y-2 text-xs">
                             <div class="flex justify-between"><span class="text-green-300">Stable (USDC, USDT)</span><span class="text-green-400">+5</span></div>
                             <div class="flex justify-between"><span class="text-yellow-300">Bluechip (BTC, ETH)</span><span class="text-green-400">+5</span></div>
+                            <div class="flex justify-between"><span class="text-amber-300">RWA (PAXG, tokenized assets)</span><span class="text-green-400">+5</span></div>
                             <div class="flex justify-between"><span class="text-cyan-300">LSD (ampLUNA, stLUNA)</span><span class="text-green-400">+5</span></div>
                             <div class="flex justify-between"><span class="text-gray-300">Core/Native/DeFi</span><span class="text-gray-400">+0</span></div>
+                        </div>
+                        <div class="text-[10px] text-gray-500 mt-2 space-y-1">
+                            <div>Bonus for asset types that bring value to Terra ecosystem</div>
+                            <div><span class="text-amber-300">RWA</span> = Non-crypto correlated, store of value in bear markets</div>
                         </div>
                     </div>
                     
@@ -1566,6 +1667,12 @@
                     <span class="text-sm text-red-400">Astroport</span>
                     <i class="fas fa-external-link-alt text-[10px] text-red-400/50"></i>
                 </a>
+                <a href="https://app.whitewhale.money/terra/pools" target="_blank" 
+                   class="flex items-center gap-2 px-3 py-2 bg-emerald-500/10 border border-emerald-500/30 rounded-lg hover:bg-emerald-500/20 transition-colors">
+                    <i class="fas fa-tint text-emerald-400"></i>
+                    <span class="text-sm text-emerald-400">WhiteWhale</span>
+                    <i class="fas fa-external-link-alt text-[10px] text-emerald-400/50"></i>
+                </a>
                 <a href="https://votion.money/liquidity-alliance" target="_blank" 
                    class="flex items-center gap-2 px-3 py-2 bg-blue-500/10 border border-blue-500/30 rounded-lg hover:bg-blue-500/20 transition-colors">
                     <i class="fas fa-vote-yea text-blue-400"></i>
@@ -1619,6 +1726,8 @@
         adaoUrl: 'https://raw.githubusercontent.com/defipatriot/adao_json_storage/main',
         pdBribesUrl: 'https://raw.githubusercontent.com/defipatriot/tla-ext_json_storage/main/tla_pd_bribes.json',
         historicalUrl: 'https://raw.githubusercontent.com/defipatriot/tla-ext_json_storage/main/tla_ext_historical.json',
+        epochDatesUrl: 'https://raw.githubusercontent.com/defipatriot/tla_json_storage/main/epoch_1-300_date.json',
+        docsUrl: 'https://raw.githubusercontent.com/defipatriot/tla_json_storage/main/tla_docs.json',
         currentEpoch: 161,
         defaultPhase: 'end'
     };
@@ -1632,10 +1741,13 @@
         data: null,
         adaoSnap: null,
         pdBribesData: null,
+        docs: null,
         pools: [],
         tlaPools: [],
         dao: null,
         bribesData: null,
+        epochDates: null,
+        currentRealEpoch: null,
         loaded: false,
         charts: {}
     };
@@ -1702,6 +1814,110 @@
         if (score >= 20) return '<i class="fas fa-arrow-up"></i>';
         if (score >= 0) return '<i class="fas fa-minus"></i>';
         return '<i class="fas fa-arrow-down"></i>';
+    }
+    
+    // ============================================================
+    // EPOCH DATES & TIMING
+    // ============================================================
+    async function loadEpochDates() {
+        try {
+            const response = await fetch(CONFIG.epochDatesUrl);
+            if (response.ok) {
+                store.epochDates = await response.json();
+                console.log('Epoch dates loaded:', store.epochDates.length, 'epochs');
+                calculateCurrentEpoch();
+                startEpochCountdown();
+            }
+        } catch (err) {
+            console.log('Epoch dates fetch error:', err.message);
+        }
+    }
+    
+    function calculateCurrentEpoch() {
+        if (!store.epochDates) return null;
+        
+        const now = new Date();
+        
+        // Find the epoch we're currently in
+        for (const ep of store.epochDates) {
+            const start = new Date(ep.start_time);
+            const end = new Date(ep.end_time);
+            
+            if (now >= start && now < end) {
+                store.currentRealEpoch = ep.epoch;
+                document.getElementById('live-epoch').textContent = ep.epoch;
+                console.log('Current real epoch:', ep.epoch);
+                return ep;
+            }
+        }
+        
+        // If we're past all defined epochs, use the last one
+        const lastEpoch = store.epochDates[store.epochDates.length - 1];
+        store.currentRealEpoch = lastEpoch.epoch;
+        document.getElementById('live-epoch').textContent = lastEpoch.epoch;
+        return lastEpoch;
+    }
+    
+    function getCurrentEpochInfo() {
+        if (!store.epochDates || !store.currentRealEpoch) return null;
+        return store.epochDates.find(e => e.epoch === store.currentRealEpoch);
+    }
+    
+    function startEpochCountdown() {
+        updateEpochCountdown();
+        // Update every minute
+        setInterval(updateEpochCountdown, 60000);
+    }
+    
+    function updateEpochCountdown() {
+        const epochInfo = getCurrentEpochInfo();
+        if (!epochInfo) {
+            document.getElementById('epoch-countdown').textContent = '-';
+            return;
+        }
+        
+        const now = new Date();
+        const endTime = new Date(epochInfo.end_time);
+        const diff = endTime - now;
+        
+        if (diff <= 0) {
+            document.getElementById('epoch-countdown').innerHTML = '<span class="text-green-400">Ending soon!</span>';
+            // Recalculate epoch in case it changed
+            calculateCurrentEpoch();
+            return;
+        }
+        
+        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        
+        let countdownStr = '';
+        if (days > 0) {
+            countdownStr = `${days}d ${hours}h ${minutes}m`;
+        } else if (hours > 0) {
+            countdownStr = `${hours}h ${minutes}m`;
+        } else {
+            countdownStr = `${minutes}m`;
+        }
+        
+        document.getElementById('epoch-countdown').textContent = countdownStr;
+    }
+    
+    function updateDataNotice(dataEpoch, snapshotTime) {
+        const notice = document.getElementById('data-notice');
+        const noticeText = document.getElementById('data-notice-text');
+        const liveEpoch = store.currentRealEpoch;
+        
+        if (!liveEpoch || dataEpoch === liveEpoch) {
+            // Data is current epoch - hide notice
+            notice.classList.add('hidden');
+            return;
+        }
+        
+        // Viewing historical data - show compact notice
+        notice.classList.remove('hidden');
+        const epochsBehind = liveEpoch - dataEpoch;
+        noticeText.innerHTML = `<i class="fas fa-history mr-1"></i>${epochsBehind} epoch${epochsBehind > 1 ? 's' : ''} behind`;
     }
     
     // ============================================================
@@ -1777,7 +1993,7 @@
     function updateStatus(status, timestamp) {
         const el = document.getElementById('load-status');
         if (status === 'Loaded') {
-            // Format timestamp if provided
+            // Format timestamp in UTC if provided
             let timeStr = '';
             if (timestamp) {
                 const date = new Date(timestamp);
@@ -1785,11 +2001,15 @@
                     month: 'short', 
                     day: 'numeric',
                     hour: 'numeric',
-                    minute: '2-digit'
-                });
+                    minute: '2-digit',
+                    timeZone: 'UTC'
+                }) + ' UTC';
             }
-            el.innerHTML = `<i class="fas fa-database text-cyan-500 mr-1"></i> Snapshot${timeStr ? ': ' + timeStr : ''}`;
-            el.className = 'text-xs text-cyan-400';
+            el.innerHTML = `<div class="text-[10px] text-gray-500">Data Snapshot</div><div class="text-cyan-400 font-bold">Epoch ${store.epoch}</div>${timeStr ? `<div class="text-[10px] text-gray-400">${timeStr}</div>` : ''}`;
+            el.className = 'text-xs text-center';
+            
+            // Update the data notice
+            updateDataNotice(store.epoch, timestamp);
         } else if (status === 'Error') {
             el.innerHTML = '<i class="fas fa-exclamation-circle text-red-500 mr-1"></i> Error';
             el.className = 'text-xs text-red-400';
@@ -1811,9 +2031,6 @@
         if (!store.data) return;
         
         const data = store.data;
-        
-        // Header stats
-        document.getElementById('current-epoch').textContent = data.meta?.epoch || store.epoch || '-';
         
         const activePools = store.pools.filter(p => p.is_active !== false);
         
@@ -2275,6 +2492,13 @@
             tlaMap[tp.name] = tp;
         });
         
+        // Helper to get short DEX label
+        const getDexLabel = (dex) => {
+            if (dex?.includes('Astro')) return '<span class="text-[9px] px-1 py-0.5 rounded bg-blue-500/20 text-blue-400">Astro</span>';
+            if (dex?.includes('White')) return '<span class="text-[9px] px-1 py-0.5 rounded bg-emerald-500/20 text-emerald-400">SS</span>';
+            return '';
+        };
+        
         // Top by Avg Volume - use vol_4ep_avg field
         const topVolume = [...active]
             .map(p => ({
@@ -2289,7 +2513,10 @@
             <div class="flex items-center justify-between p-2 rounded-lg bg-white/[0.02] hover:bg-white/[0.04]">
                 <div class="flex items-center gap-2">
                     <span class="w-6 h-6 rounded flex items-center justify-center text-xs font-bold ${i < 3 ? `rank-${i+1}` : 'bg-white/10'}">${i+1}</span>
-                    <span class="text-sm font-medium">${p.name}</span>
+                    <div class="flex flex-col">
+                        <span class="text-sm font-medium">${p.name}</span>
+                        <div class="flex items-center gap-1">${getDexLabel(p.dex)}</div>
+                    </div>
                 </div>
                 <span class="mono text-orange-400 text-sm">${fmt$(p.avgVolume)}</span>
             </div>
@@ -2309,7 +2536,10 @@
             <div class="flex items-center justify-between p-2 rounded-lg bg-white/[0.02] hover:bg-white/[0.04]">
                 <div class="flex items-center gap-2">
                     <span class="w-6 h-6 rounded flex items-center justify-center text-xs font-bold ${i < 3 ? `rank-${i+1}` : 'bg-white/10'}">${i+1}</span>
-                    <span class="text-sm font-medium">${p.name}</span>
+                    <div class="flex flex-col">
+                        <span class="text-sm font-medium">${p.name}</span>
+                        <div class="flex items-center gap-1">${getDexLabel(p.dex)}</div>
+                    </div>
                 </div>
                 <span class="mono text-cyan-400 text-sm">${fmt$(p.avgLiquidity)}</span>
             </div>
@@ -2321,7 +2551,10 @@
             <div class="flex items-center justify-between p-2 rounded-lg bg-white/[0.02] hover:bg-white/[0.04]">
                 <div class="flex items-center gap-2">
                     <span class="w-6 h-6 rounded flex items-center justify-center text-xs font-bold ${i < 3 ? `rank-${i+1}` : 'bg-white/10'}">${i+1}</span>
-                    <span class="text-sm font-medium">${p.name}</span>
+                    <div class="flex flex-col">
+                        <span class="text-sm font-medium">${p.name}</span>
+                        <div class="flex items-center gap-1">${getDexLabel(p.dex)}</div>
+                    </div>
                 </div>
                 <span class="mono text-green-400 text-sm">${fmtPct(p.apr_amp)}</span>
             </div>
@@ -4275,6 +4508,42 @@
     }
     
     // ============================================================
+    // DOCS TAB FUNCTIONS
+    // ============================================================
+    function toggleDocsSection(header) {
+        const card = header.closest('.docs-card, .glass-card');
+        const expanded = card.querySelector('.docs-expanded');
+        const icon = header.querySelector('.fa-chevron-down');
+        
+        if (expanded) {
+            expanded.classList.toggle('hidden');
+            if (icon) {
+                icon.style.transform = expanded.classList.contains('hidden') ? 'rotate(0deg)' : 'rotate(180deg)';
+            }
+        }
+    }
+    
+    // Smooth scroll for docs navigation
+    document.addEventListener('DOMContentLoaded', () => {
+        document.querySelectorAll('a[href^="#docs-"]').forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const targetId = link.getAttribute('href').slice(1);
+                const target = document.getElementById(targetId);
+                if (target) {
+                    // Switch to docs tab first
+                    switchToTab('docs');
+                    history.pushState(null, '', '#docs');
+                    // Then scroll to section
+                    setTimeout(() => {
+                        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }, 100);
+                }
+            });
+        });
+    });
+    
+    // ============================================================
     // EVENT HANDLERS
     // ============================================================
     function setupEventListeners() {
@@ -4296,14 +4565,14 @@
         
         // Epoch/Phase selectors
         document.getElementById('epoch-select').addEventListener('change', (e) => {
-            const epoch = e.target.value === 'latest' ? CONFIG.currentEpoch : parseInt(e.target.value);
+            const epoch = e.target.value === 'latest' ? (store.currentRealEpoch || CONFIG.currentEpoch) : parseInt(e.target.value);
             const phase = document.getElementById('phase-select').value;
             loadEpochData(epoch, phase);
         });
         
         document.getElementById('phase-select').addEventListener('change', (e) => {
             const epochEl = document.getElementById('epoch-select');
-            const epoch = epochEl.value === 'latest' ? CONFIG.currentEpoch : parseInt(epochEl.value);
+            const epoch = epochEl.value === 'latest' ? (store.currentRealEpoch || CONFIG.currentEpoch) : parseInt(epochEl.value);
             loadEpochData(epoch, e.target.value);
         });
         
@@ -4322,7 +4591,7 @@
     
     // Switch to a specific tab
     function switchToTab(tabName) {
-        const validTabs = ['overview', 'pools', 'tla', 'rankings', 'dao'];
+        const validTabs = ['overview', 'pools', 'tla', 'rankings', 'dao', 'docs'];
         if (!validTabs.includes(tabName)) tabName = 'overview';
         
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -4345,8 +4614,10 @@
     
     function populateEpochSelector() {
         const select = document.getElementById('epoch-select');
-        // Add recent epochs
-        for (let i = CONFIG.currentEpoch; i >= Math.max(1, CONFIG.currentEpoch - 10); i--) {
+        // Use real current epoch if available, otherwise fallback to CONFIG
+        const currentEpoch = store.currentRealEpoch || CONFIG.currentEpoch;
+        // Add recent epochs (go back 15 epochs for history)
+        for (let i = currentEpoch; i >= Math.max(1, currentEpoch - 15); i--) {
             const opt = document.createElement('option');
             opt.value = i;
             opt.textContent = 'Epoch ' + i;
@@ -4607,12 +4878,39 @@
     // INIT
     // ============================================================
     async function init() {
+        // Load epoch dates first to know current real epoch
+        await loadEpochDates();
+        
+        // Now populate selector with real epoch info
         populateEpochSelector();
         setupEventListeners();
         initTabFromHash(); // Check URL hash and switch to that tab
         
-        // Load latest epoch
-        await loadEpochData(CONFIG.currentEpoch, CONFIG.defaultPhase);
+        // Find latest available data by trying epochs starting from current
+        const startEpoch = store.currentRealEpoch || CONFIG.currentEpoch;
+        let dataEpoch = await findLatestDataEpoch(startEpoch);
+        
+        // Load the latest available data
+        await loadEpochData(dataEpoch, CONFIG.defaultPhase);
+    }
+    
+    // Try to find the latest epoch that has data
+    async function findLatestDataEpoch(startFrom) {
+        // Try from startFrom down to startFrom - 2 (in case current epoch data isn't ready)
+        for (let epoch = startFrom; epoch >= Math.max(1, startFrom - 2); epoch--) {
+            const url = `${CONFIG.baseUrl}/tla-data-epoch-${epoch}-${CONFIG.defaultPhase}.json`;
+            try {
+                const response = await fetch(url, { method: 'HEAD' });
+                if (response.ok) {
+                    console.log('Found latest data at epoch:', epoch);
+                    return epoch;
+                }
+            } catch (e) {
+                // Continue to next epoch
+            }
+        }
+        // Fallback to CONFIG
+        return CONFIG.currentEpoch;
     }
     
     // Start
