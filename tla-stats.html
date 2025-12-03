@@ -1667,7 +1667,7 @@
                     <span class="text-sm text-red-400">Astroport</span>
                     <i class="fas fa-external-link-alt text-[10px] text-red-400/50"></i>
                 </a>
-                <div class="flex items-center gap-2 px-3 py-2 bg-emerald-500/10 border border-emerald-500/30 rounded-lg opacity-50 cursor-not-allowed">
+                <div id="secondary-dex-link" class="flex items-center gap-2 px-3 py-2 bg-emerald-500/10 border border-emerald-500/30 rounded-lg opacity-50 cursor-not-allowed">
                     <i class="fas fa-tint text-emerald-400"></i>
                     <span class="text-sm text-emerald-400">WhiteWhale</span>
                     <span class="text-[9px] text-gray-500">(Coming Soon)</span>
@@ -1720,6 +1720,7 @@
     // CONFIGURATION
     // ============================================================
     const CONFIG = {
+        configUrl: 'https://raw.githubusercontent.com/defipatriot/tla_json_storage/main/tla_config.json',
         baseUrl: 'https://raw.githubusercontent.com/defipatriot/tla_json_storage/main',
         extUrl: 'https://raw.githubusercontent.com/defipatriot/tla-ext_json_storage/main',
         adaoUrl: 'https://raw.githubusercontent.com/defipatriot/adao_json_storage/main',
@@ -1729,6 +1730,19 @@
         docsUrl: 'https://raw.githubusercontent.com/defipatriot/tla_json_storage/main/tla_docs.json',
         currentEpoch: 161,
         defaultPhase: 'end'
+    };
+    
+    // Site config loaded from tla_config.json - provides defaults until loaded
+    let siteConfig = {
+        scoring: {
+            weights: { access: 0.15, performance: 0.55, support: 0.30 },
+            origin: { terra_lsd: 85, terra_native: 80, ibc_native: 70, bridged_stable: 65, bridge_eureka: 55, bridge_axelar: 50 },
+            assetClass: { stable: 5, bluechip: 5, lsd: 5, rwa: 5, core: 0 }
+        },
+        dex: {
+            primary: { name: 'Astroport', link: 'https://app.astroport.fi/pools' },
+            secondary: { name: 'WhiteWhale', link: 'https://app.whitewhale.money/terra/pools', enabled: false }
+        }
     };
     
     // ============================================================
@@ -1741,6 +1755,7 @@
         adaoSnap: null,
         pdBribesData: null,
         docs: null,
+        siteConfig: null,
         pools: [],
         tlaPools: [],
         dao: null,
@@ -1813,6 +1828,103 @@
         if (score >= 20) return '<i class="fas fa-arrow-up"></i>';
         if (score >= 0) return '<i class="fas fa-minus"></i>';
         return '<i class="fas fa-arrow-down"></i>';
+    }
+    
+    // ============================================================
+    // SITE CONFIG LOADING
+    // ============================================================
+    async function loadSiteConfig() {
+        try {
+            const response = await fetch(CONFIG.configUrl);
+            if (response.ok) {
+                const config = await response.json();
+                store.siteConfig = config;
+                
+                // Update siteConfig with loaded values
+                if (config.scoring) {
+                    if (config.scoring.weights) siteConfig.scoring.weights = config.scoring.weights;
+                    if (config.scoring.origin) siteConfig.scoring.origin = config.scoring.origin;
+                    if (config.scoring.assetClass) siteConfig.scoring.assetClass = config.scoring.assetClass;
+                }
+                if (config.dex) {
+                    if (config.dex.primary) siteConfig.dex.primary = config.dex.primary;
+                    if (config.dex.secondary) siteConfig.dex.secondary = config.dex.secondary;
+                }
+                if (config.general) {
+                    if (config.general.currentEpoch) CONFIG.currentEpoch = config.general.currentEpoch;
+                    if (config.general.defaultPhase) CONFIG.defaultPhase = config.general.defaultPhase;
+                }
+                if (config.urls) {
+                    if (config.urls.baseUrl) CONFIG.baseUrl = config.urls.baseUrl;
+                    if (config.urls.extUrl) CONFIG.extUrl = config.urls.extUrl;
+                    if (config.urls.adaoUrl) CONFIG.adaoUrl = config.urls.adaoUrl;
+                }
+                
+                console.log('Site config loaded:', config.version, config.updated);
+                
+                // Update secondary DEX link visibility
+                updateSecondaryDexLink();
+            }
+        } catch (err) {
+            console.log('Site config fetch error (using defaults):', err.message);
+        }
+    }
+    
+    function updateSecondaryDexLink() {
+        const dexLinkEl = document.getElementById('secondary-dex-link');
+        if (!dexLinkEl) return;
+        
+        const dex = siteConfig.dex.secondary;
+        if (dex.enabled && dex.link) {
+            // Make it a clickable link
+            dexLinkEl.outerHTML = `
+                <a id="secondary-dex-link" href="${dex.link}" target="_blank" 
+                   class="flex items-center gap-2 px-3 py-2 bg-emerald-500/10 border border-emerald-500/30 rounded-lg hover:bg-emerald-500/20 transition-colors">
+                    <i class="fas fa-tint text-emerald-400"></i>
+                    <span class="text-sm text-emerald-400">${dex.name}</span>
+                    <i class="fas fa-external-link-alt text-[10px] text-emerald-400/50"></i>
+                </a>`;
+        } else {
+            // Keep it disabled
+            dexLinkEl.outerHTML = `
+                <div id="secondary-dex-link" class="flex items-center gap-2 px-3 py-2 bg-emerald-500/10 border border-emerald-500/30 rounded-lg opacity-50 cursor-not-allowed">
+                    <i class="fas fa-tint text-emerald-400"></i>
+                    <span class="text-sm text-emerald-400">${dex.name}</span>
+                    <span class="text-[9px] text-gray-500">(Coming Soon)</span>
+                </div>`;
+        }
+    }
+    
+    // Helper to get origin score from config
+    function getOriginScore(origin) {
+        const scores = siteConfig.scoring.origin;
+        const mapping = {
+            'terra_lsd': scores.terra_lsd,
+            'terra_native': scores.terra_native,
+            'ibc': scores.ibc_native,
+            'ibc_native': scores.ibc_native,
+            'bridge_eureka': scores.bridge_eureka,
+            'bridge_axelar': scores.bridge_axelar,
+            'bridge_osmosis': scores.bridge_axelar,
+            'stable_native': scores.bridged_stable,
+            'bridged_stable': scores.bridged_stable
+        };
+        return mapping[origin] || 30;
+    }
+    
+    // Helper to get asset class bonus from config
+    function getAssetClassBonus(assetClass) {
+        const bonuses = siteConfig.scoring.assetClass;
+        const mapping = {
+            'stable': bonuses.stable,
+            'bluechip': bonuses.bluechip,
+            'lsd': bonuses.lsd,
+            'rwa': bonuses.rwa,
+            'core': bonuses.core,
+            'native': 0,
+            'defi': 0
+        };
+        return mapping[assetClass] || 0;
     }
     
     // ============================================================
@@ -3725,14 +3837,12 @@
         document.getElementById('asset-detail-name').textContent = asset;
         document.getElementById('asset-detail-origin').textContent = meta.origin_label || meta.origin;
         
-        // Calculate score breakdown
-        const originScores = { terra_native: 80, terra_lsd: 85, ibc: 70, bridge_eureka: 55, bridge_axelar: 50, bridge_osmosis: 50, stable_native: 65, unknown: 30 };
-        const classBonus = { stable: 5, bluechip: 5, lsd: 5, core: 0, native: 0, defi: 0, unknown: 0 };
+        // Calculate score breakdown using config values
+        const baseScore = getOriginScore(meta.origin);
+        const classScore = getAssetClassBonus(meta.asset_class);
         const cgScores = { cg_terra: 15, cg_chain: 5, cg_none: -15 };
         const treasuryScores = { high: 5, medium: 0, low: -5 };
         
-        const baseScore = originScores[meta.origin] || 30;
-        const classScore = classBonus[meta.asset_class] || 0;
         const cgScore = cgScores[meta.cg_status] || -15;
         const treasuryScore = treasuryScores[meta.treasury_value] || 0;
         const namingScore = meta.naming_accurate ? 10 : -10;
@@ -4877,7 +4987,10 @@
     // INIT
     // ============================================================
     async function init() {
-        // Load epoch dates first to know current real epoch
+        // Load site config first (scoring weights, DEX settings, etc.)
+        await loadSiteConfig();
+        
+        // Load epoch dates to know current real epoch
         await loadEpochDates();
         
         // Now populate selector with real epoch info
