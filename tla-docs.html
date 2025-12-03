@@ -620,31 +620,46 @@
     </div>
 
     <script>
-        // Content URL - change this to load from GitHub when deployed
-        const CONTENT_URL = 'tla_docs_content.json';
+        // Content URL - tries relative first, falls back to GitHub raw
+        const CONTENT_URLS = [
+            'tla_docs_content.json',
+            'https://raw.githubusercontent.com/defipatriot/aDAO-links-site/main/tla_docs_content.json'
+        ];
         
         let docsContent = null;
         let glossary = {};
 
         // Initialize
         async function init() {
-            try {
-                const response = await fetch(CONTENT_URL);
-                docsContent = await response.json();
-                glossary = docsContent.glossary || {};
-                renderNav();
-                renderSections();
-                renderGlossary();
-                setupSearch();
-            } catch (error) {
-                console.error('Failed to load docs:', error);
-                document.getElementById('sectionsContainer').innerHTML = `
-                    <div class="loading">
-                        <i class="fas fa-exclamation-triangle" style="animation: none; color: var(--accent-amber);"></i>
-                        <p>Failed to load documentation. Please refresh.</p>
-                    </div>
-                `;
+            let lastError = null;
+            
+            for (const url of CONTENT_URLS) {
+                try {
+                    console.log('Trying to load from:', url);
+                    const response = await fetch(url);
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    docsContent = await response.json();
+                    glossary = docsContent.glossary || {};
+                    renderNav();
+                    renderSections();
+                    renderGlossary();
+                    setupSearch();
+                    console.log('Successfully loaded from:', url);
+                    return; // Success, exit
+                } catch (error) {
+                    console.warn('Failed to load from:', url, error);
+                    lastError = error;
+                }
             }
+            
+            // All URLs failed
+            console.error('Failed to load docs from all sources:', lastError);
+            document.getElementById('sectionsContainer').innerHTML = `
+                <div class="loading">
+                    <i class="fas fa-exclamation-triangle" style="animation: none; color: var(--accent-amber);"></i>
+                    <p>Failed to load documentation. Please refresh.</p>
+                </div>
+            `;
         }
 
         // Render navigation
