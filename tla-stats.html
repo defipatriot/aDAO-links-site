@@ -718,11 +718,23 @@
                         <h3 class="font-semibold text-lg">Vote Breakdown by Pool</h3>
                         <p class="text-xs text-gray-500">Pools stacked by total votes - showing Votion, aDAO, and Other votes</p>
                     </div>
-                    <div class="flex gap-2" id="votion-bucket-filters">
-                        <button class="votion-bucket-btn active px-3 py-1.5 text-xs rounded-lg bg-white/10 text-white" data-bucket="STABLE">Stable</button>
-                        <button class="votion-bucket-btn px-3 py-1.5 text-xs rounded-lg text-amber-400 hover:bg-amber-500/20" data-bucket="PROJECT">Project</button>
-                        <button class="votion-bucket-btn px-3 py-1.5 text-xs rounded-lg text-blue-400 hover:bg-blue-500/20" data-bucket="BLUECHIP">Bluechip</button>
-                        <button class="votion-bucket-btn px-3 py-1.5 text-xs rounded-lg text-purple-400 hover:bg-purple-500/20" data-bucket="SINGLE">Single</button>
+                    <div class="flex items-center gap-4">
+                        <!-- Epoch Toggle -->
+                        <div class="flex gap-1 bg-white/5 rounded-lg p-0.5" id="epoch-toggle">
+                            <button class="epoch-toggle-btn active px-2.5 py-1 text-xs rounded-md bg-cyan-500/20 text-cyan-400 font-medium" data-epoch="current">
+                                <span id="epoch-current-label">Epoch 161</span>
+                            </button>
+                            <button class="epoch-toggle-btn px-2.5 py-1 text-xs rounded-md text-gray-400 hover:text-gray-300 font-medium" data-epoch="next">
+                                <span id="epoch-next-label">Epoch 162</span> <span class="text-[9px] opacity-70">(Planned)</span>
+                            </button>
+                        </div>
+                        <!-- Bucket filters -->
+                        <div class="flex gap-2" id="votion-bucket-filters">
+                            <button class="votion-bucket-btn active px-3 py-1.5 text-xs rounded-lg bg-white/10 text-white" data-bucket="STABLE">Stable</button>
+                            <button class="votion-bucket-btn px-3 py-1.5 text-xs rounded-lg text-amber-400 hover:bg-amber-500/20" data-bucket="PROJECT">Project</button>
+                            <button class="votion-bucket-btn px-3 py-1.5 text-xs rounded-lg text-blue-400 hover:bg-blue-500/20" data-bucket="BLUECHIP">Bluechip</button>
+                            <button class="votion-bucket-btn px-3 py-1.5 text-xs rounded-lg text-purple-400 hover:bg-purple-500/20" data-bucket="SINGLE">Single</button>
+                        </div>
                     </div>
                 </div>
                 
@@ -2048,7 +2060,7 @@
         
         try {
             const url = `${CONFIG.baseUrl}/tla-data-epoch-${epoch}-${phase}.json`;
-            const adaoUrl = `${CONFIG.adaoUrl}/adao-snap_${epoch}_${phase}.json`;
+            const adaoUrl = `${CONFIG.adaoUrl}/adao-snapshot_${epoch}_${phase}.json`;
             console.log('Fetching TLA:', url);
             console.log('Fetching aDAO:', adaoUrl);
             
@@ -2067,15 +2079,28 @@
             store.tlaInactivePools = data.tla?.inactive_pools || [];
             store.dao = data.dao || null;
             
-            // Try to fetch matching aDAO snap (don't fail if missing)
+            // Try to fetch matching aDAO snap (with fallback to previous epoch)
+            store.adaoSnapSource = null; // Track where we got the price from
             try {
                 const adaoResponse = await fetch(adaoUrl);
                 if (adaoResponse.ok) {
                     store.adaoSnap = await adaoResponse.json();
+                    store.adaoSnapSource = { epoch, phase };
                     console.log('aDAO snap loaded, Luna price:', store.adaoSnap.lunaPrice_USD);
                 } else {
-                    store.adaoSnap = null;
-                    console.log('aDAO snap not found for this epoch/phase');
+                    // Try previous epoch 'end' as fallback
+                    const prevEpoch = epoch - 1;
+                    const fallbackUrl = `${CONFIG.adaoUrl}/adao-snapshot_${prevEpoch}_end.json`;
+                    console.log('Trying fallback aDAO snap:', fallbackUrl);
+                    const fallbackResponse = await fetch(fallbackUrl);
+                    if (fallbackResponse.ok) {
+                        store.adaoSnap = await fallbackResponse.json();
+                        store.adaoSnapSource = { epoch: prevEpoch, phase: 'end', isFallback: true };
+                        console.log('aDAO snap loaded from previous epoch, Luna price:', store.adaoSnap.lunaPrice_USD);
+                    } else {
+                        store.adaoSnap = null;
+                        console.log('aDAO snap not found for current or previous epoch');
+                    }
                 }
             } catch (adaoErr) {
                 store.adaoSnap = null;
@@ -2164,17 +2189,20 @@
         
         // TLA Epoch Rewards in LUNA (using Luna price from aDAO snap)
         const totalRewardsPerYearUSD = store.tlaPools.reduce((sum, p) => sum + (p.rewards_per_year || 0), 0);
-        const lunaPrice = store.adaoSnap?.lunaPrice_USD || 0.073; // Fallback price
+        const lunaPrice = store.adaoSnap?.lunaPrice_USD || null;
+        const priceIsFallback = store.adaoSnapSource?.isFallback;
         
-        if (lunaPrice > 0) {
+        if (lunaPrice && lunaPrice > 0) {
             const totalRewardsPerYearLuna = totalRewardsPerYearUSD / lunaPrice;
             const epochRewardsLuna = totalRewardsPerYearLuna / 52;
             document.getElementById('stat-epoch-rewards').textContent = fmtNumComma(epochRewardsLuna) + ' LUNA';
-            document.getElementById('stat-epoch-rewards-sub').textContent = `≈ ${fmt$(totalRewardsPerYearUSD / 52)} @ $${lunaPrice.toFixed(4)}`;
+            const fallbackNote = priceIsFallback ? ` (E${store.adaoSnapSource.epoch})` : '';
+            document.getElementById('stat-epoch-rewards-sub').textContent = `≈ ${fmt$(totalRewardsPerYearUSD / 52)} @ $${lunaPrice.toFixed(4)}${fallbackNote}`;
         } else {
+            // No price available - show USD only
             const epochRewardsUSD = totalRewardsPerYearUSD / 52;
             document.getElementById('stat-epoch-rewards').textContent = fmt$(epochRewardsUSD);
-            document.getElementById('stat-epoch-rewards-sub').textContent = '';
+            document.getElementById('stat-epoch-rewards-sub').textContent = 'LUNA price unavailable';
         }
         
         // Calculate bribes from PD bribes master file
@@ -2195,8 +2223,8 @@
                 // Build map of PD bribes by pool name
                 matchingRange.bribes.forEach(bribe => {
                     const luna = bribe.luna_per_epoch || 0;
-                    // Use usd_per_epoch directly if available, otherwise calculate from luna
-                    const usd = bribe.usd_per_epoch || (luna * lunaPrice);
+                    // Use usd_per_epoch directly if available, otherwise calculate from luna (if price available)
+                    const usd = bribe.usd_per_epoch || (lunaPrice ? luna * lunaPrice : 0);
                     
                     pdBribesLuna += luna;
                     pdBribesUSD += usd;
@@ -2681,17 +2709,24 @@
         `).join('');
     }
     
+    // Track which epoch view is selected for waterfall
+    let waterfallEpochView = 'current'; // 'current' or 'next'
+    
     function renderWaterfallChart(filterBucket = 'STABLE') {
         const container = document.getElementById('waterfall-bars');
+        const useNextEpoch = waterfallEpochView === 'next';
         
         // Get pools for this bucket
         let pools = store.pools
             .filter(p => p.bucket === filterBucket)
             .sort((a, b) => (b.vp || 0) - (a.vp || 0));
         
+        // Select which Votion VP to use based on toggle
+        const getVotionVP = (p) => useNextEpoch ? (p.votion_next_vp || 0) : (p.votion_now_vp || 0);
+        
         // Calculate bucket totals
         const bucketTotalVP = pools.reduce((sum, p) => sum + (p.vp || 0), 0);
-        const bucketVotionVP = pools.reduce((sum, p) => sum + (p.votion_now_vp || 0), 0);
+        const bucketVotionVP = pools.reduce((sum, p) => sum + getVotionVP(p), 0);
         const bucketAdaoVP = pools.reduce((sum, p) => sum + (p.adao_vp || 0), 0);
         const bucketOtherVP = Math.max(0, bucketTotalVP - bucketVotionVP - bucketAdaoVP);
         
@@ -2724,7 +2759,7 @@
         
         pools.forEach((pool, idx) => {
             const poolVP = pool.vp || 0;
-            const votionVP = pool.votion_now_vp || 0;
+            const votionVP = getVotionVP(pool);
             const adaoVP = pool.adao_vp || 0;
             const otherVP = Math.max(0, poolVP - votionVP - adaoVP);
             
@@ -2742,12 +2777,17 @@
             const adaoPct = poolVP > 0 ? (adaoVP / poolVP) * 100 : 0;
             const otherPct = poolVP > 0 ? (otherVP / poolVP) * 100 : 0;
             
+            // Calculate change indicator for next epoch view
+            const votionChange = (pool.votion_next_vp || 0) - (pool.votion_now_vp || 0);
+            const changeIndicator = useNextEpoch && votionChange !== 0 ? 
+                `<span class="${votionChange > 0 ? 'text-emerald-400' : 'text-red-400'} text-[9px] ml-1">${votionChange > 0 ? '▲' : '▼'}</span>` : '';
+            
             html += `
                 <div class="waterfall-row group ${activeClass}" style="height: 44px;">
                     <!-- Pool name label on left -->
                     <div class="absolute left-1 top-0 h-full flex flex-col justify-center z-20 pointer-events-none" style="max-width: ${Math.max(startPct - 1, 0)}%;">
                         <span class="text-xs text-gray-300 font-medium truncate leading-tight">
-                            ${pool.name}${activeLabel}
+                            ${pool.name}${activeLabel}${changeIndicator}
                         </span>
                         <span class="text-[9px] ${pool.dex?.includes('Astro') ? 'text-red-400' : 'text-emerald-400'} truncate leading-tight">
                             ${pool.dex?.includes('Astro') ? 'Astro' : 'Skeleton'}
@@ -2766,7 +2806,7 @@
                     ${poolWidthPct > 15 ? `
                     <div class="absolute top-0 h-full flex flex-col justify-center z-20 pointer-events-none" style="left: ${startPct + 0.5}%;">
                         <span class="text-xs text-white font-medium drop-shadow-lg px-2 leading-tight">
-                            ${pool.name}${activeLabel}
+                            ${pool.name}${activeLabel}${changeIndicator}
                         </span>
                         <span class="text-[9px] ${pool.dex?.includes('Astro') ? 'text-red-300' : 'text-emerald-300'} drop-shadow-lg px-2 leading-tight">
                             ${pool.dex?.includes('Astro') ? 'Astro' : 'Skeleton'}
@@ -2780,7 +2820,7 @@
                          style="left: ${Math.min(startPct + poolWidthPct/2, 70)}%; top: 100%; margin-top: 4px; min-width: 180px;">
                         <div class="font-semibold text-white mb-1">${pool.name} <span class="text-gray-400 font-normal">(${pool.dex})</span></div>
                         <div class="text-gray-300">Total VP: <span class="text-cyan-400 font-mono">${fmtNum(poolVP)}</span></div>
-                        ${votionVP > 0 ? `<div class="text-purple-400">Votion: ${fmtNum(votionVP)} (${votionPct.toFixed(1)}%)</div>` : ''}
+                        ${votionVP > 0 ? `<div class="text-purple-400">Votion${useNextEpoch ? ' (Planned)' : ''}: ${fmtNum(votionVP)} (${votionPct.toFixed(1)}%)${votionChange !== 0 ? ` <span class="${votionChange > 0 ? 'text-emerald-400' : 'text-red-400'}">(${votionChange > 0 ? '+' : ''}${fmtNum(votionChange)})</span>` : ''}</div>` : ''}
                         ${adaoVP > 0 ? `<div class="text-cyan-400">aDAO: ${fmtNum(adaoVP)} (${adaoPct.toFixed(1)}%)</div>` : ''}
                         ${otherVP > 0 ? `<div class="text-amber-400">Other: ${fmtNum(otherVP)} (${otherPct.toFixed(1)}%)</div>` : ''}
                     </div>
@@ -2795,6 +2835,7 @@
     
     // Bucket filter event listeners for waterfall
     function setupVotionFilters() {
+        // Bucket filters
         document.querySelectorAll('.votion-bucket-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 // Update active state
@@ -2807,6 +2848,35 @@
                 renderWaterfallChart(btn.dataset.bucket);
             });
         });
+        
+        // Epoch toggle
+        document.querySelectorAll('.epoch-toggle-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                // Update active state
+                document.querySelectorAll('.epoch-toggle-btn').forEach(b => {
+                    b.classList.remove('active', 'bg-cyan-500/20', 'text-cyan-400');
+                    b.classList.add('text-gray-400');
+                });
+                btn.classList.remove('text-gray-400');
+                btn.classList.add('active', 'bg-cyan-500/20', 'text-cyan-400');
+                
+                // Update epoch view state
+                waterfallEpochView = btn.dataset.epoch;
+                
+                // Get current bucket filter
+                const activeBtn = document.querySelector('.votion-bucket-btn.active');
+                const currentBucket = activeBtn?.dataset.bucket || 'STABLE';
+                
+                // Re-render chart
+                renderWaterfallChart(currentBucket);
+            });
+        });
+        
+        // Update epoch labels based on current epoch
+        if (store.epoch) {
+            document.getElementById('epoch-current-label').textContent = `Epoch ${store.epoch}`;
+            document.getElementById('epoch-next-label').textContent = `Epoch ${store.epoch + 1}`;
+        }
     }
     
     // ============================================================
@@ -4754,7 +4824,8 @@
     // ============================================================
     function showBribesModal() {
         const modal = document.getElementById('bribes-modal');
-        const lunaPrice = store.adaoSnap?.lunaPrice_USD || 0.073;
+        const lunaPrice = store.adaoSnap?.lunaPrice_USD || null;
+        const priceIsFallback = store.adaoSnapSource?.isFallback;
         
         // Calculate totals from pool data
         let totalPdUSD = 0, totalOtherUSD = 0, totalBribesUSD = 0;
@@ -4765,12 +4836,18 @@
         });
         
         // Update summary values
-        const pdLuna = lunaPrice > 0 ? totalPdUSD / lunaPrice : 0;
-        document.getElementById('bribes-pd-luna').textContent = fmtNum(pdLuna) + ' LUNA';
+        if (lunaPrice && lunaPrice > 0) {
+            const pdLuna = totalPdUSD / lunaPrice;
+            document.getElementById('bribes-pd-luna').textContent = fmtNum(pdLuna) + ' LUNA';
+            const fallbackNote = priceIsFallback ? ` (E${store.adaoSnapSource.epoch})` : '';
+            document.getElementById('bribes-luna-price').textContent = 'LUNA @ $' + lunaPrice.toFixed(4) + fallbackNote;
+        } else {
+            document.getElementById('bribes-pd-luna').textContent = '-';
+            document.getElementById('bribes-luna-price').textContent = 'LUNA price unavailable';
+        }
         document.getElementById('bribes-pd-usd').textContent = fmt$(totalPdUSD);
         document.getElementById('bribes-other-usd').textContent = fmt$(totalOtherUSD);
         document.getElementById('bribes-total-usd').textContent = fmt$(totalBribesUSD);
-        document.getElementById('bribes-luna-price').textContent = 'LUNA @ $' + lunaPrice.toFixed(4);
         
         // Build bucket breakdown HTML with columns
         const bucketColors = {
@@ -4800,7 +4877,7 @@
                 bucketOtherUSD += p.bribes_other || 0;
             });
             const bucketTotalUSD = bucketPdUSD + bucketOtherUSD;
-            const bucketPdLuna = lunaPrice > 0 ? bucketPdUSD / lunaPrice : 0;
+            const bucketPdLuna = (lunaPrice && lunaPrice > 0) ? bucketPdUSD / lunaPrice : 0;
             
             breakdownHtml += `
                 <div class="${colors.bg} ${colors.border} border rounded-lg overflow-hidden">
