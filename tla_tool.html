@@ -1511,10 +1511,9 @@ function applyExtDataToPools() {
     store.vote.pools.forEach(p => {
         // Create key to match ext data: "LUNA-USDC|Astroport"
         // Single-sided assets (ampCAPA, xASTRO) are still on Astroport
-        // Support both Skeleton Swap (legacy) and Skeleton Swap (new) detection
-        let dexName = p.d.includes('Astro') ? 'Astroport' : 
-                      (p.d.includes('White')) ? 'Skeleton Swap' : 
-                      p.d.includes('Single') ? 'Astroport' : null;
+        // Use helper functions that handle all DEX name variants (White Whale, Skeleton Swap, etc.)
+        let dexName = isAstroport(p.d) ? 'Astroport' : 
+                      isSkeletonSwap(p.d) ? 'Skeleton Swap' : null;
         if (!dexName) return;
         
         let lpKey = `${p.n}|${dexName}`;
@@ -2018,9 +2017,9 @@ function calculateScoresForBucket(bucketName, filterSettings = null) {
     if (filterSettings) {
         poolsForRanking = bucketPools.filter(p => {
             let isAct = p.vps >= 1;
-            let isAstroOrSingle = p.d.includes('Astro') || p.d.includes('Single');
+            let isAstroOrSingle = isAstroport(p.d);
             if (isAstroOrSingle && !filterSettings.showAstro) return false;
-            if ((p.d.includes('White')) && !filterSettings.showWW) return false;
+            if (isSkeletonSwap(p.d) && !filterSettings.showWW) return false;
             if (!isAct && !filterSettings.showInactive) return false;
             return true;
         });
@@ -2029,10 +2028,9 @@ function calculateScoresForBucket(bucketName, filterSettings = null) {
     // Calculate 4Ep averages, efficiency, and access score for each pool
     bucketPools.forEach(p => {
         // Single-sided assets (ampCAPA, xASTRO) are still on Astroport
-        // Support both Skeleton Swap (legacy) and Skeleton Swap (new) detection
-        let dexName = p.d.includes('Astro') ? 'Astroport' : 
-                      (p.d.includes('White')) ? 'Skeleton Swap' : 
-                      p.d.includes('Single') ? 'Astroport' : null;
+        // Use helper functions that handle all DEX name variants
+        let dexName = isAstroport(p.d) ? 'Astroport' : 
+                      isSkeletonSwap(p.d) ? 'Skeleton Swap' : null;
         if (!dexName) return;
         
         let lpKey = `${p.n}|${dexName}`;
@@ -3277,7 +3275,7 @@ function generateActivationTargets() {
             <div class="flex items-center gap-2">
                 <span class="text-white font-bold">${p.n}</span>
                 ${nativeBadge}
-                <span class="text-[9px] text-gray-500">${p.d.includes('Astro') ? 'Astro' : p.d.includes('Single') ? 'Single' : 'SS'}</span>
+                <span class="text-[9px] text-gray-500">${p.d.includes('Single') ? 'Single' : isAstroport(p.d) ? 'Astro' : 'SS'}</span>
             </div>
             <div class="text-right text-[10px]">
                 <span class="text-teal-400">${fmt$(liq)}</span>
@@ -3501,8 +3499,8 @@ async function fetchCoreData() {
             
             store.vote.pools = (d.pools || []).map(p => ({
                 n: p.name,
-                // Support both Skeleton Swap (legacy) and Skeleton Swap (new) - normalize to Skeleton Swap
-                d: p.dex === 'Astroport' ? 'Astroport' : (p.dex === 'Skeleton Swap' || p.dex === 'Skeleton Swap') ? 'Skeleton Swap' : p.dex === 'Single' ? 'Single (Astroport)' : p.dex,
+                // Normalize DEX names when loading (handles White Whale -> Skeleton Swap, etc.)
+                d: normalizeDexName(p.dex),
                 b: p.bucket || "UNKNOWN",
                 tvp: p.vp || 0,
                 dp: p.depth || 0,
@@ -3691,7 +3689,7 @@ async function fetchCoreData() {
                 store.vote.usd = d.vote_data.adao_unclaimed_rewards || 0;
                 store.vote.pools = (d.vote_data.pools || []).map(p => ({
                     n: p.pool_name,
-                    d: p.dex || p.dex_name,
+                    d: normalizeDexName(p.dex || p.dex_name),
                     b: p.bucket || "UNKNOWN",
                     tvp: p.tla_total_votes || 0,
                     dp: p.pool_depth || 0,
@@ -3927,6 +3925,46 @@ function normalizeName(name) {
     return name;
 }
 
+// Normalize DEX names - handles White Whale -> Skeleton Swap transition
+// Accepts: White Whale, WhiteWhale, whitewhale, WW, ww, Skeleton, Skeleton Swap, SS, ss, etc.
+function normalizeDexName(dexName) {
+    if (!dexName) return dexName;
+    let lower = dexName.toLowerCase().trim();
+    
+    // Skeleton Swap / White Whale variants -> "Skeleton Swap"
+    if (lower.includes('white') || lower.includes('whale') || 
+        lower === 'ww' || lower.includes('skeleton') || lower === 'ss') {
+        return 'Skeleton Swap';
+    }
+    
+    // Astroport variants
+    if (lower.includes('astro') && !lower.includes('single')) {
+        return 'Astroport';
+    }
+    
+    // Single-sided (Astroport single asset staking)
+    if (lower === 'single' || lower.includes('single')) {
+        return 'Single (Astroport)';
+    }
+    
+    return dexName; // Return as-is if no match
+}
+
+// Check if DEX is Skeleton Swap (handles all variants)
+function isSkeletonSwap(dexName) {
+    if (!dexName) return false;
+    let lower = dexName.toLowerCase();
+    return lower.includes('white') || lower.includes('whale') || 
+           lower === 'ww' || lower.includes('skeleton') || lower === 'ss';
+}
+
+// Check if DEX is Astroport (including Single)
+function isAstroport(dexName) {
+    if (!dexName) return false;
+    let lower = dexName.toLowerCase();
+    return lower.includes('astro') || lower === 'single';
+}
+
 function parseVote() {
     try {
         let txt = $('votePaste').value;
@@ -3963,10 +4001,14 @@ function parseVote() {
             if (/^(LIQUIDITY|VOTE|LOCK|INCENTIVIZE|DASHBOARD|AMPLIFY|GOV|ARBITRAGE|ALLIANCE|icon)/i.test(l)) continue;
 
             // DEX line = start of pool (pool name is previous line)
-            let dexMatch = l.match(/^(Astroport|Skeleton Swap|Single)/i);
+            // Match all DEX variants: Astroport, Skeleton Swap, White Whale, WhiteWhale, WW, Single
+            let dexMatch = l.match(/^(Astroport|Skeleton\s*Swap|White\s*Whale|WhiteWhale|WW|Single)/i);
             if (dexMatch && i > 0) {
                 let poolName = lines[i-1];
                 if (!poolName || /^icon/i.test(poolName)) continue;
+                
+                // Normalize the DEX name (White Whale -> Skeleton Swap, etc.)
+                let normalizedDex = normalizeDexName(dexMatch[1]);
                 
                 // Debug: log single asset detection
                 if (dexMatch[1].toLowerCase() === 'single') {
@@ -3975,7 +4017,7 @@ function parseVote() {
                 
                 let p = { 
                     n: normalizeName(poolName.replace(' LP', '')), 
-                    d: l, 
+                    d: normalizedDex,  // Use normalized DEX name
                     b: currentBucket, 
                     tvp: 0, dp: 0, vol: 0, mvp: 0, vps: 0, ms: 0,
                     // Bribes
@@ -4035,7 +4077,7 @@ function parseVote() {
         console.log('Vote parsing complete. Pools by DEX:');
         let byDex = {};
         store.vote.pools.forEach(p => {
-            let dex = p.d.includes('Astro') ? 'Astroport' : p.d.includes('Single') ? 'Single' : 'Skeleton Swap';
+            let dex = isAstroport(p.d) ? (p.d.includes('Single') ? 'Single' : 'Astroport') : 'Skeleton Swap';
             if (!byDex[dex]) byDex[dex] = [];
             byDex[dex].push(p.n);
         });
@@ -4131,13 +4173,13 @@ function renderVoteTable() {
         totalTlaVp += p.tvp;
         totalAdaoVp += p.mvp;
         
-        if (p.d.includes('Astro') || p.d.includes('Single')) {
+        if (isAstroport(p.d)) {
             if (isActive) dexStats.astro.active++; else dexStats.astro.inactive++;
             dexStats.astro.depth += p.dp;
             dexStats.astro.tlaVp += p.tvp;
             dexStats.astro.adaoVp += p.mvp;
         }
-        if (p.d.includes('White')) {
+        if (isSkeletonSwap(p.d)) {
             if (isActive) dexStats.ww.active++; else dexStats.ww.inactive++;
             dexStats.ww.depth += p.dp;
             dexStats.ww.tlaVp += p.tvp;
@@ -4185,8 +4227,8 @@ function renderVoteTable() {
         // Determine which pools are included in grading (for visual indicator)
         bucketPools.forEach(p => {
             let isAct = p.vps >= 1;
-            let isAstroOrSingle = p.d.includes('Astro') || p.d.includes('Single');
-            let isWW = p.d.includes('White');
+            let isAstroOrSingle = isAstroport(p.d);
+            let isWW = isSkeletonSwap(p.d);
             
             p.includedInGrade = true;
             if (isAstroOrSingle && !gradeAstro) p.includedInGrade = false;
@@ -4206,7 +4248,7 @@ function renderVoteTable() {
         // Render ALL pools (not filtered)
         bucketPools.forEach(p => {
             let isAct = p.vps >= 1;
-            let isAstroOrSingle = p.d.includes('Astro') || p.d.includes('Single');
+            let isAstroOrSingle = isAstroport(p.d);
             
             // Dim pools not included in grading
             let rowOpacity = p.includedInGrade ? '' : 'opacity-40';
@@ -4254,8 +4296,8 @@ function renderVoteTable() {
             let aprAmpStr = p.aprAmp > 0 ? p.aprAmp.toFixed(0) + '%' : '';
             let aprColor = p.aprNon < 40 ? 'text-red-400' : p.aprNon < 55 ? 'text-green-400' : p.aprNon < 70 ? 'text-yellow-400' : 'text-orange-400';
             
-            let dexShort = p.d.includes('Astro') ? 'Astro' : p.d.includes('Single') ? 'Single' : 'SS';
-            let dexFull = p.d.includes('Astro') ? 'Astroport' : p.d.includes('Single') ? 'Single' : 'Skeleton Swap';
+            let dexShort = p.d.includes('Single') ? 'Single' : isAstroport(p.d) ? 'Astro' : 'SS';
+            let dexFull = p.d.includes('Single') ? 'Single' : isAstroport(p.d) ? 'Astroport' : 'Skeleton Swap';
             
             finalHtml += `
             <div class="vote-grid border-b border-gray-800/50 py-2 hover:bg-white/5 px-2 cursor-pointer ${rowOpacity}" onclick="showPoolScoreDetails('${p.n}', '${dexShort}')">
@@ -4659,11 +4701,11 @@ function renderLiquidityTable() {
     };
     
     activePools.forEach(p => {
-        if (p.dex.includes('Astro')) {
+        if (isAstroport(p.dex)) {
             dexStats.astro.count++;
             dexStats.astro.depth += p.depth;
             dexStats.astro.stk += p.stk;
-        } else if (p.dex.includes('White')) {
+        } else if (isSkeletonSwap(p.dex)) {
             dexStats.ww.count++;
             dexStats.ww.depth += p.depth;
             dexStats.ww.stk += p.stk;
@@ -4755,14 +4797,14 @@ function renderLiquidityTable() {
         
         bucketPools.push(p);
         
-        let dexColor = p.dex.includes('Astro') ? 'text-blue-500' : (p.dex === 'Single' ? 'text-purple-400' : 'text-green-400');
+        let dexColor = isAstroport(p.dex) ? 'text-blue-500' : (p.dex === 'Single' ? 'text-purple-400' : 'text-green-400');
         let tlaDepthPct = p.depth > 0 ? ((p.stk / p.depth) * 100) : 0;
         
         html += `<div class="liq-grid border-b border-gray-800/50 py-1.5 hover:bg-white/5 px-2">
             <div class="flex flex-col justify-center">
                 <span class="text-white text-[12px] font-bold truncate" title="${p.name}">${p.normName || p.name}</span>
             </div>
-            <div class="text-center text-[11px] ${dexColor}">${p.dex === 'Single' ? 'Single' : p.dex.includes('Astro') ? 'Astroport' : 'Skeleton Swap'}</div>
+            <div class="text-center text-[11px] ${dexColor}">${p.dex === 'Single' ? 'Single' : isAstroport(p.dex) ? 'Astroport' : 'Skeleton Swap'}</div>
             <div class="text-center text-[11px] text-gray-500">${p.type}</div>
             <div class="text-right font-mono text-[11px] text-gray-400">${fmt$(p.depth)}</div>
             <div class="text-right font-mono text-[11px] text-orange-400">${fmt$(p.stk)}</div>
@@ -4793,7 +4835,7 @@ function renderLiquidityTable() {
         let inactiveTotals = { depth: 0, stk: 0, rYr: 0, adaoNon: 0, adaoAmp: 0 };
         
         inactivePools.forEach(p => {
-            let dexColor = p.dex.includes('Astro') ? 'text-blue-500' : (p.dex === 'Single' ? 'text-purple-400' : 'text-green-400');
+            let dexColor = isAstroport(p.dex) ? 'text-blue-500' : (p.dex === 'Single' ? 'text-purple-400' : 'text-green-400');
             let tlaDepthPct = p.depth > 0 ? ((p.stk / p.depth) * 100) : 0;
             
             inactiveTotals.depth += p.depth;
@@ -4807,7 +4849,7 @@ function renderLiquidityTable() {
                     <span class="text-white text-[11px] font-bold truncate" title="${p.name}">${p.normName || p.name}</span>
                     <span class="text-gray-600 text-[9px]">${p.bucket}</span>
                 </div>
-                <div class="text-center text-[10px] ${dexColor}">${p.dex === 'Single' ? 'Single' : p.dex.includes('Astro') ? 'Astro' : 'SS'}</div>
+                <div class="text-center text-[10px] ${dexColor}">${p.dex === 'Single' ? 'Single' : isAstroport(p.dex) ? 'Astro' : 'SS'}</div>
                 <div class="text-center text-[10px] text-gray-500">${p.type}</div>
                 <div class="text-right font-mono text-[10px] text-gray-400">${fmt$(p.depth)}</div>
                 <div class="text-right font-mono text-[10px] text-orange-400">${fmt$(p.stk)}</div>
@@ -5032,8 +5074,8 @@ function buildExportData() {
     // Filter pools based on export settings
     let exportPools = store.vote.pools.filter(p => {
         let isAct = p.vps >= 1;
-        let isAstroOrSingle = p.d.includes('Astro') || p.d.includes('Single');
-        let isWW = p.d.includes('White');
+        let isAstroOrSingle = isAstroport(p.d);
+        let isWW = isSkeletonSwap(p.d);
         
         if (isAstroOrSingle && !exportAstro) return false;
         if (isWW && !exportWW) return false;
@@ -5065,7 +5107,7 @@ function buildExportData() {
         },
         pools: exportPools.map(p => ({
             name: p.n,
-            dex: p.d.includes('Astro') ? 'Astroport' : p.d.includes('Single') ? 'Single' : 'Skeleton Swap',
+            dex: p.d.includes('Single') ? 'Single' : isAstroport(p.d) ? 'Astroport' : 'Skeleton Swap',
             dex_raw: p.d,
             bucket: p.b,
             is_active: p.vps >= 1,
@@ -5138,7 +5180,7 @@ function buildExportData() {
                 .filter(p => p.mvp > 0)
                 .map(p => ({
                     pool: p.n,
-                    dex: p.d.includes('Astro') ? 'Astroport' : p.d.includes('Single') ? 'Single' : 'Skeleton Swap',
+                    dex: p.d.includes('Single') ? 'Single' : isAstroport(p.d) ? 'Astroport' : 'Skeleton Swap',
                     bucket: p.b,
                     vp: p.mvp,
                     pct: p.ms
