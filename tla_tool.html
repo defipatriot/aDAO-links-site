@@ -1606,12 +1606,19 @@ function applyExtDataToPools() {
         let pnLower = p.n.toLowerCase().replace(/\.(atom|axl|osmo|wh)/gi, '');
         let liqPool = store.tla.pools?.find(lp => {
             let lpNormLower = (lp.normName || '').toLowerCase().replace(/\.(atom|axl|osmo|wh)/gi, '');
-            return lpNormLower === pnLower && lp.dex.includes(dexName.substring(0,5));
+            if (lpNormLower !== pnLower) return false;
+            // Use helper functions to match DEX
+            if (isSkeletonSwap(dexName) && isSkeletonSwap(lp.dex)) return true;
+            if (isAstroport(dexName) && isAstroport(lp.dex)) return true;
+            return false;
         });
         if (!liqPool) {
             liqPool = store.tla.inactivePools?.find(lp => {
                 let lpNormLower = (lp.normName || '').toLowerCase().replace(/\.(atom|axl|osmo|wh)/gi, '');
-                return lpNormLower === pnLower && lp.dex.includes(dexName.substring(0,5));
+                if (lpNormLower !== pnLower) return false;
+                if (isSkeletonSwap(dexName) && isSkeletonSwap(lp.dex)) return true;
+                if (isAstroport(dexName) && isAstroport(lp.dex)) return true;
+                return false;
             });
         }
         
@@ -1702,12 +1709,19 @@ function getPoolApr(poolName, dex) {
     let poolNameLower = poolName.toLowerCase().replace(/\.(atom|axl|osmo|wh)/gi, '');
     let liqPool = store.tla.pools.find(p => {
         let pnLower = (p.normName || '').toLowerCase().replace(/\.(atom|axl|osmo|wh)/gi, '');
-        return pnLower === poolNameLower && p.dex.includes(dex.substring(0,5));
+        if (pnLower !== poolNameLower) return false;
+        // Use helper functions to match DEX
+        if (isSkeletonSwap(dex) && isSkeletonSwap(p.dex)) return true;
+        if (isAstroport(dex) && isAstroport(p.dex)) return true;
+        return false;
     });
     if (!liqPool) {
         liqPool = store.tla.inactivePools?.find(p => {
             let pnLower = (p.normName || '').toLowerCase().replace(/\.(atom|axl|osmo|wh)/gi, '');
-            return pnLower === poolNameLower && p.dex.includes(dex.substring(0,5));
+            if (pnLower !== poolNameLower) return false;
+            if (isSkeletonSwap(dex) && isSkeletonSwap(p.dex)) return true;
+            if (isAstroport(dex) && isAstroport(p.dex)) return true;
+            return false;
         });
     }
     return {
@@ -2418,7 +2432,14 @@ function showScoreInfo(type) {
 }
 
 function showPoolScoreDetails(poolName, dex) {
-    let p = store.vote.pools.find(pool => pool.n === poolName && pool.d.includes(dex.substring(0,5)));
+    // Match pool using helper functions for DEX comparison
+    let p = store.vote.pools.find(pool => {
+        if (pool.n !== poolName) return false;
+        if (isSkeletonSwap(dex) && isSkeletonSwap(pool.d)) return true;
+        if (isAstroport(dex) && isAstroport(pool.d)) return true;
+        if (dex === 'Single' && pool.d.includes('Single')) return true;
+        return false;
+    });
     if (!p) return;
     
     let liq4EpStr = p.liq4Ep ? `$${(p.liq4Ep.avg/1000).toFixed(1)}K (${p.liq4Ep.count} epochs)` : 'N/A';
@@ -4541,10 +4562,12 @@ function parseLiquidity() {
 
     let parsedPools = [];
     lines.forEach((l, i) => {
-        // Match DEX line format: "Astroport - pcl" or "Skeleton Swap - stable" or "Skeleton Swap - stable"
-        if (l.match(/^(Astroport|Skeleton Swap|Single)/i)) {
+        // Match DEX line format: "Astroport - pcl" or "WhiteWhale - stable" or "Skeleton Swap - xyk"
+        // Include all variants of White Whale / Skeleton Swap
+        if (l.match(/^(Astroport|WhiteWhale|White\s*Whale|Skeleton\s*Swap|Single)/i)) {
             let dexParts = l.split('-').map(x => x.trim());
-            let dex = dexParts[0];
+            let dexRaw = dexParts[0];
+            let dex = normalizeDexName(dexRaw); // Normalize to "Skeleton Swap" if WhiteWhale
             let lpType = dexParts[1]?.toLowerCase() || '?';
             
             // Normalize LP type
@@ -4563,17 +4586,24 @@ function parseLiquidity() {
             let bucket = 'UNKNOWN';
             
             // Single-sided pools go to SINGLE bucket
-            if (dex === 'Single' || lpType === 'single') {
+            if (dex === 'Single' || dex === 'Single (Astroport)' || lpType === 'single') {
                 bucket = 'SINGLE';
             } else {
-                let votePool = store.vote.pools.find(vp => vp.n === normName && vp.d.includes(dex.substring(0,5)));
+                // Use helper functions to match DEX - handles both WhiteWhale and Skeleton Swap
+                let votePool = store.vote.pools.find(vp => {
+                    if (vp.n !== normName) return false;
+                    // Both should be Skeleton Swap after normalization
+                    if (isSkeletonSwap(dex) && isSkeletonSwap(vp.d)) return true;
+                    if (isAstroport(dex) && isAstroport(vp.d)) return true;
+                    return false;
+                });
                 if (votePool) bucket = votePool.b;
             }
             
             let p = { 
                 name: poolName, 
                 normName: normName,
-                dex: dex, 
+                dex: dex,  // Already normalized above
                 type: lpType, 
                 bucket: bucket,
                 depth: 0, 
@@ -4592,7 +4622,8 @@ function parseLiquidity() {
             let adaoDeposits = [];
             
             for (let k = 1; k < 20; k++) {
-                if (lines[i+k+1]?.match(/^(Astroport|Skeleton Swap|Single)/)) break;
+                // Stop at next pool - include all DEX variants
+                if (lines[i+k+1]?.match(/^(Astroport|WhiteWhale|White\s*Whale|Skeleton\s*Swap|Single)/i)) break;
                 let nl = lines[i+k];
                 if (!nl) continue;
                 
