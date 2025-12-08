@@ -201,6 +201,14 @@
         .stat-box {
             text-align: center;
             padding: 20px 16px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            min-height: 120px;
+        }
+        
+        .stat-box-content {
+            flex: 1;
         }
         
         .stat-value {
@@ -227,6 +235,79 @@
             text-transform: uppercase;
             letter-spacing: 0.1em;
             margin-bottom: 4px;
+        }
+        
+        .stat-trend {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            min-height: 28px;
+            flex-shrink: 0;
+        }
+        
+        .stat-trend:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.12);
+        }
+        
+        .stat-trend.positive {
+            color: #10b981;
+            background: rgba(16, 185, 129, 0.08);
+            border-color: rgba(16, 185, 129, 0.2);
+        }
+        
+        .stat-trend.negative {
+            color: #ef4444;
+            background: rgba(239, 68, 68, 0.08);
+            border-color: rgba(239, 68, 68, 0.2);
+        }
+        
+        .stat-trend.neutral {
+            color: #6b7280;
+        }
+        
+        /* Chart header trend badges */
+        .chart-trend {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        
+        .chart-trend:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        .chart-trend.positive {
+            color: #10b981;
+            background: rgba(16, 185, 129, 0.1);
+            border-color: rgba(16, 185, 129, 0.25);
+        }
+        
+        .chart-trend.negative {
+            color: #ef4444;
+            background: rgba(239, 68, 68, 0.1);
+            border-color: rgba(239, 68, 68, 0.25);
+        }
+        
+        .chart-trend.neutral {
+            color: #6b7280;
         }
         
         /* Chart container */
@@ -594,29 +675,47 @@
     <section class="max-w-7xl mx-auto px-4 py-6">
         <div class="glass-card grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 divide-x divide-white/5">
             <div class="stat-box">
-                <div class="stat-label">Astroport Pools</div>
-                <div id="stat-astro-pools" class="stat-value mono">-</div>
+                <div class="stat-box-content">
+                    <div class="stat-label">Active Astroport Pools</div>
+                    <div id="stat-astro-pools" class="stat-value mono">-</div>
+                </div>
+                <div id="trend-astro-pools" class="stat-trend" onclick="showHistoryModal('astro-pools')"></div>
             </div>
             <div class="stat-box">
-                <div class="stat-label">Skeleton Swap Pools</div>
-                <div id="stat-ww-pools" class="stat-value mono">-</div>
+                <div class="stat-box-content">
+                    <div class="stat-label">Active Skeleton Pools</div>
+                    <div id="stat-ww-pools" class="stat-value mono">-</div>
+                </div>
+                <div id="trend-ww-pools" class="stat-trend" onclick="showHistoryModal('ww-pools')"></div>
             </div>
             <div class="stat-box">
-                <div class="stat-label">Epoch Rewards</div>
-                <div id="stat-epoch-rewards" class="stat-value-sm mono">-</div>
-                <div id="stat-epoch-rewards-sub" class="text-[10px] text-gray-500 mt-0.5">-</div>
-            </div>
-            <div class="stat-box cursor-pointer hover:bg-white/5 transition-colors rounded-lg" id="bribes-stat-box" onclick="showBribesModal()">
-                <div class="stat-label">Epoch Bribes <i class="fas fa-info-circle text-gray-500 text-xs ml-1"></i></div>
-                <div id="stat-total-bribes" class="stat-value mono">-</div>
-            </div>
-            <div class="stat-box">
-                <div class="stat-label">Avg APR (Non-Amp)</div>
-                <div id="stat-avg-apr-non" class="stat-value mono">-</div>
+                <div class="stat-box-content">
+                    <div class="stat-label">Epoch Rewards</div>
+                    <div id="stat-epoch-rewards" class="stat-value-sm mono">-</div>
+                    <div id="stat-epoch-rewards-sub" class="text-[10px] text-gray-500 mt-0.5">-</div>
+                </div>
+                <div id="trend-epoch-rewards" class="stat-trend" onclick="showHistoryModal('epoch-rewards')"></div>
             </div>
             <div class="stat-box">
-                <div class="stat-label">Avg APR (Amplified)</div>
-                <div id="stat-avg-apr-amp" class="stat-value mono">-</div>
+                <div class="stat-box-content">
+                    <div class="stat-label">Epoch Bribes <i class="fas fa-info-circle text-gray-500 text-xs ml-1 cursor-pointer" onclick="event.stopPropagation(); showBribesModal();" title="Click for breakdown"></i></div>
+                    <div id="stat-total-bribes" class="stat-value mono">-</div>
+                </div>
+                <div id="trend-epoch-bribes" class="stat-trend" onclick="showHistoryModal('epoch-bribes')"></div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-box-content">
+                    <div class="stat-label">Avg APR (Non-Amp)</div>
+                    <div id="stat-avg-apr-non" class="stat-value mono">-</div>
+                </div>
+                <div id="trend-apr-non" class="stat-trend" onclick="showHistoryModal('apr-non')"></div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-box-content">
+                    <div class="stat-label">Avg APR (Amplified)</div>
+                    <div id="stat-avg-apr-amp" class="stat-value mono">-</div>
+                </div>
+                <div id="trend-apr-amp" class="stat-trend" onclick="showHistoryModal('apr-amp')"></div>
             </div>
         </div>
     </section>
@@ -657,7 +756,10 @@
                         <h3 class="font-semibold text-lg">TLA Total VP</h3>
                         <div class="text-right">
                             <div class="text-xs text-gray-500">Total VP</div>
-                            <div id="chart-total-vp" class="text-lg font-bold mono text-cyan-400">-</div>
+                            <div class="flex items-center justify-end gap-2">
+                                <span id="chart-total-vp" class="text-lg font-bold mono text-cyan-400">-</span>
+                                <span id="trend-total-vp" class="chart-trend" onclick="showHistoryModal('total-vp')"></span>
+                            </div>
                         </div>
                     </div>
                     <div class="chart-container">
@@ -671,7 +773,10 @@
                         <h3 class="font-semibold text-lg">Liquidity: DEX vs TLA Staked</h3>
                         <div class="text-right">
                             <div class="text-xs text-gray-500">TLA TVL</div>
-                            <div id="chart-tla-tvl" class="text-lg font-bold mono text-cyan-400">-</div>
+                            <div class="flex items-center justify-end gap-2">
+                                <span id="chart-tla-tvl" class="text-lg font-bold mono text-cyan-400">-</span>
+                                <span id="trend-tla-tvl" class="chart-trend" onclick="showHistoryModal('tla-tvl')"></span>
+                            </div>
                         </div>
                     </div>
                     <div class="chart-container" style="height: 300px;">
@@ -806,6 +911,43 @@
                     <div class="flex items-center gap-2">
                         <div class="w-4 h-3 rounded" style="background: #f59e0b;"></div>
                         <span class="text-gray-400">Other</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Threshold Watch Section -->
+            <div class="glass-card p-6 mt-6">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h3 class="font-semibold text-lg flex items-center gap-2">
+                            <i class="fas fa-exclamation-triangle text-amber-400"></i>
+                            Threshold Watch
+                        </h3>
+                        <p class="text-xs text-gray-500 mt-1">Pools need &gt;1% of bucket votes to stay active. Showing pools at risk and recently inactive.</p>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- At Risk (1% - 2%) -->
+                    <div>
+                        <div class="flex items-center gap-2 mb-3">
+                            <span class="text-[10px] px-2 py-1 rounded bg-amber-500/20 text-amber-400 font-medium">AT RISK</span>
+                            <span class="text-xs text-gray-500">Between 1% - 2% of bucket votes</span>
+                        </div>
+                        <div id="threshold-at-risk" class="space-y-2">
+                            <div class="text-gray-500 text-sm">Loading...</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Inactive / Below Threshold -->
+                    <div>
+                        <div class="flex items-center gap-2 mb-3">
+                            <span class="text-[10px] px-2 py-1 rounded bg-red-500/20 text-red-400 font-medium">INACTIVE</span>
+                            <span class="text-xs text-gray-500">Below 1% threshold</span>
+                        </div>
+                        <div id="threshold-inactive" class="space-y-2">
+                            <div class="text-gray-500 text-sm">Loading...</div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1213,6 +1355,49 @@
             <!-- Bucket Breakdown -->
             <div class="space-y-4" id="bribes-bucket-breakdown">
                 <!-- Populated by JS -->
+            </div>
+        </div>
+    </div>
+    
+    <!-- History Modal -->
+    <div id="history-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center overflow-y-auto py-8" onclick="closeHistoryModal(event)">
+        <div class="bg-gray-900 border border-white/10 rounded-2xl p-6 max-w-2xl w-full mx-4 shadow-2xl my-auto" onclick="event.stopPropagation()">
+            <div class="flex items-center justify-between mb-4">
+                <div>
+                    <h3 id="history-modal-title" class="text-lg font-bold">Metric History</h3>
+                    <p class="text-xs text-gray-500">Tracking changes across epochs</p>
+                </div>
+                <button onclick="closeHistoryModal()" class="text-gray-400 hover:text-white transition-colors">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <!-- Chart Area -->
+            <div id="history-chart-container" class="bg-gray-800/50 rounded-lg p-4 mb-4" style="height: 200px;">
+                <canvas id="history-chart"></canvas>
+            </div>
+            
+            <!-- Data Table -->
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-white/10">
+                            <th class="text-left py-2 px-3 text-gray-400 font-medium">Epoch</th>
+                            <th class="text-left py-2 px-3 text-gray-400 font-medium">Date</th>
+                            <th class="text-right py-2 px-3 text-gray-400 font-medium">Value</th>
+                            <th class="text-right py-2 px-3 text-gray-400 font-medium">Change</th>
+                            <th id="history-table-col5" class="text-right py-2 px-3 text-gray-400 font-medium">LUNA Price</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-table-body">
+                        <!-- Populated by JS -->
+                    </tbody>
+                </table>
+            </div>
+            
+            <div class="mt-4 text-center text-xs text-gray-500">
+                <i class="fas fa-info-circle mr-1"></i>
+                More history will appear as epochs are tracked
             </div>
         </div>
     </div>
@@ -1774,6 +1959,7 @@
         phase: 'end',
         data: null,
         adaoSnap: null,
+        adaoSnapSource: null,
         pdBribesData: null,
         docs: null,
         siteConfig: null,
@@ -1784,7 +1970,11 @@
         epochDates: null,
         currentRealEpoch: null,
         loaded: false,
-        charts: {}
+        charts: {},
+        // History tracking
+        previousEpochData: null,
+        previousAdaoSnap: null,
+        historyData: [] // Array of {epoch, metrics} for trend display
     };
     
     // ============================================================
@@ -2120,6 +2310,30 @@
                 }
             }
             
+            // Try to load previous epoch for trend comparison
+            const prevEpoch = epoch - 1;
+            try {
+                const prevUrl = `${CONFIG.baseUrl}/tla-data-epoch-${prevEpoch}-end.json`;
+                const prevAdaoUrl = `${CONFIG.adaoUrl}/adao-snapshot_${prevEpoch}_end.json`;
+                console.log('Fetching previous epoch:', prevUrl);
+                
+                const [prevResponse, prevAdaoResponse] = await Promise.all([
+                    fetch(prevUrl).catch(() => null),
+                    fetch(prevAdaoUrl).catch(() => null)
+                ]);
+                
+                if (prevResponse?.ok) {
+                    store.previousEpochData = await prevResponse.json();
+                    console.log('Previous epoch data loaded:', prevEpoch);
+                }
+                if (prevAdaoResponse?.ok) {
+                    store.previousAdaoSnap = await prevAdaoResponse.json();
+                    console.log('Previous aDAO snap loaded, price:', store.previousAdaoSnap.lunaPrice_USD);
+                }
+            } catch (prevErr) {
+                console.log('Previous epoch fetch error (non-critical):', prevErr.message);
+            }
+            
             store.loaded = true;
             
             populateUI();
@@ -2382,6 +2596,9 @@
         renderTlaTab();
         renderRankingsTab();
         renderDaoTab();
+        
+        // Render trend rows under stat tiles
+        renderTrendRows();
     }
     
     // ============================================================
@@ -2391,6 +2608,7 @@
         renderBucketCharts();
         renderTopPools();
         renderWaterfallChart('STABLE');
+        renderThresholdWatch();
         setupVotionFilters();
     }
     
@@ -2634,6 +2852,9 @@
         const active = store.pools.filter(p => p.is_active !== false);
         const tlaPools = store.tlaPools || [];
         
+        // Get previous epoch data for comparison
+        const prevPools = store.previousEpochData?.pools?.filter(p => p.is_active !== false) || [];
+        
         // Create map of TLA pool data by name for quick lookup
         const tlaMap = {};
         tlaPools.forEach(tp => {
@@ -2647,6 +2868,29 @@
             return '';
         };
         
+        // Helper to get ranking change badge
+        const getRankBadge = (poolName, currentRank, prevRankings) => {
+            if (!prevRankings || prevRankings.length === 0) return '';
+            
+            const prevRank = prevRankings.findIndex(p => p.name === poolName);
+            
+            if (prevRank === -1) {
+                // Not in top 5 last epoch
+                return '<span class="text-[9px] px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400 ml-1">NEW</span>';
+            }
+            
+            const change = prevRank - currentRank; // positive = moved up
+            
+            if (change > 0) {
+                return `<span class="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 ml-1">▲${change}</span>`;
+            } else if (change < 0) {
+                return `<span class="text-[9px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 ml-1">▼${Math.abs(change)}</span>`;
+            } else {
+                // Same position
+                return '<span class="text-[9px] px-1.5 py-0.5 rounded bg-gray-500/20 text-gray-400 ml-1">No Change</span>';
+            }
+        };
+        
         // Top by Avg Volume - use vol_4ep_avg field
         const topVolume = [...active]
             .map(p => ({
@@ -2657,12 +2901,22 @@
             .sort((a, b) => b.avgVolume - a.avgVolume)
             .slice(0, 5);
         
+        // Get previous epoch volume rankings
+        const prevTopVolume = [...prevPools]
+            .map(p => ({ name: p.name, avgVolume: p.vol_4ep_avg || 0 }))
+            .filter(p => p.avgVolume > 0)
+            .sort((a, b) => b.avgVolume - a.avgVolume)
+            .slice(0, 5);
+        
         document.getElementById('top-vp-pools').innerHTML = topVolume.map((p, i) => `
             <div class="flex items-center justify-between p-2 rounded-lg bg-white/[0.02] hover:bg-white/[0.04]">
                 <div class="flex items-center gap-2">
                     <span class="w-6 h-6 rounded flex items-center justify-center text-xs font-bold ${i < 3 ? `rank-${i+1}` : 'bg-white/10'}">${i+1}</span>
                     <div class="flex flex-col">
-                        <span class="text-sm font-medium">${p.name}</span>
+                        <div class="flex items-center">
+                            <span class="text-sm font-medium">${p.name}</span>
+                            ${getRankBadge(p.name, i, prevTopVolume)}
+                        </div>
                         <div class="flex items-center gap-1">${getDexLabel(p.dex)}</div>
                     </div>
                 </div>
@@ -2680,12 +2934,22 @@
             .sort((a, b) => b.avgLiquidity - a.avgLiquidity)
             .slice(0, 5);
         
+        // Get previous epoch liquidity rankings
+        const prevTopLiquidity = [...prevPools]
+            .map(p => ({ name: p.name, avgLiquidity: p.liq_4ep_avg || 0 }))
+            .filter(p => p.avgLiquidity > 0)
+            .sort((a, b) => b.avgLiquidity - a.avgLiquidity)
+            .slice(0, 5);
+        
         document.getElementById('top-depth-pools').innerHTML = topLiquidity.map((p, i) => `
             <div class="flex items-center justify-between p-2 rounded-lg bg-white/[0.02] hover:bg-white/[0.04]">
                 <div class="flex items-center gap-2">
                     <span class="w-6 h-6 rounded flex items-center justify-center text-xs font-bold ${i < 3 ? `rank-${i+1}` : 'bg-white/10'}">${i+1}</span>
                     <div class="flex flex-col">
-                        <span class="text-sm font-medium">${p.name}</span>
+                        <div class="flex items-center">
+                            <span class="text-sm font-medium">${p.name}</span>
+                            ${getRankBadge(p.name, i, prevTopLiquidity)}
+                        </div>
                         <div class="flex items-center gap-1">${getDexLabel(p.dex)}</div>
                     </div>
                 </div>
@@ -2695,18 +2959,183 @@
         
         // Top by APR
         const topAPR = [...active].filter(p => p.apr_amp > 0).sort((a, b) => (b.apr_amp || 0) - (a.apr_amp || 0)).slice(0, 5);
+        
+        // Get previous epoch APR rankings
+        const prevTopAPR = [...prevPools]
+            .filter(p => p.apr_amp > 0)
+            .sort((a, b) => (b.apr_amp || 0) - (a.apr_amp || 0))
+            .slice(0, 5);
+        
         document.getElementById('top-apr-pools').innerHTML = topAPR.map((p, i) => `
             <div class="flex items-center justify-between p-2 rounded-lg bg-white/[0.02] hover:bg-white/[0.04]">
                 <div class="flex items-center gap-2">
                     <span class="w-6 h-6 rounded flex items-center justify-center text-xs font-bold ${i < 3 ? `rank-${i+1}` : 'bg-white/10'}">${i+1}</span>
                     <div class="flex flex-col">
-                        <span class="text-sm font-medium">${p.name}</span>
+                        <div class="flex items-center">
+                            <span class="text-sm font-medium">${p.name}</span>
+                            ${getRankBadge(p.name, i, prevTopAPR)}
+                        </div>
                         <div class="flex items-center gap-1">${getDexLabel(p.dex)}</div>
                     </div>
                 </div>
                 <span class="mono text-green-400 text-sm">${fmtPct(p.apr_amp)}</span>
             </div>
         `).join('');
+    }
+    
+    // Render Threshold Watch section
+    function renderThresholdWatch() {
+        const allPools = store.pools || [];
+        const prevPools = store.previousEpochData?.pools || [];
+        
+        // Group by bucket and calculate bucket totals
+        const bucketTotals = {};
+        allPools.forEach(p => {
+            if (!bucketTotals[p.bucket]) bucketTotals[p.bucket] = 0;
+            bucketTotals[p.bucket] += (p.vp || 0);
+        });
+        
+        // Previous epoch bucket totals for ranking comparison
+        const prevBucketTotals = {};
+        prevPools.forEach(p => {
+            if (!prevBucketTotals[p.bucket]) prevBucketTotals[p.bucket] = 0;
+            prevBucketTotals[p.bucket] += (p.vp || 0);
+        });
+        
+        // Calculate percentage of bucket for each pool
+        const poolsWithPct = allPools.map(p => {
+            const bucketTotal = bucketTotals[p.bucket] || 1;
+            const pct = ((p.vp || 0) / bucketTotal) * 100;
+            return { ...p, bucketPct: pct };
+        });
+        
+        // Previous epoch percentages
+        const prevPoolsWithPct = prevPools.map(p => {
+            const bucketTotal = prevBucketTotals[p.bucket] || 1;
+            const pct = ((p.vp || 0) / bucketTotal) * 100;
+            return { name: p.name, bucket: p.bucket, bucketPct: pct };
+        });
+        
+        // At Risk: Active but between 1% - 2%
+        const atRisk = poolsWithPct
+            .filter(p => p.is_active !== false && p.bucketPct >= 1 && p.bucketPct < 2)
+            .sort((a, b) => a.bucketPct - b.bucketPct); // Lowest first (most at risk)
+        
+        // Inactive: Below 1% or marked inactive
+        const inactive = poolsWithPct
+            .filter(p => p.is_active === false || p.bucketPct < 1)
+            .sort((a, b) => b.bucketPct - a.bucketPct); // Highest first (closest to threshold)
+        
+        // Helper for DEX label
+        const getDexLabel = (dex) => {
+            if (dex?.includes('Astro')) return '<span class="text-[9px] px-1 py-0.5 rounded bg-blue-500/20 text-blue-400">Astro</span>';
+            if (dex?.includes('Skeleton')) return '<span class="text-[9px] px-1 py-0.5 rounded bg-emerald-500/20 text-emerald-400">Skeleton</span>';
+            return '';
+        };
+        
+        // Helper for bucket badge
+        const getBucketBadge = (bucket) => {
+            const colors = {
+                'STABLE': 'bg-cyan-500/20 text-cyan-400',
+                'PROJECT': 'bg-purple-500/20 text-purple-400',
+                'BLUECHIP': 'bg-blue-500/20 text-blue-400',
+                'SINGLE': 'bg-amber-500/20 text-amber-400'
+            };
+            return `<span class="text-[9px] px-1 py-0.5 rounded ${colors[bucket] || 'bg-gray-500/20 text-gray-400'}">${bucket}</span>`;
+        };
+        
+        // Helper for position change - also detects activation state changes
+        const getPositionChange = (poolName, bucket, currentPct) => {
+            const prevPool = prevPoolsWithPct.find(p => p.name === poolName && p.bucket === bucket);
+            if (!prevPool) return '<span class="text-[9px] px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400">NEW</span>';
+            
+            const pctChange = currentPct - prevPool.bucketPct;
+            const wasActive = prevPool.bucketPct >= 1;
+            const isActive = currentPct >= 1;
+            
+            // Check for state transitions
+            if (!wasActive && isActive) {
+                // Just became active!
+                return `<span class="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/30 text-emerald-300 font-semibold animate-pulse">🎉 JUST ACTIVATED</span>`;
+            } else if (wasActive && !isActive) {
+                // Just became inactive!
+                return `<span class="text-[9px] px-1.5 py-0.5 rounded bg-red-500/30 text-red-300 font-semibold">⚠️ JUST DROPPED</span>`;
+            }
+            
+            // Normal change display
+            if (pctChange > 0.1) {
+                return `<span class="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400">▲ +${pctChange.toFixed(2)}%</span>`;
+            } else if (pctChange < -0.1) {
+                return `<span class="text-[9px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400">▼ ${pctChange.toFixed(2)}%</span>`;
+            } else {
+                return '<span class="text-[9px] px-1.5 py-0.5 rounded bg-gray-500/20 text-gray-400">No Change</span>';
+            }
+        };
+        
+        // Render At Risk
+        const atRiskContainer = document.getElementById('threshold-at-risk');
+        if (atRisk.length === 0) {
+            atRiskContainer.innerHTML = '<div class="text-gray-500 text-sm p-3 bg-white/[0.02] rounded-lg">No pools currently at risk</div>';
+        } else {
+            atRiskContainer.innerHTML = atRisk.map(p => `
+                <div class="flex items-center justify-between p-3 rounded-lg bg-amber-500/5 border border-amber-500/10 hover:bg-amber-500/10 transition-colors">
+                    <div class="flex flex-col gap-1">
+                        <div class="flex items-center gap-2">
+                            <span class="font-medium">${p.name}</span>
+                            ${getPositionChange(p.name, p.bucket, p.bucketPct)}
+                        </div>
+                        <div class="flex items-center gap-1">
+                            ${getDexLabel(p.dex)}
+                            ${getBucketBadge(p.bucket)}
+                        </div>
+                    </div>
+                    <div class="text-right cursor-pointer hover:scale-105 transition-transform pool-history-trigger bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-lg px-3 py-2" data-pool="${p.name}" data-bucket="${p.bucket}" title="Click for history">
+                        <div class="mono text-amber-400 font-bold flex items-center gap-1">
+                            ${p.bucketPct.toFixed(2)}%
+                            <i class="fas fa-chart-line text-[10px] opacity-60"></i>
+                        </div>
+                        <div class="text-[10px] text-gray-500">${fmtNum(p.vp)} VP</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        // Render Inactive
+        const inactiveContainer = document.getElementById('threshold-inactive');
+        if (inactive.length === 0) {
+            inactiveContainer.innerHTML = '<div class="text-gray-500 text-sm p-3 bg-white/[0.02] rounded-lg">No inactive pools</div>';
+        } else {
+            inactiveContainer.innerHTML = inactive.slice(0, 6).map(p => `
+                <div class="flex items-center justify-between p-3 rounded-lg bg-red-500/5 border border-red-500/10 hover:bg-red-500/10 transition-colors">
+                    <div class="flex flex-col gap-1">
+                        <div class="flex items-center gap-2">
+                            <span class="font-medium text-gray-400">${p.name}</span>
+                            ${getPositionChange(p.name, p.bucket, p.bucketPct)}
+                        </div>
+                        <div class="flex items-center gap-1">
+                            ${getDexLabel(p.dex)}
+                            ${getBucketBadge(p.bucket)}
+                        </div>
+                    </div>
+                    <div class="text-right cursor-pointer hover:scale-105 transition-transform pool-history-trigger bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-lg px-3 py-2" data-pool="${p.name}" data-bucket="${p.bucket}" title="Click for history">
+                        <div class="mono text-red-400 font-bold flex items-center gap-1">
+                            ${p.bucketPct.toFixed(2)}%
+                            <i class="fas fa-chart-line text-[10px] opacity-60"></i>
+                        </div>
+                        <div class="text-[10px] text-gray-500">${fmtNum(p.vp)} VP</div>
+                    </div>
+                </div>
+            `).join('') + (inactive.length > 6 ? `<div class="text-center text-xs text-gray-500 mt-2">+${inactive.length - 6} more inactive pools</div>` : '');
+        }
+        
+        // Add click listeners for pool history
+        document.querySelectorAll('.pool-history-trigger').forEach(el => {
+            el.addEventListener('click', () => {
+                const poolName = el.dataset.pool;
+                const bucket = el.dataset.bucket;
+                showPoolHistory(poolName, bucket);
+            });
+        });
     }
     
     // Track which epoch view is selected for waterfall
@@ -3058,6 +3487,15 @@
                 if (bucketFilter !== 'all' && bucketFilter !== bucket) return;
                 renderBucketChart(bucket, 'all');
             });
+            
+            // Add click listeners for pool metric cells
+            document.querySelectorAll('.pool-metric-cell').forEach(el => {
+                el.addEventListener('click', () => {
+                    const poolName = el.dataset.pool;
+                    const metric = el.dataset.metric;
+                    showPoolMetricHistory(poolName, metric);
+                });
+            });
         }, 100);
     }
     
@@ -3362,6 +3800,19 @@
         const poolOtherBribes = p.bribes_other || 0;
         const poolTotalBribes = p.bribes_total || 0;
         
+        // Calculate changes from previous epoch for icon colors
+        const prevPool = store.previousEpochData?.pools?.find(x => x.name === p.name);
+        const aprChange = prevPool ? (p.apr_amp || 0) - (prevPool.apr_amp || 0) : 0;
+        const bribesChange = prevPool ? poolTotalBribes - (prevPool.bribes_total || 0) : 0;
+        const tlaChange = prevPool ? (p.vp || 0) - (prevPool.vp || 0) : 0;
+        const adaoChange = prevPool ? (p.adao_vp || 0) - (prevPool.adao_vp || 0) : 0;
+        
+        // Helper for icon color
+        const iconColor = (change) => change > 0 ? 'text-emerald-400' : change < 0 ? 'text-red-400' : 'text-gray-500 opacity-40';
+        
+        // Escape pool name for data attributes
+        const safePoolName = p.name.replace(/'/g, "\\'");
+        
         return `
             <tr class="${!isActive ? 'opacity-60' : ''}">
                 <td>
@@ -3375,8 +3826,11 @@
                 </td>
                 <td class="text-right mono text-cyan-400">${p.liq_4ep_avg ? fmt$(p.liq_4ep_avg) : '-'}</td>
                 <td class="text-right mono text-orange-400">${p.vol_4ep_avg ? fmt$(p.vol_4ep_avg) : '-'}</td>
-                <td class="text-right">
-                    <div class="mono text-green-400">${p.apr_amp ? fmtPct(p.apr_amp) : '-'}</div>
+                <td class="text-right pool-metric-cell cursor-pointer hover:bg-white/5 rounded transition-colors" data-pool="${safePoolName}" data-metric="apr" title="Click for trend">
+                    <div class="mono text-green-400 flex items-center justify-end gap-1">
+                        ${p.apr_amp ? fmtPct(p.apr_amp) : '-'}
+                        <i class="fas fa-chart-line text-[8px] ${iconColor(aprChange)}"></i>
+                    </div>
                     <div class="mono text-[10px] text-gray-500">${p.apr_non ? fmtPct(p.apr_non) : '-'}</div>
                 </td>
                 <td class="text-right mono">
@@ -3390,18 +3844,25 @@
                     <div class="text-purple-400">${p.votion_next_vp ? fmtNum(p.votion_next_vp) : '-'}</div>
                     <div class="text-[10px] text-gray-500">${votionNextPct > 0 ? fmtPct(votionNextPct) : '-'}</div>
                 </td>
-                <td class="text-right">
-                    <div class="mono ${poolTotalBribes > 0 ? 'text-amber-400' : 'text-gray-500'}">
+                <td class="text-right pool-metric-cell cursor-pointer hover:bg-white/5 rounded transition-colors" data-pool="${safePoolName}" data-metric="bribes" title="Click for trend">
+                    <div class="mono flex items-center justify-end gap-1 ${poolTotalBribes > 0 ? 'text-amber-400' : 'text-gray-500'}">
                         ${poolTotalBribes > 0 ? fmt$(poolTotalBribes) : '-'}
+                        <i class="fas fa-chart-line text-[8px] ${iconColor(bribesChange)}"></i>
                     </div>
                     ${poolPdBribes > 0 ? `<div class="text-[10px] text-purple-400">Phoenix: ${fmt$(poolPdBribes)}</div>` : ''}
                 </td>
-                <td class="text-right mono">
-                    <div class="text-orange-400">${p.vp ? fmtNum(p.vp) : '-'}</div>
+                <td class="text-right pool-metric-cell cursor-pointer hover:bg-white/5 rounded transition-colors" data-pool="${safePoolName}" data-metric="tla-vote" title="Click for trend">
+                    <div class="mono text-orange-400 flex items-center justify-end gap-1">
+                        ${p.vp ? fmtNum(p.vp) : '-'}
+                        <i class="fas fa-chart-line text-[8px] ${iconColor(tlaChange)}"></i>
+                    </div>
                     <div class="text-[10px] text-gray-500">${tlaPct > 0 ? fmtPct(tlaPct) : '-'}</div>
                 </td>
-                <td class="text-right mono">
-                    <div class="text-cyan-400">${p.adao_vp ? fmtNum(p.adao_vp) : '-'}</div>
+                <td class="text-right pool-metric-cell cursor-pointer hover:bg-white/5 rounded transition-colors" data-pool="${safePoolName}" data-metric="adao-vote" title="Click for trend">
+                    <div class="mono text-cyan-400 flex items-center justify-end gap-1">
+                        ${p.adao_vp ? fmtNum(p.adao_vp) : '-'}
+                        <i class="fas fa-chart-line text-[8px] ${iconColor(adaoChange)}"></i>
+                    </div>
                     <div class="text-[10px] text-gray-500">${adaoPct > 0 ? fmtPct(adaoPct) : '-'}</div>
                 </td>
             </tr>
@@ -3636,6 +4097,20 @@
                 `Rating: ${effLabel}&#10;` +
                 `Rank: #${rank} of ${efficiencies.length} pools (top ${percentile}%)`;
             
+            // Escape pool name for data attributes
+            const safePoolName = (p.normalized_name || p.name).replace(/'/g, "\\'");
+            
+            // Calculate changes from previous epoch for icon colors
+            const prevTlaPool = store.previousEpochData?.tla?.pools?.find(x => (x.normalized_name || x.name) === (p.normalized_name || p.name));
+            const depthChange = prevTlaPool ? (p.depth || 0) - (prevTlaPool.depth || 0) : 0;
+            const tlaStakedChange = prevTlaPool ? (p.tla_staked || 0) - (prevTlaPool.tla_staked || 0) : 0;
+            const tlaAprChange = prevTlaPool ? (p.apr_amplified || 0) - (prevTlaPool.apr_amplified || 0) : 0;
+            const tlaRewardsChange = prevTlaPool ? ((p.rewards_per_year || 0) / 52) - ((prevTlaPool.rewards_per_year || 0) / 52) : 0;
+            const tlaAdaoChange = prevTlaPool ? (p.adaoDeposit || 0) - (prevTlaPool.adaoDeposit || 0) : 0;
+            
+            // Helper for icon color
+            const iconColor = (change) => change > 0 ? 'text-emerald-400' : change < 0 ? 'text-red-400' : 'text-gray-500 opacity-40';
+            
             return `
             <tr class="${!isActive ? 'opacity-50' : ''}">
                 <td>
@@ -3650,25 +4125,55 @@
                 <td class="text-center">
                     <span class="text-[10px] px-2 py-0.5 rounded ${bucketClass}">${bucket}</span>
                 </td>
-                <td class="text-right mono text-green-400">${fmt$(p.depth)}</td>
-                <td class="text-right mono text-cyan-400">${fmt$(p.tla_staked)}</td>
+                <td class="text-right tla-metric-cell cursor-pointer hover:bg-white/5 rounded transition-colors" data-pool="${safePoolName}" data-metric="tla-depth" title="Click for trend">
+                    <div class="mono text-green-400 flex items-center justify-end gap-1">
+                        ${fmt$(p.depth)}
+                        <i class="fas fa-chart-line text-[8px] ${iconColor(depthChange)}"></i>
+                    </div>
+                </td>
+                <td class="text-right tla-metric-cell cursor-pointer hover:bg-white/5 rounded transition-colors" data-pool="${safePoolName}" data-metric="tla-staked" title="Click for trend">
+                    <div class="mono text-cyan-400 flex items-center justify-end gap-1">
+                        ${fmt$(p.tla_staked)}
+                        <i class="fas fa-chart-line text-[8px] ${iconColor(tlaStakedChange)}"></i>
+                    </div>
+                </td>
                 <td class="text-right mono text-gray-400">${p.depthPct > 0 ? fmtPct(p.depthPct) : '-'}</td>
                 <td class="text-right mono text-gray-400">${p.tlaPct > 0 ? fmtPct(p.tlaPct) : '-'}</td>
                 <td class="text-right ${effColor}" title="${effTooltip}">
                     ${eff > 0 ? `<div class="mono">${effPct}%</div><div class="text-[10px]">${effLabel}</div>` : '-'}
                 </td>
-                <td class="text-right">
-                    <div class="mono ${p.apr_amplified > 0 ? 'text-green-400' : 'text-gray-500'}">${p.apr_amplified > 0 ? fmtPct(p.apr_amplified) : '-'}</div>
+                <td class="text-right tla-metric-cell cursor-pointer hover:bg-white/5 rounded transition-colors" data-pool="${safePoolName}" data-metric="tla-apr" title="Click for trend">
+                    <div class="mono flex items-center justify-end gap-1 ${p.apr_amplified > 0 ? 'text-green-400' : 'text-gray-500'}">
+                        ${p.apr_amplified > 0 ? fmtPct(p.apr_amplified) : '-'}
+                        <i class="fas fa-chart-line text-[8px] ${iconColor(tlaAprChange)}"></i>
+                    </div>
                     <div class="mono text-[10px] ${p.apr_non_amp > 0 ? 'text-green-300' : 'text-gray-600'}">${p.apr_non_amp > 0 ? fmtPct(p.apr_non_amp) : '-'}</div>
                 </td>
-                <td class="text-right">
-                    <div class="mono text-orange-400">${rewardsPerEpoch > 0 ? fmt$(rewardsPerEpoch) : '-'}</div>
+                <td class="text-right tla-metric-cell cursor-pointer hover:bg-white/5 rounded transition-colors" data-pool="${safePoolName}" data-metric="tla-rewards" title="Click for trend">
+                    <div class="mono text-orange-400 flex items-center justify-end gap-1">
+                        ${rewardsPerEpoch > 0 ? fmt$(rewardsPerEpoch) : '-'}
+                        <i class="fas fa-chart-line text-[8px] ${iconColor(tlaRewardsChange)}"></i>
+                    </div>
                     <div class="mono text-[10px] text-gray-500">${p.rewards_per_year > 0 ? fmt$(p.rewards_per_year) : '-'}</div>
                 </td>
-                <td class="text-right mono ${p.adaoDeposit > 0 ? 'text-purple-400' : 'text-gray-500'}">${p.adaoDeposit > 0 ? fmt$(p.adaoDeposit) : '-'}</td>
+                <td class="text-right tla-metric-cell cursor-pointer hover:bg-white/5 rounded transition-colors" data-pool="${safePoolName}" data-metric="tla-adao" title="Click for trend">
+                    <div class="mono flex items-center justify-end gap-1 ${p.adaoDeposit > 0 ? 'text-purple-400' : 'text-gray-500'}">
+                        ${p.adaoDeposit > 0 ? fmt$(p.adaoDeposit) : '-'}
+                        <i class="fas fa-chart-line text-[8px] ${iconColor(tlaAdaoChange)}"></i>
+                    </div>
+                </td>
             </tr>
             `;
         }).join('');
+        
+        // Add click listeners for TLA metric cells
+        document.querySelectorAll('.tla-metric-cell').forEach(el => {
+            el.addEventListener('click', () => {
+                const poolName = el.dataset.pool;
+                const metric = el.dataset.metric;
+                showTlaMetricHistory(poolName, metric);
+            });
+        });
     }
     
     // ============================================================
@@ -4175,12 +4680,24 @@
                 const isPick = bucketPick && normalizePoolName(bucketPick.name) === normalizedName;
                 const adjustTooltip = `DAODAO: ${daodaoRec}%&#10;Custom: ${customRec}%&#10;Current: ${currentPct.toFixed(0)}%`;
                 
+                // Calculate changes from previous epoch for trend icons
+                const prevPool = store.previousEpochData?.pools?.find(x => x.name === p.name);
+                const perfChange = prevPool ? (p.calc_perf || 0) - (prevPool.calc_perf || 0) : 0;
+                const supportChange = prevPool ? (p.calc_support || 0) - (prevPool.calc_support || 0) : 0;
+                const scoreChange = prevPool ? score - (prevPool.calc_score || 0) : 0;
+                
+                // Helper for icon color
+                const iconColor = (change) => change > 0 ? 'text-emerald-400' : change < 0 ? 'text-red-400' : 'text-gray-500 opacity-40';
+                
+                // Escape pool name for data attributes
+                const safePoolName = p.name.replace(/'/g, "\\'");
+                
                 html += `
-                <tr class="hover:bg-white/5 cursor-pointer ${!isActive ? 'opacity-50' : ''} ${isPick ? 'bg-green-500/10' : ''}" onclick="showPoolDetail('${p.name}')">
+                <tr class="${!isActive ? 'opacity-50' : ''} ${isPick ? 'bg-green-500/10' : ''}">
                     <td class="text-center">
                         <span class="w-6 h-6 rounded flex items-center justify-center text-xs font-bold mx-auto ${rank < 3 ? `rank-${rank+1}` : 'bg-white/10'}">${rank+1}</span>
                     </td>
-                    <td>
+                    <td class="cursor-pointer hover:bg-white/5" onclick="showPoolDetail('${safePoolName}')">
                         <div class="flex items-center gap-2">
                             <span class="active-dot ${isActive ? 'on' : 'off'}"></span>
                             <div class="min-w-0">
@@ -4192,11 +4709,22 @@
                     <td class="text-center">
                         ${pdPct > 0 ? `<span class="mono text-orange-400">${pdPct.toFixed(0)}%</span>` : '<span class="text-gray-600">-</span>'}
                     </td>
-                    <td class="text-center mono text-emerald-400">${(p.calc_perf || 0).toFixed(1)}</td>
-                    <td class="text-center mono text-amber-400">${(p.calc_support || 0).toFixed(1)}</td>
-                    <td class="text-center">
-                        <span class="score-badge ${getScoreClass(score)}">
+                    <td class="text-center mono text-emerald-400 cursor-pointer hover:bg-white/5 rounded transition-colors ranking-metric-cell" data-pool="${safePoolName}" data-metric="perf" title="Click for trend">
+                        <span class="inline-flex items-center gap-1">
+                            ${(p.calc_perf || 0).toFixed(1)}
+                            <i class="fas fa-chart-line text-[8px] ${iconColor(perfChange)}"></i>
+                        </span>
+                    </td>
+                    <td class="text-center mono text-amber-400 cursor-pointer hover:bg-white/5 rounded transition-colors ranking-metric-cell" data-pool="${safePoolName}" data-metric="support" title="Click for trend">
+                        <span class="inline-flex items-center gap-1">
+                            ${(p.calc_support || 0).toFixed(1)}
+                            <i class="fas fa-chart-line text-[8px] ${iconColor(supportChange)}"></i>
+                        </span>
+                    </td>
+                    <td class="text-center cursor-pointer hover:bg-white/5 rounded transition-colors ranking-metric-cell" data-pool="${safePoolName}" data-metric="score" title="Click for trend">
+                        <span class="score-badge ${getScoreClass(score)} inline-flex items-center gap-1">
                             ${getScoreIcon(score)} ${score.toFixed(1)}
+                            <i class="fas fa-chart-line text-[8px] ${iconColor(scoreChange)}"></i>
                         </span>
                     </td>
                     <td class="text-center mono text-gray-400">${currentPct > 0 ? currentPct.toFixed(0) + '%' : '-'}</td>
@@ -4223,6 +4751,166 @@
         });
         
         container.innerHTML = html || '<div class="text-center text-gray-500 py-8">No pools match current filters</div>';
+        
+        // Add click listeners for ranking metric cells
+        document.querySelectorAll('.ranking-metric-cell').forEach(el => {
+            el.addEventListener('click', (e) => {
+                e.stopPropagation(); // Don't trigger row click
+                const poolName = el.dataset.pool;
+                const metric = el.dataset.metric;
+                showRankingMetricHistory(poolName, metric);
+            });
+        });
+    }
+    
+    // Show ranking metric history (Performance, Support, Score)
+    function showRankingMetricHistory(poolName, metric) {
+        const modal = document.getElementById('history-modal');
+        
+        // Metric configurations for Rankings tab
+        const metricConfigs = {
+            'perf': {
+                title: `${poolName} - Performance Score History`,
+                getValue: (pool) => pool?.calc_perf || 0,
+                format: (v) => v.toFixed(1),
+                color: '#10b981',
+                label: 'Performance'
+            },
+            'support': {
+                title: `${poolName} - Support Score History`,
+                getValue: (pool) => pool?.calc_support || 0,
+                format: (v) => v.toFixed(1),
+                color: '#f59e0b',
+                label: 'Support'
+            },
+            'score': {
+                title: `${poolName} - Opportunity Score History`,
+                getValue: (pool) => pool?.calc_score || 0,
+                format: (v) => v.toFixed(1),
+                color: '#06b6d4',
+                label: 'Opportunity'
+            }
+        };
+        
+        const config = metricConfigs[metric];
+        if (!config) return;
+        
+        document.getElementById('history-modal-title').textContent = config.title;
+        document.getElementById('history-table-col5').textContent = 'LUNA Price';
+        
+        // Build history points
+        const historyPoints = [];
+        
+        // Previous epoch
+        if (store.previousEpochData?.pools) {
+            const prevPool = store.previousEpochData.pools.find(p => p.name === poolName);
+            if (prevPool) {
+                historyPoints.push({
+                    epoch: store.epoch - 1,
+                    value: config.getValue(prevPool),
+                    lunaPrice: store.previousAdaoSnap?.lunaPrice_USD || null,
+                    date: store.previousEpochData?.meta?.generated_at
+                });
+            }
+        }
+        
+        // Current epoch
+        const currentPool = store.pools.find(p => p.name === poolName);
+        if (currentPool) {
+            historyPoints.push({
+                epoch: store.epoch,
+                value: config.getValue(currentPool),
+                lunaPrice: store.adaoSnap?.lunaPrice_USD || null,
+                date: store.data?.meta?.generated_at
+            });
+        }
+        
+        // Render chart
+        const ctx = document.getElementById('history-chart');
+        if (ctx) {
+            if (historyModalChart) {
+                historyModalChart.destroy();
+            }
+            
+            historyModalChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: historyPoints.map(p => `E${p.epoch}`),
+                    datasets: [{
+                        label: config.label,
+                        data: historyPoints.map(p => p.value),
+                        borderColor: config.color,
+                        backgroundColor: config.color + '20',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 6,
+                        pointBackgroundColor: config.color,
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: (ctx) => config.format(ctx.raw)
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { color: '#9ca3af' }
+                        },
+                        y: {
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { 
+                                color: '#9ca3af',
+                                callback: (v) => config.format(v)
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Render table
+        const tbody = document.getElementById('history-table-body');
+        const sorted = [...historyPoints].sort((a, b) => b.epoch - a.epoch);
+        
+        let html = '';
+        sorted.forEach((point, idx) => {
+            const prevPoint = sorted[idx + 1];
+            let changeHtml = '-';
+            
+            if (prevPoint) {
+                const change = point.value - prevPoint.value;
+                const isPositive = change > 0;
+                const color = isPositive ? 'text-emerald-400' : change < 0 ? 'text-red-400' : 'text-gray-400';
+                changeHtml = `<span class="${color}">${isPositive ? '+' : ''}${change.toFixed(1)}</span>`;
+            }
+            
+            const dateStr = point.date ? new Date(point.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-';
+            const priceStr = point.lunaPrice ? `$${point.lunaPrice.toFixed(4)}` : '-';
+            
+            html += `
+                <tr class="border-b border-white/5 hover:bg-white/5">
+                    <td class="py-2 px-3 font-medium">E${point.epoch}</td>
+                    <td class="py-2 px-3 text-gray-400">${dateStr}</td>
+                    <td class="py-2 px-3 text-right font-mono" style="color: ${config.color}">${config.format(point.value)}</td>
+                    <td class="py-2 px-3 text-right">${changeHtml}</td>
+                    <td class="py-2 px-3 text-right text-gray-400">${priceStr}</td>
+                </tr>
+            `;
+        });
+        
+        tbody.innerHTML = html;
+        
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
     }
     
     // Normalize pool name for matching (handle various formats)
@@ -4964,6 +5652,768 @@
         const modal = document.getElementById('bribes-modal');
         modal.classList.add('hidden');
         modal.classList.remove('flex');
+    }
+    
+    // ============================================================
+    // HISTORY TRENDS & MODAL
+    // ============================================================
+    
+    // Metric definitions for history tracking
+    const historyMetrics = {
+        'astro-pools': {
+            title: 'Active Astroport Pools',
+            getValue: (data, adao) => data?.pools?.filter(p => p.dex?.includes('Astro') && p.is_active !== false).length || 0,
+            format: (v) => v.toString(),
+            unit: 'pools',
+            changeType: 'absolute' // Show +1, -2 instead of %
+        },
+        'ww-pools': {
+            title: 'Active Skeleton Pools',
+            getValue: (data, adao) => data?.pools?.filter(p => p.dex?.includes('Skeleton') && p.is_active !== false).length || 0,
+            format: (v) => v.toString(),
+            unit: 'pools',
+            changeType: 'absolute' // Show +1, -2 instead of %
+        },
+        'epoch-rewards': {
+            title: 'Epoch Rewards (USD)',
+            getValue: (data, adao) => {
+                const totalPerYear = (data?.tla?.pools || []).reduce((sum, p) => sum + (p.rewards_per_year || 0), 0);
+                return totalPerYear / 52;
+            },
+            format: (v) => fmt$(v),
+            unit: 'USD',
+            changeType: 'dollar' // Show +$5K instead of %
+        },
+        'epoch-bribes': {
+            title: 'Epoch Bribes',
+            getValue: (data, adao) => (data?.pools || []).reduce((sum, p) => sum + (p.bribes_total || 0), 0),
+            format: (v) => fmt$(v),
+            unit: 'USD',
+            changeType: 'dollar' // Show +$500 instead of %
+        },
+        'apr-non': {
+            title: 'Avg APR (Non-Amplified)',
+            getValue: (data, adao) => {
+                const pools = data?.tla?.pools || [];
+                const nonAmpAprs = pools.map(p => p.apr_non_amp || 0).filter(a => a > 0);
+                return nonAmpAprs.length > 0 ? nonAmpAprs.reduce((a, b) => a + b, 0) / nonAmpAprs.length : 0;
+            },
+            format: (v) => fmtPct(v),
+            unit: '%',
+            changeType: 'points' // Show +5.2% (percentage points) instead of relative %
+        },
+        'apr-amp': {
+            title: 'Avg APR (Amplified)',
+            getValue: (data, adao) => {
+                const pools = data?.tla?.pools || [];
+                const ampAprs = pools.map(p => p.apr_amplified || 0).filter(a => a > 0);
+                return ampAprs.length > 0 ? ampAprs.reduce((a, b) => a + b, 0) / ampAprs.length : 0;
+            },
+            format: (v) => fmtPct(v),
+            unit: '%',
+            changeType: 'points' // Show +5.2% (percentage points) instead of relative %
+        },
+        'tla-tvl': {
+            title: 'TLA TVL',
+            getValue: (data, adao) => (data?.tla?.pools || []).reduce((sum, p) => sum + (p.tla_staked || 0), 0),
+            format: (v) => fmt$(v),
+            unit: 'USD',
+            changeType: 'percent' // Keep as % for TVL
+        },
+        'total-vp': {
+            title: 'Total VP',
+            getValue: (data, adao) => data?.vote?.tvp || 0,
+            format: (v) => fmtNum(v),
+            unit: 'VP',
+            changeType: 'percent' // Keep as % for VP
+        }
+    };
+    
+    // Calculate and render trend rows under stat tiles
+    function renderTrendRows() {
+        if (!store.previousEpochData) {
+            // No previous data - hide trends
+            Object.keys(historyMetrics).forEach(key => {
+                const el = document.getElementById(`trend-${key}`);
+                if (el) el.style.display = 'none';
+            });
+            return;
+        }
+        
+        const currentData = store.data;
+        const prevData = store.previousEpochData;
+        const currentAdao = store.adaoSnap;
+        const prevAdao = store.previousAdaoSnap;
+        
+        Object.entries(historyMetrics).forEach(([key, metric]) => {
+            const el = document.getElementById(`trend-${key}`);
+            if (!el) return;
+            
+            el.style.display = el.classList.contains('chart-trend') ? 'inline-flex' : 'flex';
+            
+            const currentVal = metric.getValue(currentData, currentAdao);
+            const prevVal = metric.getValue(prevData, prevAdao);
+            
+            // Calculate changes
+            const absoluteChange = currentVal - prevVal;
+            const percentChange = prevVal !== 0 ? ((currentVal - prevVal) / prevVal) * 100 : 0;
+            
+            // Determine direction
+            el.classList.remove('positive', 'negative', 'neutral');
+            
+            let arrow = '→';
+            let isPositive = absoluteChange > 0;
+            let isNegative = absoluteChange < 0;
+            
+            // Use appropriate threshold based on type
+            const threshold = metric.changeType === 'absolute' ? 0.5 : 
+                             metric.changeType === 'points' ? 0.5 : 
+                             metric.changeType === 'dollar' ? 1 : 0.5;
+            
+            if (absoluteChange > threshold) {
+                el.classList.add('positive');
+                arrow = '▲';
+            } else if (absoluteChange < -threshold) {
+                el.classList.add('negative');
+                arrow = '▼';
+            } else {
+                el.classList.add('neutral');
+            }
+            
+            // Format change based on type
+            let changeText = '';
+            switch (metric.changeType) {
+                case 'absolute':
+                    // Show +1, -2 for counts
+                    const absChange = Math.round(absoluteChange);
+                    changeText = absChange >= 0 ? `+${absChange}` : `${absChange}`;
+                    break;
+                    
+                case 'dollar':
+                    // Show +$5K for dollar amounts
+                    const sign = absoluteChange >= 0 ? '+' : '';
+                    changeText = sign + fmt$(absoluteChange);
+                    break;
+                    
+                case 'points':
+                    // Show +5.2% for percentage point changes (APR went from 50% to 55.2%)
+                    const pSign = absoluteChange >= 0 ? '+' : '';
+                    changeText = `${pSign}${absoluteChange.toFixed(1)}%`;
+                    break;
+                    
+                case 'percent':
+                default:
+                    // Show +5.2% for relative percent changes
+                    const pcSign = percentChange >= 0 ? '+' : '';
+                    changeText = `${pcSign}${percentChange.toFixed(1)}%`;
+                    break;
+            }
+            
+            // Different format for stat-trend vs chart-trend
+            if (el.classList.contains('chart-trend')) {
+                // Compact format for chart headers
+                el.innerHTML = `${arrow} ${changeText}`;
+                el.title = `${changeText} from Epoch ${store.epoch - 1}`;
+            } else {
+                // Full format for stat bar
+                el.innerHTML = `${arrow} ${changeText} from E${store.epoch - 1}`;
+            }
+        });
+    }
+    
+    // Current history modal state
+    let historyModalChart = null;
+    
+    function showHistoryModal(metricKey) {
+        const metric = historyMetrics[metricKey];
+        if (!metric) return;
+        
+        const modal = document.getElementById('history-modal');
+        document.getElementById('history-modal-title').textContent = `${metric.title} History`;
+        document.getElementById('history-table-col5').textContent = 'LUNA Price';
+        
+        // Build history array from current + previous
+        const historyPoints = [];
+        
+        if (store.previousEpochData) {
+            historyPoints.push({
+                epoch: store.epoch - 1,
+                value: metric.getValue(store.previousEpochData, store.previousAdaoSnap),
+                lunaPrice: store.previousAdaoSnap?.lunaPrice_USD || null,
+                date: store.previousEpochData?.meta?.generated_at
+            });
+        }
+        
+        historyPoints.push({
+            epoch: store.epoch,
+            value: metric.getValue(store.data, store.adaoSnap),
+            lunaPrice: store.adaoSnap?.lunaPrice_USD || null,
+            date: store.data?.meta?.generated_at
+        });
+        
+        // Render chart
+        renderHistoryChart(historyPoints, metric);
+        
+        // Render table
+        renderHistoryTable(historyPoints, metric);
+        
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    }
+    
+    function renderHistoryChart(points, metric) {
+        const ctx = document.getElementById('history-chart');
+        if (!ctx) return;
+        
+        // Destroy existing chart
+        if (historyModalChart) {
+            historyModalChart.destroy();
+        }
+        
+        const labels = points.map(p => `E${p.epoch}`);
+        const values = points.map(p => p.value);
+        
+        historyModalChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: metric.title,
+                    data: values,
+                    borderColor: '#06b6d4',
+                    backgroundColor: 'rgba(6, 182, 212, 0.1)',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 6,
+                    pointBackgroundColor: '#06b6d4',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => metric.format(ctx.raw)
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { color: 'rgba(255,255,255,0.05)' },
+                        ticks: { color: '#9ca3af' }
+                    },
+                    y: {
+                        grid: { color: 'rgba(255,255,255,0.05)' },
+                        ticks: { 
+                            color: '#9ca3af',
+                            callback: (v) => metric.format(v)
+                        },
+                        beginAtZero: false
+                    }
+                }
+            }
+        });
+    }
+    
+    function renderHistoryTable(points, metric) {
+        const tbody = document.getElementById('history-table-body');
+        if (!tbody) return;
+        
+        // Sort by epoch descending (newest first)
+        const sorted = [...points].sort((a, b) => b.epoch - a.epoch);
+        
+        let html = '';
+        sorted.forEach((point, idx) => {
+            const prevPoint = sorted[idx + 1];
+            let changeHtml = '-';
+            
+            if (prevPoint) {
+                const change = point.value - prevPoint.value;
+                const changePct = prevPoint.value !== 0 ? ((change) / prevPoint.value) * 100 : 0;
+                const isPositive = changePct > 0;
+                const color = isPositive ? 'text-emerald-400' : changePct < 0 ? 'text-red-400' : 'text-gray-400';
+                changeHtml = `<span class="${color}">${isPositive ? '+' : ''}${changePct.toFixed(1)}%</span>`;
+            }
+            
+            const dateStr = point.date ? new Date(point.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-';
+            const priceStr = point.lunaPrice ? `$${point.lunaPrice.toFixed(4)}` : '-';
+            
+            html += `
+                <tr class="border-b border-white/5 hover:bg-white/5">
+                    <td class="py-2 px-3 font-medium">E${point.epoch}</td>
+                    <td class="py-2 px-3 text-gray-400">${dateStr}</td>
+                    <td class="py-2 px-3 text-right font-mono text-cyan-400">${metric.format(point.value)}</td>
+                    <td class="py-2 px-3 text-right">${changeHtml}</td>
+                    <td class="py-2 px-3 text-right text-gray-400">${priceStr}</td>
+                </tr>
+            `;
+        });
+        
+        tbody.innerHTML = html;
+    }
+    
+    function closeHistoryModal(event) {
+        if (event && event.target !== event.currentTarget) return;
+        const modal = document.getElementById('history-modal');
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+    
+    // Show pool-specific history for threshold watch
+    function showPoolHistory(poolName, bucket) {
+        const modal = document.getElementById('history-modal');
+        document.getElementById('history-modal-title').textContent = `${poolName} - Bucket % History`;
+        document.getElementById('history-table-col5').textContent = 'Status';
+        
+        // Helper to calculate bucket % for a pool
+        const getPoolBucketPct = (data, poolName, bucket) => {
+            if (!data?.pools) return null;
+            
+            const pool = data.pools.find(p => p.name === poolName);
+            if (!pool) return null;
+            
+            const bucketTotal = data.pools
+                .filter(p => p.bucket === bucket)
+                .reduce((sum, p) => sum + (p.vp || 0), 0);
+            
+            if (bucketTotal === 0) return null;
+            
+            return {
+                pct: ((pool.vp || 0) / bucketTotal) * 100,
+                vp: pool.vp || 0,
+                isActive: pool.is_active !== false
+            };
+        };
+        
+        // Build history points
+        const historyPoints = [];
+        
+        // Previous epoch
+        if (store.previousEpochData) {
+            const prevData = getPoolBucketPct(store.previousEpochData, poolName, bucket);
+            if (prevData) {
+                historyPoints.push({
+                    epoch: store.epoch - 1,
+                    value: prevData.pct,
+                    vp: prevData.vp,
+                    isActive: prevData.isActive,
+                    lunaPrice: store.previousAdaoSnap?.lunaPrice_USD || null,
+                    date: store.previousEpochData?.meta?.generated_at
+                });
+            }
+        }
+        
+        // Current epoch
+        const currentData = getPoolBucketPct(store.data, poolName, bucket);
+        if (currentData) {
+            historyPoints.push({
+                epoch: store.epoch,
+                value: currentData.pct,
+                vp: currentData.vp,
+                isActive: currentData.isActive,
+                lunaPrice: store.adaoSnap?.lunaPrice_USD || null,
+                date: store.data?.meta?.generated_at
+            });
+        }
+        
+        // Custom metric for pool bucket %
+        const poolMetric = {
+            title: `${poolName} Bucket %`,
+            format: (v) => v.toFixed(2) + '%',
+            unit: '%'
+        };
+        
+        // Render chart
+        renderHistoryChart(historyPoints, poolMetric);
+        
+        // Custom table for pool data
+        const tbody = document.getElementById('history-table-body');
+        const sorted = [...historyPoints].sort((a, b) => b.epoch - a.epoch);
+        
+        let html = '';
+        sorted.forEach((point, idx) => {
+            const prevPoint = sorted[idx + 1];
+            let changeHtml = '-';
+            
+            if (prevPoint) {
+                const change = point.value - prevPoint.value;
+                const isPositive = change > 0;
+                const color = isPositive ? 'text-emerald-400' : change < 0 ? 'text-red-400' : 'text-gray-400';
+                changeHtml = `<span class="${color}">${isPositive ? '+' : ''}${change.toFixed(2)}%</span>`;
+            }
+            
+            const dateStr = point.date ? new Date(point.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-';
+            const statusBadge = point.isActive 
+                ? '<span class="text-[9px] px-1 py-0.5 rounded bg-emerald-500/20 text-emerald-400">Active</span>'
+                : '<span class="text-[9px] px-1 py-0.5 rounded bg-red-500/20 text-red-400">Inactive</span>';
+            
+            html += `
+                <tr class="border-b border-white/5 hover:bg-white/5">
+                    <td class="py-2 px-3 font-medium">E${point.epoch}</td>
+                    <td class="py-2 px-3 text-gray-400">${dateStr}</td>
+                    <td class="py-2 px-3 text-right">
+                        <span class="font-mono ${point.value >= 1 ? 'text-cyan-400' : 'text-red-400'}">${point.value.toFixed(2)}%</span>
+                        <span class="text-[10px] text-gray-500 ml-1">(${fmtNum(point.vp)} VP)</span>
+                    </td>
+                    <td class="py-2 px-3 text-right">${changeHtml}</td>
+                    <td class="py-2 px-3 text-right">${statusBadge}</td>
+                </tr>
+            `;
+        });
+        
+        tbody.innerHTML = html;
+        
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    }
+    
+    // Show pool metric history (APR, Bribes, TLA Vote, aDAO Vote)
+    function showPoolMetricHistory(poolName, metric) {
+        const modal = document.getElementById('history-modal');
+        
+        // Metric configurations
+        const metricConfigs = {
+            'apr': {
+                title: `${poolName} - APR History`,
+                getValue: (pool) => pool?.apr_amp || 0,
+                format: (v) => fmtPct(v),
+                color: '#10b981',
+                label: 'Amplified APR'
+            },
+            'bribes': {
+                title: `${poolName} - Bribes History`,
+                getValue: (pool) => pool?.bribes_total || 0,
+                format: (v) => fmt$(v),
+                color: '#f59e0b',
+                label: 'Total Bribes'
+            },
+            'tla-vote': {
+                title: `${poolName} - TLA Vote History`,
+                getValue: (pool) => pool?.vp || 0,
+                format: (v) => fmtNum(v),
+                color: '#f97316',
+                label: 'TLA VP'
+            },
+            'adao-vote': {
+                title: `${poolName} - aDAO Vote History`,
+                getValue: (pool) => pool?.adao_vp || 0,
+                format: (v) => fmtNum(v),
+                color: '#06b6d4',
+                label: 'aDAO VP'
+            }
+        };
+        
+        const config = metricConfigs[metric];
+        if (!config) return;
+        
+        document.getElementById('history-modal-title').textContent = config.title;
+        document.getElementById('history-table-col5').textContent = 'LUNA Price';
+        
+        // Helper to find pool in data
+        const findPool = (data, name) => data?.pools?.find(p => p.name === name);
+        
+        // Build history points
+        const historyPoints = [];
+        
+        // Previous epoch
+        if (store.previousEpochData) {
+            const prevPool = findPool(store.previousEpochData, poolName);
+            if (prevPool) {
+                historyPoints.push({
+                    epoch: store.epoch - 1,
+                    value: config.getValue(prevPool),
+                    lunaPrice: store.previousAdaoSnap?.lunaPrice_USD || null,
+                    date: store.previousEpochData?.meta?.generated_at
+                });
+            }
+        }
+        
+        // Current epoch
+        const currentPool = findPool(store.data, poolName);
+        if (currentPool) {
+            historyPoints.push({
+                epoch: store.epoch,
+                value: config.getValue(currentPool),
+                lunaPrice: store.adaoSnap?.lunaPrice_USD || null,
+                date: store.data?.meta?.generated_at
+            });
+        }
+        
+        // Render chart with custom color
+        const ctx = document.getElementById('history-chart');
+        if (ctx) {
+            if (historyModalChart) {
+                historyModalChart.destroy();
+            }
+            
+            historyModalChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: historyPoints.map(p => `E${p.epoch}`),
+                    datasets: [{
+                        label: config.label,
+                        data: historyPoints.map(p => p.value),
+                        borderColor: config.color,
+                        backgroundColor: config.color + '20',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 6,
+                        pointBackgroundColor: config.color,
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: (ctx) => config.format(ctx.raw)
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { color: '#9ca3af' }
+                        },
+                        y: {
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { 
+                                color: '#9ca3af',
+                                callback: (v) => config.format(v)
+                            },
+                            beginAtZero: metric === 'bribes' || metric === 'adao-vote'
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Render table
+        const tbody = document.getElementById('history-table-body');
+        const sorted = [...historyPoints].sort((a, b) => b.epoch - a.epoch);
+        
+        let html = '';
+        sorted.forEach((point, idx) => {
+            const prevPoint = sorted[idx + 1];
+            let changeHtml = '-';
+            
+            if (prevPoint && prevPoint.value !== 0) {
+                const change = point.value - prevPoint.value;
+                const changePct = (change / prevPoint.value) * 100;
+                const isPositive = change > 0;
+                const color = isPositive ? 'text-emerald-400' : change < 0 ? 'text-red-400' : 'text-gray-400';
+                
+                // Format change based on metric type
+                if (metric === 'apr') {
+                    changeHtml = `<span class="${color}">${isPositive ? '+' : ''}${change.toFixed(1)}%</span>`;
+                } else if (metric === 'bribes') {
+                    changeHtml = `<span class="${color}">${isPositive ? '+' : ''}${fmt$(change)}</span>`;
+                } else {
+                    changeHtml = `<span class="${color}">${isPositive ? '+' : ''}${fmtNum(change)}</span>`;
+                }
+            }
+            
+            const dateStr = point.date ? new Date(point.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-';
+            const priceStr = point.lunaPrice ? `$${point.lunaPrice.toFixed(4)}` : '-';
+            
+            html += `
+                <tr class="border-b border-white/5 hover:bg-white/5">
+                    <td class="py-2 px-3 font-medium">E${point.epoch}</td>
+                    <td class="py-2 px-3 text-gray-400">${dateStr}</td>
+                    <td class="py-2 px-3 text-right font-mono" style="color: ${config.color}">${config.format(point.value)}</td>
+                    <td class="py-2 px-3 text-right">${changeHtml}</td>
+                    <td class="py-2 px-3 text-right text-gray-400">${priceStr}</td>
+                </tr>
+            `;
+        });
+        
+        tbody.innerHTML = html;
+        
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    }
+    
+    // Show TLA tab metric history (TLA Staked, APR, Rewards, aDAO)
+    function showTlaMetricHistory(poolName, metric) {
+        const modal = document.getElementById('history-modal');
+        
+        // Metric configurations for TLA tab
+        const metricConfigs = {
+            'tla-depth': {
+                title: `${poolName} - DEX Depth History`,
+                getValue: (pool) => pool?.depth || 0,
+                format: (v) => fmt$(v),
+                color: '#22c55e',
+                label: 'DEX Depth'
+            },
+            'tla-staked': {
+                title: `${poolName} - TLA Staked History`,
+                getValue: (pool) => pool?.tla_staked || 0,
+                format: (v) => fmt$(v),
+                color: '#06b6d4',
+                label: 'TLA Staked'
+            },
+            'tla-apr': {
+                title: `${poolName} - APR History`,
+                getValue: (pool) => pool?.apr_amplified || 0,
+                format: (v) => fmtPct(v),
+                color: '#10b981',
+                label: 'Amplified APR'
+            },
+            'tla-rewards': {
+                title: `${poolName} - Rewards History`,
+                getValue: (pool) => (pool?.rewards_per_year || 0) / 52,
+                format: (v) => fmt$(v),
+                color: '#f97316',
+                label: 'Rewards/Epoch'
+            },
+            'tla-adao': {
+                title: `${poolName} - aDAO Deposit History`,
+                getValue: (pool) => pool?.adaoDeposit || 0,
+                format: (v) => fmt$(v),
+                color: '#a855f7',
+                label: 'aDAO Deposit'
+            }
+        };
+        
+        const config = metricConfigs[metric];
+        if (!config) return;
+        
+        document.getElementById('history-modal-title').textContent = config.title;
+        document.getElementById('history-table-col5').textContent = 'LUNA Price';
+        
+        // Helper to find pool in TLA data
+        const findTlaPool = (data, name) => data?.tla?.pools?.find(p => (p.normalized_name || p.name) === name);
+        
+        // Build history points
+        const historyPoints = [];
+        
+        // Previous epoch
+        if (store.previousEpochData) {
+            const prevPool = findTlaPool(store.previousEpochData, poolName);
+            if (prevPool) {
+                historyPoints.push({
+                    epoch: store.epoch - 1,
+                    value: config.getValue(prevPool),
+                    lunaPrice: store.previousAdaoSnap?.lunaPrice_USD || null,
+                    date: store.previousEpochData?.meta?.generated_at
+                });
+            }
+        }
+        
+        // Current epoch
+        const currentPool = findTlaPool(store.data, poolName);
+        if (currentPool) {
+            historyPoints.push({
+                epoch: store.epoch,
+                value: config.getValue(currentPool),
+                lunaPrice: store.adaoSnap?.lunaPrice_USD || null,
+                date: store.data?.meta?.generated_at
+            });
+        }
+        
+        // Render chart
+        const ctx = document.getElementById('history-chart');
+        if (ctx) {
+            if (historyModalChart) {
+                historyModalChart.destroy();
+            }
+            
+            historyModalChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: historyPoints.map(p => `E${p.epoch}`),
+                    datasets: [{
+                        label: config.label,
+                        data: historyPoints.map(p => p.value),
+                        borderColor: config.color,
+                        backgroundColor: config.color + '20',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 6,
+                        pointBackgroundColor: config.color,
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: (ctx) => config.format(ctx.raw)
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { color: '#9ca3af' }
+                        },
+                        y: {
+                            grid: { color: 'rgba(255,255,255,0.05)' },
+                            ticks: { 
+                                color: '#9ca3af',
+                                callback: (v) => config.format(v)
+                            },
+                            beginAtZero: metric === 'tla-adao'
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Render table
+        const tbody = document.getElementById('history-table-body');
+        const sorted = [...historyPoints].sort((a, b) => b.epoch - a.epoch);
+        
+        let html = '';
+        sorted.forEach((point, idx) => {
+            const prevPoint = sorted[idx + 1];
+            let changeHtml = '-';
+            
+            if (prevPoint && prevPoint.value !== 0) {
+                const change = point.value - prevPoint.value;
+                const changePct = (change / prevPoint.value) * 100;
+                const isPositive = change > 0;
+                const color = isPositive ? 'text-emerald-400' : change < 0 ? 'text-red-400' : 'text-gray-400';
+                
+                // Format change based on metric type
+                if (metric === 'tla-apr') {
+                    changeHtml = `<span class="${color}">${isPositive ? '+' : ''}${change.toFixed(1)}%</span>`;
+                } else {
+                    changeHtml = `<span class="${color}">${isPositive ? '+' : ''}${fmt$(change)}</span>`;
+                }
+            }
+            
+            const dateStr = point.date ? new Date(point.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-';
+            const priceStr = point.lunaPrice ? `$${point.lunaPrice.toFixed(4)}` : '-';
+            
+            html += `
+                <tr class="border-b border-white/5 hover:bg-white/5">
+                    <td class="py-2 px-3 font-medium">E${point.epoch}</td>
+                    <td class="py-2 px-3 text-gray-400">${dateStr}</td>
+                    <td class="py-2 px-3 text-right font-mono" style="color: ${config.color}">${config.format(point.value)}</td>
+                    <td class="py-2 px-3 text-right">${changeHtml}</td>
+                    <td class="py-2 px-3 text-right text-gray-400">${priceStr}</td>
+                </tr>
+            `;
+        });
+        
+        tbody.innerHTML = html;
+        
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
     }
     
     // ============================================================
