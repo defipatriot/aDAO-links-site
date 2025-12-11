@@ -537,30 +537,20 @@
     </div>
     
     <div id="tlaModal" class="modal fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50 hidden opacity-0">
-        <div class="modal-content bg-[#1a1a1a] border border-gray-700 rounded-xl shadow-xl w-full max-w-3xl relative text-white opacity-0 scale-95 p-8 overflow-y-auto">
+        <div class="modal-content bg-[#1a1a1a] border border-gray-700 rounded-xl shadow-xl w-full max-w-2xl relative text-white opacity-0 scale-95 p-8 overflow-y-auto">
             <button class="modal-close absolute top-4 right-4 text-gray-400 hover:text-white text-3xl">&times;</button>
             <h3 class="text-2xl font-bold text-cyan-400 mb-4">DAO TLA Deposit Details</h3>
             <div class="text-center bg-gray-800/50 p-4 rounded-lg mb-4">
                  <p class="text-lg">Total Deposit Value (Snapshot)</p>
                  <p class="text-2xl font-bold text-white" id="tla-deposit-total-usd"><i class="fas fa-spinner fa-spin text-white text-2xl"></i></p>
                  <p class="text-md text-cyan-400" id="tla-deposit-total-apr"><i class="fas fa-spinner fa-spin text-cyan-400"></i></p>
-                 <div class="mt-2 pt-2 border-t border-gray-600">
-                    <p class="text-lg">Unclaimed Rewards</p>
-                    <p class="text-xl font-bold text-white" id="tla-unclaimed-rewards"><i class="fas fa-spinner fa-spin text-white text-xl"></i></p>
-                 </div>
             </div>
             <div class="bg-yellow-900/30 border border-yellow-700 p-3 rounded-lg text-sm mb-4">
-                <p><strong class="text-yellow-300">Disclaimer:</strong> This data is a snapshot from <span id="tla-snapshot-date"></span>. The "Live Estimated Value" for underlying tokens is calculated using live CoinGecko prices and may not perfectly reflect the LP's current balance due to impermanent loss.</p>
+                <p><strong class="text-yellow-300">Disclaimer:</strong> This data is a snapshot from <span id="tla-snapshot-date">--</span>. Token values are calculated using live CoinGecko prices where available.</p>
             </div>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                    <h4 class="font-bold text-lg text-white mb-2 text-center">Pools</h4>
-                    <div id="tla-pools-container" class="space-y-2"> <div class="text-center p-4"><i class="fas fa-spinner fa-spin text-cyan-400 text-2xl"></i></div> </div>
-                </div>
-                <div>
-                    <h4 class="font-bold text-lg text-white mb-2 text-center">Underlying Tokens</h4>
-                    <div id="tla-tokens-container"> <div class="text-center p-4"><i class="fas fa-spinner fa-spin text-cyan-400 text-2xl"></i></div> </div>
-                </div>
+            <div>
+                <h4 class="font-bold text-lg text-white mb-2 text-center">Underlying Tokens</h4>
+                <div id="tla-tokens-container"> <div class="text-center p-4"><i class="fas fa-spinner fa-spin text-cyan-400 text-2xl"></i></div> </div>
             </div>
              <a href="https://daodao.zone/dao/terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm/apps?url=https%3A%2F%2Fwww.erisprotocol.com" target="_blank" rel="noopener noreferrer" class="inline-block mt-6 bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-4 rounded-lg transition-colors w-full text-center">
                 View Deposits on Eris Protocol &rarr;
@@ -602,6 +592,73 @@
         </div>
     </div>
 
+    <!-- Snapshot Modal -->
+    <div id="snapshotModal" class="modal fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50 hidden opacity-0">
+        <div class="modal-content bg-[#1a1a1a] border border-gray-700 rounded-xl shadow-xl w-full max-w-2xl relative text-white opacity-0 scale-95 p-8 max-h-[90vh] overflow-y-auto">
+            <button class="modal-close absolute top-4 right-4 text-gray-400 hover:text-white text-3xl">&times;</button>
+            <h2 class="text-2xl font-bold text-cyan-400 mb-4">Snapshot Manager</h2>
+            
+            <div class="space-y-6">
+                <!-- TLA Token Balances Input -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-300 mb-2">
+                        TLA Token Balances <span class="text-gray-500">(paste tab-separated: TOKEN &lt;tab&gt; AMOUNT)</span>
+                    </label>
+                    <textarea id="tla-tokens-input" class="w-full h-40 bg-gray-800 border border-gray-600 rounded-lg p-3 text-white font-mono text-sm focus:border-cyan-400 focus:outline-none" placeholder="CAPA	290916.6598134378
+LUNA	39155.8974720723
+ROAR	1832769202.6573815
+ampLUNA	12246.314451128243
+ampCAPA	313947.96729
+ampROAR	505786636.43734485
+xASTRO	20607.544605"></textarea>
+                </div>
+                
+                <!-- TLA USD and APR Input -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-300 mb-2">
+                        TLA Deposit Value & APR <span class="text-gray-500">(paste from Eris)</span>
+                    </label>
+                    <textarea id="tla-usd-input" class="w-full h-24 bg-gray-800 border border-gray-600 rounded-lg p-3 text-white font-mono text-sm focus:border-cyan-400 focus:outline-none" placeholder="Your deposit
+__15.25K__$
+est. APR 58.53 %"></textarea>
+                </div>
+                
+                <!-- Preview Section -->
+                <div id="tla-preview" class="bg-gray-800/50 border border-gray-700 rounded-lg p-4 hidden">
+                    <h4 class="font-bold text-white mb-2">Preview</h4>
+                    <div id="tla-preview-content" class="text-sm text-gray-300 space-y-1"></div>
+                </div>
+                
+                <!-- Parse Button -->
+                <button id="parse-tla-btn" class="w-full bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">
+                    <i class="fas fa-eye mr-2"></i>Preview Parsed Data
+                </button>
+                
+                <!-- Status Message -->
+                <div id="snapshot-status" class="text-center text-sm hidden"></div>
+                
+                <!-- Action Buttons -->
+                <div class="flex gap-4">
+                    <button id="download-snapshot-btn" class="flex-1 bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                        <i class="fas fa-download mr-2"></i>Download Snapshot
+                    </button>
+                </div>
+                
+                <!-- Info -->
+                <div class="bg-blue-900/30 border border-blue-700 p-3 rounded-lg text-sm">
+                    <p><strong class="text-blue-300">How to use:</strong></p>
+                    <ol class="list-decimal list-inside mt-2 space-y-1 text-gray-300">
+                        <li>Paste your TLA token balances from Eris (tab-separated)</li>
+                        <li>Paste your deposit value and APR text</li>
+                        <li>Click "Preview" to verify the data</li>
+                        <li>Click "Download Snapshot" to save the weekly snapshot file</li>
+                        <li>Upload the file to GitHub: <code class="bg-gray-800 px-1 rounded">adao_json_storage</code></li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
+
 
     <footer class="border-t border-gray-800 mt-12 py-8">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-gray-500 text-sm">
@@ -627,7 +684,7 @@
                 <a href="#" id="logo-modal-trigger" class="hover:text-white hover:underline transition-colors cursor-pointer">Logos</a>
                 <a href="https://chainsco.pe/terra2/address/terra1phr9fngjv7a8an4dhmhd0u0f98wazxfnzccqtyheq4zqrrp4fpuqw3apw9" target="_blank" rel="noopener noreferrer" class="hover:text-white hover:underline transition-colors">NFT Contract</a>
                 <a href="https://github.com/SCV-Security/PublicReports/blob/b819ec669f81e603caca261931e2a4aaca1cddf7/Alliance/Alliance%20DAO%20-%20NFT%20Collection%20Contract%20-%20Audit%20Report%20v1.0.pdf" target="_blank" rel="noopener noreferrer" class="hover:text-white hover:underline transition-colors">Contract Audit</a>
-                <a id="snapshot-link" class="hover:text-white hover:underline transition-colors disabled">Download Snapshot</a>
+                <span id="snapshot-link" class="hover:text-white hover:underline transition-colors cursor-pointer">Snapshot</span>
                 <a href="tla_tool.html" class="hover:text-white hover:underline transition-colors">TLA Tool</a>
             </div>
         </div>
@@ -640,17 +697,6 @@
         let isFetching = false; // Flag to prevent multiple downloads while fetching
 
         document.addEventListener('DOMContentLoaded', () => {
-
-            // --- UI ELEMENTS ---
-            const snapshotLink = document.getElementById('snapshot-link'); // Changed from snapshotBtn
-            // Status message element removed
-
-             // Initially disable link
-             if (snapshotLink) {
-                 snapshotLink.classList.add('disabled');
-                 snapshotLink.setAttribute('aria-disabled', 'true');
-             }
-
 
             // --- CENTRAL DATA OBJECT ---
             const dashboardData = {
@@ -667,17 +713,358 @@
                 "avgDailyGain": 0.21,
               },
               "tlaDeposits": {
-                "snapshotDate": "2025-10-07T00:00:00Z",
-                "totalDeposit": 10218.54,
-                "estApr": 40.74,
-                "unclaimedRewards": 289.72,
-                "pools": [ /* ... pools data ... */ ],
-                "tokenBalances": [ /* ... token balances ... */ ]
+                "snapshotDate": null,
+                "totalDeposit": 0,
+                "estApr": 0,
+                "tokenBalances": []
               }
             };
-             // Simplified TLA data for brevity in example
-            dashboardData.tlaDeposits.pools = [ { name: "Example Pool", platform: "Example", whiteValue: 1000, whiteApr: 10, orangeValue: 500, orangeApr: 15, rewards: 10 } ];
-            dashboardData.tlaDeposits.tokenBalances = [ { name: "LUNA", amount: 1000, geckoId: "terra-luna-2"} ];
+            
+            // --- Function to fetch Avg Daily Gain from GitHub snapshots ---
+            async function fetchAvgDailyGainFromGitHub() {
+                const avgDailyGainEl = document.getElementById('avg-daily-gain');
+                const avgDailyGainSubEl = document.getElementById('avg-daily-gain-subtext');
+                const avgDailyGainTitleEl = document.getElementById('avg-daily-gain-title');
+                
+                try {
+                    // Calculate current epoch number
+                    // Epoch 162 started Monday Dec 1, 2025. Epochs change every Monday at 00:00 UTC.
+                    const epochReferenceDate = new Date('2025-12-01T00:00:00Z'); // Start of epoch 162
+                    const epochReferenceNumber = 162;
+                    const now = new Date();
+                    const msPerWeek = 7 * 24 * 60 * 60 * 1000;
+                    const weeksDiff = Math.floor((now - epochReferenceDate) / msPerWeek);
+                    const currentEpoch = epochReferenceNumber + weeksDiff;
+                    
+                    // We need the two most recent COMPLETED epochs
+                    // If we're in epoch N, the most recent completed is N-1, and before that is N-2
+                    // The _end.json files only exist for completed epochs
+                    const newestCompletedEpoch = currentEpoch - 1;
+                    const olderCompletedEpoch = currentEpoch - 2;
+                    
+                    console.log(`DEBUG: Current epoch: ${currentEpoch}, fetching completed epoch snapshots ${olderCompletedEpoch} and ${newestCompletedEpoch}`);
+                    
+                    const baseUrl = 'https://raw.githubusercontent.com/defipatriot/adao_json_storage/main';
+                    const newestUrl = `${baseUrl}/adao-snapshot_${newestCompletedEpoch}_end.json`;
+                    const olderUrl = `${baseUrl}/adao-snapshot_${olderCompletedEpoch}_end.json`;
+                    
+                    const [newestResponse, olderResponse] = await Promise.all([
+                        fetch(newestUrl).catch(e => { console.error("Newest epoch fetch error:", e); return null; }),
+                        fetch(olderUrl).catch(e => { console.error("Older epoch fetch error:", e); return null; })
+                    ]);
+                    
+                    if (!newestResponse?.ok || !olderResponse?.ok) {
+                        console.warn("DEBUG: Could not fetch one or both epoch snapshots, falling back to static value");
+                        throw new Error("Epoch snapshot fetch failed");
+                    }
+                    
+                    const newestData = await newestResponse.json();
+                    const olderData = await olderResponse.json();
+                    
+                    console.log("DEBUG: Newest snapshot:", newestData.timestamp, "Backing:", newestData.backingPerNft_LUNA);
+                    console.log("DEBUG: Older snapshot:", olderData.timestamp, "Backing:", olderData.backingPerNft_LUNA);
+                    
+                    // Calculate backing difference
+                    const backingDiff = newestData.backingPerNft_LUNA - olderData.backingPerNft_LUNA;
+                    
+                    // Calculate time difference in days
+                    const newestTime = new Date(newestData.timestamp);
+                    const olderTime = new Date(olderData.timestamp);
+                    const timeDiffMs = newestTime - olderTime;
+                    const timeDiffDays = timeDiffMs / (1000 * 60 * 60 * 24);
+                    
+                    // Calculate average daily gain
+                    const avgDailyGain = timeDiffDays > 0 ? backingDiff / timeDiffDays : 0;
+                    
+                    console.log(`DEBUG: Backing diff: ${backingDiff.toFixed(6)}, Days: ${timeDiffDays.toFixed(2)}, Avg Daily: ${avgDailyGain.toFixed(4)}`);
+                    
+                    // Update the tile with live data
+                    if (avgDailyGainEl) {
+                        const displayValue = avgDailyGain >= 0 ? `+${avgDailyGain.toFixed(2)}` : avgDailyGain.toFixed(2);
+                        avgDailyGainEl.textContent = displayValue;
+                    }
+                    
+                    if (avgDailyGainSubEl) {
+                        avgDailyGainSubEl.textContent = '7d Avg';
+                    }
+                    
+                    // Update the title with green pulse dot (live indicator)
+                    if (avgDailyGainTitleEl) {
+                        const existingDot = avgDailyGainTitleEl.querySelector('.pulse-dot, .static-dot-red');
+                        if (existingDot) existingDot.remove();
+                        const newDot = document.createElement('span');
+                        newDot.className = 'pulse-dot ml-1';
+                        avgDailyGainTitleEl.appendChild(newDot);
+                    }
+                    
+                    return true; // Success
+                    
+                } catch (error) {
+                    console.error("DEBUG: Failed to fetch avg daily gain from GitHub:", error);
+                    
+                    // Fall back to static snapshot value
+                    const { keyMetrics } = dashboardData;
+                    if (avgDailyGainEl && avgDailyGainEl.innerHTML.includes('fa-spinner')) {
+                        avgDailyGainEl.textContent = `+${keyMetrics.avgDailyGain}`;
+                    }
+                    if (avgDailyGainSubEl && avgDailyGainSubEl.innerHTML.includes('fa-spinner')) {
+                        avgDailyGainSubEl.textContent = '(Snapshot)';
+                    }
+                    // Update with red static dot (snapshot indicator)
+                    if (avgDailyGainTitleEl) {
+                        const existingDot = avgDailyGainTitleEl.querySelector('.pulse-dot, .static-dot-red');
+                        if (existingDot) existingDot.remove();
+                        const newDot = document.createElement('span');
+                        newDot.className = 'static-dot-red ml-1';
+                        avgDailyGainTitleEl.appendChild(newDot);
+                    }
+                    
+                    return false; // Failed
+                }
+            }
+            
+            // --- Function to fetch TLA data from GitHub snapshots ---
+            async function fetchTlaFromGitHub() {
+                try {
+                    // Calculate current epoch number (same logic as avg daily gain)
+                    const epochReferenceDate = new Date('2025-12-01T00:00:00Z');
+                    const epochReferenceNumber = 162;
+                    const now = new Date();
+                    const msPerWeek = 7 * 24 * 60 * 60 * 1000;
+                    const weeksDiff = Math.floor((now - epochReferenceDate) / msPerWeek);
+                    const currentEpoch = epochReferenceNumber + weeksDiff;
+                    const newestCompletedEpoch = currentEpoch - 1;
+                    
+                    console.log(`DEBUG: Fetching TLA data from epoch ${newestCompletedEpoch}`);
+                    
+                    const baseUrl = 'https://raw.githubusercontent.com/defipatriot/adao_json_storage/main';
+                    const snapshotUrl = `${baseUrl}/adao-snapshot_${newestCompletedEpoch}_end.json`;
+                    
+                    const response = await fetch(snapshotUrl);
+                    if (!response?.ok) {
+                        console.warn("DEBUG: Could not fetch TLA snapshot");
+                        return null;
+                    }
+                    
+                    const snapshotData = await response.json();
+                    
+                    // Check if TLA data exists in the snapshot
+                    if (snapshotData.tlaDeposits) {
+                        console.log("DEBUG: TLA data found in snapshot:", snapshotData.tlaDeposits);
+                        return {
+                            data: snapshotData.tlaDeposits,
+                            epoch: newestCompletedEpoch,
+                            timestamp: snapshotData.timestamp
+                        };
+                    }
+                    
+                    return null;
+                } catch (error) {
+                    console.error("DEBUG: Failed to fetch TLA from GitHub:", error);
+                    return null;
+                }
+            }
+            
+            // --- Function to update TLA tile from GitHub data ---
+            async function updateTlaFromGitHub() {
+                const tlaResult = await fetchTlaFromGitHub();
+                
+                if (tlaResult && tlaResult.data) {
+                    const tlaData = tlaResult.data;
+                    
+                    // Update the dashboardData with fetched TLA data
+                    dashboardData.tlaDeposits.totalDeposit = tlaData.totalDeposit || tlaData.totalDeposit_USD || dashboardData.tlaDeposits.totalDeposit;
+                    dashboardData.tlaDeposits.estApr = tlaData.estApr || dashboardData.tlaDeposits.estApr;
+                    dashboardData.tlaDeposits.snapshotDate = tlaResult.timestamp;
+                    
+                    if (tlaData.tokenBalances && Array.isArray(tlaData.tokenBalances)) {
+                        dashboardData.tlaDeposits.tokenBalances = tlaData.tokenBalances;
+                    }
+                    
+                    console.log(`DEBUG: Updated TLA data from epoch ${tlaResult.epoch}`);
+                    return true;
+                }
+                
+                return false;
+            }
+            
+            // --- Parsed TLA data holder ---
+            let parsedTlaData = null;
+            
+            // --- Setup Snapshot Modal ---
+            function setupSnapshotModal() {
+                const tokensInput = document.getElementById('tla-tokens-input');
+                const usdInput = document.getElementById('tla-usd-input');
+                const parseBtn = document.getElementById('parse-tla-btn');
+                const downloadBtn = document.getElementById('download-snapshot-btn');
+                const previewDiv = document.getElementById('tla-preview');
+                const previewContent = document.getElementById('tla-preview-content');
+                const statusDiv = document.getElementById('snapshot-status');
+                
+                if (!parseBtn || !downloadBtn) return;
+                
+                // Parse button handler
+                parseBtn.addEventListener('click', () => {
+                    try {
+                        // Parse token balances
+                        const tokensText = tokensInput.value.trim();
+                        const tokenBalances = [];
+                        const geckoIds = {
+                            'LUNA': 'terra-luna-2',
+                            'ampLUNA': 'eris-amplified-luna',
+                            'CAPA': 'capapult',
+                            'ROAR': 'lion-dao',
+                            'xASTRO': 'astroport-fi',
+                            'ASTRO': 'astroport-fi',
+                            'ampCAPA': null,
+                            'ampROAR': null
+                        };
+                        
+                        if (tokensText) {
+                            const lines = tokensText.split('\n');
+                            for (const line of lines) {
+                                const parts = line.split(/\t+/);
+                                if (parts.length >= 2) {
+                                    const name = parts[0].trim();
+                                    const amount = parseFloat(parts[1].trim());
+                                    if (name && !isNaN(amount)) {
+                                        tokenBalances.push({
+                                            name: name,
+                                            amount: amount,
+                                            geckoId: geckoIds[name] || null
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Parse USD and APR
+                        const usdText = usdInput.value.trim();
+                        let totalDeposit = 0;
+                        let estApr = 0;
+                        
+                        if (usdText) {
+                            // Extract USD value - handles multiple formats:
+                            // "14 765.85$" (space thousands separator)
+                            // "__15.25K__$" (with underscores and K/M/B multiplier)
+                            // "14,765.85$" (comma thousands separator)
+                            
+                            // First try: number with spaces/commas followed by $
+                            let usdMatch = usdText.match(/([\d\s,]+\.?\d*)\s*\$/);
+                            if (usdMatch) {
+                                // Remove spaces and commas, parse as float
+                                let value = parseFloat(usdMatch[1].replace(/[\s,]/g, ''));
+                                totalDeposit = value;
+                            } else {
+                                // Second try: __15.25K__$ format
+                                usdMatch = usdText.match(/__?([\d.,]+)([KMB])?__?\s*\$/i);
+                                if (usdMatch) {
+                                    let value = parseFloat(usdMatch[1].replace(',', ''));
+                                    const multiplier = usdMatch[2] ? { 'K': 1000, 'M': 1000000, 'B': 1000000000 }[usdMatch[2].toUpperCase()] : 1;
+                                    totalDeposit = value * (multiplier || 1);
+                                }
+                            }
+                            
+                            // Extract APR (e.g., "est. APR 58.53 %" or "est. APR 58.75 %")
+                            const aprMatch = usdText.match(/APR\s*([\d.]+)\s*%/i);
+                            if (aprMatch) {
+                                estApr = parseFloat(aprMatch[1]);
+                            }
+                        }
+                        
+                        parsedTlaData = {
+                            tokenBalances: tokenBalances,
+                            totalDeposit: totalDeposit,
+                            estApr: estApr,
+                            snapshotDate: new Date().toISOString()
+                        };
+                        
+                        // Show preview
+                        let previewHtml = `<p><strong>Total Deposit:</strong> $${totalDeposit.toLocaleString()}</p>`;
+                        previewHtml += `<p><strong>Est. APR:</strong> ${estApr.toFixed(2)}%</p>`;
+                        previewHtml += `<p><strong>Tokens (${tokenBalances.length}):</strong></p>`;
+                        previewHtml += '<ul class="list-disc list-inside ml-2">';
+                        for (const token of tokenBalances) {
+                            previewHtml += `<li>${token.name}: ${token.amount.toLocaleString()}</li>`;
+                        }
+                        previewHtml += '</ul>';
+                        
+                        previewContent.innerHTML = previewHtml;
+                        previewDiv.classList.remove('hidden');
+                        
+                        // Enable download button if we have valid data
+                        if (totalDeposit > 0 || tokenBalances.length > 0) {
+                            downloadBtn.disabled = false;
+                            statusDiv.textContent = '✓ Data parsed successfully!';
+                            statusDiv.className = 'text-center text-sm text-green-400';
+                            statusDiv.classList.remove('hidden');
+                        }
+                        
+                    } catch (error) {
+                        console.error("Parse error:", error);
+                        statusDiv.textContent = '✗ Error parsing data: ' + error.message;
+                        statusDiv.className = 'text-center text-sm text-red-400';
+                        statusDiv.classList.remove('hidden');
+                    }
+                });
+                
+                // Download button handler
+                downloadBtn.addEventListener('click', () => {
+                    if (!currentSnapshotData) {
+                        statusDiv.textContent = '✗ No live data available. Please wait for page to load.';
+                        statusDiv.className = 'text-center text-sm text-red-400';
+                        statusDiv.classList.remove('hidden');
+                        return;
+                    }
+                    
+                    try {
+                        // Calculate current epoch for filename
+                        const epochReferenceDate = new Date('2025-12-01T00:00:00Z');
+                        const epochReferenceNumber = 162;
+                        const now = new Date();
+                        const msPerWeek = 7 * 24 * 60 * 60 * 1000;
+                        const weeksDiff = Math.floor((now - epochReferenceDate) / msPerWeek);
+                        const currentEpoch = epochReferenceNumber + weeksDiff;
+                        
+                        // Build the snapshot with TLA data
+                        const snapshotToDownload = { ...currentSnapshotData };
+                        
+                        // Add TLA data if parsed
+                        if (parsedTlaData) {
+                            snapshotToDownload.tlaDeposits = {
+                                totalDeposit: parsedTlaData.totalDeposit,
+                                totalDeposit_USD: parsedTlaData.totalDeposit,
+                                estApr: parsedTlaData.estApr,
+                                tokenBalances: parsedTlaData.tokenBalances,
+                                snapshotDate: parsedTlaData.snapshotDate
+                            };
+                            snapshotToDownload.tlaDepositsTotal_USD = parsedTlaData.totalDeposit;
+                        }
+                        
+                        const jsonString = JSON.stringify(snapshotToDownload, null, 2);
+                        const blob = new Blob([jsonString], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.style.display = 'none';
+                        a.href = url;
+                        a.download = `adao-snapshot_${currentEpoch}_end.json`;
+                        document.body.appendChild(a);
+                        a.click();
+                        window.URL.revokeObjectURL(url);
+                        document.body.removeChild(a);
+                        
+                        statusDiv.textContent = `✓ Downloaded: adao-snapshot_${currentEpoch}_end.json`;
+                        statusDiv.className = 'text-center text-sm text-green-400';
+                        statusDiv.classList.remove('hidden');
+                        
+                    } catch (error) {
+                        console.error("Download error:", error);
+                        statusDiv.textContent = '✗ Error downloading: ' + error.message;
+                        statusDiv.className = 'text-center text-sm text-red-400';
+                        statusDiv.classList.remove('hidden');
+                    }
+                });
+            }
             
             const tokenLogos = { /* ... token logos ... */ 
                 "LUNA": "https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Luna.webp?raw=true",
@@ -738,13 +1125,6 @@
                  if (isFetching) return; 
                  isFetching = true;
                  console.log("DEBUG: Starting fetchLiveOnChainData..."); 
-                 // Disable snapshot link during fetch
-                 if (snapshotLink) {
-                     snapshotLink.classList.add('disabled');
-                     snapshotLink.setAttribute('aria-disabled', 'true');
-                     // Optionally change text while loading
-                     // snapshotLink.textContent = "Loading Data..."; 
-                 }
 
 
                 // ... (API URLs setup remains the same) ...
@@ -975,12 +1355,6 @@
 
                     // Store the result globally
                     currentSnapshotData = snapshotResult; 
-                     // Enable snapshot link and update text
-                     if (snapshotLink) {
-                         snapshotLink.classList.remove('disabled');
-                         snapshotLink.removeAttribute('aria-disabled');
-                         snapshotLink.textContent = "Download Snapshot"; // Change text back
-                     }
 
 
                 } catch (error) {
@@ -988,12 +1362,6 @@
                     // --- Update snapshot status on error ---
                      snapshotResult = { timestamp: new Date().toISOString(), status: "error", error: error.message };
                      currentSnapshotData = snapshotResult; 
-                     // Keep snapshot link disabled and update text
-                     if (snapshotLink) {
-                         snapshotLink.classList.add('disabled');
-                         snapshotLink.setAttribute('aria-disabled', 'true');
-                         snapshotLink.textContent = "Snapshot Error"; 
-                     }
 
                     // ... (rest of the error handling for UI remains the same) ...
                      const { keyMetrics } = dashboardData;
@@ -1014,13 +1382,28 @@
                      console.log("DEBUG: Finished fetchLiveOnChainData attempt."); // DEBUG LOG
                       // Update static tiles regardless of success/failure, if needed
                        console.log("DEBUG: Updating static tiles (final check)..."); 
-                       const { keyMetrics } = dashboardData;
-                       // This is now the *only* place avg-daily-gain is updated
-                       updateTile('avg-daily-gain', `+${keyMetrics.avgDailyGain}`, false, { titleId: 'avg-daily-gain-title'});
-                        const avgDailyGainSubEl = document.getElementById('avg-daily-gain-subtext');
-                        if (avgDailyGainSubEl && avgDailyGainSubEl.innerHTML.includes('fa-spinner')) {
-                           avgDailyGainSubEl.textContent = `(Snapshot)`;
-                        }
+                       
+                       // Fetch avg daily gain from GitHub snapshots (handles its own fallback to static)
+                       fetchAvgDailyGainFromGitHub();
+                       
+                       // Fetch TLA data from GitHub snapshots and update tile
+                       updateTlaFromGitHub().then(success => {
+                           if (success) {
+                               // Re-run buildTlaDeposits with the updated data (no price data needed for snapshot values)
+                               buildTlaDeposits(null);
+                               // Update the title indicator to show it's from snapshot
+                               const tlaTitleEl = document.getElementById('dao-tla-title');
+                               if (tlaTitleEl) {
+                                   const existingDot = tlaTitleEl.querySelector('.pulse-dot, .static-dot-red');
+                                   if (existingDot) existingDot.remove();
+                                   const newDot = document.createElement('span');
+                                   newDot.className = 'static-dot-red ml-1';
+                                   tlaTitleEl.appendChild(newDot);
+                               }
+                               console.log("DEBUG: TLA tile updated from GitHub snapshot");
+                           }
+                       });
+                       
                        const daoBrokenTotalEl = document.getElementById('dao-broken-total'); if (daoBrokenTotalEl) daoBrokenTotalEl.textContent = (1000).toLocaleString(); 
                        const supplyDaoControlledEl = document.getElementById('supply-dao-controlled'); if (supplyDaoControlledEl) supplyDaoControlledEl.textContent = (1000).toLocaleString(); 
                        console.log("DEBUG: Finished static tile update check."); 
@@ -1080,7 +1463,8 @@
                     'dao-treasury-card': 'treasuryModal',
                     'logo-modal-trigger': 'logoModal', 
                     'dao-tla-vp-card': 'tlaVpModal',
-                    'dao-tla-card': 'tlaModal'
+                    'dao-tla-card': 'tlaModal',
+                    'snapshot-link': 'snapshotModal'
                 };
 
                 const openModal = (modalId) => {
@@ -1114,6 +1498,12 @@
                     const trigger = document.getElementById(triggerId);
                     if (trigger) {
                         trigger.addEventListener('click', (e) => {
+                            // For snapshot-link (span), don't check for a tags
+                            if (triggerId === 'snapshot-link') {
+                                e.preventDefault();
+                                openModal(modalTriggers[triggerId]);
+                                return;
+                            }
                             // Prevent opening if clicking a link inside the card
                             if (e.target.tagName === 'A' || e.target.closest('a')) return;
                             openModal(modalTriggers[triggerId]);
@@ -1215,58 +1605,81 @@
                  if (totalValueEl.innerHTML.includes('fa-spinner')) { totalValueEl.textContent = '$' + totalLiveUsd.toLocaleString('en-US', {maximumFractionDigits: 0}); }
                  updateTile('dao-treasury-total', null, priceData !== null, { titleId: 'dao-treasury-title' }); 
             }
-            function buildTlaDeposits(priceData) { /* ... no changes needed ... */ 
+            function buildTlaDeposits(priceData) {
                  const tlaData = dashboardData.tlaDeposits;
                  const totalValueTileEl = document.getElementById('dao-tla-total');
                  const aprTileEl = document.getElementById('dao-tla-apr');
                  const modalTotalUsdEl = document.getElementById('tla-deposit-total-usd');
                  const modalTotalAprEl = document.getElementById('tla-deposit-total-apr');
-                 const modalUnclaimedEl = document.getElementById('tla-unclaimed-rewards');
                  const snapshotDateEl = document.getElementById('tla-snapshot-date');
-                 const poolsContainer = document.getElementById('tla-pools-container');
                  const tokensContainer = document.getElementById('tla-tokens-container');
-                 if (!tlaData || !totalValueTileEl || !aprTileEl || !modalTotalUsdEl || !modalTotalAprEl || !modalUnclaimedEl || !snapshotDateEl || !poolsContainer || !tokensContainer) { if(totalValueTileEl) totalValueTileEl.textContent = 'Error'; if(aprTileEl) aprTileEl.textContent = ''; return; }
-                 if (totalValueTileEl.innerHTML.includes('fa-spinner')) { totalValueTileEl.textContent = `$${tlaData.totalDeposit.toLocaleString('en-US', {minimumFractionDigits: 0})}`; }
-                 if (aprTileEl.innerHTML.includes('fa-spinner')) { aprTileEl.textContent = `Est. APR ${tlaData.estApr.toFixed(2)}%`; }
+                 
+                 // Check if we have valid TLA data from GitHub snapshot
+                 const hasValidTlaData = tlaData && tlaData.tokenBalances && tlaData.tokenBalances.length > 0 && tlaData.totalDeposit > 0;
+                 
+                 if (!hasValidTlaData) {
+                     // No TLA data yet - show waiting message
+                     if (totalValueTileEl) totalValueTileEl.textContent = '--';
+                     if (aprTileEl) aprTileEl.textContent = 'Awaiting Snapshot';
+                     if (modalTotalUsdEl) modalTotalUsdEl.textContent = 'Awaiting Snapshot Data';
+                     if (modalTotalAprEl) modalTotalAprEl.textContent = '';
+                     if (snapshotDateEl) snapshotDateEl.textContent = '--';
+                     if (tokensContainer) tokensContainer.innerHTML = '<p class="text-center text-gray-500 p-4">No TLA data available yet. Use the Snapshot tool to add data.</p>';
+                     updateTile('dao-tla-total', null, false, { titleId: 'dao-tla-title' }); 
+                     return;
+                 }
+                 
+                 // Update tile values
+                 if (totalValueTileEl && totalValueTileEl.innerHTML.includes('fa-spinner')) { 
+                     totalValueTileEl.textContent = `$${tlaData.totalDeposit.toLocaleString('en-US', {minimumFractionDigits: 0})}`; 
+                 }
+                 if (aprTileEl && aprTileEl.innerHTML.includes('fa-spinner')) { 
+                     aprTileEl.textContent = `Est. APR ${tlaData.estApr.toFixed(2)}%`; 
+                 }
                  updateTile('dao-tla-total', null, false, { titleId: 'dao-tla-title' }); 
-                modalTotalUsdEl.textContent = `$${tlaData.totalDeposit.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-                modalTotalAprEl.textContent = `Est. APR ${tlaData.estApr.toFixed(2)}%`;
-                modalUnclaimedEl.textContent = `Unclaimed Rewards: $${tlaData.unclaimedRewards.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-                snapshotDateEl.textContent = new Date(tlaData.snapshotDate).toLocaleDateString();
-                let poolsHtml = '';
-                tlaData.pools.forEach(pool => {
-                    poolsHtml += `
-                        <div class="bg-gray-800/50 p-3 rounded-lg text-sm">
-                            <p class="font-bold text-white">${pool.name}</p>
-                            <p class="text-xs text-gray-400">${pool.platform}</p>
-                            <div class="border-t border-gray-600 mt-2 pt-2 space-y-1">
-                                <div class="flex justify-between"><span>Non-Compounding:</span> <span class="font-mono">$${pool.whiteValue?.toLocaleString() || 'N/A'} @ ${pool.whiteApr?.toFixed(2) || 'N/A'}%</span></div>
-                                ${pool.orangeValue ? `<div class="flex justify-between"><span class="text-yellow-400">Compounding:</span> <span class="font-mono text-yellow-400">$${pool.orangeValue.toLocaleString()} @ ${pool.orangeApr.toFixed(2)}%</span></div>` : ''}
-                            </div></div>`; });
-                poolsContainer.innerHTML = poolsHtml;
-                let tokensHtml = '<table class="w-full text-left text-sm"><thead><tr><th class="p-1">Token</th><th class="p-1 text-right">Balance (Snapshot)</th><th class="p-1 text-right">Live Est. Value</th></tr></thead><tbody>';
-                let totalLiveEstValue = 0;
-                const ampRatios = { "ampCAPA": { ratio: 1.1055, baseGeckoId: 'capapult' }, "ampROAR": { ratio: 1.1087, baseGeckoId: 'lion-dao' } };
+                 
+                 // Update modal header
+                 if (modalTotalUsdEl) modalTotalUsdEl.textContent = `$${tlaData.totalDeposit.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                 if (modalTotalAprEl) modalTotalAprEl.textContent = `Est. APR ${tlaData.estApr.toFixed(2)}%`;
+                 if (snapshotDateEl && tlaData.snapshotDate) snapshotDateEl.textContent = new Date(tlaData.snapshotDate).toLocaleDateString();
+                 
+                 // Build tokens table
+                 let tokensHtml = '<table class="w-full text-left text-sm"><thead><tr><th class="p-1">Token</th><th class="p-1 text-right">Balance (Snapshot)</th><th class="p-1 text-right">Live Est. Value</th></tr></thead><tbody>';
+                 let totalLiveEstValue = 0;
+                 const ampRatios = { "ampCAPA": { ratio: 1.1055, baseGeckoId: 'capapult' }, "ampROAR": { ratio: 1.1087, baseGeckoId: 'lion-dao' } };
+                 
                  tlaData.tokenBalances.forEach(token => {
-                     const logoUrl = tokenLogos[token.name]; let liveValue = null;
+                     const logoUrl = tokenLogos[token.name]; 
+                     let liveValue = null;
+                     
                      if (priceData) { 
                          const geckoId = token.geckoId;
-                         if (geckoId && priceData[geckoId] && typeof priceData[geckoId].usd === 'number') { liveValue = token.amount * priceData[geckoId].usd; } 
-                         else if (ampRatios[token.name]) {
-                             const ratioInfo = ampRatios[token.name]; const baseTokenPrice = priceData[ratioInfo.baseGeckoId]?.usd;
-                             if(typeof baseTokenPrice === 'number'){ const baseTokenAmount = token.amount * ratioInfo.ratio; liveValue = baseTokenAmount * baseTokenPrice; }
+                         if (geckoId && priceData[geckoId] && typeof priceData[geckoId].usd === 'number') { 
+                             liveValue = token.amount * priceData[geckoId].usd; 
+                         } else if (ampRatios[token.name]) {
+                             const ratioInfo = ampRatios[token.name]; 
+                             const baseTokenPrice = priceData[ratioInfo.baseGeckoId]?.usd;
+                             if (typeof baseTokenPrice === 'number') { 
+                                 const baseTokenAmount = token.amount * ratioInfo.ratio; 
+                                 liveValue = baseTokenAmount * baseTokenPrice; 
+                             }
                          }
-                          if (typeof liveValue === 'number') { totalLiveEstValue += liveValue; }
+                         if (typeof liveValue === 'number') { totalLiveEstValue += liveValue; }
                      }
-                      let amountFormatted = token.amount < 0.0001 && token.amount > 0 ? token.amount.toExponential(2) : token.amount < 1 ? token.amount.toFixed(6) : token.amount.toLocaleString('en-US', { maximumFractionDigits: 2 }); 
+                     
+                     let amountFormatted = token.amount < 0.0001 && token.amount > 0 ? token.amount.toExponential(2) : token.amount < 1 ? token.amount.toFixed(6) : token.amount.toLocaleString('en-US', { maximumFractionDigits: 2 }); 
                      tokensHtml += `
                         <tr class="border-t border-gray-700">
                             <td class="p-1 font-bold flex items-center gap-2">
                                 ${logoUrl ? `<img src="${logoUrl}" alt="${token.name}" class="h-5 w-5 rounded-full" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-block';"><span style="display:none;" class="h-5 w-5"></span>` : '<div class="h-5 w-5 inline-block"></div>'} ${token.name}
-                            </td> <td class="p-1 text-right font-mono">${amountFormatted}</td> <td class="p-1 text-right font-mono">${liveValue !== null ? '$' + liveValue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '<span class="text-gray-500">N/A</span>'}</td>
-                        </tr>`; });
-                tokensHtml += `</tbody><tfoot class="sticky bottom-0 bg-gray-900 z-10"><tr class="border-t-2 border-cyan-400 font-bold"><td class="p-1" colspan="2">Total Live Est. Value</td><td class="p-1 text-right font-mono text-cyan-400">$${totalLiveEstValue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td></tr></tfoot></table>`;
-                tokensContainer.innerHTML = tokensHtml;
+                            </td> 
+                            <td class="p-1 text-right font-mono">${amountFormatted}</td> 
+                            <td class="p-1 text-right font-mono">${liveValue !== null ? '$' + liveValue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '<span class="text-gray-500">N/A</span>'}</td>
+                        </tr>`; 
+                 });
+                 
+                 tokensHtml += `</tbody><tfoot class="sticky bottom-0 bg-gray-900 z-10"><tr class="border-t-2 border-cyan-400 font-bold"><td class="p-1" colspan="2">Total Live Est. Value</td><td class="p-1 text-right font-mono text-cyan-400">$${totalLiveEstValue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td></tr></tfoot></table>`;
+                 if (tokensContainer) tokensContainer.innerHTML = tokensHtml;
             }
             function buildTlaVp(priceData, ampLunaToLunaRate) { /* ... no changes needed ... */ 
                 const container = document.getElementById('tla-vp-locks-container');
@@ -1355,63 +1768,11 @@
             function setupInfoModalsPlaceholder() { /* REMOVED */ } 
             function buildLogoModalPlaceholder() { /* REMOVED */ }
 
-             // --- Snapshot Download Function ---
-             function downloadSnapshot() {
-                 console.log("DEBUG: Download button clicked."); 
-                 if (!currentSnapshotData) {
-                     console.error("DEBUG: No snapshot data available to download."); 
-                     // Optionally update link text briefly on error
-                     if(snapshotLink) snapshotLink.textContent = "Error: No Data";
-                     setTimeout(() => { if(snapshotLink) snapshotLink.textContent = "Snapshot Error"; }, 1500);
-                     return;
-                 }
-                 if (currentSnapshotData.status !== "success") {
-                     console.error("DEBUG: Snapshot data status is not 'success'.", currentSnapshotData); 
-                     if(snapshotLink) snapshotLink.textContent = "Error: Fetch Failed";
-                     setTimeout(() => { if(snapshotLink) snapshotLink.textContent = "Snapshot Error"; }, 1500);
-                     return;
-                 }
-
-                 try {
-                     const jsonString = JSON.stringify(currentSnapshotData, null, 2); 
-                     const blob = new Blob([jsonString], { type: 'application/json' });
-                     const url = URL.createObjectURL(blob);
-                     const a = document.createElement('a');
-                     a.style.display = 'none'; a.href = url;
-                     const date = new Date(currentSnapshotData.timestamp).toISOString().split('T')[0];
-                     a.download = `adao-snapshot-${date}.json`;
-                     document.body.appendChild(a); a.click();
-                     window.URL.revokeObjectURL(url); document.body.removeChild(a);
-                     console.log("DEBUG: Snapshot download triggered."); 
-                     // Optionally update link text briefly on success
-                      if(snapshotLink) snapshotLink.textContent = "Downloaded!";
-                      setTimeout(() => { if(snapshotLink) snapshotLink.textContent = "Download Snapshot"; }, 1500);
-
-                 } catch (error) {
-                      console.error("DEBUG: Error creating or downloading snapshot file:", error); 
-                       if(snapshotLink) snapshotLink.textContent = "Download Error";
-                       setTimeout(() => { if(snapshotLink) snapshotLink.textContent = "Download Snapshot"; }, 1500);
-                 }
-             }
-
-
             // --- Main Execution ---
             updateUI(); // Initial UI setup with static data & trigger live fetch
             setupInfoModals(); // Setup general info modals
             buildLogoModal(); // Build the logo modal content
-            
-            // --- Attach Snapshot Link Listener ---
-             if (snapshotLink) {
-                 snapshotLink.addEventListener('click', (e) => {
-                     e.preventDefault(); // Prevent default link behavior
-                     // Only download if not disabled
-                     if (!snapshotLink.classList.contains('disabled')) {
-                         downloadSnapshot();
-                     }
-                 });
-             } else {
-                 console.warn("Snapshot link not found.");
-             }
+            setupSnapshotModal(); // Setup snapshot modal functionality
 
             // --- Disclaimer Banner Logic ---
             const banner = document.getElementById('disclaimer-banner');
