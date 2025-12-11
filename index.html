@@ -839,14 +839,18 @@ est. APR 58.53 %"></textarea>
                     
                     const baseUrl = 'https://raw.githubusercontent.com/defipatriot/adao_json_storage/main';
                     const snapshotUrl = `${baseUrl}/adao-snapshot_${newestCompletedEpoch}_end.json`;
+                    console.log(`DEBUG: TLA fetch URL: ${snapshotUrl}`);
                     
                     const response = await fetch(snapshotUrl);
+                    console.log(`DEBUG: TLA fetch response status: ${response?.status}`);
+                    
                     if (!response?.ok) {
                         console.warn("DEBUG: Could not fetch TLA snapshot");
                         return null;
                     }
                     
                     const snapshotData = await response.json();
+                    console.log("DEBUG: TLA snapshot loaded, keys:", Object.keys(snapshotData));
                     
                     // Check if TLA data exists in the snapshot
                     if (snapshotData.tlaDeposits) {
@@ -856,6 +860,8 @@ est. APR 58.53 %"></textarea>
                             epoch: newestCompletedEpoch,
                             timestamp: snapshotData.timestamp
                         };
+                    } else {
+                        console.log("DEBUG: No tlaDeposits key found in snapshot");
                     }
                     
                     return null;
