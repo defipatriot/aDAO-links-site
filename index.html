@@ -619,8 +619,26 @@ xASTRO	20607.544605"></textarea>
                         TLA Deposit Value & APR <span class="text-gray-500">(paste from Eris)</span>
                     </label>
                     <textarea id="tla-usd-input" class="w-full h-24 bg-gray-800 border border-gray-600 rounded-lg p-3 text-white font-mono text-sm focus:border-cyan-400 focus:outline-none" placeholder="Your deposit
-__15.25K__$
+14 765.85$
 est. APR 58.53 %"></textarea>
+                </div>
+                
+                <!-- Amp Token Ratios -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-300 mb-2">
+                        Amp Token Ratios <span class="text-gray-500">(for tokens without CoinGecko prices)</span>
+                    </label>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1">ampCAPA → CAPA</label>
+                            <input type="number" step="0.0001" id="ratio-ampCapa" class="w-full bg-gray-800 border border-gray-600 rounded-lg p-2 text-white font-mono text-sm focus:border-cyan-400 focus:outline-none" value="1.1055" placeholder="1.1055">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1">ampROAR → ROAR</label>
+                            <input type="number" step="0.0001" id="ratio-ampRoar" class="w-full bg-gray-800 border border-gray-600 rounded-lg p-2 text-white font-mono text-sm focus:border-cyan-400 focus:outline-none" value="1.1087" placeholder="1.1087">
+                        </div>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1">ampLUNA has its own CoinGecko price, no ratio needed.</p>
                 </div>
                 
                 <!-- Preview Section -->
@@ -979,16 +997,25 @@ est. APR 58.53 %"></textarea>
                             }
                         }
                         
+                        // Get amp token ratios from inputs (only for tokens without CoinGecko prices)
+                        const ratioAmpCapa = parseFloat(document.getElementById('ratio-ampCapa')?.value) || 1.1055;
+                        const ratioAmpRoar = parseFloat(document.getElementById('ratio-ampRoar')?.value) || 1.1087;
+                        
                         parsedTlaData = {
                             tokenBalances: tokenBalances,
                             totalDeposit: totalDeposit,
                             estApr: estApr,
-                            snapshotDate: new Date().toISOString()
+                            snapshotDate: new Date().toISOString(),
+                            ampRatios: {
+                                ampCAPA: ratioAmpCapa,
+                                ampROAR: ratioAmpRoar
+                            }
                         };
                         
                         // Show preview
                         let previewHtml = `<p><strong>Total Deposit:</strong> $${totalDeposit.toLocaleString()}</p>`;
                         previewHtml += `<p><strong>Est. APR:</strong> ${estApr.toFixed(2)}%</p>`;
+                        previewHtml += `<p><strong>Amp Ratios:</strong> ampCAPA=${ratioAmpCapa}, ampROAR=${ratioAmpRoar}</p>`;
                         previewHtml += `<p><strong>Tokens (${tokenBalances.length}):</strong></p>`;
                         previewHtml += '<ul class="list-disc list-inside ml-2">';
                         for (const token of tokenBalances) {
@@ -1036,6 +1063,18 @@ est. APR 58.53 %"></textarea>
                         // Build the snapshot with TLA data
                         const snapshotToDownload = { ...currentSnapshotData };
                         
+                        // Capture token prices at snapshot time
+                        const tokenPricesAtSnapshot = {};
+                        if (cachedPriceData) {
+                            const priceIds = ['terra-luna-2', 'eris-amplified-luna', 'capapult', 'lion-dao', 'astroport-fi'];
+                            const priceNames = { 'terra-luna-2': 'LUNA', 'eris-amplified-luna': 'ampLUNA', 'capapult': 'CAPA', 'lion-dao': 'ROAR', 'astroport-fi': 'xASTRO' };
+                            for (const id of priceIds) {
+                                if (cachedPriceData[id]?.usd) {
+                                    tokenPricesAtSnapshot[priceNames[id]] = cachedPriceData[id].usd;
+                                }
+                            }
+                        }
+                        
                         // Add TLA data if parsed
                         if (parsedTlaData) {
                             snapshotToDownload.tlaDeposits = {
@@ -1043,7 +1082,9 @@ est. APR 58.53 %"></textarea>
                                 totalDeposit_USD: parsedTlaData.totalDeposit,
                                 estApr: parsedTlaData.estApr,
                                 tokenBalances: parsedTlaData.tokenBalances,
-                                snapshotDate: parsedTlaData.snapshotDate
+                                snapshotDate: parsedTlaData.snapshotDate,
+                                ampRatios: parsedTlaData.ampRatios,
+                                tokenPricesAtSnapshot: tokenPricesAtSnapshot
                             };
                             snapshotToDownload.tlaDepositsTotal_USD = parsedTlaData.totalDeposit;
                         }
@@ -1652,24 +1693,62 @@ est. APR 58.53 %"></textarea>
                  if (snapshotDateEl && tlaData.snapshotDate) snapshotDateEl.textContent = new Date(tlaData.snapshotDate).toLocaleDateString();
                  
                  // Build tokens table
-                 let tokensHtml = '<table class="w-full text-left text-sm"><thead><tr><th class="p-1">Token</th><th class="p-1 text-right">Balance (Snapshot)</th><th class="p-1 text-right">Live Est. Value</th></tr></thead><tbody>';
+                 let tokensHtml = '<table class="w-full text-left text-sm"><thead><tr><th class="p-1">Token</th><th class="p-1 text-right">Balance</th><th class="p-1 text-right">Price</th><th class="p-1 text-right">Value</th></tr></thead><tbody>';
                  let totalLiveEstValue = 0;
-                 const ampRatios = { "ampCAPA": { ratio: 1.1055, baseGeckoId: 'capapult' }, "ampROAR": { ratio: 1.1087, baseGeckoId: 'lion-dao' } };
+                 
+                 // Use ratios from snapshot if available, otherwise use defaults
+                 const snapshotRatios = tlaData.ampRatios || {};
+                 const ampRatios = { 
+                     "ampCAPA": { ratio: snapshotRatios.ampCAPA || 1.1055, baseGeckoId: 'capapult' }, 
+                     "ampROAR": { ratio: snapshotRatios.ampROAR || 1.1087, baseGeckoId: 'lion-dao' } 
+                 };
                  
                  tlaData.tokenBalances.forEach(token => {
                      const logoUrl = tokenLogos[token.name]; 
                      let liveValue = null;
+                     let tokenPrice = null;
+                     let priceDisplay = '<span class="text-gray-500">N/A</span>';
                      
                      if (priceData) { 
                          const geckoId = token.geckoId;
                          if (geckoId && priceData[geckoId] && typeof priceData[geckoId].usd === 'number') { 
-                             liveValue = token.amount * priceData[geckoId].usd; 
+                             tokenPrice = priceData[geckoId].usd;
+                             liveValue = token.amount * tokenPrice; 
+                             // Format price based on magnitude - always show decimals, not scientific notation
+                             if (tokenPrice < 0.0000001) {
+                                 priceDisplay = '$' + tokenPrice.toFixed(10);
+                             } else if (tokenPrice < 0.000001) {
+                                 priceDisplay = '$' + tokenPrice.toFixed(9);
+                             } else if (tokenPrice < 0.00001) {
+                                 priceDisplay = '$' + tokenPrice.toFixed(8);
+                             } else if (tokenPrice < 0.0001) {
+                                 priceDisplay = '$' + tokenPrice.toFixed(7);
+                             } else if (tokenPrice < 0.01) {
+                                 priceDisplay = '$' + tokenPrice.toFixed(6);
+                             } else {
+                                 priceDisplay = '$' + tokenPrice.toFixed(4);
+                             }
                          } else if (ampRatios[token.name]) {
                              const ratioInfo = ampRatios[token.name]; 
                              const baseTokenPrice = priceData[ratioInfo.baseGeckoId]?.usd;
                              if (typeof baseTokenPrice === 'number') { 
                                  const baseTokenAmount = token.amount * ratioInfo.ratio; 
-                                 liveValue = baseTokenAmount * baseTokenPrice; 
+                                 liveValue = baseTokenAmount * baseTokenPrice;
+                                 // Show effective price (base price * ratio)
+                                 const effectivePrice = baseTokenPrice * ratioInfo.ratio;
+                                 if (effectivePrice < 0.0000001) {
+                                     priceDisplay = '$' + effectivePrice.toFixed(10) + '*';
+                                 } else if (effectivePrice < 0.000001) {
+                                     priceDisplay = '$' + effectivePrice.toFixed(9) + '*';
+                                 } else if (effectivePrice < 0.00001) {
+                                     priceDisplay = '$' + effectivePrice.toFixed(8) + '*';
+                                 } else if (effectivePrice < 0.0001) {
+                                     priceDisplay = '$' + effectivePrice.toFixed(7) + '*';
+                                 } else if (effectivePrice < 0.01) {
+                                     priceDisplay = '$' + effectivePrice.toFixed(6) + '*';
+                                 } else {
+                                     priceDisplay = '$' + effectivePrice.toFixed(4) + '*';
+                                 }
                              }
                          }
                          if (typeof liveValue === 'number') { totalLiveEstValue += liveValue; }
@@ -1681,12 +1760,14 @@ est. APR 58.53 %"></textarea>
                             <td class="p-1 font-bold flex items-center gap-2">
                                 ${logoUrl ? `<img src="${logoUrl}" alt="${token.name}" class="h-5 w-5 rounded-full" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-block';"><span style="display:none;" class="h-5 w-5"></span>` : '<div class="h-5 w-5 inline-block"></div>'} ${token.name}
                             </td> 
-                            <td class="p-1 text-right font-mono">${amountFormatted}</td> 
+                            <td class="p-1 text-right font-mono">${amountFormatted}</td>
+                            <td class="p-1 text-right font-mono text-gray-400">${priceDisplay}</td>
                             <td class="p-1 text-right font-mono">${liveValue !== null ? '$' + liveValue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '<span class="text-gray-500">N/A</span>'}</td>
                         </tr>`; 
                  });
                  
-                 tokensHtml += `</tbody><tfoot class="sticky bottom-0 bg-gray-900 z-10"><tr class="border-t-2 border-cyan-400 font-bold"><td class="p-1" colspan="2">Total Live Est. Value</td><td class="p-1 text-right font-mono text-cyan-400">$${totalLiveEstValue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td></tr></tfoot></table>`;
+                 tokensHtml += `</tbody><tfoot class="sticky bottom-0 bg-gray-900 z-10"><tr class="border-t-2 border-cyan-400 font-bold"><td class="p-1" colspan="3">Total Live Est. Value</td><td class="p-1 text-right font-mono text-cyan-400">$${totalLiveEstValue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td></tr></tfoot></table>`;
+                 tokensHtml += '<p class="text-xs text-gray-500 mt-2">* Price calculated from base token × ratio</p>';
                  if (tokensContainer) tokensContainer.innerHTML = tokensHtml;
             }
             function buildTlaVp(priceData, ampLunaToLunaRate) { /* ... no changes needed ... */ 
