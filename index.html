@@ -695,6 +695,7 @@ est. APR 58.53 %"></textarea>
         // --- Global variable to store snapshot data ---
         let currentSnapshotData = null; 
         let isFetching = false; // Flag to prevent multiple downloads while fetching
+        let cachedPriceData = null; // Store price data for later use
 
         document.addEventListener('DOMContentLoaded', () => {
 
@@ -1171,6 +1172,7 @@ est. APR 58.53 %"></textarea>
                     const contractJson = await contractResponse.json(); console.log("DEBUG: Parsed contractJson."); 
                     const ampLunaRateData = await ampLunaRateResponse.json(); console.log("DEBUG: Parsed ampLunaRateData."); 
                     const priceData = await priceResponse.json(); console.log("DEBUG: Parsed priceData."); 
+                    cachedPriceData = priceData; // Cache for later use
 
                     console.log("DEBUG: Starting treasury balance fetches..."); 
                     const balancePromises = [];
@@ -1395,8 +1397,8 @@ est. APR 58.53 %"></textarea>
                        // Fetch TLA data from GitHub snapshots and update tile
                        updateTlaFromGitHub().then(success => {
                            if (success) {
-                               // Re-run buildTlaDeposits with the updated data (no price data needed for snapshot values)
-                               buildTlaDeposits(null);
+                               // Re-run buildTlaDeposits with the updated data and cached price data
+                               buildTlaDeposits(cachedPriceData);
                                // Update the title indicator to show it's from snapshot
                                const tlaTitleEl = document.getElementById('dao-tla-title');
                                if (tlaTitleEl) {
@@ -1635,11 +1637,11 @@ est. APR 58.53 %"></textarea>
                      return;
                  }
                  
-                 // Update tile values
-                 if (totalValueTileEl && totalValueTileEl.innerHTML.includes('fa-spinner')) { 
+                 // Update tile values (always update, don't check for spinner)
+                 if (totalValueTileEl) { 
                      totalValueTileEl.textContent = `$${tlaData.totalDeposit.toLocaleString('en-US', {minimumFractionDigits: 0})}`; 
                  }
-                 if (aprTileEl && aprTileEl.innerHTML.includes('fa-spinner')) { 
+                 if (aprTileEl) { 
                      aprTileEl.textContent = `Est. APR ${tlaData.estApr.toFixed(2)}%`; 
                  }
                  updateTile('dao-tla-total', null, false, { titleId: 'dao-tla-title' }); 
