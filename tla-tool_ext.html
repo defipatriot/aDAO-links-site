@@ -77,8 +77,8 @@
             <div class="text-[9px] text-gray-500 uppercase font-bold">Epoch Snapshot Checklist</div>
             <div class="flex gap-2 items-center">
                 <div class="flex flex-col items-center">
-                    <span id="step-ratios" class="px-2 py-0.5 rounded bg-gray-800 text-gray-500 border border-gray-700 text-[10px] cursor-pointer" onclick="switchTab('votion')" title="Get ratios from Eris Protocol">① Ratios</span>
-                    <span id="step-ratios-val" class="text-[8px] text-gray-600 mt-0.5">-</span>
+                    <span id="step-lst" class="px-2 py-0.5 rounded bg-gray-800 text-gray-500 border border-gray-700 text-[10px] cursor-pointer" onclick="switchTab('lstratios')" title="Update LST ratios and APYs">① LST Ratios</span>
+                    <span id="step-lst-val" class="text-[8px] text-gray-600 mt-0.5">0/6</span>
                 </div>
                 <div class="flex flex-col items-center">
                     <span id="step-votion" class="px-2 py-0.5 rounded bg-gray-800 text-gray-500 border border-gray-700 text-[10px] cursor-pointer" onclick="switchTab('votion')" title="Paste Votion lockup data">② Votion</span>
@@ -203,10 +203,11 @@
 <!-- TABS -->
 <div class="flex gap-2 mb-4 border-b border-gray-800 pb-1 overflow-x-auto">
     <div class="tab-btn active" onclick="switchTab('lpreg')">1. LP Registry</div>
-    <div class="tab-btn" onclick="switchTab('votion')">2. Votion</div>
-    <div class="tab-btn" onclick="switchTab('pdbribes')">3. PD Bribes</div>
-    <div class="tab-btn" onclick="switchTab('astro')">4. Astroport</div>
-    <div class="tab-btn" onclick="switchTab('ww')">5. Skeleton Swap</div>
+    <div class="tab-btn" onclick="switchTab('lstratios')">2. LST Ratios</div>
+    <div class="tab-btn" onclick="switchTab('votion')">3. Votion</div>
+    <div class="tab-btn" onclick="switchTab('pdbribes')">4. PD Bribes</div>
+    <div class="tab-btn" onclick="switchTab('astro')">5. Astroport</div>
+    <div class="tab-btn" onclick="switchTab('ww')">6. Skeleton Swap</div>
 </div>
 
 <!-- WS 0: LP REGISTRY -->
@@ -261,36 +262,236 @@
     </div>
 </div>
 
-<!-- WS 1: VOTION -->
-<div id="ws-votion" class="workspace">
-    <!-- Step 1: Conversion Ratios from Eris -->
-    <div class="grid grid-cols-12 gap-4 mb-4">
-        <div class="col-span-6 bg-[#161616] p-3 rounded border border-orange-900/30 flex flex-col gap-2">
-            <div class="flex justify-between items-center">
-                <div class="flex items-center gap-2">
-                    <span class="bg-orange-900/50 text-orange-300 text-[9px] px-1.5 py-0.5 rounded font-bold">STEP 1</span>
-                    <span class="text-[10px] text-gray-400 font-bold">LST → LUNA Ratios</span>
+<!-- WS: LST RATIOS -->
+<div id="ws-lstratios" class="workspace">
+    <!-- Header with status -->
+    <div class="bg-[#161616] border border-teal-900/50 rounded-lg p-4 mb-4">
+        <div class="flex justify-between items-center mb-3">
+            <div class="flex items-center gap-3">
+                <i class="fas fa-exchange-alt text-teal-400 text-xl"></i>
+                <div>
+                    <h2 class="text-teal-400 font-bold text-sm">LST Ratios & Chain Staking</h2>
+                    <p class="text-gray-500 text-[10px]">Track liquid staking token ratios and APYs for snapshot export</p>
                 </div>
-                <a href="https://www.erisprotocol.com/terra/amplifier/LUNA" target="_blank" class="text-[9px] text-teal-400 hover:text-teal-300 flex items-center gap-1">
-                    <i class="fas fa-external-link-alt"></i> Open Eris
+            </div>
+            <div class="flex items-center gap-3">
+                <div id="lst-all-status" class="px-3 py-1 rounded text-[10px] font-bold bg-red-900/30 text-red-400 border border-red-700">
+                    <i class="fas fa-exclamation-circle mr-1"></i> Incomplete
+                </div>
+                <button onclick="fetchChainStakingApr()" class="bg-teal-900/30 hover:bg-teal-900/50 text-teal-400 px-3 py-1.5 rounded text-[10px] border border-teal-900/50">
+                    <i class="fas fa-sync-alt mr-1"></i> Fetch APR
+                </button>
+            </div>
+        </div>
+        
+        <!-- Chain Staking APR -->
+        <div class="grid grid-cols-3 gap-4 mb-4">
+            <div class="bg-[#0D0D0D] rounded-lg p-3 border border-yellow-900/50">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-yellow-400 text-[10px] font-bold uppercase">Chain Staking APR</span>
+                    <a href="https://github.com/defipatriot/tla_json_storage/blob/main/luna_staking_apr.csv" target="_blank" class="text-[9px] text-gray-500 hover:text-gray-400">
+                        <i class="fas fa-external-link-alt"></i>
+                    </a>
+                </div>
+                <div class="flex items-baseline gap-2">
+                    <input type="number" id="lst-chain-apr" step="0.01" class="input-dark text-xl font-bold w-24 text-center text-yellow-400" value="22.04" onchange="updateLstRatio('chainStakingApr', this.value)">
+                    <span class="text-yellow-400 text-lg">%</span>
+                </div>
+                <div id="lst-chain-apr-date" class="text-[9px] text-gray-600 mt-1">Last: --</div>
+            </div>
+            <div class="col-span-2 bg-[#0D0D0D] rounded-lg p-3 border border-gray-800">
+                <div class="text-[9px] text-gray-500 uppercase font-bold mb-2">Parse Instructions</div>
+                <div class="text-[10px] text-gray-400 space-y-1">
+                    <p><span class="text-teal-400 font-mono">Eris:</span> Copy "1 ampLUNA = X.XXXX LUNA" text and paste into boxes</p>
+                    <p><span class="text-cyan-400 font-mono">Backbone:</span> Convert "1 LUNA = 0.623302 bLUNA" → 1/0.623302 = 1.6048</p>
+                    <p><span class="text-purple-400 font-mono">Astroport:</span> Copy "1:1.22 xASTRO:ASTRO" → ratio = 1.22</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- LST Ratio Cards -->
+    <div class="grid grid-cols-3 gap-4 mb-4">
+        <!-- ampLUNA -->
+        <div id="lst-card-ampLUNA" class="bg-[#161616] rounded-lg p-3 border-2 border-gray-700">
+            <div class="flex justify-between items-center mb-2">
+                <div class="flex items-center gap-2">
+                    <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/refs/heads/main/logos/ampLUNA.png" class="w-6 h-6 rounded-full" onerror="this.style.display='none'">
+                    <span class="text-teal-400 font-bold text-sm">ampLUNA</span>
+                </div>
+                <a href="https://www.erisprotocol.com/terra/amplifier/LUNA" target="_blank" class="text-[9px] text-teal-400 hover:text-teal-300 bg-teal-900/30 px-2 py-0.5 rounded border border-teal-900/50">
+                    <i class="fas fa-external-link-alt mr-1"></i> Eris
                 </a>
             </div>
-            <div class="text-[8px] text-gray-500 bg-gray-900/50 rounded p-2">
-                <strong class="text-gray-400">How to get ratios:</strong> 
-                On Eris, find "1 ampLUNA = X LUNA" and "1 arbLUNA = X LUNA". Paste below or enter manually.
+            <div id="lst-status-ampLUNA" class="text-[9px] px-2 py-0.5 rounded bg-gray-800 text-gray-500 text-center mb-2">pending</div>
+            <div class="flex items-center gap-2 mb-2">
+                <span class="text-[10px] text-gray-500">1 ampLUNA =</span>
+                <input type="number" id="lst-ratio-ampLUNA" step="0.0001" class="input-dark w-24 text-center font-mono" value="1.9015" onchange="updateLstRatio('ampLUNA', this.value)">
+                <span class="text-[10px] text-gray-400">LUNA</span>
             </div>
-            <div class="flex gap-2">
-                <input type="text" id="ratioPaste" class="input-dark text-[10px] flex-1" placeholder="Paste: 1 ampLUNA = 1.8707 LUNA" onpaste="setTimeout(parseRatioPaste,100)" onchange="parseRatioPaste()">
-                <button onclick="parseRatioPaste()" class="btn-action w-16 mt-0 bg-gray-700 text-gray-300">Parse</button>
+            <div class="flex items-center gap-2 mb-2">
+                <span class="text-[10px] text-gray-500">APY:</span>
+                <input type="number" id="lst-apy-ampLUNA" step="0.01" class="input-dark w-20 text-center font-mono text-green-400" value="29.68" onchange="updateLstApy('ampLUNA', this.value)">
+                <span class="text-[10px] text-gray-400">%</span>
+            </div>
+            <textarea id="lst-paste-ampLUNA" class="input-dark text-[9px] h-16 w-full" placeholder="Paste: Amplified APY 29.68% TVL... 1 ampLUNA = 1.9015 LUNA" onpaste="setTimeout(() => parseLstPaste('ampLUNA'), 100)"></textarea>
+            <button onclick="parseLstPaste('ampLUNA')" class="btn-action text-[9px] bg-teal-900/30 text-teal-300">Parse</button>
+        </div>
+        
+        <!-- arbLUNA -->
+        <div id="lst-card-arbLUNA" class="bg-[#161616] rounded-lg p-3 border-2 border-gray-700">
+            <div class="flex justify-between items-center mb-2">
+                <div class="flex items-center gap-2">
+                    <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/refs/heads/main/logos/arbLUNA.png" class="w-6 h-6 rounded-full" onerror="this.style.display='none'">
+                    <span class="text-orange-400 font-bold text-sm">arbLUNA</span>
+                </div>
+                <a href="https://www.erisprotocol.com/terra/arb-vault" target="_blank" class="text-[9px] text-orange-400 hover:text-orange-300 bg-orange-900/30 px-2 py-0.5 rounded border border-orange-900/50">
+                    <i class="fas fa-external-link-alt mr-1"></i> Eris Arb
+                </a>
+            </div>
+            <div id="lst-status-arbLUNA" class="text-[9px] px-2 py-0.5 rounded bg-gray-800 text-gray-500 text-center mb-2">pending</div>
+            <div class="flex items-center gap-2 mb-2">
+                <span class="text-[10px] text-gray-500">1 arbLUNA =</span>
+                <input type="number" id="lst-ratio-arbLUNA" step="0.0001" class="input-dark w-24 text-center font-mono" value="2.6873" onchange="updateLstRatio('arbLUNA', this.value)">
+                <span class="text-[10px] text-gray-400">LUNA</span>
+            </div>
+            <div class="flex items-center gap-2 mb-2">
+                <span class="text-[10px] text-gray-500">APY:</span>
+                <input type="number" id="lst-apy-arbLUNA" step="0.01" class="input-dark w-20 text-center font-mono text-green-400" value="146.24" onchange="updateLstApy('arbLUNA', this.value)">
+                <span class="text-[10px] text-gray-400">%</span>
+            </div>
+            <textarea id="lst-paste-arbLUNA" class="input-dark text-[9px] h-16 w-full" placeholder="Paste: Arbitrage APY 146.24% TVL... 1 arbLUNA = 2.6873 LUNA" onpaste="setTimeout(() => parseLstPaste('arbLUNA'), 100)"></textarea>
+            <button onclick="parseLstPaste('arbLUNA')" class="btn-action text-[9px] bg-orange-900/30 text-orange-300">Parse</button>
+        </div>
+        
+        <!-- bLUNA -->
+        <div id="lst-card-bLUNA" class="bg-[#161616] rounded-lg p-3 border-2 border-gray-700">
+            <div class="flex justify-between items-center mb-2">
+                <div class="flex items-center gap-2">
+                    <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/refs/heads/main/logos/bLUNA.png" class="w-6 h-6 rounded-full" onerror="this.style.display='none'">
+                    <span class="text-cyan-400 font-bold text-sm">bLUNA</span>
+                </div>
+                <a href="https://app.backbonelabs.io/liquid-staking/gravedigger/phoenix-1" target="_blank" class="text-[9px] text-cyan-400 hover:text-cyan-300 bg-cyan-900/30 px-2 py-0.5 rounded border border-cyan-900/50">
+                    <i class="fas fa-external-link-alt mr-1"></i> Backbone
+                </a>
+            </div>
+            <div id="lst-status-bLUNA" class="text-[9px] px-2 py-0.5 rounded bg-gray-800 text-gray-500 text-center mb-2">pending</div>
+            <div class="flex items-center gap-2 mb-2">
+                <span class="text-[10px] text-gray-500">1 bLUNA =</span>
+                <input type="number" id="lst-ratio-bLUNA" step="0.0001" class="input-dark w-24 text-center font-mono" value="1.6048" onchange="updateLstRatio('bLUNA', this.value)">
+                <span class="text-[10px] text-gray-400">LUNA</span>
+            </div>
+            <div class="flex items-center gap-2 mb-2">
+                <span class="text-[10px] text-gray-500">APY:</span>
+                <input type="number" id="lst-apy-bLUNA" step="0.01" class="input-dark w-20 text-center font-mono text-gray-500" placeholder="N/A" onchange="updateLstApy('bLUNA', this.value)">
+                <span class="text-[10px] text-gray-500">% <span class="text-[8px]">(not shown)</span></span>
+            </div>
+            <textarea id="lst-paste-bLUNA" class="input-dark text-[9px] h-16 w-full" placeholder="Paste: Exchange rate 1 LUNA = 0.623302 bLUNA (will auto-convert)" onpaste="setTimeout(() => parseLstPaste('bLUNA'), 100)"></textarea>
+            <button onclick="parseLstPaste('bLUNA')" class="btn-action text-[9px] bg-cyan-900/30 text-cyan-300">Parse</button>
+        </div>
+        
+        <!-- ampCAPA -->
+        <div id="lst-card-ampCAPA" class="bg-[#161616] rounded-lg p-3 border-2 border-gray-700">
+            <div class="flex justify-between items-center mb-2">
+                <div class="flex items-center gap-2">
+                    <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/refs/heads/main/logos/ampCAPA.png" class="w-6 h-6 rounded-full" onerror="this.style.display='none'">
+                    <span class="text-purple-400 font-bold text-sm">ampCAPA</span>
+                </div>
+                <a href="https://www.erisprotocol.com/terra/amplifier/CAPA" target="_blank" class="text-[9px] text-purple-400 hover:text-purple-300 bg-purple-900/30 px-2 py-0.5 rounded border border-purple-900/50">
+                    <i class="fas fa-external-link-alt mr-1"></i> Eris
+                </a>
+            </div>
+            <div id="lst-status-ampCAPA" class="text-[9px] px-2 py-0.5 rounded bg-gray-800 text-gray-500 text-center mb-2">pending</div>
+            <div class="flex items-center gap-2 mb-2">
+                <span class="text-[10px] text-gray-500">1 ampCAPA =</span>
+                <input type="number" id="lst-ratio-ampCAPA" step="0.0001" class="input-dark w-24 text-center font-mono" value="1.1055" onchange="updateLstRatio('ampCAPA', this.value)">
+                <span class="text-[10px] text-gray-400">CAPA</span>
+            </div>
+            <div class="flex items-center gap-2 mb-2">
+                <span class="text-[10px] text-gray-500">APY:</span>
+                <input type="number" id="lst-apy-ampCAPA" step="0.01" class="input-dark w-20 text-center font-mono text-green-400" value="4.83" onchange="updateLstApy('ampCAPA', this.value)">
+                <span class="text-[10px] text-gray-400">%</span>
+            </div>
+            <textarea id="lst-paste-ampCAPA" class="input-dark text-[9px] h-16 w-full" placeholder="Paste: Amplified APY 4.83% TVL... 1 ampCAPA = 1.1055 CAPA" onpaste="setTimeout(() => parseLstPaste('ampCAPA'), 100)"></textarea>
+            <button onclick="parseLstPaste('ampCAPA')" class="btn-action text-[9px] bg-purple-900/30 text-purple-300">Parse</button>
+        </div>
+        
+        <!-- ampROAR -->
+        <div id="lst-card-ampROAR" class="bg-[#161616] rounded-lg p-3 border-2 border-gray-700">
+            <div class="flex justify-between items-center mb-2">
+                <div class="flex items-center gap-2">
+                    <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/refs/heads/main/logos/ampROAR.png" class="w-6 h-6 rounded-full" onerror="this.style.display='none'">
+                    <span class="text-yellow-400 font-bold text-sm">ampROAR</span>
+                </div>
+                <a href="https://www.erisprotocol.com/terra/amplifier/ROAR" target="_blank" class="text-[9px] text-yellow-400 hover:text-yellow-300 bg-yellow-900/30 px-2 py-0.5 rounded border border-yellow-900/50">
+                    <i class="fas fa-external-link-alt mr-1"></i> Eris
+                </a>
+            </div>
+            <div id="lst-status-ampROAR" class="text-[9px] px-2 py-0.5 rounded bg-gray-800 text-gray-500 text-center mb-2">pending</div>
+            <div class="flex items-center gap-2 mb-2">
+                <span class="text-[10px] text-gray-500">1 ampROAR =</span>
+                <input type="number" id="lst-ratio-ampROAR" step="0.0001" class="input-dark w-24 text-center font-mono" value="1.1087" onchange="updateLstRatio('ampROAR', this.value)">
+                <span class="text-[10px] text-gray-400">ROAR</span>
+            </div>
+            <div class="flex items-center gap-2 mb-2">
+                <span class="text-[10px] text-gray-500">APY:</span>
+                <input type="number" id="lst-apy-ampROAR" step="0.01" class="input-dark w-20 text-center font-mono text-green-400" value="9.92" onchange="updateLstApy('ampROAR', this.value)">
+                <span class="text-[10px] text-gray-400">%</span>
+            </div>
+            <textarea id="lst-paste-ampROAR" class="input-dark text-[9px] h-16 w-full" placeholder="Paste: Amplified APY 9.92% TVL... 1 ampROAR = 1.1087 ROAR" onpaste="setTimeout(() => parseLstPaste('ampROAR'), 100)"></textarea>
+            <button onclick="parseLstPaste('ampROAR')" class="btn-action text-[9px] bg-yellow-900/30 text-yellow-300">Parse</button>
+        </div>
+        
+        <!-- xASTRO -->
+        <div id="lst-card-xASTRO" class="bg-[#161616] rounded-lg p-3 border-2 border-gray-700">
+            <div class="flex justify-between items-center mb-2">
+                <div class="flex items-center gap-2">
+                    <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/refs/heads/main/logos/xASTRO.png" class="w-6 h-6 rounded-full" onerror="this.style.display='none'">
+                    <span class="text-blue-400 font-bold text-sm">xASTRO</span>
+                </div>
+                <a href="https://app.astroport.fi/governance" target="_blank" class="text-[9px] text-blue-400 hover:text-blue-300 bg-blue-900/30 px-2 py-0.5 rounded border border-blue-900/50">
+                    <i class="fas fa-external-link-alt mr-1"></i> Astroport
+                </a>
+            </div>
+            <div id="lst-status-xASTRO" class="text-[9px] px-2 py-0.5 rounded bg-gray-800 text-gray-500 text-center mb-2">pending</div>
+            <div class="flex items-center gap-2 mb-2">
+                <span class="text-[10px] text-gray-500">1 xASTRO =</span>
+                <input type="number" id="lst-ratio-xASTRO" step="0.0001" class="input-dark w-24 text-center font-mono" value="1.22" onchange="updateLstRatio('xASTRO', this.value)">
+                <span class="text-[10px] text-gray-400">ASTRO</span>
+            </div>
+            <div class="flex items-center gap-2 mb-2">
+                <span class="text-[10px] text-gray-500">APY:</span>
+                <input type="number" id="lst-apy-xASTRO" step="0.01" class="input-dark w-20 text-center font-mono text-green-400" value="22.49" onchange="updateLstApy('xASTRO', this.value)">
+                <span class="text-[10px] text-gray-400">%</span>
+            </div>
+            <textarea id="lst-paste-xASTRO" class="input-dark text-[9px] h-16 w-full" placeholder="Paste: 22.49% APY 1:1.22 xASTRO:ASTRO" onpaste="setTimeout(() => parseLstPaste('xASTRO'), 100)"></textarea>
+            <button onclick="parseLstPaste('xASTRO')" class="btn-action text-[9px] bg-blue-900/30 text-blue-300">Parse</button>
+        </div>
+    </div>
+</div>
+
+<!-- WS 1: VOTION -->
+<div id="ws-votion" class="workspace">
+    <!-- Ratios Reference (from LST Ratios tab) -->
+    <div class="grid grid-cols-12 gap-4 mb-4">
+        <div class="col-span-6 bg-[#161616] p-3 rounded border border-gray-800 flex flex-col gap-2">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center gap-2">
+                    <span class="text-[10px] text-gray-400 font-bold">LST → LUNA Ratios</span>
+                    <span class="text-[9px] text-gray-600">(for VP calculation)</span>
+                </div>
+                <button onclick="switchTab('lstratios')" class="text-[9px] text-teal-400 hover:text-teal-300 flex items-center gap-1 bg-teal-900/30 px-2 py-1 rounded border border-teal-900/50">
+                    <i class="fas fa-arrow-left"></i> Edit in LST Ratios Tab
+                </button>
             </div>
             <div class="grid grid-cols-2 gap-2">
                 <div class="flex items-center gap-1 bg-orange-900/20 rounded px-2 py-1">
                     <span class="text-[9px] text-orange-400">arbLUNA:</span>
-                    <input type="number" id="ratioArb" step="0.0001" value="2.4362" class="input-dark text-[10px] w-20 text-center bg-transparent border-orange-900/50" onchange="updateRatios()">
+                    <input type="number" id="ratioArb" step="0.0001" value="2.4362" class="input-dark text-[10px] w-20 text-center bg-transparent border-orange-900/50" onchange="updateRatios()" readonly>
                 </div>
                 <div class="flex items-center gap-1 bg-cyan-900/20 rounded px-2 py-1">
                     <span class="text-[9px] text-cyan-400">ampLUNA:</span>
-                    <input type="number" id="ratioAmp" step="0.0001" value="1.8707" class="input-dark text-[10px] w-20 text-center bg-transparent border-cyan-900/50" onchange="updateRatios()">
+                    <input type="number" id="ratioAmp" step="0.0001" value="1.8707" class="input-dark text-[10px] w-20 text-center bg-transparent border-cyan-900/50" onchange="updateRatios()" readonly>
                 </div>
             </div>
             <div class="flex items-center justify-between text-[8px]">
@@ -317,12 +518,11 @@
         </div>
     </div>
     
-    <!-- Step 2: Votion Lockups -->
+    <!-- Votion Lockups -->
     <div class="grid grid-cols-12 gap-4 mb-4">
         <div class="col-span-12 bg-[#161616] p-3 rounded border border-teal-900/30 flex flex-col gap-2">
             <div class="flex justify-between items-center">
                 <div class="flex items-center gap-2">
-                    <span class="bg-teal-900/50 text-teal-300 text-[9px] px-1.5 py-0.5 rounded font-bold">STEP 2</span>
                     <span class="text-[10px] text-gray-400 font-bold">Votion Lockups</span>
                     <span class="text-gray-500 font-normal text-[9px]">(paste each lockup page separately)</span>
                 </div>
@@ -733,6 +933,18 @@ let store = {
     mode: 'staging', // 'staging' or 'normal'
     lpRegistry: {},  // { "LUNA-USDC": { bucket, sources: { Astroport: { vote_pct } }, active } }
     votion: { lockups: [], ratioArb: 2.4362, ratioAmp: 1.8707 },
+    // Comprehensive LST ratios and APYs
+    lstRatios: {
+        ampLUNA: { ratio: 1.9015, base: 'LUNA', apy: 29.68, updated: null },
+        arbLUNA: { ratio: 2.6873, base: 'LUNA', apy: 146.24, updated: null },
+        bLUNA: { ratio: 1.6048, base: 'LUNA', apy: null, updated: null }, // bLUNA doesn't show APY on BBL
+        ampCAPA: { ratio: 1.1055, base: 'CAPA', apy: 4.83, updated: null },
+        ampROAR: { ratio: 1.1087, base: 'ROAR', apy: 9.92, updated: null },
+        xASTRO: { ratio: 1.22, base: 'ASTRO', apy: 22.49, updated: null },
+        chainStakingApr: 22.04,
+        chainStakingAprDate: null,
+        allUpdated: false
+    },
     pdBribesHistory: [],
     pdNewProp: null,
     staging: {
@@ -759,6 +971,7 @@ const STAGING_URLS = {
 const HISTORICAL_URL = GITHUB_BASE + 'tla_ext_historical.json';
 const CURRENT_URL = GITHUB_BASE + 'tla_ext_current.json';
 const PD_BRIBES_GITHUB_URL = GITHUB_BASE + 'tla_pd_bribes.json';
+const STAKING_APR_CSV_URL = 'https://raw.githubusercontent.com/defipatriot/tla_json_storage/main/luna_staking_apr.csv';
 
 // Epoch calculation constants
 const EPOCH_ANCHOR_DATE = new Date(Date.UTC(2025, 10, 17, 0, 0, 0)); // Nov 17, 2025 = Epoch 160
@@ -807,6 +1020,10 @@ function updateRatios() {
     store.votion.ratioArb = parseFloat($('ratioArb').value) || 2.4362;
     store.votion.ratioAmp = parseFloat($('ratioAmp').value) || 1.8707;
     
+    // Also sync to LST ratios store
+    store.lstRatios.arbLUNA.ratio = store.votion.ratioArb;
+    store.lstRatios.ampLUNA.ratio = store.votion.ratioAmp;
+    
     // Check if ratios were manually updated (different from defaults)
     const arbDefault = 2.4362;
     const ampDefault = 1.8707;
@@ -833,28 +1050,254 @@ function updateRatios() {
     recalcVotion();
 }
 
-function updateWorkflowStatus() {
-    // Step 1: Ratios
-    const arbDefault = 2.4362;
-    const ampDefault = 1.8707;
-    const ratioArb = parseFloat($('ratioArb')?.value) || arbDefault;
-    const ratioAmp = parseFloat($('ratioAmp')?.value) || ampDefault;
-    const arbUpdated = Math.abs(ratioArb - arbDefault) > 0.0001;
-    const ampUpdated = Math.abs(ratioAmp - ampDefault) > 0.0001;
-    const ratiosComplete = arbUpdated && ampUpdated;
+// ============ LST RATIO FUNCTIONS ============
+
+function updateLstRatio(token, value) {
+    const ratio = parseFloat(value) || 0;
+    if (token === 'chainStakingApr') {
+        store.lstRatios.chainStakingApr = ratio;
+        store.lstRatios.chainStakingAprDate = new Date().toISOString();
+    } else if (store.lstRatios[token]) {
+        store.lstRatios[token].ratio = ratio;
+        store.lstRatios[token].updated = new Date().toISOString();
+        
+        // Sync ampLUNA/arbLUNA to votion ratios for VP calculation
+        if (token === 'ampLUNA') {
+            store.votion.ratioAmp = ratio;
+            $('ratioAmp').value = ratio;
+        } else if (token === 'arbLUNA') {
+            store.votion.ratioArb = ratio;
+            $('ratioArb').value = ratio;
+        }
+    }
+    updateLstCardStatus(token);
+    updateLstOverallStatus();
+    updateWorkflowStatus();
+}
+
+function updateLstApy(token, value) {
+    const apy = parseFloat(value) || null;
+    if (store.lstRatios[token]) {
+        store.lstRatios[token].apy = apy;
+        store.lstRatios[token].updated = new Date().toISOString();
+    }
+    updateLstCardStatus(token);
+    updateLstOverallStatus();
+}
+
+function parseLstPaste(token) {
+    const pasteEl = $(`lst-paste-${token}`);
+    if (!pasteEl) return;
     
-    let stepRatios = $('step-ratios');
-    let stepRatiosVal = $('step-ratios-val');
-    if (stepRatios) {
-        if (ratiosComplete) {
-            stepRatios.className = 'px-2 py-0.5 rounded bg-green-900/50 text-green-300 border border-green-700 text-[10px] cursor-pointer font-bold';
-            if (stepRatiosVal) stepRatiosVal.innerText = '✓ Updated';
-        } else if (arbUpdated || ampUpdated) {
-            stepRatios.className = 'px-2 py-0.5 rounded bg-yellow-900/50 text-yellow-300 border border-yellow-700 text-[10px] cursor-pointer';
-            if (stepRatiosVal) stepRatiosVal.innerText = 'Partial';
+    const txt = pasteEl.value;
+    if (!txt.trim()) return;
+    
+    let ratio = null;
+    let apy = null;
+    
+    // Parse based on token type
+    if (token === 'ampLUNA' || token === 'arbLUNA') {
+        // Eris format: "1 ampLUNA = 1.9015 LUNA" or "1 arbLUNA = 2.6873 LUNA"
+        const ratioMatch = txt.match(/1\s*(amp|arb)LUNA\s*=\s*([\d\.]+)\s*LUNA/i);
+        if (ratioMatch) ratio = parseFloat(ratioMatch[2]);
+        
+        // APY: "Amplified APY 29.68%" or "Arbitrage APY 146.24%"
+        const apyMatch = txt.match(/(Amplified|Arbitrage)\s*APY[:\s]*([\d\.]+)\s*%/i);
+        if (apyMatch) apy = parseFloat(apyMatch[2]);
+    }
+    else if (token === 'bLUNA') {
+        // Backbone format: "1 LUNA = 0.623302 bLUNA" - need to invert
+        const bbMatch = txt.match(/1\s*LUNA\s*=\s*([\d\.]+)\s*bLUNA/i);
+        if (bbMatch) {
+            const inverse = parseFloat(bbMatch[1]);
+            if (inverse > 0) ratio = 1 / inverse;
+        }
+        // Also try direct format "1 bLUNA = X LUNA"
+        const directMatch = txt.match(/1\s*bLUNA\s*=\s*([\d\.]+)\s*LUNA/i);
+        if (directMatch) ratio = parseFloat(directMatch[1]);
+        
+        // APY from Backbone (if present)
+        const apyMatch = txt.match(/APY[:\s]*([\d\.]+)\s*%/i);
+        if (apyMatch) apy = parseFloat(apyMatch[1]);
+    }
+    else if (token === 'ampCAPA' || token === 'ampROAR') {
+        // Eris format: "1 ampCAPA = 1.1055 CAPA" or "1 ampROAR = 1.1087 ROAR"
+        const base = token === 'ampCAPA' ? 'CAPA' : 'ROAR';
+        const ratioRegex = new RegExp(`1\\s*${token}\\s*=\\s*([\\d\\.]+)\\s*${base}`, 'i');
+        const ratioMatch = txt.match(ratioRegex);
+        if (ratioMatch) ratio = parseFloat(ratioMatch[1]);
+        
+        // APY
+        const apyMatch = txt.match(/Amplified\s*APY[:\s]*([\d\.]+)\s*%/i);
+        if (apyMatch) apy = parseFloat(apyMatch[1]);
+    }
+    else if (token === 'xASTRO') {
+        // Astroport format: "1:1.22 xASTRO:ASTRO" or multiline with APY
+        // Can be: "22.49%\nAPY\n1:1.22\nxASTRO:ASTRO"
+        const astroMatch = txt.match(/1:([\d\.]+)\s*\n?\s*xASTRO:ASTRO/i);
+        if (astroMatch) ratio = parseFloat(astroMatch[1]);
+        
+        // Also try "xASTRO:ASTRO = 1:1.22"
+        const altMatch = txt.match(/xASTRO:ASTRO\s*=?\s*1:([\d\.]+)/i);
+        if (altMatch) ratio = parseFloat(altMatch[1]);
+        
+        // Also try inline "1:1.22 xASTRO:ASTRO"
+        const inlineMatch = txt.match(/1:([\d\.]+)\s+xASTRO:ASTRO/i);
+        if (inlineMatch) ratio = parseFloat(inlineMatch[1]);
+        
+        // APY for xASTRO: "22.49% APY" or "22.49%\nAPY"
+        const apyMatch = txt.match(/([\d\.]+)\s*%\s*\n?\s*APY/i);
+        if (apyMatch) apy = parseFloat(apyMatch[1]);
+    }
+    
+    // Update values if found
+    if (ratio !== null && ratio > 0) {
+        $(`lst-ratio-${token}`).value = ratio.toFixed(4);
+        updateLstRatio(token, ratio);
+    }
+    if (apy !== null) {
+        $(`lst-apy-${token}`).value = apy.toFixed(2);
+        updateLstApy(token, apy);
+    }
+    
+    // Clear paste box and update status
+    if (ratio !== null || apy !== null) {
+        pasteEl.value = '';
+        updateLstCardStatus(token);
+    }
+}
+
+function updateLstCardStatus(token) {
+    const statusEl = $(`lst-status-${token}`);
+    const cardEl = $(`lst-card-${token}`);
+    if (!statusEl || !cardEl) return;
+    
+    const data = store.lstRatios[token];
+    if (!data) return;
+    
+    const isUpdated = data.updated !== null;
+    
+    if (isUpdated) {
+        statusEl.textContent = '✓ updated';
+        statusEl.className = 'text-[9px] px-2 py-0.5 rounded bg-green-900/50 text-green-400 text-center mb-2';
+        cardEl.className = 'bg-[#161616] rounded-lg p-3 border-2 border-green-700';
+    } else {
+        statusEl.textContent = 'pending';
+        statusEl.className = 'text-[9px] px-2 py-0.5 rounded bg-gray-800 text-gray-500 text-center mb-2';
+        cardEl.className = 'bg-[#161616] rounded-lg p-3 border-2 border-gray-700';
+    }
+}
+
+function updateLstOverallStatus() {
+    const tokens = ['ampLUNA', 'arbLUNA', 'bLUNA', 'ampCAPA', 'ampROAR', 'xASTRO'];
+    let updatedCount = 0;
+    
+    tokens.forEach(token => {
+        if (store.lstRatios[token]?.updated) updatedCount++;
+    });
+    
+    const allUpdated = updatedCount === tokens.length;
+    store.lstRatios.allUpdated = allUpdated;
+    
+    const statusEl = $('lst-all-status');
+    if (statusEl) {
+        if (allUpdated) {
+            statusEl.innerHTML = '<i class="fas fa-check-circle mr-1"></i> All Complete';
+            statusEl.className = 'px-3 py-1 rounded text-[10px] font-bold bg-green-900/30 text-green-400 border border-green-700';
         } else {
-            stepRatios.className = 'px-2 py-0.5 rounded bg-orange-900/50 text-orange-300 border border-orange-700 text-[10px] cursor-pointer';
-            if (stepRatiosVal) stepRatiosVal.innerText = 'Defaults!';
+            statusEl.innerHTML = `<i class="fas fa-exclamation-circle mr-1"></i> ${updatedCount}/${tokens.length} Complete`;
+            statusEl.className = 'px-3 py-1 rounded text-[10px] font-bold bg-red-900/30 text-red-400 border border-red-700';
+        }
+    }
+}
+
+async function fetchChainStakingApr() {
+    try {
+        const resp = await fetch(STAKING_APR_CSV_URL);
+        if (!resp.ok) throw new Error('Failed to fetch');
+        
+        const text = await resp.text();
+        const lines = text.trim().split('\n');
+        
+        // Get last non-empty line (most recent APR)
+        let lastLine = null;
+        for (let i = lines.length - 1; i >= 0; i--) {
+            if (lines[i].trim() && !lines[i].includes('title')) {
+                lastLine = lines[i];
+                break;
+            }
+        }
+        
+        if (lastLine) {
+            // Parse CSV: "2025-12-19","22.0373"
+            const match = lastLine.match(/"([^"]+)","([^"]+)"/);
+            if (match) {
+                const date = match[1];
+                const apr = parseFloat(match[2]);
+                
+                $('lst-chain-apr').value = apr.toFixed(2);
+                $('lst-chain-apr-date').textContent = `Last: ${date}`;
+                
+                store.lstRatios.chainStakingApr = apr;
+                store.lstRatios.chainStakingAprDate = date;
+            }
+        }
+    } catch (e) {
+        console.error('Failed to fetch staking APR:', e);
+        $('lst-chain-apr-date').textContent = 'Fetch failed';
+    }
+}
+
+function initLstRatiosTab() {
+    // Initialize values from store
+    const tokens = ['ampLUNA', 'arbLUNA', 'bLUNA', 'ampCAPA', 'ampROAR', 'xASTRO'];
+    tokens.forEach(token => {
+        const data = store.lstRatios[token];
+        if (data) {
+            const ratioEl = $(`lst-ratio-${token}`);
+            const apyEl = $(`lst-apy-${token}`);
+            if (ratioEl) ratioEl.value = data.ratio;
+            if (apyEl && data.apy !== null) apyEl.value = data.apy;
+            updateLstCardStatus(token);
+        }
+    });
+    
+    // Sync ampLUNA/arbLUNA to Votion tab display
+    $('ratioArb').value = store.lstRatios.arbLUNA.ratio;
+    $('ratioAmp').value = store.lstRatios.ampLUNA.ratio;
+    store.votion.ratioArb = store.lstRatios.arbLUNA.ratio;
+    store.votion.ratioAmp = store.lstRatios.ampLUNA.ratio;
+    
+    $('lst-chain-apr').value = store.lstRatios.chainStakingApr;
+    updateLstOverallStatus();
+}
+
+function updateWorkflowStatus() {
+    // Step 1: LST Ratios (all 6 tokens)
+    const tokens = ['ampLUNA', 'arbLUNA', 'bLUNA', 'ampCAPA', 'ampROAR', 'xASTRO'];
+    let lstUpdatedCount = 0;
+    tokens.forEach(token => {
+        if (store.lstRatios[token]?.updated) lstUpdatedCount++;
+    });
+    const lstComplete = lstUpdatedCount === tokens.length;
+    
+    // Also check arbLUNA and ampLUNA specifically for Votion VP calculation
+    const arbLunaUpdated = store.lstRatios.arbLUNA?.updated !== null;
+    const ampLunaUpdated = store.lstRatios.ampLUNA?.updated !== null;
+    const votionRatiosReady = arbLunaUpdated && ampLunaUpdated;
+    
+    let stepLst = $('step-lst');
+    let stepLstVal = $('step-lst-val');
+    if (stepLst) {
+        if (lstComplete) {
+            stepLst.className = 'px-2 py-0.5 rounded bg-green-900/50 text-green-300 border border-green-700 text-[10px] cursor-pointer font-bold';
+            if (stepLstVal) stepLstVal.innerText = '✓ All 6';
+        } else if (lstUpdatedCount > 0) {
+            stepLst.className = 'px-2 py-0.5 rounded bg-yellow-900/50 text-yellow-300 border border-yellow-700 text-[10px] cursor-pointer';
+            if (stepLstVal) stepLstVal.innerText = `${lstUpdatedCount}/6`;
+        } else {
+            stepLst.className = 'px-2 py-0.5 rounded bg-red-900/50 text-red-300 border border-red-700 text-[10px] cursor-pointer';
+            if (stepLstVal) stepLstVal.innerText = '0/6';
         }
     }
     
@@ -863,7 +1306,7 @@ function updateWorkflowStatus() {
     let stepVotion = $('step-votion');
     let stepVotionVal = $('step-votion-val');
     if (stepVotion) {
-        if (lockCount >= 3) {
+        if (lockCount >= 3 && votionRatiosReady) {
             stepVotion.className = 'px-2 py-0.5 rounded bg-green-900/50 text-green-300 border border-green-700 text-[10px] cursor-pointer font-bold';
             if (stepVotionVal) stepVotionVal.innerText = lockCount + ' locks ✓';
         } else if (lockCount > 0) {
@@ -902,8 +1345,8 @@ function updateWorkflowStatus() {
         }
     }
     
-    // Step 4: Export readiness
-    let ready = ratiosComplete && lockCount >= 3 && pdCovered;
+    // Step 4: Export readiness (require at minimum: arbLUNA + ampLUNA ratios, votion locks, PD coverage)
+    let ready = votionRatiosReady && lockCount >= 3 && pdCovered;
     let stepExport = $('step-export');
     let stepExportVal = $('step-export-val');
     if (stepExport) {
@@ -913,7 +1356,7 @@ function updateWorkflowStatus() {
         } else {
             stepExport.className = 'px-2 py-0.5 rounded bg-gray-800 text-gray-500 border border-gray-700 text-[10px] cursor-pointer';
             let missing = [];
-            if (!ratiosComplete) missing.push('ratios');
+            if (!votionRatiosReady) missing.push('lst');
             if (lockCount < 3) missing.push('votion');
             if (!pdCovered) missing.push('pd');
             if (stepExportVal) stepExportVal.innerText = 'Need: ' + missing.join(', ');
@@ -980,6 +1423,9 @@ window.onload = async function() {
     setMode('staging');
     renderLpRegistry();
     updateAstroTab();
+    
+    // Initialize LST Ratios tab
+    initLstRatiosTab();
     
     // Auto-fetch data from GitHub
     fetchAllFromGithub();
@@ -3589,6 +4035,20 @@ function getExportData() {
             total_vp: Math.round(totalVp),
             pools: votionPools,
             lockups: store.votion.lockups // Keep raw lockups for reference
+        },
+        // Comprehensive LST ratios for dashboard snapshot
+        lst_ratios: {
+            snapshot_date: new Date().toISOString(),
+            chain_staking_apr: store.lstRatios.chainStakingApr,
+            chain_staking_apr_date: store.lstRatios.chainStakingAprDate,
+            tokens: {
+                ampLUNA: { ratio: store.lstRatios.ampLUNA.ratio, base: 'LUNA', apy: store.lstRatios.ampLUNA.apy },
+                arbLUNA: { ratio: store.lstRatios.arbLUNA.ratio, base: 'LUNA', apy: store.lstRatios.arbLUNA.apy },
+                bLUNA: { ratio: store.lstRatios.bLUNA.ratio, base: 'LUNA', apy: store.lstRatios.bLUNA.apy },
+                ampCAPA: { ratio: store.lstRatios.ampCAPA.ratio, base: 'CAPA', apy: store.lstRatios.ampCAPA.apy },
+                ampROAR: { ratio: store.lstRatios.ampROAR.ratio, base: 'ROAR', apy: store.lstRatios.ampROAR.apy },
+                xASTRO: { ratio: store.lstRatios.xASTRO.ratio, base: 'ASTRO', apy: store.lstRatios.xASTRO.apy }
+            }
         },
         pd_bribes: pdBribesForEpoch, // Simplified bribes for this epoch
         pd_bribes_master: store.pdBribesHistory, // Full bribe history
