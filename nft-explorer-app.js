@@ -2225,7 +2225,7 @@ const initializeStarfield = () => {
     }
 
     function updateStars() {
-        stars.forEach(star => {
+        mapStars.forEach(star => {
             star.alpha += star.twinkleSpeed * star.twinkleDirection;
             if (star.alpha > 1 || star.alpha < 0) {
                 star.alpha = Math.max(0, Math.min(1, star.alpha)); // Clamp
