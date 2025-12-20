@@ -38,10 +38,25 @@
 <body class="bg-gray-900 p-4 sm:p-8">
 
     <!-- Mobile Notice Banner - dismissible -->
-    <div id="mobile-notice" class="hidden fixed top-0 left-0 right-0 bg-gradient-to-r from-cyan-600 to-teal-600 text-white text-center py-2 px-10 z-50 shadow-lg">
-        <p class="text-xs font-medium">📱 Mobile version in progress. Best viewed on desktop.</p>
-        <button id="mobile-notice-close" class="absolute right-3 top-1/2 -translate-y-1/2 text-white hover:text-gray-200 text-2xl font-bold leading-none p-1">&times;</button>
+    <div id="mobile-notice" class="hidden fixed top-0 left-0 right-0 bg-gradient-to-r from-cyan-600 to-teal-600 text-white text-center py-2 px-4 z-50 shadow-lg">
+        <p class="text-xs font-medium pr-10">📱 Mobile version in progress. Best viewed on desktop.</p>
+        <button type="button" id="close-mobile-banner" class="absolute right-2 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/30 rounded-full w-8 h-8 flex items-center justify-center text-white text-xl font-bold leading-none cursor-pointer">&times;</button>
     </div>
+    <script>
+        // Immediate banner close handler - runs before any other JS
+        document.addEventListener('DOMContentLoaded', function() {
+            var btn = document.getElementById('close-mobile-banner');
+            var banner = document.getElementById('mobile-notice');
+            if (btn && banner) {
+                btn.onclick = function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    banner.style.display = 'none';
+                    document.body.style.paddingTop = '';
+                };
+            }
+        });
+    </script>
 
     <header class="max-w-screen-2xl mx-auto mb-8 flex flex-col sm:flex-row justify-between items-center gap-4">
         <a href="https://www.thealliancedao.com/" rel="noopener noreferrer" class="flex-shrink-0">
@@ -74,28 +89,26 @@
                     </div>
                 </div>
                 
-                <!-- Address Search Row - separate on mobile -->
-                <div class="mt-4">
+                <!-- Address Search Section -->
+                <div class="mb-4">
                     <label for="search-address" class="block text-sm font-medium text-gray-300 mb-1">Search by Address</label>
-                    <div class="flex flex-col sm:flex-row gap-2">
-                        <div class="flex items-center gap-2 flex-1">
-                            <button id="address-direction-toggle" class="control-btn h-10 flex-shrink-0 w-16 text-xs font-mono" title="Toggle search direction">...cba</button>
-                            <input type="text" id="search-address" placeholder="Type from end" class="form-input flex-1 min-w-0" style="text-align: right;">
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <select id="address-dropdown" class="form-select flex-1 sm:flex-initial sm:w-32">
-                                <option value="">Holders</option>
-                            </select>
-                            <button id="copy-address-btn" class="control-btn h-10 flex-shrink-0" title="Copy Address">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
-                            </button>
-                        </div>
+                    <!-- Line 1: Search Input -->
+                    <input type="text" id="search-address" placeholder="Type from end (last char first)" class="form-input w-full mb-2" style="text-align: right;">
+                    <!-- Line 2: Toggle, Dropdown, Copy -->
+                    <div class="flex items-center gap-2">
+                        <button id="address-direction-toggle" class="control-btn h-10 px-3 text-xs" title="Toggle search direction">End ⇄</button>
+                        <select id="address-dropdown" class="form-select flex-1">
+                            <option value="">Holders</option>
+                        </select>
+                        <button id="copy-address-btn" class="control-btn h-10 flex-shrink-0" title="Copy Address">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                        </button>
                     </div>
                     <div id="address-suggestions" class="address-suggestions hidden"></div>
                 </div>
                 
                 <!-- Amount and Reset Row -->
-                <div class="flex justify-between items-end gap-4 mt-4">
+                <div class="flex justify-between items-end gap-4 mb-4">
                     <div class="text-center">
                         <label class="block text-sm font-medium text-gray-300 mb-1">AMOUNT</label>
                         <div id="results-count" class="h-10 bg-gray-900/50 rounded-lg flex items-center justify-center border border-gray-700 text-lg font-semibold text-cyan-400 whitespace-nowrap px-4"></div>
@@ -106,7 +119,7 @@
                 </div>
 
 
-                 <div class="mt-6 pt-4 border-t border-gray-700">
+                 <div class="pt-4 border-t border-gray-700">
                     <div id="toggle-status-filters" class="flex justify-between items-center cursor-pointer">
                         <h3 class="filter-section-title !mb-0">Status Filters</h3>
                         <svg id="status-arrow" class="w-5 h-5 text-gray-400 transition-transform md:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
@@ -162,33 +175,31 @@
 
         <div id="wallet-view" class="hidden">
             <div class="p-4 bg-gray-800/50 rounded-lg border border-gray-700 mb-8">
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-                    <div class="relative md:col-span-2">
-                        <label for="wallet-search-address" class="block text-sm font-medium text-gray-300 mb-1">Search by Address</label>
-                        <div class="flex items-center gap-2">
-                            <button id="wallet-address-direction-toggle" class="control-btn h-10 flex-shrink-0 w-20 text-xs font-mono" title="Toggle search direction">...cba</button>
-                            <input type="text" id="wallet-search-address" placeholder="Type from end (last char first)" class="form-input w-full" style="text-align: right;">
-                            <button id="wallet-copy-address-btn" class="control-btn h-10 flex-shrink-0" title="Copy Address">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
-                            </button>
-                        </div>
-                        <div id="wallet-address-suggestions" class="address-suggestions hidden"></div>
-                    </div>
-                    <div class="flex justify-end items-end">
-                        <button id="wallet-reset-btn" class="control-btn h-10">Reset</button>
-                    </div>
+                <!-- Wallet Address Search Section -->
+                <label for="wallet-search-address" class="block text-sm font-medium text-gray-300 mb-1">Search by Address</label>
+                <!-- Line 1: Search Input -->
+                <input type="text" id="wallet-search-address" placeholder="Type from end (last char first)" class="form-input w-full mb-2" style="text-align: right;">
+                <!-- Line 2: Toggle, Copy, Reset -->
+                <div class="flex items-center gap-2">
+                    <button id="wallet-address-direction-toggle" class="control-btn h-10 px-3 text-xs" title="Toggle search direction">End ⇄</button>
+                    <button id="wallet-copy-address-btn" class="control-btn h-10 flex-shrink-0" title="Copy Address">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                    </button>
+                    <div class="flex-1"></div>
+                    <button id="wallet-reset-btn" class="control-btn h-10">Reset</button>
                 </div>
+                <div id="wallet-address-suggestions" class="address-suggestions hidden"></div>
             </div>
 
             <div class="space-y-8">
                 <div>
                     <h2 class="text-2xl font-bold text-white mb-4">Holder Leaderboard</h2>
                     
-                    <!-- Selected wallet details - shown on mobile when a wallet is selected -->
+                    <!-- Selected wallet details - shown when a wallet is selected from leaderboard -->
                     <div id="selected-wallet-details" class="hidden mb-4 p-4 bg-gray-800/70 rounded-lg border border-cyan-500/50">
                         <div class="flex justify-between items-center mb-2">
                             <span id="selected-wallet-address" class="text-cyan-400 font-mono text-sm truncate flex-1"></span>
-                            <button id="clear-selected-wallet" class="text-gray-400 hover:text-white text-lg">&times;</button>
+                            <button id="clear-selected-wallet" class="text-gray-400 hover:text-white text-xl leading-none p-2">&times;</button>
                         </div>
                         <div id="selected-wallet-stats" class="grid grid-cols-3 gap-2 text-center text-xs">
                             <!-- Stats will be populated by JS -->

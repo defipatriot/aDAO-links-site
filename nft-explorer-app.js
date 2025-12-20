@@ -226,25 +226,6 @@ const mergeNftData = (metadata, statusData) => {
 };
 
 const initializeExplorer = async () => {
-    // Mobile banner close button - set up immediately before any async code
-    const mobileNotice = document.getElementById('mobile-notice');
-    const mobileNoticeClose = document.getElementById('mobile-notice-close');
-    if (mobileNoticeClose && mobileNotice) {
-        mobileNoticeClose.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            mobileNotice.style.display = 'none';
-            document.body.style.paddingTop = '0.5rem';
-        });
-        // Also handle touch
-        mobileNoticeClose.addEventListener('touchend', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            mobileNotice.style.display = 'none';
-            document.body.style.paddingTop = '0.5rem';
-        });
-    }
-    
     showLoading(gallery, 'Loading collection metadata...');
     showLoading(leaderboardTable, 'Loading holder data...');
     showLoading(walletGallery, 'Search for or select a wallet to see owned NFTs.');
@@ -2234,20 +2215,26 @@ function handleMapTouchMove(e) {
         // Pinch zoom - zoom toward pinch center
         const currentDist = getTouchDistance(e.touches);
         const scale = currentDist / touchState.startDist;
-        const newZoom = Math.max(0.1, Math.min(5, touchState.startZoom * scale));
+        const newZoom = Math.max(0.3, Math.min(4, touchState.startZoom * scale));
         
-        // Calculate offset to keep pinch center stationary
-        const canvasCenterX = spaceCanvas.clientWidth / 2;
-        const canvasCenterY = spaceCanvas.clientHeight / 2;
+        // Get current pinch center
+        const rect = spaceCanvas.getBoundingClientRect();
+        const center = getTouchCenter(e.touches);
+        const currentPinchX = center.x - rect.left;
+        const currentPinchY = center.y - rect.top;
         
-        // Vector from canvas center to pinch point
-        const pinchFromCenterX = touchState.pinchCenterX - canvasCenterX;
-        const pinchFromCenterY = touchState.pinchCenterY - canvasCenterY;
+        // The key insight: we want the point under our fingers to stay under our fingers
+        // Before zoom: worldX = (screenX - offsetX) / zoom
+        // After zoom:  worldX = (screenX - newOffsetX) / newZoom
+        // For the point to stay the same: newOffsetX = screenX - worldX * newZoom
         
-        // Adjust offset based on zoom change
-        const zoomDelta = newZoom / touchState.startZoom;
-        mapOffsetX = touchState.startOffsetX - pinchFromCenterX * (zoomDelta - 1);
-        mapOffsetY = touchState.startOffsetY - pinchFromCenterY * (zoomDelta - 1);
+        // Calculate the world point that was under the original pinch center
+        const worldX = (touchState.pinchCenterX - touchState.startOffsetX) / touchState.startZoom;
+        const worldY = (touchState.pinchCenterY - touchState.startOffsetY) / touchState.startZoom;
+        
+        // Calculate new offset to keep that world point under the current pinch center
+        mapOffsetX = currentPinchX - worldX * newZoom;
+        mapOffsetY = currentPinchY - worldY * newZoom;
         
         mapZoom = newZoom;
     } else if (e.touches.length === 1 && isPanning) {
@@ -2707,13 +2694,13 @@ const initializeStarfield = () => {
 const updateDirectionToggle = (toggleBtn, inputEl, isPrefix) => {
     if (!toggleBtn) return;
     if (isPrefix) {
-        toggleBtn.textContent = 'terra...';
-        toggleBtn.title = 'Mode: Start of address (click to switch)';
+        toggleBtn.textContent = 'Start ⇄';
+        toggleBtn.title = 'Mode: Start of address (click to switch to End)';
         inputEl.placeholder = 'Type from start (e.g. terra1x)';
         inputEl.style.textAlign = 'left';
     } else {
-        toggleBtn.textContent = '...cba';
-        toggleBtn.title = 'Mode: End of address - type last char first (click to switch)';
+        toggleBtn.textContent = 'End ⇄';
+        toggleBtn.title = 'Mode: End of address (click to switch to Start)';
         inputEl.placeholder = 'Type from end (last char first)';
         inputEl.style.textAlign = 'right';
     }
