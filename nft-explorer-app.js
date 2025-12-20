@@ -65,7 +65,7 @@ const STATUS_DATA_URL = "https://deving.zone/en/nfts/alliance_daos.json";
 const DAO_WALLET_ADDRESS = "terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm";
 const DAO_LOCKED_WALLET_SUFFIXES = ["8ywv", "417v", "6ugw"]; // Added from previous logic
 const itemsPerPage = 20;
-const traitOrder = ["Rank", "Rarity", "Planet", "Inhabitant", "Object", "Weather", "Light"];
+const traitOrder = ["Rarity", "Planet", "Inhabitant", "Object", "Weather", "Light"];
 const filterLayoutOrder = ["Rarity", "Object", "Weather", "Light"];
 const defaultTraitsOn = ["Rank", "Planet", "Inhabitant", "Object"];
 
@@ -234,65 +234,59 @@ const calculateRanks = () => {
         }
     });
 
-    // Second pass: assign rarity class and calculate tie-breaker scores
-    // Rarity Class = Official "Rarity" attribute (1-40, based on Object)
-    // Tie-breakers: Object count, Weather count, Light count, then NFT ID
+    // Second pass: assign rarity class and calculate trait-based sub-score
     allNfts.forEach(nft => {
         // Get official rarity score from metadata (Object rarity 1-40)
         const officialRarity = nft.attributes?.find(a => a.trait_type === 'Rarity')?.value || 0;
         nft.rarityClass = Number(officialRarity);
         
-        // Get trait counts for tie-breaking (lower count = rarer = better)
-        const objectValue = nft.attributes?.find(a => a.trait_type === 'Object')?.value;
-        const weatherValue = nft.attributes?.find(a => a.trait_type === 'Weather')?.value;
-        const lightValue = nft.attributes?.find(a => a.trait_type === 'Light')?.value;
-        
-        nft.objectCount = objectValue ? (traitCounts['Object']?.[objectValue] || 9999) : 9999;
-        nft.weatherCount = weatherValue ? (traitCounts['Weather']?.[weatherValue] || 9999) : 9999;
-        nft.lightCount = lightValue ? (traitCounts['Light']?.[lightValue] || 9999) : 9999;
-        
-        // Also store a combined rarity score for potential future use
-        let traitScore = 0;
+        // Calculate trait-based sub-score for ranking within the same rarity class
+        // Uses actual trait counts - rarer traits = higher score
+        let subScore = 0;
         if (nft.attributes) {
             nft.attributes.forEach(attr => {
+                // Include all visual traits for sub-scoring (excluding Rarity itself)
                 if (traitCounts[attr.trait_type]?.[attr.value] && attr.trait_type !== 'Rarity') {
                     const count = traitCounts[attr.trait_type][attr.value];
-                    traitScore += 1 / (count / allNfts.length);
+                    subScore += 1 / (count / allNfts.length);
                 }
             });
         }
-        nft.rarityScore = traitScore;
+        nft.subScore = subScore;
     });
 
-    // Sort by: Rarity Class (desc), then Object count (asc), Weather count (asc), Light count (asc), NFT ID (asc)
+    // Sort by: Rarity Class DESC (40 first), then subScore DESC (rarer traits first), then NFT ID ASC
     allNfts.sort((a, b) => {
         // Primary: Rarity class (higher = rarer = first)
         if (b.rarityClass !== a.rarityClass) return b.rarityClass - a.rarityClass;
         
-        // Tie-breaker 1: Object count (lower = rarer = first)
-        if (a.objectCount !== b.objectCount) return a.objectCount - b.objectCount;
-        
-        // Tie-breaker 2: Weather count (lower = rarer = first)
-        if (a.weatherCount !== b.weatherCount) return a.weatherCount - b.weatherCount;
-        
-        // Tie-breaker 3: Light count (lower = rarer = first)
-        if (a.lightCount !== b.lightCount) return a.lightCount - b.lightCount;
+        // Secondary: Sub-score (higher = rarer traits = first)
+        if (b.subScore !== a.subScore) return b.subScore - a.subScore;
         
         // Final tie-breaker: NFT ID (lower = first)
         return (a.id || 0) - (b.id || 0);
     });
 
-    // Assign display order (not a "rank", just for internal reference)
+    // Assign sub-rank within each rarity class
+    let currentClass = null;
+    let subRank = 0;
     allNfts.forEach((nft, index) => {
+        if (nft.rarityClass !== currentClass) {
+            currentClass = nft.rarityClass;
+            subRank = 1;
+        } else {
+            subRank++;
+        }
+        nft.subRank = subRank;
         nft.displayOrder = index + 1;
     });
     
-    // Log top 15 for debugging
-    console.log('Top 15 NFTs by Rarity Class (with tie-breakers):');
-    allNfts.slice(0, 15).forEach((nft, idx) => {
+    // Log top 20 for debugging
+    console.log('Top 20 NFTs by Rarity Class (40 = rarest):');
+    allNfts.slice(0, 20).forEach((nft) => {
         const weather = nft.attributes?.find(a => a.trait_type === 'Weather')?.value || 'N/A';
         const object = nft.attributes?.find(a => a.trait_type === 'Object')?.value || 'N/A';
-        console.log(`${idx + 1}. #${nft.id} - Rarity: ${nft.rarityClass}/40, Object: ${object} (${nft.objectCount}), Weather: ${weather} (${nft.weatherCount})`);
+        console.log(`${nft.rarityClass}/${nft.subRank} - #${nft.id}, Object: ${object}, Weather: ${weather}, SubScore: ${nft.subScore.toFixed(2)}`);
     });
 };
 
@@ -930,15 +924,13 @@ const createNftCard = (nft, toggleSelector) => {
     
     visibleTraits.forEach(traitType => {
         let value = 'N/A';
-        if (traitType === 'Rank') {
-            // Show Rarity Class instead of rank number
+        if (traitType === 'Rarity') {
+            // Show Rarity Class from the NFT
             value = nft.rarityClass != null ? `${nft.rarityClass}/40` : 'N/A';
-        } else if (traitType === 'Rarity') {
-    value = nft.attributes?.find(a => a.trait_type === 'Rarity')?.value || 'N/A';
         } else {
             value = nft.attributes?.find(attr => attr.trait_type === traitType)?.value || 'N/A';
         }
-        traitsHtml += `<li class="flex justify-between items-center py-2 px-1 border-b border-gray-700 last:border-b-0"><span class="text-xs font-medium text-cyan-400 uppercase">${traitType === 'Rank' ? 'RARITY' : traitType}</span><span class="text-sm font-semibold text-white truncate" title="${value}">${value}</span></li>`;
+        traitsHtml += `<li class="flex justify-between items-center py-2 px-1 border-b border-gray-700 last:border-b-0"><span class="text-xs font-medium text-cyan-400 uppercase">${traitType}</span><span class="text-sm font-semibold text-white truncate" title="${value}">${value}</span></li>`;
     });
     
     card.innerHTML = `<div class="image-container aspect-w-1-aspect-h-1 w-full"><img src="${imageUrl}" data-fallback="${fallbackUrl}" alt="${newTitle}" class="w-full h-full object-cover" loading="lazy" onerror="if(this.dataset.fallback && this.src !== this.dataset.fallback) { this.src = this.dataset.fallback; } else { this.onerror=null; this.src='https://placehold.co/300x300/1f2937/e5e7eb?text=Image+Error'; }"></div><div class="p-4 flex-grow flex flex-col"><h2 class="text-lg font-bold text-white mb-3 truncate" title="${newTitle}">${newTitle}</h2><ul class="text-sm flex-grow">${traitsHtml}</ul></div>`;
