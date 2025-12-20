@@ -88,7 +88,28 @@ let isInitialLoad = true;
 const debounce = (func, delay) => { let timeout; return function(...args) { clearTimeout(timeout); timeout = setTimeout(() => func.apply(this, args), delay); }; };
 const showLoading = (container, message) => { if(container) container.innerHTML = `<p class="text-center col-span-full text-cyan-400 text-lg">${message}</p>`; };
 const showError = (container, message) => { if(container) container.innerHTML = `<div class="text-center col-span-full bg-red-900/50 border border-red-700 text-white p-6 rounded-lg"><h3 class="font-bold text-xl">Error</h3><p class="mt-2 text-red-300">${message}</p></div>`; };
-function convertIpfsUrl(ipfsUrl) { if (!ipfsUrl || !ipfsUrl.startsWith('ipfs://')) return ''; return `https://ipfs.io/ipfs/${ipfsUrl.replace('ipfs://', '')}`; }
+// Primary: Cloudflare Images CDN (fast & reliable)
+// Fallback: IPFS gateway
+const CLOUDFLARE_CDN_BASE = 'https://imagedelivery.net/v_zOWVQCPb7Xpcbu-gQC1A/alliance_dao';
+const IPFS_GATEWAY = 'https://cloudflare-ipfs.com/ipfs'; // Using Cloudflare's IPFS gateway as fallback
+
+function getImageUrl(nftId, variant = 'public') {
+    if (!nftId) return '';
+    return `${CLOUDFLARE_CDN_BASE}/${nftId}.png/${variant}`;
+}
+
+function convertIpfsUrl(ipfsUrl) { 
+    if (!ipfsUrl || !ipfsUrl.startsWith('ipfs://')) return ''; 
+    return `${IPFS_GATEWAY}/${ipfsUrl.replace('ipfs://', '')}`; 
+}
+
+// Helper to get image with fallback - use for onerror handlers
+function getIpfsFallbackUrl(nftId, ipfsUrl) {
+    if (ipfsUrl && ipfsUrl.startsWith('ipfs://')) {
+        return convertIpfsUrl(ipfsUrl);
+    }
+    return `https://placehold.co/300x300/1f2937/e5e7eb?text=NFT+${nftId || '?'}`;
+}
 
 // --- Data Fetching and Processing ---
 const mergeNftData = (metadata, statusData) => {
@@ -825,7 +846,9 @@ const createNftCard = (nft, toggleSelector) => {
     const card = document.createElement('div');
     card.className = 'nft-card bg-gray-800 border border-gray-700 rounded-xl overflow-hidden flex flex-col';
     card.addEventListener('click', () => showNftDetails(nft));
-    const imageUrl = convertIpfsUrl(nft.thumbnail_image || nft.image) || `https://placehold.co/300x300/1f2937/e5e7eb?text=No+Image`;
+    // Primary: Cloudflare CDN, Fallback: IPFS gateway
+    const imageUrl = getImageUrl(nft.id) || `https://placehold.co/300x300/1f2937/e5e7eb?text=No+Image`;
+    const fallbackUrl = getIpfsFallbackUrl(nft.id, nft.thumbnail_image || nft.image);
     const newTitle = (nft.name || `NFT #${nft.id || '?'}`).replace('The AllianceDAO NFT', 'AllianceDAO NFT');
 
     let traitsHtml = '';
@@ -846,7 +869,7 @@ const createNftCard = (nft, toggleSelector) => {
         traitsHtml += `<li class="flex justify-between items-center py-2 px-1 border-b border-gray-700 last:border-b-0"><span class="text-xs font-medium text-cyan-400 uppercase">${traitType}</span><span class="text-sm font-semibold text-white truncate" title="${value}">${value}</span></li>`;
     });
     
-    card.innerHTML = `<div class="image-container aspect-w-1-aspect-h-1 w-full"><img src="${imageUrl}" alt="${newTitle}" class="w-full h-full object-cover" loading="lazy" onerror="this.onerror=null; this.src='https://placehold.co/300x300/1f2937/e5e7eb?text=Image+Error'; this.alt='Image Error';"></div><div class="p-4 flex-grow flex flex-col"><h2 class="text-lg font-bold text-white mb-3 truncate" title="${newTitle}">${newTitle}</h2><ul class="text-sm flex-grow">${traitsHtml}</ul></div>`;
+    card.innerHTML = `<div class="image-container aspect-w-1-aspect-h-1 w-full"><img src="${imageUrl}" data-fallback="${fallbackUrl}" alt="${newTitle}" class="w-full h-full object-cover" loading="lazy" onerror="if(this.dataset.fallback && this.src !== this.dataset.fallback) { this.src = this.dataset.fallback; } else { this.onerror=null; this.src='https://placehold.co/300x300/1f2937/e5e7eb?text=Image+Error'; }"></div><div class="p-4 flex-grow flex flex-col"><h2 class="text-lg font-bold text-white mb-3 truncate" title="${newTitle}">${newTitle}</h2><ul class="text-sm flex-grow">${traitsHtml}</ul></div>`;
     
     const imageContainer = card.querySelector('.image-container');
     if (!imageContainer) return card; // Safety check
@@ -1122,13 +1145,13 @@ const showPreviewTile = (event, traitType, value) => {
     const placeholder = `https://placehold.co/128x128/374151/9ca3af?text=N/A`;
     
     if (sample1) {
-        image1.src = convertIpfsUrl(sample1.thumbnail_image || sample1.image) || placeholder;
+        image1.src = getImageUrl(sample1.id) || convertIpfsUrl(sample1.thumbnail_image || sample1.image) || placeholder;
         name1.textContent = sample1.attributes?.find(a => a.trait_type === traitType)?.value || value;
         container1.classList.remove('hidden');
     } else { container1.classList.add('hidden'); image1.src=''; name1.textContent=''; }
     
     if (sample2) {
-        image2.src = convertIpfsUrl(sample2.thumbnail_image || sample2.image) || placeholder;
+        image2.src = getImageUrl(sample2.id) || convertIpfsUrl(sample2.thumbnail_image || sample2.image) || placeholder;
         name2.textContent = sample2.attributes?.find(a => a.trait_type === traitType)?.value || value;
         container2.classList.remove('hidden');
     } else { container2.classList.add('hidden'); image2.src=''; name2.textContent=''; }
@@ -1196,7 +1219,19 @@ const showNftDetails = (nft) => {
     
     if(!imgEl || !titleEl || !traitsEl || !linkEl || !dlBtn) return; // Safety check
     
-    imgEl.src = convertIpfsUrl(nft.image) || `https://placehold.co/400x400/1f2937/e5e7eb?text=No+Image`;
+    // Primary: Cloudflare CDN, Fallback: IPFS gateway
+    const primaryUrl = getImageUrl(nft.id) || `https://placehold.co/400x400/1f2937/e5e7eb?text=No+Image`;
+    const fallbackUrl = getIpfsFallbackUrl(nft.id, nft.image);
+    imgEl.src = primaryUrl;
+    imgEl.dataset.fallback = fallbackUrl;
+    imgEl.onerror = function() {
+        if (this.dataset.fallback && this.src !== this.dataset.fallback) {
+            this.src = this.dataset.fallback;
+        } else {
+            this.onerror = null;
+            this.src = 'https://placehold.co/400x400/1f2937/e5e7eb?text=Image+Error';
+        }
+    };
     titleEl.textContent = (nft.name || `NFT #${nft.id || '?'}`).replace('The AllianceDAO NFT', 'AllianceDAO NFT');
     
     // Get the "Rarity" trait value, default to 'N/A'
@@ -1258,8 +1293,8 @@ const showNftDetails = (nft) => {
         ownerEl.removeAttribute('title');
     }
 
-    // Update IPFS link and Download button (same as before)
-    linkEl.href = convertIpfsUrl(nft.image) || '#';
+    // Update image link and Download button
+    linkEl.href = getImageUrl(nft.id) || convertIpfsUrl(nft.image) || '#';
     dlBtn.textContent = 'Download Post';
     dlBtn.disabled = false;
     dlBtn.onclick = () => generateShareImage(nft, dlBtn); 
@@ -1312,13 +1347,26 @@ const generateShareImage = (nft, button) => {
     const img = new Image();
     img.crossOrigin = "anonymous";
     
-    const imgUrl = convertIpfsUrl(nft.image) || convertIpfsUrl(nft.thumbnail_image);
-    if (!imgUrl) {
+    // Primary: Cloudflare CDN, Fallback: IPFS
+    const primaryUrl = getImageUrl(nft.id);
+    const fallbackUrl = convertIpfsUrl(nft.image) || convertIpfsUrl(nft.thumbnail_image);
+    
+    if (!primaryUrl && !fallbackUrl) {
         button.textContent = 'No Image';
         setTimeout(() => { button.textContent = 'Download Post'; button.disabled = false; }, 2000);
         return;
     }
-    img.src = imgUrl;
+    
+    // Try primary first, fall back to IPFS on error
+    img.onerror = function() {
+        if (fallbackUrl && this.src !== fallbackUrl) {
+            this.src = fallbackUrl;
+        } else {
+            button.textContent = 'Load Error';
+            setTimeout(() => { button.textContent = 'Download Post'; button.disabled = false; }, 2000);
+        }
+    };
+    img.src = primaryUrl || fallbackUrl;
 
     img.onload = () => {
         canvas.width = 1080; canvas.height = 1080;
@@ -2159,8 +2207,7 @@ const initializeStarfield = () => {
 
 // --- Reusable Address Search Handler ---
 const handleAddressInput = (inputEl, suggestionsEl, onSelectCallback, isWallet) => {
-    const input = inputEl.value.toLowerCase();
-    const reversedInput = input.split('').reverse().join('');
+    const input = inputEl.value.toLowerCase().trim();
     if (!suggestionsEl) return;
     suggestionsEl.innerHTML = '';
 
@@ -2170,22 +2217,55 @@ const handleAddressInput = (inputEl, suggestionsEl, onSelectCallback, isWallet) 
         return;
     }
     
-    // Use the master list of all owners for suggestions
-    let matches = ownerAddresses.filter(addr => addr.toLowerCase().endsWith(reversedInput));
+    // Determine search direction: 
+    // - If starts with 'terra' → prefix search (left-to-right)
+    // - Otherwise → suffix search (right-to-left)
+    const isPrefix = input.startsWith('terra');
+    
+    let matches;
+    if (isPrefix) {
+        // Left-to-right: user is typing from the beginning
+        matches = ownerAddresses.filter(addr => addr.toLowerCase().startsWith(input));
+        // Sort alphabetically by the character after the typed portion
+        matches.sort((a, b) => {
+            const charA = a.charAt(input.length) || '';
+            const charB = b.charAt(input.length) || '';
+            return charA.localeCompare(charB);
+        });
+    } else {
+        // Right-to-left: user is typing from the end
+        matches = ownerAddresses.filter(addr => addr.toLowerCase().endsWith(input));
+        // Sort by the character before the typed portion (going backwards)
+        matches.sort((a, b) => {
+            const charA = a.charAt(a.length - input.length - 1) || '';
+            const charB = b.charAt(b.length - input.length - 1) || '';
+            return charA.localeCompare(charB);
+        });
+    }
 
-    const sortIndex = reversedInput.length;
-    matches.sort((a, b) => {
-        const charA = a.charAt(a.length - 1 - sortIndex) || '';
-        const charB = b.charAt(b.length - 1 - sortIndex) || '';
-        return charA.localeCompare(charB);
-    });
+    // Auto-fill if exactly one match
+    if (matches.length === 1) {
+        inputEl.value = matches[0];
+        suggestionsEl.classList.add('hidden');
+        onSelectCallback();
+        return;
+    }
 
     if (matches.length > 0) {
         matches.slice(0, 10).forEach(match => {
             const item = document.createElement('div');
             item.className = 'address-suggestion-item';
-            const startIndex = match.length - reversedInput.length;
-            item.innerHTML = `${match.substring(0, startIndex)}<strong class="text-cyan-400">${match.substring(startIndex)}</strong>`;
+            
+            // Highlight the matching portion
+            if (isPrefix) {
+                // Highlight from start
+                item.innerHTML = `<strong class="text-cyan-400">${match.substring(0, input.length)}</strong>${match.substring(input.length)}`;
+            } else {
+                // Highlight from end
+                const startIndex = match.length - input.length;
+                item.innerHTML = `${match.substring(0, startIndex)}<strong class="text-cyan-400">${match.substring(startIndex)}</strong>`;
+            }
+            
             item.style.direction = 'ltr';
             item.style.textAlign = 'left';
             item.onclick = () => {
@@ -2195,6 +2275,7 @@ const handleAddressInput = (inputEl, suggestionsEl, onSelectCallback, isWallet) 
             };
             suggestionsEl.appendChild(item);
         });
+        
         if (matches.length > 10) {
             const item = document.createElement('div');
             item.className = 'address-suggestion-item text-gray-400';
@@ -2205,6 +2286,7 @@ const handleAddressInput = (inputEl, suggestionsEl, onSelectCallback, isWallet) 
     } else {
         suggestionsEl.classList.add('hidden');
     }
+    
     // Trigger filter *only* for collection view input
     if (!isWallet) debouncedFilter();
 };
