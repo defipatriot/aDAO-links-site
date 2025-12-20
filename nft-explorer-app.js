@@ -18,9 +18,15 @@ const modalCloseBtn = document.getElementById('modal-close');
 const rarityModal = document.getElementById('rarity-modal');
 const rarityExplainedBtn = document.getElementById('rarity-explained-btn');
 const rarityModalCloseBtn = document.getElementById('rarity-modal-close');
+const sortingModal = document.getElementById('sorting-modal');
+const sortingExplainedBtn = document.getElementById('sorting-explained-btn');
+const sortingModalCloseBtn = document.getElementById('sorting-modal-close');
 const badgeModal = document.getElementById('badge-modal');
 const badgesExplainedBtn = document.getElementById('badges-explained-btn');
 const badgeModalCloseBtn = document.getElementById('badge-modal-close');
+const matchingTraitsToggle = document.getElementById('matching-traits-toggle');
+const matchingTraitsSlider = document.getElementById('matching-traits-slider');
+const matchingTraitsCount = document.getElementById('matching-traits-count');
 const collectionViewBtn = document.getElementById('collection-view-btn');
 const walletViewBtn = document.getElementById('wallet-view-btn');
 const mapViewBtn = document.getElementById('map-view-btn');
@@ -49,6 +55,17 @@ const togInhabBtn = document.getElementById('toggle-inhabitant-filters');
 const inhabArrow = document.getElementById('inhabitant-arrow');
 const togPlanBtn = document.getElementById('toggle-planet-filters');
 const planArrow = document.getElementById('planet-arrow');
+const togStatusBtn = document.getElementById('toggle-status-filters');
+const statusArrow = document.getElementById('status-arrow');
+const statusFiltersExtra = document.getElementById('status-filters-extra');
+// Address direction toggle buttons
+const addressDirectionToggle = document.getElementById('address-direction-toggle');
+const walletAddressDirectionToggle = document.getElementById('wallet-address-direction-toggle');
+
+// --- Address Search State ---
+// false = suffix/right-to-left (default, type ending), true = prefix/left-to-right (type beginning)
+let addressSearchDirection = false; 
+let walletAddressSearchDirection = false;
 
 
 // --- Config ---
@@ -57,9 +74,67 @@ const STATUS_DATA_URL = "https://deving.zone/en/nfts/alliance_daos.json";
 const DAO_WALLET_ADDRESS = "terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm";
 const DAO_LOCKED_WALLET_SUFFIXES = ["8ywv", "417v", "6ugw"]; // Added from previous logic
 const itemsPerPage = 20;
-const traitOrder = ["Rank", "Rarity", "Planet", "Inhabitant", "Object", "Weather", "Light"];
+const traitOrder = ["Rarity", "Planet", "Inhabitant", "Object", "Weather", "Light"];
 const filterLayoutOrder = ["Rarity", "Object", "Weather", "Light"];
-const defaultTraitsOn = ["Rank", "Planet", "Inhabitant", "Object"];
+const defaultTraitsOn = ["Rarity", "Planet", "Inhabitant", "Object"];
+
+// Planet to Inhabitant mapping (for "Matching Traits" filter)
+// Each planet has its native inhabitant race
+const PLANET_INHABITANT_MAP = {
+    'Cristall': 'Cristallian',
+    'Crutha': 'Cruthan',
+    'Gredica': 'Gredican',
+    'Kita': 'Kitan',
+    'Lusa': 'Lusan',
+    'Minas': 'Minasan',
+    'Ozara': 'Ozaran',
+    'Pampa': 'Pampan',
+    'Sindari': 'Sindarin',
+    'Zando': 'Zandoan'
+};
+
+// Planet to Objects mapping (objects that belong to each planet/race)
+const PLANET_OBJECTS_MAP = {
+    'Cristall': ['Cristallian Staff', 'Cristallian Bow', 'Cristallian Sword', 'Cristallian Ray Gun'],
+    'Crutha': ['Cruthan Death Mace', 'Cruthan Blaster'],
+    'Gredica': ['Gredican Power Staff', 'Gredican Sword'],
+    'Kita': ['Kitan Ice Staff', 'Kitan Ice Bow', 'Kitan Ice Sword'],
+    'Lusa': ['Lusan Water Staff', 'Lusan Water Saber', 'Ancient Lusan Trident', 'Lusan Xtreme Soaker'],
+    'Minas': ['Minasan Ore Staff', 'Minasan Bow', 'Minasan Ore Sword'],
+    'Ozara': ['Ozaran Sand Staff', 'Ozaran Bone Axe', 'Ozaran Death Saber', 'Royal Ozaran Bow', 'Ozaran Blaster'],
+    'Pampa': ['Pampan Grass Staff', 'Pampan Grass Sword'],
+    'Sindari': ['Sindarin Fire Staff', 'Sindarin Fire Bow', 'Sindarin Fire Saber', 'Sindarin Flame Thrower'],
+    'Zando': ['Staff of Zando', 'Sword of Zando', 'Zandoan Vine Bow']
+};
+
+// Check if an NFT has matching traits based on strictness level
+// Level 0: Planet + Inhabitant match (inhabitant on home planet)
+// Level 1: Planet + Inhabitant + Object match (full match - all three belong together)
+const hasMatchingTraits = (nft, strictLevel = 0) => {
+    const planet = nft.attributes?.find(a => a.trait_type === 'Planet')?.value;
+    const inhabitant = nft.attributes?.find(a => a.trait_type === 'Inhabitant')?.value;
+    const object = nft.attributes?.find(a => a.trait_type === 'Object')?.value;
+    
+    if (!planet || !inhabitant) return false;
+    
+    // Extract base planet name (remove North/South)
+    const basePlanet = planet.replace(/ (North|South)$/, '');
+    // Extract base inhabitant name (remove M/F)
+    const baseInhabitant = inhabitant.replace(/ (M|F)$/, '');
+    
+    // Check if inhabitant matches planet's native race
+    const planetInhabitantMatch = PLANET_INHABITANT_MAP[basePlanet] === baseInhabitant;
+    
+    if (!planetInhabitantMatch) return false;
+    
+    // If only checking planet + inhabitant (level 0), we're done
+    if (strictLevel === 0) return true;
+    
+    // Level 1: Also check if object belongs to this planet
+    if (!object) return false;
+    const planetObjects = PLANET_OBJECTS_MAP[basePlanet] || [];
+    return planetObjects.includes(object);
+};
 
 // --- State ---
 let allNfts = [];
@@ -88,7 +163,28 @@ let isInitialLoad = true;
 const debounce = (func, delay) => { let timeout; return function(...args) { clearTimeout(timeout); timeout = setTimeout(() => func.apply(this, args), delay); }; };
 const showLoading = (container, message) => { if(container) container.innerHTML = `<p class="text-center col-span-full text-cyan-400 text-lg">${message}</p>`; };
 const showError = (container, message) => { if(container) container.innerHTML = `<div class="text-center col-span-full bg-red-900/50 border border-red-700 text-white p-6 rounded-lg"><h3 class="font-bold text-xl">Error</h3><p class="mt-2 text-red-300">${message}</p></div>`; };
-function convertIpfsUrl(ipfsUrl) { if (!ipfsUrl || !ipfsUrl.startsWith('ipfs://')) return ''; return `https://ipfs.io/ipfs/${ipfsUrl.replace('ipfs://', '')}`; }
+// Primary: Cloudflare Images CDN (fast & reliable)
+// Fallback: IPFS gateway
+const CLOUDFLARE_CDN_BASE = 'https://imagedelivery.net/v_zOWVQCPb7Xpcbu-gQC1A/alliance_dao';
+const IPFS_GATEWAY = 'https://cloudflare-ipfs.com/ipfs'; // Using Cloudflare's IPFS gateway as fallback
+
+function getImageUrl(nftId, variant = 'public') {
+    if (!nftId) return '';
+    return `${CLOUDFLARE_CDN_BASE}/${nftId}.png/${variant}`;
+}
+
+function convertIpfsUrl(ipfsUrl) { 
+    if (!ipfsUrl || !ipfsUrl.startsWith('ipfs://')) return ''; 
+    return `${IPFS_GATEWAY}/${ipfsUrl.replace('ipfs://', '')}`; 
+}
+
+// Helper to get image with fallback - use for onerror handlers
+function getIpfsFallbackUrl(nftId, ipfsUrl) {
+    if (ipfsUrl && ipfsUrl.startsWith('ipfs://')) {
+        return convertIpfsUrl(ipfsUrl);
+    }
+    return `https://placehold.co/300x300/1f2937/e5e7eb?text=NFT+${nftId || '?'}`;
+}
 
 // --- Data Fetching and Processing ---
 const mergeNftData = (metadata, statusData) => {
@@ -159,10 +255,12 @@ const initializeExplorer = async () => {
         populateWalletTraitToggles();
         updateAddressDropdown(allNfts);
         updateFilterCounts(allNfts);
+        updateMatchingTraitsCount(); // Update matching traits count
         addAllEventListeners();
         applyStateFromUrl();
         applyFiltersAndSort();
         calculateAndDisplayLeaderboard();
+        
         
         handleHashChange(); // Check hash on initial load
         isInitialLoad = false; // Mark initial load complete
@@ -179,6 +277,8 @@ const calculateRanks = () => {
     traitCounts = {};
     inhabitantCounts = {};
     planetCounts = {};
+    
+    // First pass: count all traits
     allNfts.forEach(nft => {
         if (nft.attributes) {
             nft.attributes.forEach(attr => {
@@ -203,26 +303,152 @@ const calculateRanks = () => {
         }
     });
 
+    // Second pass: assign rarity class and calculate sub-score for tie-breaking
+    // Rarity Class = Official "Rarity" attribute (1-40, based on Object)
+    // Sub-score uses OTHER traits in order: Inhabitant, Planet, Weather, Light
+    // For Inhabitant and Planet, we use the SPECIFIC variant count (M/F, North/South)
     allNfts.forEach(nft => {
-        let totalScore = 0;
-        if (nft.attributes) {
-            nft.attributes.forEach(attr => {
-                // Rarity score based on all traits except Weather and Light
-                if (traitCounts[attr.trait_type]?.[attr.value] && !['Weather', 'Light', 'Rarity'].includes(attr.trait_type)) {
-                    const count = traitCounts[attr.trait_type][attr.value];
-                    const rarity = count / allNfts.length;
-                    if (rarity > 0) totalScore += 1 / rarity;
-                }
-            });
-        }
-        nft.rarityScore = totalScore;
+        // Get official rarity score from metadata (Object rarity 1-40)
+        const officialRarity = nft.attributes?.find(a => a.trait_type === 'Rarity')?.value || 0;
+        nft.rarityClass = Number(officialRarity);
+        
+        // Get individual trait values
+        const inhabitantValue = nft.attributes?.find(a => a.trait_type === 'Inhabitant')?.value;
+        const planetValue = nft.attributes?.find(a => a.trait_type === 'Planet')?.value;
+        const weatherValue = nft.attributes?.find(a => a.trait_type === 'Weather')?.value;
+        const lightValue = nft.attributes?.find(a => a.trait_type === 'Light')?.value;
+        
+        // For Inhabitant: use the specific M/F variant count, not the base count
+        // traitCounts['Inhabitant']['Lusan M'] gives exact count of Lusan M
+        nft.inhabitantCount = inhabitantValue ? (traitCounts['Inhabitant']?.[inhabitantValue] || 9999) : 9999;
+        
+        // For Planet: use the specific North/South variant count
+        // traitCounts['Planet']['Cristall South'] gives exact count of Cristall South
+        nft.planetCount = planetValue ? (traitCounts['Planet']?.[planetValue] || 9999) : 9999;
+        
+        // Weather and Light counts
+        nft.weatherCount = weatherValue ? (traitCounts['Weather']?.[weatherValue] || 9999) : 9999;
+        nft.lightCount = lightValue ? (traitCounts['Light']?.[lightValue] || 9999) : 9999;
+        
+        // Store the values for display/debugging
+        nft.inhabitantValue = inhabitantValue;
+        nft.planetValue = planetValue;
+        nft.weatherValue = weatherValue;
+        nft.lightValue = lightValue;
     });
 
-    allNfts.sort((a, b) => b.rarityScore - a.rarityScore);
+    // Sort by: Rarity Class DESC, then Planet ASC, Inhabitant ASC, Weather ASC, Light ASC, NFT ID ASC
+    // (Lower count = rarer = should come first, so ASC)
+    allNfts.sort((a, b) => {
+        // Primary: Rarity class (higher = rarer = first)
+        if (b.rarityClass !== a.rarityClass) return b.rarityClass - a.rarityClass;
+        
+        // Tie-breaker 1: Planet variant count (lower = rarer = first)
+        // Background is ~80% of visual, so most important after Object
+        if (a.planetCount !== b.planetCount) return a.planetCount - b.planetCount;
+        
+        // Tie-breaker 2: Inhabitant variant count (lower = rarer = first)
+        if (a.inhabitantCount !== b.inhabitantCount) return a.inhabitantCount - b.inhabitantCount;
+        
+        // Tie-breaker 3: Weather count (lower = rarer = first)
+        if (a.weatherCount !== b.weatherCount) return a.weatherCount - b.weatherCount;
+        
+        // Tie-breaker 4: Light count (lower = rarer = first)
+        if (a.lightCount !== b.lightCount) return a.lightCount - b.lightCount;
+        
+        // Final tie-breaker: NFT ID (lower = first)
+        return (a.id || 0) - (b.id || 0);
+    });
 
+    // Assign sub-rank within each rarity class
+    let currentClass = null;
+    let subRank = 0;
     allNfts.forEach((nft, index) => {
-        nft.rank = index + 1;
+        if (nft.rarityClass !== currentClass) {
+            currentClass = nft.rarityClass;
+            subRank = 1;
+        } else {
+            subRank++;
+        }
+        nft.subRank = subRank;
+        nft.displayOrder = index + 1;
     });
+    
+    // Log top 25 for debugging (to see all Rarity 40s)
+    console.log('Top 25 NFTs by Rarity Class (tie-break: Planet N/S → Inhabitant M/F → Weather → Light → ID):');
+    console.log('Lower counts = rarer = ranked higher within class');
+    allNfts.slice(0, 25).forEach((nft) => {
+        console.log(`${nft.rarityClass}/${nft.subRank} - #${nft.id} | Planet: ${nft.planetValue} (${nft.planetCount}) | Inh: ${nft.inhabitantValue} (${nft.inhabitantCount}) | Weather: ${nft.weatherValue} (${nft.weatherCount})`);
+    });
+};
+
+// Helper function to get trait rarity rank (for medal display)
+const getTraitRarityRank = (traitType, traitValue) => {
+    if (!traitCounts[traitType]) return null;
+    
+    // Get all values for this trait type and sort by count (ascending = rarer first)
+    const traitValues = Object.entries(traitCounts[traitType])
+        .map(([value, count]) => ({ value, count }))
+        .sort((a, b) => a.count - b.count);
+    
+    const rank = traitValues.findIndex(t => t.value === traitValue) + 1;
+    const total = traitValues.length;
+    const count = traitCounts[traitType][traitValue];
+    const percentage = ((count / allNfts.length) * 100).toFixed(1);
+    
+    return { rank, total, count, percentage };
+};
+
+// Populate the distribution tables in the Sorting Explained modal
+const populateDistributionTables = () => {
+    const planetDistEl = document.getElementById('planet-distribution');
+    const inhabitantDistEl = document.getElementById('inhabitant-distribution');
+    
+    if (!traitCounts['Planet'] || !traitCounts['Inhabitant']) {
+        if (planetDistEl) planetDistEl.innerHTML = '<p class="text-gray-500">Data not loaded yet.</p>';
+        if (inhabitantDistEl) inhabitantDistEl.innerHTML = '<p class="text-gray-500">Data not loaded yet.</p>';
+        return;
+    }
+    
+    // Planet + Zone distribution (sorted by count, rarest first)
+    if (planetDistEl) {
+        const planetData = Object.entries(traitCounts['Planet'])
+            .map(([name, count]) => ({ name, count, pct: ((count / allNfts.length) * 100).toFixed(2) }))
+            .sort((a, b) => a.count - b.count);
+        
+        let html = '<div class="grid grid-cols-2 md:grid-cols-4 gap-2">';
+        planetData.forEach((p, idx) => {
+            const colorClass = idx < 5 ? 'text-yellow-400' : idx < 10 ? 'text-cyan-400' : 'text-gray-400';
+            html += `<span class="${colorClass}">${idx + 1}. ${p.name} (${p.count} - ${p.pct}%)</span>`;
+        });
+        html += '</div>';
+        planetDistEl.innerHTML = html;
+    }
+    
+    // Inhabitant + Gender distribution (sorted by count, rarest first)
+    if (inhabitantDistEl) {
+        const inhabitantData = Object.entries(traitCounts['Inhabitant'])
+            .map(([name, count]) => ({ name, count, pct: ((count / allNfts.length) * 100).toFixed(2) }))
+            .sort((a, b) => a.count - b.count);
+        
+        let html = '<div class="grid grid-cols-2 md:grid-cols-4 gap-2">';
+        inhabitantData.forEach((i, idx) => {
+            const colorClass = idx < 5 ? 'text-purple-400' : idx < 10 ? 'text-cyan-400' : 'text-gray-400';
+            html += `<span class="${colorClass}">${idx + 1}. ${i.name} (${i.count} - ${i.pct}%)</span>`;
+        });
+        html += '</div>';
+        inhabitantDistEl.innerHTML = html;
+    }
+};
+
+// Update the matching traits count display
+const updateMatchingTraitsCount = () => {
+    if (!matchingTraitsCount || !allNfts.length) return;
+    
+    const strictLevel = matchingTraitsSlider ? parseInt(matchingTraitsSlider.value) : 0;
+    const count = allNfts.filter(nft => hasMatchingTraits(nft, strictLevel)).length;
+    
+    matchingTraitsCount.textContent = count.toLocaleString();
 };
 
 // --- UI Population ---
@@ -323,39 +549,34 @@ const populateTraitFilters = () => {
 
 const populateStatusFilters = () => {
     statusFiltersGrid.innerHTML = '';
+    
+    // All 6 status filters in the same structure
     const statusFilterConfig = [
-        { key: 'staked', label: 'Staked', left: 'Ent', right: 'DAO' }, // Changed from Enterprise/DAODAO
-        { key: 'listed', label: 'Listed', left: 'Boost', right: 'BBL' }, // Changed from Boost/BackBoneLabs
-        { key: 'rewards', label: 'Rewards', left: 'Broken', right: 'Unbroken' }
+        { key: 'staked', label: 'Staked', left: 'Ent', right: 'DAO' },
+        { key: 'listed', label: 'Listed', left: 'Boost', right: 'BBL' },
+        { key: 'rewards', label: 'Rewards', left: 'Broken', right: 'Unbroken' },
+        { key: 'mint_status', label: 'Mint Status', left: 'Un-Minted', right: 'Minted' },
+        { key: 'matching_traits', label: 'Matching', left: 'P+I', right: 'P+I+O' },
+        { key: 'liquid_status', label: 'Liquid', left: 'Liquid', right: 'Not Liq' }
     ];
 
     statusFilterConfig.forEach(filter => {
         const container = createFilterItem({
-            toggleClass: 'status-toggle-cb', key: filter.key, label: filter.label,
+            toggleClass: 'status-toggle-cb', 
+            key: filter.key, 
+            label: filter.label,
             countClass: 'status-count',
-            sliderClass: 'status-slider', left: filter.left, right: filter.right
+            sliderClass: 'status-slider', 
+            left: filter.left, 
+            right: filter.right
         });
-         statusFiltersGrid.appendChild(container);
+        statusFiltersGrid.appendChild(container);
     });
 
-    mintStatusContainer.innerHTML = ''; // Clear previous content
-    const mintStatusFilter = createFilterItem({
-        toggleClass: 'status-toggle-cb', key: 'mint_status', label: 'Mint Status',
-        countClass: 'status-count',
-        sliderClass: 'status-slider', left: 'Un-Minted', right: 'Minted'
-    });
-    mintStatusContainer.appendChild(mintStatusFilter);
-    
-    // *** ADDED LIQUID FILTER ***
-    const liquidStatusFilter = createFilterItem({
-        toggleClass: 'status-toggle-cb', key: 'liquid_status', label: 'Liquid Status',
-        countClass: 'status-count',
-        sliderClass: 'status-slider', left: 'Liquid', right: 'Not Liq'
-    });
-    // Add it to the same grid as the mint status
-    const grid = mintStatusContainer.closest('.grid') || mintStatusContainer.parentElement;
-    if (grid) {
-        grid.appendChild(liquidStatusFilter);
+    // Clear and hide the old extra container since we moved everything to the main grid
+    const extraContainer = document.getElementById('status-filters-extra');
+    if (extraContainer) {
+        extraContainer.style.display = 'none';
     }
 };
 
@@ -371,7 +592,7 @@ const populateTraitToggles = () => {
 
 const populateWalletTraitToggles = () => {
     walletTraitTogglesContainer.innerHTML = '';
-    const walletTraits = ["Rank", "Planet", "Inhabitant", "Object"];
+    const walletTraits = ["Rarity", "Planet", "Inhabitant", "Object"];
     walletTraits.forEach(traitType => {
         const label = document.createElement('label');
         label.className = 'toggle-label';
@@ -424,6 +645,13 @@ const addAllEventListeners = () => {
             planArrow.classList.toggle('rotate-180');
         });
     }
+    // Status filters toggle - same behavior as inhabitant/planet
+    if(togStatusBtn && statusFiltersGrid && statusArrow) {
+        togStatusBtn.addEventListener('click', () => {
+            statusFiltersGrid.classList.toggle('hidden');
+            statusArrow.classList.toggle('rotate-180');
+        });
+    }
     
     // Add other listeners from the single file
     document.addEventListener('click', () => closeAllDropdowns());
@@ -432,9 +660,30 @@ const addAllEventListeners = () => {
     if (rarityExplainedBtn) rarityExplainedBtn.addEventListener('click', () => rarityModal.classList.remove('hidden'));
     if (rarityModalCloseBtn) rarityModalCloseBtn.addEventListener('click', () => rarityModal.classList.add('hidden'));
     if (rarityModal) rarityModal.addEventListener('click', (e) => { if (e.target === rarityModal) rarityModal.classList.add('hidden'); });
+    if (sortingExplainedBtn) sortingExplainedBtn.addEventListener('click', () => { 
+        populateDistributionTables(); 
+        sortingModal.classList.remove('hidden'); 
+    });
+    if (sortingModalCloseBtn) sortingModalCloseBtn.addEventListener('click', () => sortingModal.classList.add('hidden'));
+    if (sortingModal) sortingModal.addEventListener('click', (e) => { if (e.target === sortingModal) sortingModal.classList.add('hidden'); });
     if (badgesExplainedBtn) badgesExplainedBtn.addEventListener('click', () => badgeModal.classList.remove('hidden'));
     if (badgeModalCloseBtn) badgeModalCloseBtn.addEventListener('click', () => badgeModal.classList.add('hidden'));
     if (badgeModal) badgeModal.addEventListener('click', (e) => { if (e.target === badgeModal) badgeModal.classList.add('hidden'); });
+    if (matchingTraitsToggle) {
+        matchingTraitsToggle.addEventListener('change', () => {
+            if (matchingTraitsSlider) {
+                matchingTraitsSlider.disabled = !matchingTraitsToggle.checked;
+            }
+            updateMatchingTraitsCount();
+            handleFilterChange();
+        });
+    }
+    if (matchingTraitsSlider) {
+        matchingTraitsSlider.addEventListener('input', () => {
+            updateMatchingTraitsCount();
+            handleFilterChange();
+        });
+    }
     if (walletModalCloseBtn) walletModalCloseBtn.addEventListener('click', hideWalletExplorerModal);
     if (walletExplorerModal) walletExplorerModal.addEventListener('click', (e) => { if (e.target === walletExplorerModal) hideWalletExplorerModal(); });
     if (systemModalCloseBtn) systemModalCloseBtn.addEventListener('click', hideSystemLeaderboardModal);
@@ -456,12 +705,23 @@ const addAllEventListeners = () => {
             if (walletSearchAddressInput) walletSearchAddressInput.value = '';
             if (walletGallery) walletGallery.innerHTML = '';
             if (walletGalleryTitle) walletGalleryTitle.textContent = 'Wallet NFTs';
+            // Reset wallet status filters
+            document.querySelectorAll('.wallet-status-filter').forEach(cb => cb.checked = false);
              document.querySelectorAll('#leaderboard-table .leaderboard-row').forEach(row => {
                 row.classList.remove('selected');
             });
             showLoading(walletGallery,'Search for or select a wallet to see owned NFTs.'); // Reset gallery text
         });
     }
+    
+    // Wallet status filters - refresh display when toggled
+    document.querySelectorAll('.wallet-status-filter').forEach(cb => {
+        cb.addEventListener('change', () => {
+            if (walletSearchAddressInput?.value.trim()) {
+                searchWallet();
+            }
+        });
+    });
 
     if (walletSearchAddressInput) {
         walletSearchAddressInput.addEventListener('keypress', (e) => {
@@ -506,6 +766,10 @@ const addAllEventListeners = () => {
 
     setupCopyButton(copyAddressBtn, searchAddressInput);
     setupCopyButton(walletCopyAddressBtn, walletSearchAddressInput);
+    
+    // Setup address direction toggles
+    setupAddressDirectionToggle(addressDirectionToggle, searchAddressInput, false);
+    setupAddressDirectionToggle(walletAddressDirectionToggle, walletSearchAddressInput, true);
     
     // Map listeners
     addMapListeners(); // Add map listeners
@@ -639,6 +903,15 @@ const applyFiltersAndSort = () => {
         if (sliderValue === '0') tempNfts = tempNfts.filter(nft => nft.liquid === true);
         else if (sliderValue === '2') tempNfts = tempNfts.filter(nft => nft.liquid === false);
     }
+    
+    // *** MATCHING TRAITS FILTER - check both old DOM element and new dynamic one ***
+    const matchingToggle = document.querySelector('.status-toggle-cb[data-key="matching_traits"]') || matchingTraitsToggle;
+    const matchingSlider = document.querySelector('.status-slider[data-slider-key="matching_traits"]') || matchingTraitsSlider;
+    if (matchingToggle?.checked) {
+        const strictLevel = matchingSlider ? parseInt(matchingSlider.value) : 0;
+        tempNfts = tempNfts.filter(nft => hasMatchingTraits(nft, strictLevel));
+    }
+    
     const activePlanetFilters = [];
     document.querySelectorAll('.planet-toggle-cb:checked').forEach(cb => {
         const planetName = cb.dataset.key;
@@ -693,9 +966,21 @@ const applyFiltersAndSort = () => {
     });
 
     const sortValue = sortSelect.value;
-    if (sortValue === 'asc') tempNfts.sort((a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity));
-    else if (sortValue === 'desc') tempNfts.sort((a, b) => (b.rank ?? -Infinity) - (a.rank ?? -Infinity));
-    else if (sortValue === 'id') tempNfts.sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
+    if (sortValue === 'desc') {
+        // Rarity High to Low: 40/1, 40/2... 39/1, 39/2... (default, best first)
+        tempNfts.sort((a, b) => {
+            if (b.rarityClass !== a.rarityClass) return b.rarityClass - a.rarityClass;
+            return (a.subRank ?? 0) - (b.subRank ?? 0); // Within same class, lower subRank first
+        });
+    } else if (sortValue === 'asc') {
+        // Rarity Low to High: 1/1, 1/2... 2/1, 2/2... (common first)
+        tempNfts.sort((a, b) => {
+            if (a.rarityClass !== b.rarityClass) return a.rarityClass - b.rarityClass;
+            return (a.subRank ?? 0) - (b.subRank ?? 0); // Within same class, lower subRank first
+        });
+    } else if (sortValue === 'id') {
+        tempNfts.sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
+    }
 
     filteredNfts = tempNfts;
     if (resultsCount) resultsCount.textContent = filteredNfts.length;
@@ -749,7 +1034,7 @@ const applyStateFromUrl = () => {
     if (sortSelect && [...sortSelect.options].some(o => o.value === sortParam)) {
         sortSelect.value = sortParam;
     } else if (sortSelect) {
-        sortSelect.value = 'asc';
+        sortSelect.value = 'desc'; // Default: Rarity High to Low (40 first)
     }
     
     document.querySelectorAll('.multi-select-container').forEach(container => {
@@ -825,8 +1110,13 @@ const createNftCard = (nft, toggleSelector) => {
     const card = document.createElement('div');
     card.className = 'nft-card bg-gray-800 border border-gray-700 rounded-xl overflow-hidden flex flex-col';
     card.addEventListener('click', () => showNftDetails(nft));
-    const imageUrl = convertIpfsUrl(nft.thumbnail_image || nft.image) || `https://placehold.co/300x300/1f2937/e5e7eb?text=No+Image`;
-    const newTitle = (nft.name || `NFT #${nft.id || '?'}`).replace('The AllianceDAO NFT', 'AllianceDAO NFT');
+    // Primary: Cloudflare CDN, Fallback: IPFS gateway
+    const imageUrl = getImageUrl(nft.id) || `https://placehold.co/300x300/1f2937/e5e7eb?text=No+Image`;
+    const fallbackUrl = getIpfsFallbackUrl(nft.id, nft.thumbnail_image || nft.image);
+    
+    // Use shorter title format: "aDAO #XXXX" 
+    const shortTitle = `aDAO #${nft.id || '?'}`;
+    const fullTitle = (nft.name || `NFT #${nft.id || '?'}`).replace('The AllianceDAO NFT', 'AllianceDAO NFT');
 
     let traitsHtml = '';
     const visibleTraits = traitOrder.filter(t => {
@@ -836,17 +1126,20 @@ const createNftCard = (nft, toggleSelector) => {
     
     visibleTraits.forEach(traitType => {
         let value = 'N/A';
-        if (traitType === 'Rank' && nft.rank != null) {
-            value = `#${nft.rank}`;
-        } else if (traitType === 'Rarity') {
-    value = nft.attributes?.find(a => a.trait_type === 'Rarity')?.value || 'N/A';
+        if (traitType === 'Rarity') {
+            // Show as RarityClass/SubRank (e.g., 40/1 means Rarity 40, ranked 1st within that class)
+            if (nft.rarityClass != null && nft.subRank != null) {
+                value = `${nft.rarityClass}/${nft.subRank}`;
+            } else if (nft.rarityClass != null) {
+                value = `${nft.rarityClass}`;
+            }
         } else {
             value = nft.attributes?.find(attr => attr.trait_type === traitType)?.value || 'N/A';
         }
         traitsHtml += `<li class="flex justify-between items-center py-2 px-1 border-b border-gray-700 last:border-b-0"><span class="text-xs font-medium text-cyan-400 uppercase">${traitType}</span><span class="text-sm font-semibold text-white truncate" title="${value}">${value}</span></li>`;
     });
     
-    card.innerHTML = `<div class="image-container aspect-w-1-aspect-h-1 w-full"><img src="${imageUrl}" alt="${newTitle}" class="w-full h-full object-cover" loading="lazy" onerror="this.onerror=null; this.src='https://placehold.co/300x300/1f2937/e5e7eb?text=Image+Error'; this.alt='Image Error';"></div><div class="p-4 flex-grow flex flex-col"><h2 class="text-lg font-bold text-white mb-3 truncate" title="${newTitle}">${newTitle}</h2><ul class="text-sm flex-grow">${traitsHtml}</ul></div>`;
+    card.innerHTML = `<div class="image-container aspect-w-1-aspect-h-1 w-full"><img src="${imageUrl}" data-fallback="${fallbackUrl}" alt="${fullTitle}" class="w-full h-full object-cover" loading="lazy" onerror="if(this.dataset.fallback && this.src !== this.dataset.fallback) { this.src = this.dataset.fallback; } else { this.onerror=null; this.src='https://placehold.co/300x300/1f2937/e5e7eb?text=Image+Error'; }"></div><div class="p-4 flex-grow flex flex-col"><h2 class="text-lg font-bold text-white mb-3 truncate" title="${fullTitle}">${shortTitle}</h2><ul class="text-sm flex-grow">${traitsHtml}</ul></div>`;
     
     const imageContainer = card.querySelector('.image-container');
     if (!imageContainer) return card; // Safety check
@@ -935,7 +1228,12 @@ const resetAll = () => {
     if(searchInput) searchInput.value = '';
     if(searchAddressInput) searchAddressInput.value = '';
     if(addressDropdown) addressDropdown.value = '';
-    if(sortSelect) sortSelect.value = 'asc';
+    if(sortSelect) sortSelect.value = 'desc'; // Default: Rarity High to Low (40 first)
+    if(matchingTraitsToggle) matchingTraitsToggle.checked = false;
+    if(matchingTraitsSlider) {
+        matchingTraitsSlider.value = 0;
+        matchingTraitsSlider.disabled = true;
+    }
     
     document.querySelectorAll('.toggle-checkbox').forEach(toggle => {
         if (['status-toggle-cb', 'planet-toggle-cb', 'inhabitant-toggle-cb'].some(cls => toggle.classList.contains(cls))) {
@@ -1085,7 +1383,7 @@ const findHighestRaritySample = (filterFn) => {
     // Find the highest *score* (lowest rank)
     const matches = allNfts.filter(filterFn);
     if (matches.length === 0) return null;
-    matches.sort((a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity)); // Sort by rank asc
+    matches.sort((a, b) => (b.rarityClass ?? 0) - (a.rarityClass ?? 0)); // Sort by rarity class desc
     return matches[0];
 };
 
@@ -1122,13 +1420,13 @@ const showPreviewTile = (event, traitType, value) => {
     const placeholder = `https://placehold.co/128x128/374151/9ca3af?text=N/A`;
     
     if (sample1) {
-        image1.src = convertIpfsUrl(sample1.thumbnail_image || sample1.image) || placeholder;
+        image1.src = getImageUrl(sample1.id) || convertIpfsUrl(sample1.thumbnail_image || sample1.image) || placeholder;
         name1.textContent = sample1.attributes?.find(a => a.trait_type === traitType)?.value || value;
         container1.classList.remove('hidden');
     } else { container1.classList.add('hidden'); image1.src=''; name1.textContent=''; }
     
     if (sample2) {
-        image2.src = convertIpfsUrl(sample2.thumbnail_image || sample2.image) || placeholder;
+        image2.src = getImageUrl(sample2.id) || convertIpfsUrl(sample2.thumbnail_image || sample2.image) || placeholder;
         name2.textContent = sample2.attributes?.find(a => a.trait_type === traitType)?.value || value;
         container2.classList.remove('hidden');
     } else { container2.classList.add('hidden'); image2.src=''; name2.textContent=''; }
@@ -1196,30 +1494,72 @@ const showNftDetails = (nft) => {
     
     if(!imgEl || !titleEl || !traitsEl || !linkEl || !dlBtn) return; // Safety check
     
-    imgEl.src = convertIpfsUrl(nft.image) || `https://placehold.co/400x400/1f2937/e5e7eb?text=No+Image`;
+    // Primary: Cloudflare CDN, Fallback: IPFS gateway
+    const primaryUrl = getImageUrl(nft.id) || `https://placehold.co/400x400/1f2937/e5e7eb?text=No+Image`;
+    const fallbackUrl = getIpfsFallbackUrl(nft.id, nft.image);
+    imgEl.src = primaryUrl;
+    imgEl.dataset.fallback = fallbackUrl;
+    imgEl.onerror = function() {
+        if (this.dataset.fallback && this.src !== this.dataset.fallback) {
+            this.src = this.dataset.fallback;
+        } else {
+            this.onerror = null;
+            this.src = 'https://placehold.co/400x400/1f2937/e5e7eb?text=Image+Error';
+        }
+    };
     titleEl.textContent = (nft.name || `NFT #${nft.id || '?'}`).replace('The AllianceDAO NFT', 'AllianceDAO NFT');
     
-    // Get the "Rarity" trait value, default to 'N/A'
-    const rarityValue = nft.attributes?.find(a => a.trait_type === 'Rarity')?.value || 'N/A';
-
-    // Start traits HTML with Rank and the corrected Rarity value
-    let traitsHtml = `<div class="flex justify-between text-sm"><span class="text-gray-400">Rank:</span><span class="font-semibold text-white">#${nft.rank || 'N/A'}</span></div>`;
-    traitsHtml += `<div class="flex justify-between text-sm"><span class="text-gray-400">Rarity:</span><span class="font-semibold text-white">${rarityValue}</span></div>`;
+    // Helper function to get medal emoji based on rank
+    const getMedalBadge = (rank) => {
+        if (rank === 1) return '<span class="trait-medal gold" title="Rarest">🥇</span>';
+        if (rank === 2) return '<span class="trait-medal silver" title="2nd Rarest">🥈</span>';
+        if (rank === 3) return '<span class="trait-medal bronze" title="3rd Rarest">🥉</span>';
+        return '';
+    };
     
-    // Filter and sort the *rest* of the attributes
-    const attributesToShow = (nft.attributes || [])
-        .filter(a => traitOrder.includes(a.trait_type) && !['Rank', 'Rarity'].includes(a.trait_type))
-        .sort((a, b) => traitOrder.indexOf(a.trait_type) - traitOrder.indexOf(b.trait_type));
+    // Get the "Rarity" trait value (official object rarity 1-40)
+    const rarityValue = nft.attributes?.find(a => a.trait_type === 'Rarity')?.value || 'N/A';
+    
+    // Start traits HTML with Rank and Rarity
+    // Show Rarity as Class/SubRank (e.g., 40/1)
+    const rarityDisplay = (nft.rarityClass != null && nft.subRank != null) 
+        ? `${nft.rarityClass}/${nft.subRank}` 
+        : (nft.rarityClass || 'N/A');
+    let traitsHtml = `<div class="flex justify-between text-sm"><span class="text-gray-400">Rarity:</span><span class="font-semibold text-cyan-400 text-lg">${rarityDisplay}</span></div>`;
+    
+    // Separator
+    traitsHtml += `<div class="pt-2 mt-2 border-t border-gray-600"></div>`;
+    
+    // Traits with rarity info and medals
+    const traitsToShow = ['Planet', 'Inhabitant', 'Object', 'Weather', 'Light'];
+    traitsToShow.forEach(traitType => {
+        const attr = nft.attributes?.find(a => a.trait_type === traitType);
+        if (!attr) return;
         
-    // Add the filtered attributes to the HTML
-    traitsHtml += attributesToShow.map(attr => 
-        `<div class="flex justify-between text-sm"><span class="text-gray-400">${attr.trait_type}:</span><span class="font-semibold text-white truncate" title="${attr.value}">${attr.value || 'N/A'}</span></div>`
-    ).join('');
+        const rarityInfo = getTraitRarityRank(traitType, attr.value);
+        let rarityBadge = '';
+        let countInfo = '';
+        
+        if (rarityInfo) {
+            rarityBadge = getMedalBadge(rarityInfo.rank);
+            countInfo = `<span class="text-gray-500 text-xs ml-1">(${rarityInfo.percentage}% - ${rarityInfo.count} have)</span>`;
+        }
+        
+        traitsHtml += `
+            <div class="flex justify-between text-sm items-center">
+                <span class="text-gray-400">${traitType}:</span>
+                <span class="font-semibold text-white flex items-center gap-1">
+                    ${rarityBadge}
+                    <span class="truncate" title="${attr.value}">${attr.value || 'N/A'}</span>
+                    ${countInfo}
+                </span>
+            </div>`;
+    });
     
     // Separator line
     traitsHtml += `<div class="pt-2 mt-2 border-t border-gray-600"></div>`;
     
-    // Status Text Logic (same as before)
+    // Status Text Logic
     let statusTxt = 'Unknown';
     if (nft.owned_by_alliance_dao) {
         statusTxt = 'DAO Owned (Un-minted)';
@@ -1234,7 +1574,7 @@ const showNftDetails = (nft) => {
     } else if (nft.boost_market) {
         statusTxt = 'Listed (Boost)';
     } else if (nft.liquid === false) {
-        statusTxt = 'In Wallet (Not Liquid)'; // Catch-all for non-liquid
+        statusTxt = 'In Wallet (Not Liquid)';
     }
 
     traitsHtml += `<div class="flex justify-between text-sm"><span class="text-gray-400">Status:</span><span class="font-semibold text-white">${statusTxt}</span></div>`;
@@ -1243,7 +1583,7 @@ const showNftDetails = (nft) => {
     // Separator line
     traitsHtml += `<div class="pt-2 mt-2 border-t border-gray-600"></div>`;
     
-    // Owner Info (same as before)
+    // Owner Info
     traitsHtml += `<div class="flex justify-between text-sm items-center"><span class="text-gray-400">Owner:</span><span class="owner-address font-mono text-sm font-semibold text-white truncate cursor-pointer" title="Click to copy">${nft.owner || 'N/A'}</span></div>`;
 
     // Update the DOM
@@ -1258,8 +1598,8 @@ const showNftDetails = (nft) => {
         ownerEl.removeAttribute('title');
     }
 
-    // Update IPFS link and Download button (same as before)
-    linkEl.href = convertIpfsUrl(nft.image) || '#';
+    // Update image link and Download button
+    linkEl.href = getImageUrl(nft.id) || convertIpfsUrl(nft.image) || '#';
     dlBtn.textContent = 'Download Post';
     dlBtn.disabled = false;
     dlBtn.onclick = () => generateShareImage(nft, dlBtn); 
@@ -1285,9 +1625,11 @@ const findRarestTrait = (nft) => {
     let rarestTrait = null;
     let minCount = Infinity;
 
+    // Find the rarest trait by actual mint count
+    // Include: Planet, Inhabitant, Object (these affect the visual/value)
+    // Exclude: Weather, Light (per official docs, don't factor into rarity)
     nft.attributes.forEach(attr => {
-        // Only count traits that contribute to rarity score
-        if (traitCounts[attr.trait_type]?.[attr.value] && !['Weather', 'Light'].includes(attr.trait_type)) {
+        if (traitCounts[attr.trait_type]?.[attr.value] && !['Weather', 'Light', 'Rarity'].includes(attr.trait_type)) {
             const count = traitCounts[attr.trait_type][attr.value];
             if (count < minCount) {
                 minCount = count;
@@ -1312,13 +1654,26 @@ const generateShareImage = (nft, button) => {
     const img = new Image();
     img.crossOrigin = "anonymous";
     
-    const imgUrl = convertIpfsUrl(nft.image) || convertIpfsUrl(nft.thumbnail_image);
-    if (!imgUrl) {
+    // Primary: Cloudflare CDN, Fallback: IPFS
+    const primaryUrl = getImageUrl(nft.id);
+    const fallbackUrl = convertIpfsUrl(nft.image) || convertIpfsUrl(nft.thumbnail_image);
+    
+    if (!primaryUrl && !fallbackUrl) {
         button.textContent = 'No Image';
         setTimeout(() => { button.textContent = 'Download Post'; button.disabled = false; }, 2000);
         return;
     }
-    img.src = imgUrl;
+    
+    // Try primary first, fall back to IPFS on error
+    img.onerror = function() {
+        if (fallbackUrl && this.src !== fallbackUrl) {
+            this.src = fallbackUrl;
+        } else {
+            button.textContent = 'Load Error';
+            setTimeout(() => { button.textContent = 'Download Post'; button.disabled = false; }, 2000);
+        }
+    };
+    img.src = primaryUrl || fallbackUrl;
 
     img.onload = () => {
         canvas.width = 1080; canvas.height = 1080;
@@ -1345,7 +1700,10 @@ const generateShareImage = (nft, button) => {
         };
 
         drawText(`NFT #${nft.id || '?'}`, margin, margin + 48, 'left');
-        drawText(`Rank #${nft.rank || 'N/A'}`, canvas.width - margin, margin + 48, 'right');
+        const rarityDisplay = (nft.rarityClass != null && nft.subRank != null) 
+            ? `${nft.rarityClass}/${nft.subRank}` 
+            : (nft.rarityClass || 'N/A');
+        drawText(`Rarity ${rarityDisplay}`, canvas.width - margin, margin + 48, 'right');
         drawText(getTrait('Planet'), margin, canvas.height - margin, 'left');
         
         let inhabitantText = getTrait('Inhabitant');
@@ -1371,14 +1729,39 @@ const generateShareImage = (nft, button) => {
             drawText(`Rarest: ${strength.value || 'N/A'}`, canvas.width / 2, bannerY + 75, 'center');
         }
         
+        // Create download - works better on mobile
         try {
-            const link = document.createElement('a');
-            link.download = `AllianceDAO_NFT_${nft.id || 'Unknown'}.png`;
-            link.href = canvas.toDataURL('image/png');
-            link.click();
-            button.textContent = 'Downloaded!';
+            canvas.toBlob((blob) => {
+                if (!blob) {
+                    button.textContent = 'Blob Error';
+                    setTimeout(() => { button.textContent = 'Download Post'; button.disabled = false; }, 2000);
+                    return;
+                }
+                
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.download = `AllianceDAO_NFT_${nft.id || 'Unknown'}.png`;
+                link.href = url;
+                
+                // For iOS Safari, we need to open in new tab
+                const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+                if (isIOS) {
+                    // Open image in new tab - user can long-press to save
+                    window.open(url, '_blank');
+                    button.textContent = 'Opened!';
+                } else {
+                    // Standard download for other browsers
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    button.textContent = 'Downloaded!';
+                }
+                
+                // Clean up blob URL after a delay
+                setTimeout(() => URL.revokeObjectURL(url), 5000);
+            }, 'image/png');
         } catch(e) {
-            console.error("Error creating download link:", e);
+            console.error("Error creating download:", e);
             button.textContent = 'DL Failed';
         }
 
@@ -1475,11 +1858,15 @@ const displayHolderPage = (page) => {
         item.dataset.address = address;
         const shortAddress = address ? `terra...${address.substring(address.length - 4)}` : 'N/A';
         
-        // Store stats for mobile detail view
+        // Stats summary for mobile view
+        const statsSummary = `Liq: ${stats.liquid || 0} | DAO: ${stats.daodaoStaked || 0} | Brk: ${stats.broken || 0}`;
+        item.dataset.stats = statsSummary;
+        // Store full stats for mobile detail view
         item.dataset.liquid = stats.liquid || 0;
         item.dataset.daodao = stats.daodaoStaked || 0;
         item.dataset.enterprise = stats.enterpriseStaked || 0;
         item.dataset.broken = stats.broken || 0;
+        item.dataset.unbroken = stats.unbroken || 0;
         item.dataset.bbl = stats.bblListed || 0;
         item.dataset.boost = stats.boostListed || 0;
         item.dataset.total = stats.total || 0;
@@ -1539,6 +1926,72 @@ const updateHolderPaginationControls = () => {
     nextButton.disabled = holderCurrentPage === totalPages;
     nextButton.onclick = () => displayHolderPage(holderCurrentPage + 1);
     leaderboardPagination.appendChild(nextButton);
+};
+
+// Show selected wallet details on mobile
+const showSelectedWalletDetails = (address, stats) => {
+    // Only show on mobile (< 768px)
+    if (window.innerWidth >= 768) return;
+    
+    const detailsContainer = document.getElementById('selected-wallet-details');
+    const addressEl = document.getElementById('selected-wallet-address');
+    const statsEl = document.getElementById('selected-wallet-stats');
+    const clearBtn = document.getElementById('clear-selected-wallet');
+    
+    if (!detailsContainer || !addressEl || !statsEl) return;
+    
+    // Show the container (remove hidden class)
+    detailsContainer.classList.remove('hidden');
+    
+    // Set address
+    const shortAddr = address ? `terra...${address.substring(address.length - 4)}` : '';
+    addressEl.textContent = shortAddr;
+    addressEl.title = address;
+    
+    // Dataset values are strings, so we need to access them properly
+    // When passed from dataset, they come as DOMStringMap
+    const liquid = stats.liquid !== undefined ? stats.liquid : '0';
+    const daodao = stats.daodao !== undefined ? stats.daodao : '0';
+    const enterprise = stats.enterprise !== undefined ? stats.enterprise : '0';
+    const broken = stats.broken !== undefined ? stats.broken : '0';
+    const bbl = stats.bbl !== undefined ? stats.bbl : '0';
+    const boost = stats.boost !== undefined ? stats.boost : '0';
+    
+    // Build stats grid
+    statsEl.innerHTML = `
+        <div class="bg-gray-700/50 rounded p-2">
+            <div class="text-gray-400 text-xs">Liquid</div>
+            <div class="text-white font-bold">${liquid}</div>
+        </div>
+        <div class="bg-gray-700/50 rounded p-2">
+            <div class="text-cyan-400 text-xs">DAODAO</div>
+            <div class="text-white font-bold">${daodao}</div>
+        </div>
+        <div class="bg-gray-700/50 rounded p-2">
+            <div class="text-gray-400 text-xs">Enterprise</div>
+            <div class="text-white font-bold">${enterprise}</div>
+        </div>
+        <div class="bg-gray-700/50 rounded p-2">
+            <div class="text-red-400 text-xs">Broken</div>
+            <div class="text-white font-bold">${broken}</div>
+        </div>
+        <div class="bg-gray-700/50 rounded p-2">
+            <div class="text-green-400 text-xs">BBL</div>
+            <div class="text-white font-bold">${bbl}</div>
+        </div>
+        <div class="bg-gray-700/50 rounded p-2">
+            <div class="text-purple-400 text-xs">Boost</div>
+            <div class="text-white font-bold">${boost}</div>
+        </div>
+    `;
+    
+    // Clear button handler
+    if (clearBtn) {
+        clearBtn.onclick = () => {
+            detailsContainer.classList.add('hidden');
+            document.querySelectorAll('#leaderboard-table .leaderboard-row').forEach(r => r.classList.remove('selected'));
+        };
+    }
 };
 
 // --- Map View Logic ---
@@ -1722,6 +2175,21 @@ const handleMapResize = debounce(() => {
 }, 250);
 
 let mapListenersAdded = false;
+let touchState = { 
+    startDist: 0, 
+    startZoom: 1, 
+    lastX: 0, 
+    lastY: 0, 
+    isPinching: false,
+    pinchCenterX: 0,
+    pinchCenterY: 0,
+    startOffsetX: 0,
+    startOffsetY: 0,
+    startX: 0,
+    startY: 0,
+    startTime: 0
+};
+
 function addMapListeners() {
     if (mapListenersAdded || !spaceCanvas) return;
     console.log("Adding map listeners");
@@ -1741,22 +2209,17 @@ function addMapListeners() {
     mapListenersAdded = true;
 }
 
-// Touch state for mobile
-let touchState = { 
-    startX: 0, 
-    startY: 0, 
-    startTime: 0,
-    lastX: 0, 
-    lastY: 0,
-    isPinching: false,
-    startDist: 0,
-    startZoom: 1
-};
-
 function getTouchDistance(touches) {
     const dx = touches[0].clientX - touches[1].clientX;
     const dy = touches[0].clientY - touches[1].clientY;
     return Math.sqrt(dx * dx + dy * dy);
+}
+
+function getTouchCenter(touches) {
+    return {
+        x: (touches[0].clientX + touches[1].clientX) / 2,
+        y: (touches[0].clientY + touches[1].clientY) / 2
+    };
 }
 
 function handleMapTouchStart(e) {
@@ -1766,11 +2229,20 @@ function handleMapTouchStart(e) {
         touchState.isPinching = true;
         touchState.startDist = getTouchDistance(e.touches);
         touchState.startZoom = mapZoom;
+        touchState.startOffsetX = mapOffsetX;
+        touchState.startOffsetY = mapOffsetY;
+        
+        // Get pinch center relative to canvas
+        const rect = spaceCanvas.getBoundingClientRect();
+        const center = getTouchCenter(e.touches);
+        touchState.pinchCenterX = center.x - rect.left;
+        touchState.pinchCenterY = center.y - rect.top;
     } else if (e.touches.length === 1) {
         // Single finger - could be pan or tap
         touchState.isPinching = false;
         touchState.lastX = e.touches[0].clientX;
         touchState.lastY = e.touches[0].clientY;
+        // Record start position and time for tap detection
         touchState.startX = e.touches[0].clientX;
         touchState.startY = e.touches[0].clientY;
         touchState.startTime = Date.now();
@@ -1781,11 +2253,32 @@ function handleMapTouchStart(e) {
 function handleMapTouchMove(e) {
     e.preventDefault();
     if (e.touches.length === 2 && touchState.isPinching) {
-        // Pinch zoom
+        // Pinch zoom - zoom toward pinch center
         const currentDist = getTouchDistance(e.touches);
         const scale = currentDist / touchState.startDist;
-        mapZoom = Math.max(0.1, Math.min(5, touchState.startZoom * scale));
-    } else if (e.touches.length === 1 && isPanning && !touchState.isPinching) {
+        const newZoom = Math.max(0.3, Math.min(4, touchState.startZoom * scale));
+        
+        // Get current pinch center
+        const rect = spaceCanvas.getBoundingClientRect();
+        const center = getTouchCenter(e.touches);
+        const currentPinchX = center.x - rect.left;
+        const currentPinchY = center.y - rect.top;
+        
+        // The key insight: we want the point under our fingers to stay under our fingers
+        // Before zoom: worldX = (screenX - offsetX) / zoom
+        // After zoom:  worldX = (screenX - newOffsetX) / newZoom
+        // For the point to stay the same: newOffsetX = screenX - worldX * newZoom
+        
+        // Calculate the world point that was under the original pinch center
+        const worldX = (touchState.pinchCenterX - touchState.startOffsetX) / touchState.startZoom;
+        const worldY = (touchState.pinchCenterY - touchState.startOffsetY) / touchState.startZoom;
+        
+        // Calculate new offset to keep that world point under the current pinch center
+        mapOffsetX = currentPinchX - worldX * newZoom;
+        mapOffsetY = currentPinchY - worldY * newZoom;
+        
+        mapZoom = newZoom;
+    } else if (e.touches.length === 1 && isPanning) {
         // Pan
         const dx = e.touches[0].clientX - touchState.lastX;
         const dy = e.touches[0].clientY - touchState.lastY;
@@ -1809,10 +2302,11 @@ function handleMapTouchEnd(e) {
         // If movement is small and duration is short, treat as tap
         if (dx < 15 && dy < 15 && elapsed < 300) {
             // Simulate a click event for the tap
-            const clickEvent = {
+            const clickEvent = new MouseEvent('click', {
                 clientX: touch.clientX,
-                clientY: touch.clientY
-            };
+                clientY: touch.clientY,
+                bubbles: true
+            });
             handleMapClick(clickEvent);
         }
     }
@@ -1900,7 +2394,7 @@ const initializeStarfield = () => {
         ctx.scale(mapZoom, mapZoom);
         ctx.rotate(mapRotation);
 
-        stars.forEach(star => {
+        mapStars.forEach(star => {
             ctx.beginPath();
             ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2, false);
             ctx.fillStyle = `rgba(255, 255, 255, ${star.alpha})`;
@@ -1980,7 +2474,7 @@ const initializeStarfield = () => {
     }
 
     function updateStars() {
-        stars.forEach(star => {
+        mapStars.forEach(star => {
             star.alpha += star.twinkleSpeed * star.twinkleDirection;
             if (star.alpha > 1 || star.alpha < 0) {
                 star.alpha = Math.max(0, Math.min(1, star.alpha)); // Clamp
@@ -2047,16 +2541,15 @@ const initializeStarfield = () => {
         mapObjects = [];
         createStars();
         
-        // ***** THIS IS THE CORRECTED BLOCK *****
+        // Images from aDAO-Image-Planets-Empty repo
         const imageAssets = {
-            daodao: 'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/daodao-planet.png',
-            bbl: 'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/bbl-planet.png',
-            boost: 'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/boost-ship.png',
-            enterprise: 'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/enterprise-blackhole.png',
+            daodao: 'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/daodao-planet.png',
+            bbl: 'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/bbl-planet.png',
+            boost: 'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/boost-ship.png',
+            enterprise: 'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/enterprise-blackhole.png',
             allianceLogo: 'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/aDAO%20Logo%20No%20Background.png',
             terra: 'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Terra.PNG'
         };
-        // ***************************************
 
         const imagePromises = Object.entries(imageAssets).map(([id, url]) => {
             return new Promise((resolve, reject) => {
@@ -2258,9 +2751,85 @@ const initializeStarfield = () => {
 };
 
 // --- Reusable Address Search Handler ---
+// --- Address Search Direction Toggle ---
+const updateDirectionToggle = (toggleBtn, inputEl, isPrefix) => {
+    if (!toggleBtn) return;
+    if (isPrefix) {
+        toggleBtn.textContent = 'Start ⇄';
+        toggleBtn.title = 'Mode: Start of address (click to switch to End)';
+        inputEl.placeholder = 'Type from start (e.g. terra1x)';
+        inputEl.style.textAlign = 'left';
+    } else {
+        toggleBtn.textContent = 'End ⇄';
+        toggleBtn.title = 'Mode: End of address (click to switch to Start)';
+        inputEl.placeholder = 'Type from end (last char first)';
+        inputEl.style.textAlign = 'right';
+    }
+};
+
+const setupAddressDirectionToggle = (toggleBtn, inputEl, isWalletSearch) => {
+    if (!toggleBtn || !inputEl) return;
+    
+    // Initialize display
+    const isPrefix = isWalletSearch ? walletAddressSearchDirection : addressSearchDirection;
+    updateDirectionToggle(toggleBtn, inputEl, isPrefix);
+    
+    toggleBtn.addEventListener('click', () => {
+        if (isWalletSearch) {
+            walletAddressSearchDirection = !walletAddressSearchDirection;
+            updateDirectionToggle(toggleBtn, inputEl, walletAddressSearchDirection);
+        } else {
+            addressSearchDirection = !addressSearchDirection;
+            updateDirectionToggle(toggleBtn, inputEl, addressSearchDirection);
+        }
+        // Clear input when switching modes
+        inputEl.value = '';
+        inputEl.focus();
+    });
+    
+    // Add keydown handler for reverse typing in suffix mode
+    inputEl.addEventListener('keydown', (e) => {
+        const isPrefix = isWalletSearch ? walletAddressSearchDirection : addressSearchDirection;
+        
+        // Only intercept in suffix mode (right-to-left)
+        if (isPrefix) return;
+        
+        // Handle backspace - remove from the front
+        if (e.key === 'Backspace') {
+            e.preventDefault();
+            if (inputEl.value.length > 0) {
+                inputEl.value = inputEl.value.substring(1); // Remove first character
+                // Trigger input event to update suggestions
+                inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+            return;
+        }
+        
+        // Handle delete - also remove from front
+        if (e.key === 'Delete') {
+            e.preventDefault();
+            if (inputEl.value.length > 0) {
+                inputEl.value = inputEl.value.substring(1);
+                inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+            return;
+        }
+        
+        // Only handle single character keys (letters, numbers)
+        if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+            e.preventDefault();
+            // Prepend the new character (reverse typing)
+            inputEl.value = e.key + inputEl.value;
+            // Trigger input event to update suggestions
+            inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+    });
+};
+
 const handleAddressInput = (inputEl, suggestionsEl, onSelectCallback, isWallet) => {
-    const input = inputEl.value.toLowerCase();
-    const reversedInput = input.split('').reverse().join('');
+    const isPrefix = isWallet ? walletAddressSearchDirection : addressSearchDirection;
+    let input = inputEl.value.toLowerCase().trim();
+    
     if (!suggestionsEl) return;
     suggestionsEl.innerHTML = '';
 
@@ -2270,31 +2839,59 @@ const handleAddressInput = (inputEl, suggestionsEl, onSelectCallback, isWallet) 
         return;
     }
     
-    // Use the master list of all owners for suggestions
-    let matches = ownerAddresses.filter(addr => addr.toLowerCase().endsWith(reversedInput));
+    let matches;
+    if (isPrefix) {
+        // Left-to-right: user is typing from the beginning (normal)
+        matches = ownerAddresses.filter(addr => addr.toLowerCase().startsWith(input));
+        matches.sort((a, b) => {
+            const charA = a.charAt(input.length) || '';
+            const charB = b.charAt(input.length) || '';
+            return charA.localeCompare(charB);
+        });
+    } else {
+        // Right-to-left: input is already built in reverse order by keydown handler
+        // So input "ulw" means we search for addresses ending in "ulw"
+        matches = ownerAddresses.filter(addr => addr.toLowerCase().endsWith(input));
+        matches.sort((a, b) => {
+            const charA = a.charAt(a.length - input.length - 1) || '';
+            const charB = b.charAt(b.length - input.length - 1) || '';
+            return charA.localeCompare(charB);
+        });
+    }
 
-    const sortIndex = reversedInput.length;
-    matches.sort((a, b) => {
-        const charA = a.charAt(a.length - 1 - sortIndex) || '';
-        const charB = b.charAt(b.length - 1 - sortIndex) || '';
-        return charA.localeCompare(charB);
-    });
+    // Auto-fill if exactly one match
+    if (matches.length === 1) {
+        inputEl.value = matches[0];
+        inputEl.style.textAlign = 'left'; // Show full address left-aligned
+        suggestionsEl.classList.add('hidden');
+        onSelectCallback();
+        return;
+    }
 
     if (matches.length > 0) {
         matches.slice(0, 10).forEach(match => {
             const item = document.createElement('div');
             item.className = 'address-suggestion-item';
-            const startIndex = match.length - reversedInput.length;
-            item.innerHTML = `${match.substring(0, startIndex)}<strong class="text-cyan-400">${match.substring(startIndex)}</strong>`;
+            
+            // Highlight the matching portion
+            if (isPrefix) {
+                item.innerHTML = `<strong class="text-cyan-400">${match.substring(0, input.length)}</strong>${match.substring(input.length)}`;
+            } else {
+                const startIndex = match.length - input.length;
+                item.innerHTML = `${match.substring(0, startIndex)}<strong class="text-cyan-400">${match.substring(startIndex)}</strong>`;
+            }
+            
             item.style.direction = 'ltr';
             item.style.textAlign = 'left';
             item.onclick = () => {
                 inputEl.value = match;
+                inputEl.style.textAlign = 'left'; // Show full address left-aligned
                 suggestionsEl.classList.add('hidden');
                 onSelectCallback();
             };
             suggestionsEl.appendChild(item);
         });
+        
         if (matches.length > 10) {
             const item = document.createElement('div');
             item.className = 'address-suggestion-item text-gray-400';
@@ -2305,6 +2902,7 @@ const handleAddressInput = (inputEl, suggestionsEl, onSelectCallback, isWallet) 
     } else {
         suggestionsEl.classList.add('hidden');
     }
+    
     // Trigger filter *only* for collection view input
     if (!isWallet) debouncedFilter();
 };
@@ -2352,7 +2950,7 @@ const showWalletExplorerModal = (address) => {
         `;
     });
 
-    walletNfts.sort((a,b) => (a.rank ?? Infinity) - (b.rank ?? Infinity)).forEach(nft => {
+    walletNfts.sort((a,b) => (b.rarityClass ?? 0) - (a.rarityClass ?? 0)).forEach(nft => {
         galleryEl.appendChild(createNftCard(nft, '.wallet-trait-toggle'));
     });
 
@@ -2474,16 +3072,45 @@ const searchWallet = () => {
     
     // Use setTimeout to allow UI to update before heavy processing
     setTimeout(() => {
-        const walletNfts = allNfts.filter(nft => nft.owner === address);
-        walletGalleryTitle.textContent = `Found ${walletNfts.length} NFTs for wallet:`;
+        // Get wallet NFTs
+        let walletNfts = allNfts.filter(nft => nft.owner === address);
+        
+        // Apply wallet status filters
+        const liquidFilter = document.querySelector('.wallet-status-filter[data-status="liquid"]');
+        const stakedFilter = document.querySelector('.wallet-status-filter[data-status="staked"]');
+        const brokenFilter = document.querySelector('.wallet-status-filter[data-status="broken"]');
+        const listedFilter = document.querySelector('.wallet-status-filter[data-status="listed"]');
+        
+        if (liquidFilter?.checked) {
+            walletNfts = walletNfts.filter(nft => nft.liquid === true);
+        }
+        if (stakedFilter?.checked) {
+            walletNfts = walletNfts.filter(nft => nft.staked_enterprise_legacy || nft.staked_daodao);
+        }
+        if (brokenFilter?.checked) {
+            walletNfts = walletNfts.filter(nft => nft.broken === true);
+        }
+        if (listedFilter?.checked) {
+            walletNfts = walletNfts.filter(nft => nft.boost_market || nft.bbl_market);
+        }
+        
+        const totalForWallet = allNfts.filter(nft => nft.owner === address).length;
+        const filterActive = liquidFilter?.checked || stakedFilter?.checked || brokenFilter?.checked || listedFilter?.checked;
+        
+        if (filterActive) {
+            walletGalleryTitle.textContent = `Showing ${walletNfts.length} of ${totalForWallet} NFTs for wallet:`;
+        } else {
+            walletGalleryTitle.textContent = `Found ${walletNfts.length} NFTs for wallet:`;
+        }
+        
         walletGallery.innerHTML = '';
         if (walletNfts.length === 0) {
-            showLoading(walletGallery, 'No NFTs found for this address.');
+            showLoading(walletGallery, filterActive ? 'No NFTs match the selected filters.' : 'No NFTs found for this address.');
             return;
         }
         
         // Sort NFTs
-        walletNfts.sort((a,b) => (b.rarityClass ?? 0) - (a.rarityClass ?? 0) || (a.rank ?? Infinity) - (b.rank ?? Infinity));
+        walletNfts.sort((a,b) => (b.rarityClass ?? 0) - (a.rarityClass ?? 0));
         
         // Render cards in batches for better performance
         const batchSize = 20;
@@ -2506,64 +3133,7 @@ const searchWallet = () => {
         };
         
         renderBatch();
-    }, 50); // Small delay to let loading indicator show
-};
-
-// Show selected wallet details on mobile
-const showSelectedWalletDetails = (address, stats) => {
-    // Only show on mobile (< 768px)
-    if (window.innerWidth >= 768) return;
-    
-    const detailsContainer = document.getElementById('selected-wallet-details');
-    const addressEl = document.getElementById('selected-wallet-address');
-    const statsEl = document.getElementById('selected-wallet-stats');
-    const clearBtn = document.getElementById('clear-selected-wallet');
-    
-    if (!detailsContainer || !addressEl || !statsEl) return;
-    
-    // Show the container
-    detailsContainer.classList.remove('hidden');
-    
-    // Set address
-    const shortAddr = address ? `terra...${address.substring(address.length - 4)}` : '';
-    addressEl.textContent = shortAddr;
-    addressEl.title = address;
-    
-    // Build stats grid - stats come from dataset so they're strings
-    statsEl.innerHTML = `
-        <div class="bg-gray-700/50 rounded p-2">
-            <div class="text-gray-400 text-xs">Liquid</div>
-            <div class="text-white font-bold">${stats.liquid || '0'}</div>
-        </div>
-        <div class="bg-gray-700/50 rounded p-2">
-            <div class="text-cyan-400 text-xs">DAODAO</div>
-            <div class="text-white font-bold">${stats.daodao || '0'}</div>
-        </div>
-        <div class="bg-gray-700/50 rounded p-2">
-            <div class="text-gray-400 text-xs">Enterprise</div>
-            <div class="text-white font-bold">${stats.enterprise || '0'}</div>
-        </div>
-        <div class="bg-gray-700/50 rounded p-2">
-            <div class="text-red-400 text-xs">Broken</div>
-            <div class="text-white font-bold">${stats.broken || '0'}</div>
-        </div>
-        <div class="bg-gray-700/50 rounded p-2">
-            <div class="text-green-400 text-xs">BBL</div>
-            <div class="text-white font-bold">${stats.bbl || '0'}</div>
-        </div>
-        <div class="bg-gray-700/50 rounded p-2">
-            <div class="text-purple-400 text-xs">Boost</div>
-            <div class="text-white font-bold">${stats.boost || '0'}</div>
-        </div>
-    `;
-    
-    // Clear button handler
-    if (clearBtn) {
-        clearBtn.onclick = () => {
-            detailsContainer.classList.add('hidden');
-            document.querySelectorAll('#leaderboard-table .leaderboard-row').forEach(r => r.classList.remove('selected'));
-        };
-    }
+    }, 10); // Small delay to let loading indicator show
 };
 
 // --- Hash Handling ---
