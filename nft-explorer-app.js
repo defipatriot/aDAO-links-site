@@ -1948,31 +1948,40 @@ const showSelectedWalletDetails = (address, stats) => {
     addressEl.textContent = shortAddr;
     addressEl.title = address;
     
+    // Dataset values are strings, so we need to access them properly
+    // When passed from dataset, they come as DOMStringMap
+    const liquid = stats.liquid !== undefined ? stats.liquid : '0';
+    const daodao = stats.daodao !== undefined ? stats.daodao : '0';
+    const enterprise = stats.enterprise !== undefined ? stats.enterprise : '0';
+    const broken = stats.broken !== undefined ? stats.broken : '0';
+    const bbl = stats.bbl !== undefined ? stats.bbl : '0';
+    const boost = stats.boost !== undefined ? stats.boost : '0';
+    
     // Build stats grid
     statsEl.innerHTML = `
         <div class="bg-gray-700/50 rounded p-2">
-            <div class="text-gray-400">Liquid</div>
-            <div class="text-white font-bold">${stats.liquid || 0}</div>
+            <div class="text-gray-400 text-xs">Liquid</div>
+            <div class="text-white font-bold">${liquid}</div>
         </div>
         <div class="bg-gray-700/50 rounded p-2">
-            <div class="text-cyan-400">DAODAO</div>
-            <div class="text-white font-bold">${stats.daodao || 0}</div>
+            <div class="text-cyan-400 text-xs">DAODAO</div>
+            <div class="text-white font-bold">${daodao}</div>
         </div>
         <div class="bg-gray-700/50 rounded p-2">
-            <div class="text-gray-400">Enterprise</div>
-            <div class="text-white font-bold">${stats.enterprise || 0}</div>
+            <div class="text-gray-400 text-xs">Enterprise</div>
+            <div class="text-white font-bold">${enterprise}</div>
         </div>
         <div class="bg-gray-700/50 rounded p-2">
-            <div class="text-red-400">Broken</div>
-            <div class="text-white font-bold">${stats.broken || 0}</div>
+            <div class="text-red-400 text-xs">Broken</div>
+            <div class="text-white font-bold">${broken}</div>
         </div>
         <div class="bg-gray-700/50 rounded p-2">
-            <div class="text-green-400">BBL</div>
-            <div class="text-white font-bold">${stats.bbl || 0}</div>
+            <div class="text-green-400 text-xs">BBL</div>
+            <div class="text-white font-bold">${bbl}</div>
         </div>
         <div class="bg-gray-700/50 rounded p-2">
-            <div class="text-purple-400">Boost</div>
-            <div class="text-white font-bold">${stats.boost || 0}</div>
+            <div class="text-purple-400 text-xs">Boost</div>
+            <div class="text-white font-bold">${boost}</div>
         </div>
     `;
     
@@ -2175,7 +2184,10 @@ let touchState = {
     pinchCenterX: 0,
     pinchCenterY: 0,
     startOffsetX: 0,
-    startOffsetY: 0
+    startOffsetY: 0,
+    startX: 0,
+    startY: 0,
+    startTime: 0
 };
 
 function addMapListeners() {
@@ -2226,10 +2238,14 @@ function handleMapTouchStart(e) {
         touchState.pinchCenterX = center.x - rect.left;
         touchState.pinchCenterY = center.y - rect.top;
     } else if (e.touches.length === 1) {
-        // Single finger pan
+        // Single finger - could be pan or tap
         touchState.isPinching = false;
         touchState.lastX = e.touches[0].clientX;
         touchState.lastY = e.touches[0].clientY;
+        // Record start position and time for tap detection
+        touchState.startX = e.touches[0].clientX;
+        touchState.startY = e.touches[0].clientY;
+        touchState.startTime = Date.now();
         isPanning = true;
     }
 }
@@ -2275,6 +2291,26 @@ function handleMapTouchMove(e) {
 
 function handleMapTouchEnd(e) {
     e.preventDefault();
+    
+    // Detect tap (single touch, short duration, minimal movement)
+    if (!touchState.isPinching && e.changedTouches.length === 1) {
+        const touch = e.changedTouches[0];
+        const dx = Math.abs(touch.clientX - touchState.startX);
+        const dy = Math.abs(touch.clientY - touchState.startY);
+        const elapsed = Date.now() - touchState.startTime;
+        
+        // If movement is small and duration is short, treat as tap
+        if (dx < 15 && dy < 15 && elapsed < 300) {
+            // Simulate a click event for the tap
+            const clickEvent = new MouseEvent('click', {
+                clientX: touch.clientX,
+                clientY: touch.clientY,
+                bubbles: true
+            });
+            handleMapClick(clickEvent);
+        }
+    }
+    
     touchState.isPinching = false;
     isPanning = false;
 }
