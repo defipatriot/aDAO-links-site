@@ -57,7 +57,6 @@ const togPlanBtn = document.getElementById('toggle-planet-filters');
 const planArrow = document.getElementById('planet-arrow');
 const togStatusBtn = document.getElementById('toggle-status-filters');
 const statusArrow = document.getElementById('status-arrow');
-const statusFiltersGrid = document.getElementById('status-filters-grid');
 const statusFiltersExtra = document.getElementById('status-filters-extra');
 // Address direction toggle buttons
 const addressDirectionToggle = document.getElementById('address-direction-toggle');
@@ -261,6 +260,16 @@ const initializeExplorer = async () => {
         applyStateFromUrl();
         applyFiltersAndSort();
         calculateAndDisplayLeaderboard();
+        
+        // Mobile banner close button
+        const mobileNotice = document.getElementById('mobile-notice');
+        const mobileNoticeClose = document.getElementById('mobile-notice-close');
+        if (mobileNoticeClose && mobileNotice) {
+            mobileNoticeClose.addEventListener('click', () => {
+                mobileNotice.style.display = 'none';
+                document.body.style.paddingTop = '';
+            });
+        }
         
         handleHashChange(); // Check hash on initial load
         isInitialLoad = false; // Mark initial load complete
