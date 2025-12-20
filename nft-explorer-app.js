@@ -67,7 +67,7 @@ const DAO_LOCKED_WALLET_SUFFIXES = ["8ywv", "417v", "6ugw"]; // Added from previ
 const itemsPerPage = 20;
 const traitOrder = ["Rarity", "Planet", "Inhabitant", "Object", "Weather", "Light"];
 const filterLayoutOrder = ["Rarity", "Object", "Weather", "Light"];
-const defaultTraitsOn = ["Rank", "Planet", "Inhabitant", "Object"];
+const defaultTraitsOn = ["Rarity", "Planet", "Inhabitant", "Object"];
 
 // --- State ---
 let allNfts = [];
@@ -779,9 +779,21 @@ const applyFiltersAndSort = () => {
     });
 
     const sortValue = sortSelect.value;
-    if (sortValue === 'asc') tempNfts.sort((a, b) => (a.rarityClass ?? 0) - (b.rarityClass ?? 0));
-    else if (sortValue === 'desc') tempNfts.sort((a, b) => (b.rarityClass ?? 0) - (a.rarityClass ?? 0));
-    else if (sortValue === 'id') tempNfts.sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
+    if (sortValue === 'desc') {
+        // Rarity High to Low: 40/1, 40/2... 39/1, 39/2... (default, best first)
+        tempNfts.sort((a, b) => {
+            if (b.rarityClass !== a.rarityClass) return b.rarityClass - a.rarityClass;
+            return (a.subRank ?? 0) - (b.subRank ?? 0); // Within same class, lower subRank first
+        });
+    } else if (sortValue === 'asc') {
+        // Rarity Low to High: 1/1, 1/2... 2/1, 2/2... (common first)
+        tempNfts.sort((a, b) => {
+            if (a.rarityClass !== b.rarityClass) return a.rarityClass - b.rarityClass;
+            return (a.subRank ?? 0) - (b.subRank ?? 0); // Within same class, lower subRank first
+        });
+    } else if (sortValue === 'id') {
+        tempNfts.sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
+    }
 
     filteredNfts = tempNfts;
     if (resultsCount) resultsCount.textContent = filteredNfts.length;
@@ -925,8 +937,12 @@ const createNftCard = (nft, toggleSelector) => {
     visibleTraits.forEach(traitType => {
         let value = 'N/A';
         if (traitType === 'Rarity') {
-            // Show Rarity Class from the NFT
-            value = nft.rarityClass != null ? `${nft.rarityClass}/40` : 'N/A';
+            // Show as RarityClass/SubRank (e.g., 40/1 means Rarity 40, ranked 1st within that class)
+            if (nft.rarityClass != null && nft.subRank != null) {
+                value = `${nft.rarityClass}/${nft.subRank}`;
+            } else if (nft.rarityClass != null) {
+                value = `${nft.rarityClass}`;
+            }
         } else {
             value = nft.attributes?.find(attr => attr.trait_type === traitType)?.value || 'N/A';
         }
@@ -1310,7 +1326,11 @@ const showNftDetails = (nft) => {
     const rarityValue = nft.attributes?.find(a => a.trait_type === 'Rarity')?.value || 'N/A';
     
     // Start traits HTML with Rank and Rarity
-    let traitsHtml = `<div class="flex justify-between text-sm"><span class="text-gray-400">Rarity Class:</span><span class="font-semibold text-cyan-400 text-lg">${nft.rarityClass || 'N/A'}/40</span></div>`;
+    // Show Rarity as Class/SubRank (e.g., 40/1)
+    const rarityDisplay = (nft.rarityClass != null && nft.subRank != null) 
+        ? `${nft.rarityClass}/${nft.subRank}` 
+        : (nft.rarityClass || 'N/A');
+    let traitsHtml = `<div class="flex justify-between text-sm"><span class="text-gray-400">Rarity:</span><span class="font-semibold text-cyan-400 text-lg">${rarityDisplay}</span></div>`;
     
     // Separator
     traitsHtml += `<div class="pt-2 mt-2 border-t border-gray-600"></div>`;
@@ -1483,7 +1503,10 @@ const generateShareImage = (nft, button) => {
         };
 
         drawText(`NFT #${nft.id || '?'}`, margin, margin + 48, 'left');
-        drawText(`Rarity ${nft.rarityClass || 'N/A'}/40`, canvas.width - margin, margin + 48, 'right');
+        const rarityDisplay = (nft.rarityClass != null && nft.subRank != null) 
+            ? `${nft.rarityClass}/${nft.subRank}` 
+            : (nft.rarityClass || 'N/A');
+        drawText(`Rarity ${rarityDisplay}`, canvas.width - margin, margin + 48, 'right');
         drawText(getTrait('Planet'), margin, canvas.height - margin, 'left');
         
         let inhabitantText = getTrait('Inhabitant');
