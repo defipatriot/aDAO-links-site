@@ -226,20 +226,6 @@ const mergeNftData = (metadata, statusData) => {
 };
 
 const initializeExplorer = async () => {
-    // Banner close - must run first
-    const bannerCloseBtn = document.getElementById('banner-close-btn');
-    const mobileBanner = document.getElementById('mobile-notice');
-    if (bannerCloseBtn && mobileBanner) {
-        bannerCloseBtn.addEventListener('click', function(e) {
-            e.preventDefault();
-            mobileBanner.style.display = 'none';
-        });
-        bannerCloseBtn.addEventListener('touchstart', function(e) {
-            e.preventDefault();
-            mobileBanner.style.display = 'none';
-        });
-    }
-    
     showLoading(gallery, 'Loading collection metadata...');
     showLoading(leaderboardTable, 'Loading holder data...');
     showLoading(walletGallery, 'Search for or select a wallet to see owned NFTs.');
@@ -659,14 +645,12 @@ const addAllEventListeners = () => {
             planArrow.classList.toggle('rotate-180');
         });
     }
-    // Status filters toggle (for mobile)
+    // Status filters toggle - same behavior as inhabitant/planet
     if(togStatusBtn && statusFiltersGrid && statusArrow) {
         togStatusBtn.addEventListener('click', () => {
-            statusFiltersGrid.classList.toggle('mobile-show');
-            if (statusFiltersExtra) statusFiltersExtra.classList.toggle('mobile-show');
+            statusFiltersGrid.classList.toggle('hidden');
             statusArrow.classList.toggle('rotate-180');
         });
-        // Start collapsed on mobile (don't add mobile-show class)
     }
     
     // Add other listeners from the single file
@@ -1919,6 +1903,9 @@ const updateHolderPaginationControls = () => {
 
 // Show selected wallet details on mobile
 const showSelectedWalletDetails = (address, stats) => {
+    // Only show on mobile (< 768px)
+    if (window.innerWidth >= 768) return;
+    
     const detailsContainer = document.getElementById('selected-wallet-details');
     const addressEl = document.getElementById('selected-wallet-address');
     const statsEl = document.getElementById('selected-wallet-stats');
@@ -1926,7 +1913,7 @@ const showSelectedWalletDetails = (address, stats) => {
     
     if (!detailsContainer || !addressEl || !statsEl) return;
     
-    // Show the container
+    // Show the container (remove hidden class)
     detailsContainer.classList.remove('hidden');
     
     // Set address
