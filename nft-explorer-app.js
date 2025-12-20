@@ -208,6 +208,8 @@ const calculateRanks = () => {
     traitCounts = {};
     inhabitantCounts = {};
     planetCounts = {};
+    
+    // First pass: count all traits
     allNfts.forEach(nft => {
         if (nft.attributes) {
             nft.attributes.forEach(attr => {
@@ -232,26 +234,66 @@ const calculateRanks = () => {
         }
     });
 
+    // Second pass: calculate rarity scores
+    // Using industry-standard rarity.tools formula: sum of (1 / (trait_count / total_items))
+    // INCLUDING all traits (Planet, Inhabitant, Object, Weather, Light) to align with BBL marketplace
+    // Note: Official AllianceDAO docs stated Weather/Light should be excluded, but BBL includes them
     allNfts.forEach(nft => {
-        let totalScore = 0;
+        // Get official rarity score from metadata (Object rarity 1-40) for reference
+        const officialRarity = nft.attributes?.find(a => a.trait_type === 'Rarity')?.value || 0;
+        nft.officialRarity = Number(officialRarity);
+        
+        // Calculate trait-based score using ALL traits (to match BBL)
+        let traitScore = 0;
         if (nft.attributes) {
             nft.attributes.forEach(attr => {
-                // Rarity score based on all traits except Weather and Light
-                if (traitCounts[attr.trait_type]?.[attr.value] && !['Weather', 'Light', 'Rarity'].includes(attr.trait_type)) {
+                // Include: Planet, Inhabitant, Object, Weather, Light
+                // Exclude: Rarity (this is a derived score, not a trait)
+                if (traitCounts[attr.trait_type]?.[attr.value] && attr.trait_type !== 'Rarity') {
                     const count = traitCounts[attr.trait_type][attr.value];
-                    const rarity = count / allNfts.length;
-                    if (rarity > 0) totalScore += 1 / rarity;
+                    traitScore += 1 / (count / allNfts.length);
                 }
             });
         }
-        nft.rarityScore = totalScore;
+        nft.rarityScore = traitScore;
     });
 
-    allNfts.sort((a, b) => b.rarityScore - a.rarityScore);
+    // Sort by rarity score descending, then by NFT ID ascending for ties
+    allNfts.sort((a, b) => {
+        const scoreDiff = b.rarityScore - a.rarityScore;
+        if (scoreDiff !== 0) return scoreDiff;
+        // Tie-breaker: lower NFT ID wins
+        return (a.id || 0) - (b.id || 0);
+    });
 
     allNfts.forEach((nft, index) => {
         nft.rank = index + 1;
     });
+    
+    // Log top 15 for debugging
+    console.log('Top 15 NFTs by rarity (All Traits including Weather/Light):');
+    allNfts.slice(0, 15).forEach(nft => {
+        const weather = nft.attributes?.find(a => a.trait_type === 'Weather')?.value || 'N/A';
+        const object = nft.attributes?.find(a => a.trait_type === 'Object')?.value || 'N/A';
+        console.log(`#${nft.id} - Rank: ${nft.rank}, Score: ${nft.rarityScore.toFixed(2)}, Object: ${object}, Weather: ${weather}`);
+    });
+};
+
+// Helper function to get trait rarity rank (for medal display)
+const getTraitRarityRank = (traitType, traitValue) => {
+    if (!traitCounts[traitType]) return null;
+    
+    // Get all values for this trait type and sort by count (ascending = rarer first)
+    const traitValues = Object.entries(traitCounts[traitType])
+        .map(([value, count]) => ({ value, count }))
+        .sort((a, b) => a.count - b.count);
+    
+    const rank = traitValues.findIndex(t => t.value === traitValue) + 1;
+    const total = traitValues.length;
+    const count = traitCounts[traitType][traitValue];
+    const percentage = ((count / allNfts.length) * 100).toFixed(1);
+    
+    return { rank, total, count, percentage };
 };
 
 // --- UI Population ---
@@ -1246,27 +1288,54 @@ const showNftDetails = (nft) => {
     };
     titleEl.textContent = (nft.name || `NFT #${nft.id || '?'}`).replace('The AllianceDAO NFT', 'AllianceDAO NFT');
     
-    // Get the "Rarity" trait value, default to 'N/A'
-    const rarityValue = nft.attributes?.find(a => a.trait_type === 'Rarity')?.value || 'N/A';
-
-    // Start traits HTML with Rank and the corrected Rarity value
-    let traitsHtml = `<div class="flex justify-between text-sm"><span class="text-gray-400">Rank:</span><span class="font-semibold text-white">#${nft.rank || 'N/A'}</span></div>`;
-    traitsHtml += `<div class="flex justify-between text-sm"><span class="text-gray-400">Rarity:</span><span class="font-semibold text-white">${rarityValue}</span></div>`;
+    // Helper function to get medal emoji based on rank
+    const getMedalBadge = (rank) => {
+        if (rank === 1) return '<span class="trait-medal gold" title="Rarest">🥇</span>';
+        if (rank === 2) return '<span class="trait-medal silver" title="2nd Rarest">🥈</span>';
+        if (rank === 3) return '<span class="trait-medal bronze" title="3rd Rarest">🥉</span>';
+        return '';
+    };
     
-    // Filter and sort the *rest* of the attributes
-    const attributesToShow = (nft.attributes || [])
-        .filter(a => traitOrder.includes(a.trait_type) && !['Rank', 'Rarity'].includes(a.trait_type))
-        .sort((a, b) => traitOrder.indexOf(a.trait_type) - traitOrder.indexOf(b.trait_type));
+    // Get the "Rarity" trait value (official object rarity 1-40)
+    const rarityValue = nft.attributes?.find(a => a.trait_type === 'Rarity')?.value || 'N/A';
+    
+    // Start traits HTML with Rank and Rarity
+    let traitsHtml = `<div class="flex justify-between text-sm"><span class="text-gray-400">Rank:</span><span class="font-semibold text-white">#${nft.rank || 'N/A'}</span></div>`;
+    traitsHtml += `<div class="flex justify-between text-sm"><span class="text-gray-400">Rarity Score:</span><span class="font-semibold text-white">${rarityValue}/40</span></div>`;
+    
+    // Separator
+    traitsHtml += `<div class="pt-2 mt-2 border-t border-gray-600"></div>`;
+    
+    // Traits with rarity info and medals
+    const traitsToShow = ['Planet', 'Inhabitant', 'Object', 'Weather', 'Light'];
+    traitsToShow.forEach(traitType => {
+        const attr = nft.attributes?.find(a => a.trait_type === traitType);
+        if (!attr) return;
         
-    // Add the filtered attributes to the HTML
-    traitsHtml += attributesToShow.map(attr => 
-        `<div class="flex justify-between text-sm"><span class="text-gray-400">${attr.trait_type}:</span><span class="font-semibold text-white truncate" title="${attr.value}">${attr.value || 'N/A'}</span></div>`
-    ).join('');
+        const rarityInfo = getTraitRarityRank(traitType, attr.value);
+        let rarityBadge = '';
+        let countInfo = '';
+        
+        if (rarityInfo) {
+            rarityBadge = getMedalBadge(rarityInfo.rank);
+            countInfo = `<span class="text-gray-500 text-xs ml-1">(${rarityInfo.percentage}% - ${rarityInfo.count} have)</span>`;
+        }
+        
+        traitsHtml += `
+            <div class="flex justify-between text-sm items-center">
+                <span class="text-gray-400">${traitType}:</span>
+                <span class="font-semibold text-white flex items-center gap-1">
+                    ${rarityBadge}
+                    <span class="truncate" title="${attr.value}">${attr.value || 'N/A'}</span>
+                    ${countInfo}
+                </span>
+            </div>`;
+    });
     
     // Separator line
     traitsHtml += `<div class="pt-2 mt-2 border-t border-gray-600"></div>`;
     
-    // Status Text Logic (same as before)
+    // Status Text Logic
     let statusTxt = 'Unknown';
     if (nft.owned_by_alliance_dao) {
         statusTxt = 'DAO Owned (Un-minted)';
@@ -1281,7 +1350,7 @@ const showNftDetails = (nft) => {
     } else if (nft.boost_market) {
         statusTxt = 'Listed (Boost)';
     } else if (nft.liquid === false) {
-        statusTxt = 'In Wallet (Not Liquid)'; // Catch-all for non-liquid
+        statusTxt = 'In Wallet (Not Liquid)';
     }
 
     traitsHtml += `<div class="flex justify-between text-sm"><span class="text-gray-400">Status:</span><span class="font-semibold text-white">${statusTxt}</span></div>`;
@@ -1290,7 +1359,7 @@ const showNftDetails = (nft) => {
     // Separator line
     traitsHtml += `<div class="pt-2 mt-2 border-t border-gray-600"></div>`;
     
-    // Owner Info (same as before)
+    // Owner Info
     traitsHtml += `<div class="flex justify-between text-sm items-center"><span class="text-gray-400">Owner:</span><span class="owner-address font-mono text-sm font-semibold text-white truncate cursor-pointer" title="Click to copy">${nft.owner || 'N/A'}</span></div>`;
 
     // Update the DOM
