@@ -49,6 +49,14 @@ const togInhabBtn = document.getElementById('toggle-inhabitant-filters');
 const inhabArrow = document.getElementById('inhabitant-arrow');
 const togPlanBtn = document.getElementById('toggle-planet-filters');
 const planArrow = document.getElementById('planet-arrow');
+// Address direction toggle buttons
+const addressDirectionToggle = document.getElementById('address-direction-toggle');
+const walletAddressDirectionToggle = document.getElementById('wallet-address-direction-toggle');
+
+// --- Address Search State ---
+// false = suffix/right-to-left (default, type ending), true = prefix/left-to-right (type beginning)
+let addressSearchDirection = false; 
+let walletAddressSearchDirection = false;
 
 
 // --- Config ---
@@ -527,6 +535,10 @@ const addAllEventListeners = () => {
 
     setupCopyButton(copyAddressBtn, searchAddressInput);
     setupCopyButton(walletCopyAddressBtn, walletSearchAddressInput);
+    
+    // Setup address direction toggles
+    setupAddressDirectionToggle(addressDirectionToggle, searchAddressInput, false);
+    setupAddressDirectionToggle(walletAddressDirectionToggle, walletSearchAddressInput, true);
     
     // Map listeners
     addMapListeners(); // Add map listeners
@@ -2206,8 +2218,85 @@ const initializeStarfield = () => {
 };
 
 // --- Reusable Address Search Handler ---
+// --- Address Search Direction Toggle ---
+const updateDirectionToggle = (toggleBtn, inputEl, isPrefix) => {
+    if (!toggleBtn) return;
+    if (isPrefix) {
+        toggleBtn.textContent = 'terra...';
+        toggleBtn.title = 'Mode: Start of address (click to switch)';
+        inputEl.placeholder = 'Type from start (e.g. terra1x)';
+        inputEl.style.textAlign = 'left';
+    } else {
+        toggleBtn.textContent = '...cba';
+        toggleBtn.title = 'Mode: End of address - type last char first (click to switch)';
+        inputEl.placeholder = 'Type from end (last char first)';
+        inputEl.style.textAlign = 'right';
+    }
+};
+
+const setupAddressDirectionToggle = (toggleBtn, inputEl, isWalletSearch) => {
+    if (!toggleBtn || !inputEl) return;
+    
+    // Initialize display
+    const isPrefix = isWalletSearch ? walletAddressSearchDirection : addressSearchDirection;
+    updateDirectionToggle(toggleBtn, inputEl, isPrefix);
+    
+    toggleBtn.addEventListener('click', () => {
+        if (isWalletSearch) {
+            walletAddressSearchDirection = !walletAddressSearchDirection;
+            updateDirectionToggle(toggleBtn, inputEl, walletAddressSearchDirection);
+        } else {
+            addressSearchDirection = !addressSearchDirection;
+            updateDirectionToggle(toggleBtn, inputEl, addressSearchDirection);
+        }
+        // Clear input when switching modes
+        inputEl.value = '';
+        inputEl.focus();
+    });
+    
+    // Add keydown handler for reverse typing in suffix mode
+    inputEl.addEventListener('keydown', (e) => {
+        const isPrefix = isWalletSearch ? walletAddressSearchDirection : addressSearchDirection;
+        
+        // Only intercept in suffix mode (right-to-left)
+        if (isPrefix) return;
+        
+        // Handle backspace - remove from the front
+        if (e.key === 'Backspace') {
+            e.preventDefault();
+            if (inputEl.value.length > 0) {
+                inputEl.value = inputEl.value.substring(1); // Remove first character
+                // Trigger input event to update suggestions
+                inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+            return;
+        }
+        
+        // Handle delete - also remove from front
+        if (e.key === 'Delete') {
+            e.preventDefault();
+            if (inputEl.value.length > 0) {
+                inputEl.value = inputEl.value.substring(1);
+                inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+            return;
+        }
+        
+        // Only handle single character keys (letters, numbers)
+        if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+            e.preventDefault();
+            // Prepend the new character (reverse typing)
+            inputEl.value = e.key + inputEl.value;
+            // Trigger input event to update suggestions
+            inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+    });
+};
+
 const handleAddressInput = (inputEl, suggestionsEl, onSelectCallback, isWallet) => {
-    const input = inputEl.value.toLowerCase().trim();
+    const isPrefix = isWallet ? walletAddressSearchDirection : addressSearchDirection;
+    let input = inputEl.value.toLowerCase().trim();
+    
     if (!suggestionsEl) return;
     suggestionsEl.innerHTML = '';
 
@@ -2217,25 +2306,19 @@ const handleAddressInput = (inputEl, suggestionsEl, onSelectCallback, isWallet) 
         return;
     }
     
-    // Determine search direction: 
-    // - If starts with 'terra' → prefix search (left-to-right)
-    // - Otherwise → suffix search (right-to-left)
-    const isPrefix = input.startsWith('terra');
-    
     let matches;
     if (isPrefix) {
-        // Left-to-right: user is typing from the beginning
+        // Left-to-right: user is typing from the beginning (normal)
         matches = ownerAddresses.filter(addr => addr.toLowerCase().startsWith(input));
-        // Sort alphabetically by the character after the typed portion
         matches.sort((a, b) => {
             const charA = a.charAt(input.length) || '';
             const charB = b.charAt(input.length) || '';
             return charA.localeCompare(charB);
         });
     } else {
-        // Right-to-left: user is typing from the end
+        // Right-to-left: input is already built in reverse order by keydown handler
+        // So input "ulw" means we search for addresses ending in "ulw"
         matches = ownerAddresses.filter(addr => addr.toLowerCase().endsWith(input));
-        // Sort by the character before the typed portion (going backwards)
         matches.sort((a, b) => {
             const charA = a.charAt(a.length - input.length - 1) || '';
             const charB = b.charAt(b.length - input.length - 1) || '';
@@ -2246,6 +2329,7 @@ const handleAddressInput = (inputEl, suggestionsEl, onSelectCallback, isWallet) 
     // Auto-fill if exactly one match
     if (matches.length === 1) {
         inputEl.value = matches[0];
+        inputEl.style.textAlign = 'left'; // Show full address left-aligned
         suggestionsEl.classList.add('hidden');
         onSelectCallback();
         return;
@@ -2258,10 +2342,8 @@ const handleAddressInput = (inputEl, suggestionsEl, onSelectCallback, isWallet) 
             
             // Highlight the matching portion
             if (isPrefix) {
-                // Highlight from start
                 item.innerHTML = `<strong class="text-cyan-400">${match.substring(0, input.length)}</strong>${match.substring(input.length)}`;
             } else {
-                // Highlight from end
                 const startIndex = match.length - input.length;
                 item.innerHTML = `${match.substring(0, startIndex)}<strong class="text-cyan-400">${match.substring(startIndex)}</strong>`;
             }
@@ -2270,6 +2352,7 @@ const handleAddressInput = (inputEl, suggestionsEl, onSelectCallback, isWallet) 
             item.style.textAlign = 'left';
             item.onclick = () => {
                 inputEl.value = match;
+                inputEl.style.textAlign = 'left'; // Show full address left-aligned
                 suggestionsEl.classList.add('hidden');
                 onSelectCallback();
             };
