@@ -226,6 +226,20 @@ const mergeNftData = (metadata, statusData) => {
 };
 
 const initializeExplorer = async () => {
+    // Banner close - must run first
+    const bannerCloseBtn = document.getElementById('banner-close-btn');
+    const mobileBanner = document.getElementById('mobile-notice');
+    if (bannerCloseBtn && mobileBanner) {
+        bannerCloseBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            mobileBanner.style.display = 'none';
+        });
+        bannerCloseBtn.addEventListener('touchstart', function(e) {
+            e.preventDefault();
+            mobileBanner.style.display = 'none';
+        });
+    }
+    
     showLoading(gallery, 'Loading collection metadata...');
     showLoading(leaderboardTable, 'Loading holder data...');
     showLoading(walletGallery, 'Search for or select a wallet to see owned NFTs.');
@@ -549,39 +563,34 @@ const populateTraitFilters = () => {
 
 const populateStatusFilters = () => {
     statusFiltersGrid.innerHTML = '';
+    
+    // All 6 status filters in the same structure
     const statusFilterConfig = [
-        { key: 'staked', label: 'Staked', left: 'Ent', right: 'DAO' }, // Changed from Enterprise/DAODAO
-        { key: 'listed', label: 'Listed', left: 'Boost', right: 'BBL' }, // Changed from Boost/BackBoneLabs
-        { key: 'rewards', label: 'Rewards', left: 'Broken', right: 'Unbroken' }
+        { key: 'staked', label: 'Staked', left: 'Ent', right: 'DAO' },
+        { key: 'listed', label: 'Listed', left: 'Boost', right: 'BBL' },
+        { key: 'rewards', label: 'Rewards', left: 'Broken', right: 'Unbroken' },
+        { key: 'mint_status', label: 'Mint Status', left: 'Un-Minted', right: 'Minted' },
+        { key: 'matching_traits', label: 'Matching', left: 'P+I', right: 'P+I+O' },
+        { key: 'liquid_status', label: 'Liquid', left: 'Liquid', right: 'Not Liq' }
     ];
 
     statusFilterConfig.forEach(filter => {
         const container = createFilterItem({
-            toggleClass: 'status-toggle-cb', key: filter.key, label: filter.label,
+            toggleClass: 'status-toggle-cb', 
+            key: filter.key, 
+            label: filter.label,
             countClass: 'status-count',
-            sliderClass: 'status-slider', left: filter.left, right: filter.right
+            sliderClass: 'status-slider', 
+            left: filter.left, 
+            right: filter.right
         });
-         statusFiltersGrid.appendChild(container);
+        statusFiltersGrid.appendChild(container);
     });
 
-    mintStatusContainer.innerHTML = ''; // Clear previous content
-    const mintStatusFilter = createFilterItem({
-        toggleClass: 'status-toggle-cb', key: 'mint_status', label: 'Mint Status',
-        countClass: 'status-count',
-        sliderClass: 'status-slider', left: 'Un-Minted', right: 'Minted'
-    });
-    mintStatusContainer.appendChild(mintStatusFilter);
-    
-    // *** ADDED LIQUID FILTER ***
-    const liquidStatusFilter = createFilterItem({
-        toggleClass: 'status-toggle-cb', key: 'liquid_status', label: 'Liquid Status',
-        countClass: 'status-count',
-        sliderClass: 'status-slider', left: 'Liquid', right: 'Not Liq'
-    });
-    // Add it to the same grid as the mint status
-    const grid = mintStatusContainer.closest('.grid') || mintStatusContainer.parentElement;
-    if (grid) {
-        grid.appendChild(liquidStatusFilter);
+    // Clear and hide the old extra container since we moved everything to the main grid
+    const extraContainer = document.getElementById('status-filters-extra');
+    if (extraContainer) {
+        extraContainer.style.display = 'none';
     }
 };
 
@@ -911,9 +920,11 @@ const applyFiltersAndSort = () => {
         else if (sliderValue === '2') tempNfts = tempNfts.filter(nft => nft.liquid === false);
     }
     
-    // *** MATCHING TRAITS FILTER ***
-    if (matchingTraitsToggle?.checked) {
-        const strictLevel = matchingTraitsSlider ? parseInt(matchingTraitsSlider.value) : 0;
+    // *** MATCHING TRAITS FILTER - check both old DOM element and new dynamic one ***
+    const matchingToggle = document.querySelector('.status-toggle-cb[data-key="matching_traits"]') || matchingTraitsToggle;
+    const matchingSlider = document.querySelector('.status-slider[data-slider-key="matching_traits"]') || matchingTraitsSlider;
+    if (matchingToggle?.checked) {
+        const strictLevel = matchingSlider ? parseInt(matchingSlider.value) : 0;
         tempNfts = tempNfts.filter(nft => hasMatchingTraits(nft, strictLevel));
     }
     
