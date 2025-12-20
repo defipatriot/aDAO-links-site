@@ -3030,45 +3030,74 @@ const searchWallet = () => {
         return;
     }
     
-    // Get wallet NFTs
-    let walletNfts = allNfts.filter(nft => nft.owner === address);
+    // Show loading immediately
+    walletGalleryTitle.textContent = 'Loading...';
+    walletGallery.innerHTML = '<div class="col-span-full text-center py-8 text-gray-400"><div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-400 mb-2"></div><p>Loading wallet NFTs...</p></div>';
     
-    // Apply wallet status filters
-    const liquidFilter = document.querySelector('.wallet-status-filter[data-status="liquid"]');
-    const stakedFilter = document.querySelector('.wallet-status-filter[data-status="staked"]');
-    const brokenFilter = document.querySelector('.wallet-status-filter[data-status="broken"]');
-    const listedFilter = document.querySelector('.wallet-status-filter[data-status="listed"]');
-    
-    if (liquidFilter?.checked) {
-        walletNfts = walletNfts.filter(nft => nft.liquid === true);
-    }
-    if (stakedFilter?.checked) {
-        walletNfts = walletNfts.filter(nft => nft.staked_enterprise_legacy || nft.staked_daodao);
-    }
-    if (brokenFilter?.checked) {
-        walletNfts = walletNfts.filter(nft => nft.broken === true);
-    }
-    if (listedFilter?.checked) {
-        walletNfts = walletNfts.filter(nft => nft.boost_market || nft.bbl_market);
-    }
-    
-    const totalForWallet = allNfts.filter(nft => nft.owner === address).length;
-    const filterActive = liquidFilter?.checked || stakedFilter?.checked || brokenFilter?.checked || listedFilter?.checked;
-    
-    if (filterActive) {
-        walletGalleryTitle.textContent = `Showing ${walletNfts.length} of ${totalForWallet} NFTs for wallet:`;
-    } else {
-        walletGalleryTitle.textContent = `Found ${walletNfts.length} NFTs for wallet:`;
-    }
-    
-    walletGallery.innerHTML = '';
-    if (walletNfts.length === 0) {
-        showLoading(walletGallery, filterActive ? 'No NFTs match the selected filters.' : 'No NFTs found for this address.');
-        return;
-    }
-    walletNfts.sort((a,b) => (b.rarityClass ?? 0) - (a.rarityClass ?? 0)).forEach(nft => {
-        walletGallery.appendChild(createNftCard(nft, '.wallet-trait-toggle'));
-    });
+    // Use setTimeout to allow UI to update before heavy processing
+    setTimeout(() => {
+        // Get wallet NFTs
+        let walletNfts = allNfts.filter(nft => nft.owner === address);
+        
+        // Apply wallet status filters
+        const liquidFilter = document.querySelector('.wallet-status-filter[data-status="liquid"]');
+        const stakedFilter = document.querySelector('.wallet-status-filter[data-status="staked"]');
+        const brokenFilter = document.querySelector('.wallet-status-filter[data-status="broken"]');
+        const listedFilter = document.querySelector('.wallet-status-filter[data-status="listed"]');
+        
+        if (liquidFilter?.checked) {
+            walletNfts = walletNfts.filter(nft => nft.liquid === true);
+        }
+        if (stakedFilter?.checked) {
+            walletNfts = walletNfts.filter(nft => nft.staked_enterprise_legacy || nft.staked_daodao);
+        }
+        if (brokenFilter?.checked) {
+            walletNfts = walletNfts.filter(nft => nft.broken === true);
+        }
+        if (listedFilter?.checked) {
+            walletNfts = walletNfts.filter(nft => nft.boost_market || nft.bbl_market);
+        }
+        
+        const totalForWallet = allNfts.filter(nft => nft.owner === address).length;
+        const filterActive = liquidFilter?.checked || stakedFilter?.checked || brokenFilter?.checked || listedFilter?.checked;
+        
+        if (filterActive) {
+            walletGalleryTitle.textContent = `Showing ${walletNfts.length} of ${totalForWallet} NFTs for wallet:`;
+        } else {
+            walletGalleryTitle.textContent = `Found ${walletNfts.length} NFTs for wallet:`;
+        }
+        
+        walletGallery.innerHTML = '';
+        if (walletNfts.length === 0) {
+            showLoading(walletGallery, filterActive ? 'No NFTs match the selected filters.' : 'No NFTs found for this address.');
+            return;
+        }
+        
+        // Sort NFTs
+        walletNfts.sort((a,b) => (b.rarityClass ?? 0) - (a.rarityClass ?? 0));
+        
+        // Render cards in batches for better performance
+        const batchSize = 20;
+        let index = 0;
+        
+        const renderBatch = () => {
+            const fragment = document.createDocumentFragment();
+            const end = Math.min(index + batchSize, walletNfts.length);
+            
+            for (let i = index; i < end; i++) {
+                fragment.appendChild(createNftCard(walletNfts[i], '.wallet-trait-toggle'));
+            }
+            
+            walletGallery.appendChild(fragment);
+            index = end;
+            
+            if (index < walletNfts.length) {
+                requestAnimationFrame(renderBatch);
+            }
+        };
+        
+        renderBatch();
+    }, 10); // Small delay to let loading indicator show
 };
 
 // --- Hash Handling ---
