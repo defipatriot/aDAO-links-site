@@ -234,21 +234,27 @@ const calculateRanks = () => {
         }
     });
 
-    // Second pass: calculate rarity scores
-    // Using industry-standard rarity.tools formula: sum of (1 / (trait_count / total_items))
-    // INCLUDING all traits (Planet, Inhabitant, Object, Weather, Light) to align with BBL marketplace
-    // Note: Official AllianceDAO docs stated Weather/Light should be excluded, but BBL includes them
+    // Second pass: assign rarity class and calculate tie-breaker scores
+    // Rarity Class = Official "Rarity" attribute (1-40, based on Object)
+    // Tie-breakers: Object count, Weather count, Light count, then NFT ID
     allNfts.forEach(nft => {
-        // Get official rarity score from metadata (Object rarity 1-40) for reference
+        // Get official rarity score from metadata (Object rarity 1-40)
         const officialRarity = nft.attributes?.find(a => a.trait_type === 'Rarity')?.value || 0;
-        nft.officialRarity = Number(officialRarity);
+        nft.rarityClass = Number(officialRarity);
         
-        // Calculate trait-based score using ALL traits (to match BBL)
+        // Get trait counts for tie-breaking (lower count = rarer = better)
+        const objectValue = nft.attributes?.find(a => a.trait_type === 'Object')?.value;
+        const weatherValue = nft.attributes?.find(a => a.trait_type === 'Weather')?.value;
+        const lightValue = nft.attributes?.find(a => a.trait_type === 'Light')?.value;
+        
+        nft.objectCount = objectValue ? (traitCounts['Object']?.[objectValue] || 9999) : 9999;
+        nft.weatherCount = weatherValue ? (traitCounts['Weather']?.[weatherValue] || 9999) : 9999;
+        nft.lightCount = lightValue ? (traitCounts['Light']?.[lightValue] || 9999) : 9999;
+        
+        // Also store a combined rarity score for potential future use
         let traitScore = 0;
         if (nft.attributes) {
             nft.attributes.forEach(attr => {
-                // Include: Planet, Inhabitant, Object, Weather, Light
-                // Exclude: Rarity (this is a derived score, not a trait)
                 if (traitCounts[attr.trait_type]?.[attr.value] && attr.trait_type !== 'Rarity') {
                     const count = traitCounts[attr.trait_type][attr.value];
                     traitScore += 1 / (count / allNfts.length);
@@ -258,24 +264,35 @@ const calculateRanks = () => {
         nft.rarityScore = traitScore;
     });
 
-    // Sort by rarity score descending, then by NFT ID ascending for ties
+    // Sort by: Rarity Class (desc), then Object count (asc), Weather count (asc), Light count (asc), NFT ID (asc)
     allNfts.sort((a, b) => {
-        const scoreDiff = b.rarityScore - a.rarityScore;
-        if (scoreDiff !== 0) return scoreDiff;
-        // Tie-breaker: lower NFT ID wins
+        // Primary: Rarity class (higher = rarer = first)
+        if (b.rarityClass !== a.rarityClass) return b.rarityClass - a.rarityClass;
+        
+        // Tie-breaker 1: Object count (lower = rarer = first)
+        if (a.objectCount !== b.objectCount) return a.objectCount - b.objectCount;
+        
+        // Tie-breaker 2: Weather count (lower = rarer = first)
+        if (a.weatherCount !== b.weatherCount) return a.weatherCount - b.weatherCount;
+        
+        // Tie-breaker 3: Light count (lower = rarer = first)
+        if (a.lightCount !== b.lightCount) return a.lightCount - b.lightCount;
+        
+        // Final tie-breaker: NFT ID (lower = first)
         return (a.id || 0) - (b.id || 0);
     });
 
+    // Assign display order (not a "rank", just for internal reference)
     allNfts.forEach((nft, index) => {
-        nft.rank = index + 1;
+        nft.displayOrder = index + 1;
     });
     
     // Log top 15 for debugging
-    console.log('Top 15 NFTs by rarity (All Traits including Weather/Light):');
-    allNfts.slice(0, 15).forEach(nft => {
+    console.log('Top 15 NFTs by Rarity Class (with tie-breakers):');
+    allNfts.slice(0, 15).forEach((nft, idx) => {
         const weather = nft.attributes?.find(a => a.trait_type === 'Weather')?.value || 'N/A';
         const object = nft.attributes?.find(a => a.trait_type === 'Object')?.value || 'N/A';
-        console.log(`#${nft.id} - Rank: ${nft.rank}, Score: ${nft.rarityScore.toFixed(2)}, Object: ${object}, Weather: ${weather}`);
+        console.log(`${idx + 1}. #${nft.id} - Rarity: ${nft.rarityClass}/40, Object: ${object} (${nft.objectCount}), Weather: ${weather} (${nft.weatherCount})`);
     });
 };
 
@@ -768,8 +785,8 @@ const applyFiltersAndSort = () => {
     });
 
     const sortValue = sortSelect.value;
-    if (sortValue === 'asc') tempNfts.sort((a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity));
-    else if (sortValue === 'desc') tempNfts.sort((a, b) => (b.rank ?? -Infinity) - (a.rank ?? -Infinity));
+    if (sortValue === 'asc') tempNfts.sort((a, b) => (a.rarityClass ?? 0) - (b.rarityClass ?? 0));
+    else if (sortValue === 'desc') tempNfts.sort((a, b) => (b.rarityClass ?? 0) - (a.rarityClass ?? 0));
     else if (sortValue === 'id') tempNfts.sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
 
     filteredNfts = tempNfts;
@@ -913,14 +930,15 @@ const createNftCard = (nft, toggleSelector) => {
     
     visibleTraits.forEach(traitType => {
         let value = 'N/A';
-        if (traitType === 'Rank' && nft.rank != null) {
-            value = `#${nft.rank}`;
+        if (traitType === 'Rank') {
+            // Show Rarity Class instead of rank number
+            value = nft.rarityClass != null ? `${nft.rarityClass}/40` : 'N/A';
         } else if (traitType === 'Rarity') {
     value = nft.attributes?.find(a => a.trait_type === 'Rarity')?.value || 'N/A';
         } else {
             value = nft.attributes?.find(attr => attr.trait_type === traitType)?.value || 'N/A';
         }
-        traitsHtml += `<li class="flex justify-between items-center py-2 px-1 border-b border-gray-700 last:border-b-0"><span class="text-xs font-medium text-cyan-400 uppercase">${traitType}</span><span class="text-sm font-semibold text-white truncate" title="${value}">${value}</span></li>`;
+        traitsHtml += `<li class="flex justify-between items-center py-2 px-1 border-b border-gray-700 last:border-b-0"><span class="text-xs font-medium text-cyan-400 uppercase">${traitType === 'Rank' ? 'RARITY' : traitType}</span><span class="text-sm font-semibold text-white truncate" title="${value}">${value}</span></li>`;
     });
     
     card.innerHTML = `<div class="image-container aspect-w-1-aspect-h-1 w-full"><img src="${imageUrl}" data-fallback="${fallbackUrl}" alt="${newTitle}" class="w-full h-full object-cover" loading="lazy" onerror="if(this.dataset.fallback && this.src !== this.dataset.fallback) { this.src = this.dataset.fallback; } else { this.onerror=null; this.src='https://placehold.co/300x300/1f2937/e5e7eb?text=Image+Error'; }"></div><div class="p-4 flex-grow flex flex-col"><h2 class="text-lg font-bold text-white mb-3 truncate" title="${newTitle}">${newTitle}</h2><ul class="text-sm flex-grow">${traitsHtml}</ul></div>`;
@@ -1162,7 +1180,7 @@ const findHighestRaritySample = (filterFn) => {
     // Find the highest *score* (lowest rank)
     const matches = allNfts.filter(filterFn);
     if (matches.length === 0) return null;
-    matches.sort((a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity)); // Sort by rank asc
+    matches.sort((a, b) => (b.rarityClass ?? 0) - (a.rarityClass ?? 0)); // Sort by rarity class desc
     return matches[0];
 };
 
@@ -1300,8 +1318,7 @@ const showNftDetails = (nft) => {
     const rarityValue = nft.attributes?.find(a => a.trait_type === 'Rarity')?.value || 'N/A';
     
     // Start traits HTML with Rank and Rarity
-    let traitsHtml = `<div class="flex justify-between text-sm"><span class="text-gray-400">Rank:</span><span class="font-semibold text-white">#${nft.rank || 'N/A'}</span></div>`;
-    traitsHtml += `<div class="flex justify-between text-sm"><span class="text-gray-400">Rarity Score:</span><span class="font-semibold text-white">${rarityValue}/40</span></div>`;
+    let traitsHtml = `<div class="flex justify-between text-sm"><span class="text-gray-400">Rarity Class:</span><span class="font-semibold text-cyan-400 text-lg">${nft.rarityClass || 'N/A'}/40</span></div>`;
     
     // Separator
     traitsHtml += `<div class="pt-2 mt-2 border-t border-gray-600"></div>`;
@@ -1474,7 +1491,7 @@ const generateShareImage = (nft, button) => {
         };
 
         drawText(`NFT #${nft.id || '?'}`, margin, margin + 48, 'left');
-        drawText(`Rank #${nft.rank || 'N/A'}`, canvas.width - margin, margin + 48, 'right');
+        drawText(`Rarity ${nft.rarityClass || 'N/A'}/40`, canvas.width - margin, margin + 48, 'right');
         drawText(getTrait('Planet'), margin, canvas.height - margin, 'left');
         
         let inhabitantText = getTrait('Inhabitant');
@@ -2486,7 +2503,7 @@ const showWalletExplorerModal = (address) => {
         `;
     });
 
-    walletNfts.sort((a,b) => (a.rank ?? Infinity) - (b.rank ?? Infinity)).forEach(nft => {
+    walletNfts.sort((a,b) => (b.rarityClass ?? 0) - (a.rarityClass ?? 0)).forEach(nft => {
         galleryEl.appendChild(createNftCard(nft, '.wallet-trait-toggle'));
     });
 
@@ -2608,7 +2625,7 @@ const searchWallet = () => {
         showLoading(walletGallery, 'No NFTs found for this address.');
         return;
     }
-    walletNfts.sort((a,b) => (a.rank ?? Infinity) - (b.rank ?? Infinity)).forEach(nft => {
+    walletNfts.sort((a,b) => (b.rarityClass ?? 0) - (a.rarityClass ?? 0)).forEach(nft => {
         walletGallery.appendChild(createNftCard(nft, '.wallet-trait-toggle'));
     });
 };
