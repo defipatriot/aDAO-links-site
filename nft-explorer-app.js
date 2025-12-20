@@ -18,9 +18,15 @@ const modalCloseBtn = document.getElementById('modal-close');
 const rarityModal = document.getElementById('rarity-modal');
 const rarityExplainedBtn = document.getElementById('rarity-explained-btn');
 const rarityModalCloseBtn = document.getElementById('rarity-modal-close');
+const sortingModal = document.getElementById('sorting-modal');
+const sortingExplainedBtn = document.getElementById('sorting-explained-btn');
+const sortingModalCloseBtn = document.getElementById('sorting-modal-close');
 const badgeModal = document.getElementById('badge-modal');
 const badgesExplainedBtn = document.getElementById('badges-explained-btn');
 const badgeModalCloseBtn = document.getElementById('badge-modal-close');
+const matchingTraitsToggle = document.getElementById('matching-traits-toggle');
+const matchingTraitsSlider = document.getElementById('matching-traits-slider');
+const matchingTraitsCount = document.getElementById('matching-traits-count');
 const collectionViewBtn = document.getElementById('collection-view-btn');
 const walletViewBtn = document.getElementById('wallet-view-btn');
 const mapViewBtn = document.getElementById('map-view-btn');
@@ -68,6 +74,64 @@ const itemsPerPage = 20;
 const traitOrder = ["Rarity", "Planet", "Inhabitant", "Object", "Weather", "Light"];
 const filterLayoutOrder = ["Rarity", "Object", "Weather", "Light"];
 const defaultTraitsOn = ["Rarity", "Planet", "Inhabitant", "Object"];
+
+// Planet to Inhabitant mapping (for "Matching Traits" filter)
+// Each planet has its native inhabitant race
+const PLANET_INHABITANT_MAP = {
+    'Cristall': 'Cristallian',
+    'Crutha': 'Cruthan',
+    'Gredica': 'Gredican',
+    'Kita': 'Kitan',
+    'Lusa': 'Lusan',
+    'Minas': 'Minasan',
+    'Ozara': 'Ozaran',
+    'Pampa': 'Pampan',
+    'Sindari': 'Sindarin',
+    'Zando': 'Zandoan'
+};
+
+// Planet to Objects mapping (objects that belong to each planet/race)
+const PLANET_OBJECTS_MAP = {
+    'Cristall': ['Cristallian Staff', 'Cristallian Bow', 'Cristallian Sword', 'Cristallian Ray Gun'],
+    'Crutha': ['Cruthan Death Mace', 'Cruthan Blaster'],
+    'Gredica': ['Gredican Power Staff', 'Gredican Sword'],
+    'Kita': ['Kitan Ice Staff', 'Kitan Ice Bow', 'Kitan Ice Sword'],
+    'Lusa': ['Lusan Water Staff', 'Lusan Water Saber', 'Ancient Lusan Trident', 'Lusan Xtreme Soaker'],
+    'Minas': ['Minasan Ore Staff', 'Minasan Bow', 'Minasan Ore Sword'],
+    'Ozara': ['Ozaran Sand Staff', 'Ozaran Bone Axe', 'Ozaran Death Saber', 'Royal Ozaran Bow', 'Ozaran Blaster'],
+    'Pampa': ['Pampan Grass Staff', 'Pampan Grass Sword'],
+    'Sindari': ['Sindarin Fire Staff', 'Sindarin Fire Bow', 'Sindarin Fire Saber', 'Sindarin Flame Thrower'],
+    'Zando': ['Staff of Zando', 'Sword of Zando', 'Zandoan Vine Bow']
+};
+
+// Check if an NFT has matching traits based on strictness level
+// Level 0: Planet + Inhabitant match (inhabitant on home planet)
+// Level 1: Planet + Inhabitant + Object match (full match - all three belong together)
+const hasMatchingTraits = (nft, strictLevel = 0) => {
+    const planet = nft.attributes?.find(a => a.trait_type === 'Planet')?.value;
+    const inhabitant = nft.attributes?.find(a => a.trait_type === 'Inhabitant')?.value;
+    const object = nft.attributes?.find(a => a.trait_type === 'Object')?.value;
+    
+    if (!planet || !inhabitant) return false;
+    
+    // Extract base planet name (remove North/South)
+    const basePlanet = planet.replace(/ (North|South)$/, '');
+    // Extract base inhabitant name (remove M/F)
+    const baseInhabitant = inhabitant.replace(/ (M|F)$/, '');
+    
+    // Check if inhabitant matches planet's native race
+    const planetInhabitantMatch = PLANET_INHABITANT_MAP[basePlanet] === baseInhabitant;
+    
+    if (!planetInhabitantMatch) return false;
+    
+    // If only checking planet + inhabitant (level 0), we're done
+    if (strictLevel === 0) return true;
+    
+    // Level 1: Also check if object belongs to this planet
+    if (!object) return false;
+    const planetObjects = PLANET_OBJECTS_MAP[basePlanet] || [];
+    return planetObjects.includes(object);
+};
 
 // --- State ---
 let allNfts = [];
@@ -188,6 +252,7 @@ const initializeExplorer = async () => {
         populateWalletTraitToggles();
         updateAddressDropdown(allNfts);
         updateFilterCounts(allNfts);
+        updateMatchingTraitsCount(); // Update matching traits count
         addAllEventListeners();
         applyStateFromUrl();
         applyFiltersAndSort();
@@ -234,34 +299,58 @@ const calculateRanks = () => {
         }
     });
 
-    // Second pass: assign rarity class and calculate trait-based sub-score
+    // Second pass: assign rarity class and calculate sub-score for tie-breaking
+    // Rarity Class = Official "Rarity" attribute (1-40, based on Object)
+    // Sub-score uses OTHER traits in order: Inhabitant, Planet, Weather, Light
+    // For Inhabitant and Planet, we use the SPECIFIC variant count (M/F, North/South)
     allNfts.forEach(nft => {
         // Get official rarity score from metadata (Object rarity 1-40)
         const officialRarity = nft.attributes?.find(a => a.trait_type === 'Rarity')?.value || 0;
         nft.rarityClass = Number(officialRarity);
         
-        // Calculate trait-based sub-score for ranking within the same rarity class
-        // Uses actual trait counts - rarer traits = higher score
-        let subScore = 0;
-        if (nft.attributes) {
-            nft.attributes.forEach(attr => {
-                // Include all visual traits for sub-scoring (excluding Rarity itself)
-                if (traitCounts[attr.trait_type]?.[attr.value] && attr.trait_type !== 'Rarity') {
-                    const count = traitCounts[attr.trait_type][attr.value];
-                    subScore += 1 / (count / allNfts.length);
-                }
-            });
-        }
-        nft.subScore = subScore;
+        // Get individual trait values
+        const inhabitantValue = nft.attributes?.find(a => a.trait_type === 'Inhabitant')?.value;
+        const planetValue = nft.attributes?.find(a => a.trait_type === 'Planet')?.value;
+        const weatherValue = nft.attributes?.find(a => a.trait_type === 'Weather')?.value;
+        const lightValue = nft.attributes?.find(a => a.trait_type === 'Light')?.value;
+        
+        // For Inhabitant: use the specific M/F variant count, not the base count
+        // traitCounts['Inhabitant']['Lusan M'] gives exact count of Lusan M
+        nft.inhabitantCount = inhabitantValue ? (traitCounts['Inhabitant']?.[inhabitantValue] || 9999) : 9999;
+        
+        // For Planet: use the specific North/South variant count
+        // traitCounts['Planet']['Cristall South'] gives exact count of Cristall South
+        nft.planetCount = planetValue ? (traitCounts['Planet']?.[planetValue] || 9999) : 9999;
+        
+        // Weather and Light counts
+        nft.weatherCount = weatherValue ? (traitCounts['Weather']?.[weatherValue] || 9999) : 9999;
+        nft.lightCount = lightValue ? (traitCounts['Light']?.[lightValue] || 9999) : 9999;
+        
+        // Store the values for display/debugging
+        nft.inhabitantValue = inhabitantValue;
+        nft.planetValue = planetValue;
+        nft.weatherValue = weatherValue;
+        nft.lightValue = lightValue;
     });
 
-    // Sort by: Rarity Class DESC (40 first), then subScore DESC (rarer traits first), then NFT ID ASC
+    // Sort by: Rarity Class DESC, then Planet ASC, Inhabitant ASC, Weather ASC, Light ASC, NFT ID ASC
+    // (Lower count = rarer = should come first, so ASC)
     allNfts.sort((a, b) => {
         // Primary: Rarity class (higher = rarer = first)
         if (b.rarityClass !== a.rarityClass) return b.rarityClass - a.rarityClass;
         
-        // Secondary: Sub-score (higher = rarer traits = first)
-        if (b.subScore !== a.subScore) return b.subScore - a.subScore;
+        // Tie-breaker 1: Planet variant count (lower = rarer = first)
+        // Background is ~80% of visual, so most important after Object
+        if (a.planetCount !== b.planetCount) return a.planetCount - b.planetCount;
+        
+        // Tie-breaker 2: Inhabitant variant count (lower = rarer = first)
+        if (a.inhabitantCount !== b.inhabitantCount) return a.inhabitantCount - b.inhabitantCount;
+        
+        // Tie-breaker 3: Weather count (lower = rarer = first)
+        if (a.weatherCount !== b.weatherCount) return a.weatherCount - b.weatherCount;
+        
+        // Tie-breaker 4: Light count (lower = rarer = first)
+        if (a.lightCount !== b.lightCount) return a.lightCount - b.lightCount;
         
         // Final tie-breaker: NFT ID (lower = first)
         return (a.id || 0) - (b.id || 0);
@@ -281,12 +370,11 @@ const calculateRanks = () => {
         nft.displayOrder = index + 1;
     });
     
-    // Log top 20 for debugging
-    console.log('Top 20 NFTs by Rarity Class (40 = rarest):');
-    allNfts.slice(0, 20).forEach((nft) => {
-        const weather = nft.attributes?.find(a => a.trait_type === 'Weather')?.value || 'N/A';
-        const object = nft.attributes?.find(a => a.trait_type === 'Object')?.value || 'N/A';
-        console.log(`${nft.rarityClass}/${nft.subRank} - #${nft.id}, Object: ${object}, Weather: ${weather}, SubScore: ${nft.subScore.toFixed(2)}`);
+    // Log top 25 for debugging (to see all Rarity 40s)
+    console.log('Top 25 NFTs by Rarity Class (tie-break: Planet N/S → Inhabitant M/F → Weather → Light → ID):');
+    console.log('Lower counts = rarer = ranked higher within class');
+    allNfts.slice(0, 25).forEach((nft) => {
+        console.log(`${nft.rarityClass}/${nft.subRank} - #${nft.id} | Planet: ${nft.planetValue} (${nft.planetCount}) | Inh: ${nft.inhabitantValue} (${nft.inhabitantCount}) | Weather: ${nft.weatherValue} (${nft.weatherCount})`);
     });
 };
 
@@ -305,6 +393,58 @@ const getTraitRarityRank = (traitType, traitValue) => {
     const percentage = ((count / allNfts.length) * 100).toFixed(1);
     
     return { rank, total, count, percentage };
+};
+
+// Populate the distribution tables in the Sorting Explained modal
+const populateDistributionTables = () => {
+    const planetDistEl = document.getElementById('planet-distribution');
+    const inhabitantDistEl = document.getElementById('inhabitant-distribution');
+    
+    if (!traitCounts['Planet'] || !traitCounts['Inhabitant']) {
+        if (planetDistEl) planetDistEl.innerHTML = '<p class="text-gray-500">Data not loaded yet.</p>';
+        if (inhabitantDistEl) inhabitantDistEl.innerHTML = '<p class="text-gray-500">Data not loaded yet.</p>';
+        return;
+    }
+    
+    // Planet + Zone distribution (sorted by count, rarest first)
+    if (planetDistEl) {
+        const planetData = Object.entries(traitCounts['Planet'])
+            .map(([name, count]) => ({ name, count, pct: ((count / allNfts.length) * 100).toFixed(2) }))
+            .sort((a, b) => a.count - b.count);
+        
+        let html = '<div class="grid grid-cols-2 md:grid-cols-4 gap-2">';
+        planetData.forEach((p, idx) => {
+            const colorClass = idx < 5 ? 'text-yellow-400' : idx < 10 ? 'text-cyan-400' : 'text-gray-400';
+            html += `<span class="${colorClass}">${idx + 1}. ${p.name} (${p.count} - ${p.pct}%)</span>`;
+        });
+        html += '</div>';
+        planetDistEl.innerHTML = html;
+    }
+    
+    // Inhabitant + Gender distribution (sorted by count, rarest first)
+    if (inhabitantDistEl) {
+        const inhabitantData = Object.entries(traitCounts['Inhabitant'])
+            .map(([name, count]) => ({ name, count, pct: ((count / allNfts.length) * 100).toFixed(2) }))
+            .sort((a, b) => a.count - b.count);
+        
+        let html = '<div class="grid grid-cols-2 md:grid-cols-4 gap-2">';
+        inhabitantData.forEach((i, idx) => {
+            const colorClass = idx < 5 ? 'text-purple-400' : idx < 10 ? 'text-cyan-400' : 'text-gray-400';
+            html += `<span class="${colorClass}">${idx + 1}. ${i.name} (${i.count} - ${i.pct}%)</span>`;
+        });
+        html += '</div>';
+        inhabitantDistEl.innerHTML = html;
+    }
+};
+
+// Update the matching traits count display
+const updateMatchingTraitsCount = () => {
+    if (!matchingTraitsCount || !allNfts.length) return;
+    
+    const strictLevel = matchingTraitsSlider ? parseInt(matchingTraitsSlider.value) : 0;
+    const count = allNfts.filter(nft => hasMatchingTraits(nft, strictLevel)).length;
+    
+    matchingTraitsCount.textContent = count.toLocaleString();
 };
 
 // --- UI Population ---
@@ -514,9 +654,30 @@ const addAllEventListeners = () => {
     if (rarityExplainedBtn) rarityExplainedBtn.addEventListener('click', () => rarityModal.classList.remove('hidden'));
     if (rarityModalCloseBtn) rarityModalCloseBtn.addEventListener('click', () => rarityModal.classList.add('hidden'));
     if (rarityModal) rarityModal.addEventListener('click', (e) => { if (e.target === rarityModal) rarityModal.classList.add('hidden'); });
+    if (sortingExplainedBtn) sortingExplainedBtn.addEventListener('click', () => { 
+        populateDistributionTables(); 
+        sortingModal.classList.remove('hidden'); 
+    });
+    if (sortingModalCloseBtn) sortingModalCloseBtn.addEventListener('click', () => sortingModal.classList.add('hidden'));
+    if (sortingModal) sortingModal.addEventListener('click', (e) => { if (e.target === sortingModal) sortingModal.classList.add('hidden'); });
     if (badgesExplainedBtn) badgesExplainedBtn.addEventListener('click', () => badgeModal.classList.remove('hidden'));
     if (badgeModalCloseBtn) badgeModalCloseBtn.addEventListener('click', () => badgeModal.classList.add('hidden'));
     if (badgeModal) badgeModal.addEventListener('click', (e) => { if (e.target === badgeModal) badgeModal.classList.add('hidden'); });
+    if (matchingTraitsToggle) {
+        matchingTraitsToggle.addEventListener('change', () => {
+            if (matchingTraitsSlider) {
+                matchingTraitsSlider.disabled = !matchingTraitsToggle.checked;
+            }
+            updateMatchingTraitsCount();
+            handleFilterChange();
+        });
+    }
+    if (matchingTraitsSlider) {
+        matchingTraitsSlider.addEventListener('input', () => {
+            updateMatchingTraitsCount();
+            handleFilterChange();
+        });
+    }
     if (walletModalCloseBtn) walletModalCloseBtn.addEventListener('click', hideWalletExplorerModal);
     if (walletExplorerModal) walletExplorerModal.addEventListener('click', (e) => { if (e.target === walletExplorerModal) hideWalletExplorerModal(); });
     if (systemModalCloseBtn) systemModalCloseBtn.addEventListener('click', hideSystemLeaderboardModal);
@@ -725,6 +886,13 @@ const applyFiltersAndSort = () => {
         if (sliderValue === '0') tempNfts = tempNfts.filter(nft => nft.liquid === true);
         else if (sliderValue === '2') tempNfts = tempNfts.filter(nft => nft.liquid === false);
     }
+    
+    // *** MATCHING TRAITS FILTER ***
+    if (matchingTraitsToggle?.checked) {
+        const strictLevel = matchingTraitsSlider ? parseInt(matchingTraitsSlider.value) : 0;
+        tempNfts = tempNfts.filter(nft => hasMatchingTraits(nft, strictLevel));
+    }
+    
     const activePlanetFilters = [];
     document.querySelectorAll('.planet-toggle-cb:checked').forEach(cb => {
         const planetName = cb.dataset.key;
@@ -847,7 +1015,7 @@ const applyStateFromUrl = () => {
     if (sortSelect && [...sortSelect.options].some(o => o.value === sortParam)) {
         sortSelect.value = sortParam;
     } else if (sortSelect) {
-        sortSelect.value = 'asc';
+        sortSelect.value = 'desc'; // Default: Rarity High to Low (40 first)
     }
     
     document.querySelectorAll('.multi-select-container').forEach(container => {
@@ -1038,7 +1206,12 @@ const resetAll = () => {
     if(searchInput) searchInput.value = '';
     if(searchAddressInput) searchAddressInput.value = '';
     if(addressDropdown) addressDropdown.value = '';
-    if(sortSelect) sortSelect.value = 'asc';
+    if(sortSelect) sortSelect.value = 'desc'; // Default: Rarity High to Low (40 first)
+    if(matchingTraitsToggle) matchingTraitsToggle.checked = false;
+    if(matchingTraitsSlider) {
+        matchingTraitsSlider.value = 0;
+        matchingTraitsSlider.disabled = true;
+    }
     
     document.querySelectorAll('.toggle-checkbox').forEach(toggle => {
         if (['status-toggle-cb', 'planet-toggle-cb', 'inhabitant-toggle-cb'].some(cls => toggle.classList.contains(cls))) {

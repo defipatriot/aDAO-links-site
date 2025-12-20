@@ -79,6 +79,21 @@
                     <div id="status-filters-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-y-4 gap-x-6"></div>
                     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-y-4 gap-x-6 mt-4">
                         <div id="mint-status-container"></div>
+                        <div class="flex items-center justify-between">
+                            <label class="flex items-center cursor-pointer">
+                                <input type="checkbox" id="matching-traits-toggle" class="toggle-checkbox">
+                                <span class="toggle-switch mr-2"></span>
+                                <span class="text-sm text-gray-300">Matching Traits</span>
+                            </label>
+                            <div class="flex flex-col items-center ml-4">
+                                <span id="matching-traits-count" class="text-xs text-gray-400 h-4"></span>
+                                <div class="direction-slider-container">
+                                    <span class="text-xs text-gray-400" title="Planet + Inhabitant">P+I</span>
+                                    <input type="range" min="0" max="1" value="0" class="direction-slider" id="matching-traits-slider" disabled>
+                                    <span class="text-xs text-gray-400" title="Planet + Inhabitant + Object">P+I+O</span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 
@@ -152,6 +167,7 @@
 
     <footer class="text-center mt-12 space-x-6">
         <button id="rarity-explained-btn" class="text-red-500 font-bold hover:text-red-400 transition-colors underline">Rarity Explained</button>
+        <button id="sorting-explained-btn" class="text-green-400 font-bold hover:text-green-300 transition-colors underline">Sorting Explained</button>
         <button id="badges-explained-btn" class="text-cyan-400 font-bold hover:text-cyan-300 transition-colors underline">Badges Explained</button>
     </footer>
     <div class="mt-6 text-xs text-gray-500 max-w-3xl mx-auto text-center">
@@ -329,6 +345,129 @@
             </div>
         </div>
     </div>
+    
+    <!-- Sorting Explained Modal -->
+    <div id="sorting-modal" class="modal-backdrop hidden">
+        <div class="modal-content text-gray-300" style="max-width: 900px;">
+            <svg id="sorting-modal-close" class="modal-close-btn w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            <h2 class="text-2xl font-bold text-white mb-4">How NFTs Are Sorted</h2>
+            <div class="space-y-6 text-sm leading-relaxed">
+                
+                <div class="bg-green-900/30 border border-green-600/50 rounded-lg p-4">
+                    <h3 class="text-green-400 font-semibold mb-2">Understanding the Display: 40/1</h3>
+                    <p>When you see <strong class="text-white">40/1</strong> on an NFT card:</p>
+                    <ul class="mt-2 space-y-1">
+                        <li><strong class="text-cyan-400">40</strong> = The Rarity Class (Object rarity from metadata, 1-40 scale)</li>
+                        <li><strong class="text-cyan-400">/1</strong> = Position within that class based on other trait scarcity</li>
+                    </ul>
+                    <p class="mt-2 text-gray-400">So <strong>40/1</strong> is the rarest NFT in Rarity Class 40, while <strong>40/25</strong> would be the 25th rarest in that class.</p>
+                </div>
+
+                <div>
+                    <h3 class="text-lg font-semibold text-white mb-2">Sorting Priority (Default: High to Low)</h3>
+                    <p class="mb-3">NFTs are sorted by scarcity using the following priority:</p>
+                    
+                    <div class="space-y-3">
+                        <div class="flex items-start gap-3 bg-gray-800 rounded-lg p-3">
+                            <span class="bg-yellow-500 text-black font-bold rounded-full w-6 h-6 flex items-center justify-center flex-shrink-0">1</span>
+                            <div>
+                                <h4 class="font-semibold text-yellow-400">Rarity Class (Object)</h4>
+                                <p class="text-gray-400 text-xs">The official rarity score (1-40) from metadata. Phoenix Rising = 40, Battle Axe = 1. This is the primary sort factor.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="flex items-start gap-3 bg-gray-800 rounded-lg p-3">
+                            <span class="bg-cyan-500 text-black font-bold rounded-full w-6 h-6 flex items-center justify-center flex-shrink-0">2</span>
+                            <div>
+                                <h4 class="font-semibold text-cyan-400">Planet + Zone (Background)</h4>
+                                <p class="text-gray-400 text-xs">The background makes up ~80% of the visual. Each of the 20 combinations (10 planets × North/South) has a different actual count from the mint. Rarer backgrounds rank higher.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="flex items-start gap-3 bg-gray-800 rounded-lg p-3">
+                            <span class="bg-purple-500 text-black font-bold rounded-full w-6 h-6 flex items-center justify-center flex-shrink-0">3</span>
+                            <div>
+                                <h4 class="font-semibold text-purple-400">Inhabitant + Gender</h4>
+                                <p class="text-gray-400 text-xs">The character shown. Each of the 20 combinations (10 races × Male/Female) has different mint counts. Rarer inhabitants rank higher.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="flex items-start gap-3 bg-gray-800 rounded-lg p-3">
+                            <span class="bg-blue-500 text-black font-bold rounded-full w-6 h-6 flex items-center justify-center flex-shrink-0">4</span>
+                            <div>
+                                <h4 class="font-semibold text-blue-400">Weather</h4>
+                                <p class="text-gray-400 text-xs">Environmental weather effects. Some are very rare (e.g., "Lightning strike" with only 6 NFTs).</p>
+                            </div>
+                        </div>
+                        
+                        <div class="flex items-start gap-3 bg-gray-800 rounded-lg p-3">
+                            <span class="bg-gray-500 text-black font-bold rounded-full w-6 h-6 flex items-center justify-center flex-shrink-0">5</span>
+                            <div>
+                                <h4 class="font-semibold text-gray-400">Light</h4>
+                                <p class="text-gray-400 text-xs">Lighting overlay effects, typically planet-specific.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="flex items-start gap-3 bg-gray-800 rounded-lg p-3">
+                            <span class="bg-gray-600 text-white font-bold rounded-full w-6 h-6 flex items-center justify-center flex-shrink-0">6</span>
+                            <div>
+                                <h4 class="font-semibold text-gray-500">NFT ID</h4>
+                                <p class="text-gray-400 text-xs">Final tie-breaker. Lower IDs appear first.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="text-lg font-semibold text-white mb-2">Planet + Zone Distribution</h3>
+                    <p class="mb-2 text-gray-400">Actual counts from the mint (sorted by rarity):</p>
+                    <div id="planet-distribution" class="bg-gray-800 rounded-lg p-3 max-h-48 overflow-y-auto text-xs">
+                        <p class="text-gray-500 italic">Loading distribution data...</p>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="text-lg font-semibold text-white mb-2">Inhabitant + Gender Distribution</h3>
+                    <p class="mb-2 text-gray-400">Actual counts from the mint (sorted by rarity):</p>
+                    <div id="inhabitant-distribution" class="bg-gray-800 rounded-lg p-3 max-h-48 overflow-y-auto text-xs">
+                        <p class="text-gray-500 italic">Loading distribution data...</p>
+                    </div>
+                </div>
+
+                <div class="bg-gray-800 rounded-lg p-4">
+                    <h3 class="text-lg font-semibold text-white mb-2">🏠 Matching Traits Filter</h3>
+                    <p class="text-gray-400 mb-3">Find NFTs where traits belong together thematically:</p>
+                    
+                    <div class="grid md:grid-cols-2 gap-4 text-xs">
+                        <div class="bg-gray-700/50 rounded p-3">
+                            <h4 class="text-cyan-400 font-semibold mb-2">P+I (Planet + Inhabitant)</h4>
+                            <p class="text-gray-400">Inhabitant is on their home planet:</p>
+                            <ul class="mt-1 text-gray-500 space-y-1">
+                                <li>• Cristallian on Cristall</li>
+                                <li>• Sindarin on Sindari</li>
+                                <li>• Ozaran on Ozara</li>
+                                <li>• etc...</li>
+                            </ul>
+                        </div>
+                        <div class="bg-gray-700/50 rounded p-3">
+                            <h4 class="text-yellow-400 font-semibold mb-2">P+I+O (Full Match)</h4>
+                            <p class="text-gray-400">All three traits belong together:</p>
+                            <ul class="mt-1 text-gray-500 space-y-1">
+                                <li>• Cristallian on Cristall with Cristallian Ray Gun</li>
+                                <li>• Sindarin on Sindari with Sindarin Fire Saber</li>
+                                <li>• Ozaran on Ozara with Ozaran Blaster</li>
+                                <li>• etc...</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <p class="mt-3 text-gray-500 text-xs">Use the slider to switch between match levels. This filter affects all other filters and counts.</p>
+                </div>
+
+                <p class="pt-4 text-xs text-gray-500 italic border-t border-gray-700">This sorting method prioritizes the visual impact of traits while respecting the official rarity system. Distribution counts are calculated from actual mint data.</p>
+            </div>
+        </div>
+    </div>
+    
      <div id="badge-modal" class="modal-backdrop hidden">
         <div class="modal-content text-gray-300" style="width: 600px;">
             <svg id="badge-modal-close" class="modal-close-btn w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
