@@ -226,6 +226,25 @@ const mergeNftData = (metadata, statusData) => {
 };
 
 const initializeExplorer = async () => {
+    // Mobile banner close button - set up immediately before any async code
+    const mobileNotice = document.getElementById('mobile-notice');
+    const mobileNoticeClose = document.getElementById('mobile-notice-close');
+    if (mobileNoticeClose && mobileNotice) {
+        mobileNoticeClose.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            mobileNotice.style.display = 'none';
+            document.body.style.paddingTop = '0.5rem';
+        });
+        // Also handle touch
+        mobileNoticeClose.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            mobileNotice.style.display = 'none';
+            document.body.style.paddingTop = '0.5rem';
+        });
+    }
+    
     showLoading(gallery, 'Loading collection metadata...');
     showLoading(leaderboardTable, 'Loading holder data...');
     showLoading(walletGallery, 'Search for or select a wallet to see owned NFTs.');
@@ -261,15 +280,6 @@ const initializeExplorer = async () => {
         applyFiltersAndSort();
         calculateAndDisplayLeaderboard();
         
-        // Mobile banner close button
-        const mobileNotice = document.getElementById('mobile-notice');
-        const mobileNoticeClose = document.getElementById('mobile-notice-close');
-        if (mobileNoticeClose && mobileNotice) {
-            mobileNoticeClose.addEventListener('click', () => {
-                mobileNotice.style.display = 'none';
-                document.body.style.paddingTop = '';
-            });
-        }
         
         handleHashChange(); // Check hash on initial load
         isInitialLoad = false; // Mark initial load complete
@@ -1848,6 +1858,15 @@ const displayHolderPage = (page) => {
         // Stats summary for mobile view
         const statsSummary = `Liq: ${stats.liquid || 0} | DAO: ${stats.daodaoStaked || 0} | Brk: ${stats.broken || 0}`;
         item.dataset.stats = statsSummary;
+        // Store full stats for mobile detail view
+        item.dataset.liquid = stats.liquid || 0;
+        item.dataset.daodao = stats.daodaoStaked || 0;
+        item.dataset.enterprise = stats.enterpriseStaked || 0;
+        item.dataset.broken = stats.broken || 0;
+        item.dataset.unbroken = stats.unbroken || 0;
+        item.dataset.bbl = stats.bblListed || 0;
+        item.dataset.boost = stats.boostListed || 0;
+        item.dataset.total = stats.total || 0;
 
         item.innerHTML = `
             <span class="text-center font-bold">#${rank}</span>
@@ -1861,13 +1880,18 @@ const displayHolderPage = (page) => {
             <span class="text-center ${stats.boostListed > 0 ? 'text-purple-400' : ''}">${stats.boostListed || 0}</span>
             <span class="font-bold text-center leaderboard-total">${stats.total || 0}</span>
         `;
-        item.addEventListener('click', () => {
+        item.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
             if (address) {
                 walletSearchAddressInput.value = address;
                 searchWallet();
                 // Highlight this row
                 document.querySelectorAll('#leaderboard-table .leaderboard-row').forEach(r => r.classList.remove('selected'));
                 item.classList.add('selected');
+                
+                // Show selected wallet details on mobile
+                showSelectedWalletDetails(address, item.dataset);
             }
         });
         leaderboardTable.appendChild(item);
@@ -1899,6 +1923,60 @@ const updateHolderPaginationControls = () => {
     nextButton.disabled = holderCurrentPage === totalPages;
     nextButton.onclick = () => displayHolderPage(holderCurrentPage + 1);
     leaderboardPagination.appendChild(nextButton);
+};
+
+// Show selected wallet details on mobile
+const showSelectedWalletDetails = (address, stats) => {
+    const detailsContainer = document.getElementById('selected-wallet-details');
+    const addressEl = document.getElementById('selected-wallet-address');
+    const statsEl = document.getElementById('selected-wallet-stats');
+    const clearBtn = document.getElementById('clear-selected-wallet');
+    
+    if (!detailsContainer || !addressEl || !statsEl) return;
+    
+    // Show the container
+    detailsContainer.classList.remove('hidden');
+    
+    // Set address
+    const shortAddr = address ? `terra...${address.substring(address.length - 4)}` : '';
+    addressEl.textContent = shortAddr;
+    addressEl.title = address;
+    
+    // Build stats grid
+    statsEl.innerHTML = `
+        <div class="bg-gray-700/50 rounded p-2">
+            <div class="text-gray-400">Liquid</div>
+            <div class="text-white font-bold">${stats.liquid || 0}</div>
+        </div>
+        <div class="bg-gray-700/50 rounded p-2">
+            <div class="text-cyan-400">DAODAO</div>
+            <div class="text-white font-bold">${stats.daodao || 0}</div>
+        </div>
+        <div class="bg-gray-700/50 rounded p-2">
+            <div class="text-gray-400">Enterprise</div>
+            <div class="text-white font-bold">${stats.enterprise || 0}</div>
+        </div>
+        <div class="bg-gray-700/50 rounded p-2">
+            <div class="text-red-400">Broken</div>
+            <div class="text-white font-bold">${stats.broken || 0}</div>
+        </div>
+        <div class="bg-gray-700/50 rounded p-2">
+            <div class="text-green-400">BBL</div>
+            <div class="text-white font-bold">${stats.bbl || 0}</div>
+        </div>
+        <div class="bg-gray-700/50 rounded p-2">
+            <div class="text-purple-400">Boost</div>
+            <div class="text-white font-bold">${stats.boost || 0}</div>
+        </div>
+    `;
+    
+    // Clear button handler
+    if (clearBtn) {
+        clearBtn.onclick = () => {
+            detailsContainer.classList.add('hidden');
+            document.querySelectorAll('#leaderboard-table .leaderboard-row').forEach(r => r.classList.remove('selected'));
+        };
+    }
 };
 
 // --- Map View Logic ---
@@ -2082,7 +2160,17 @@ const handleMapResize = debounce(() => {
 }, 250);
 
 let mapListenersAdded = false;
-let touchState = { startDist: 0, startZoom: 1, lastX: 0, lastY: 0, isPinching: false };
+let touchState = { 
+    startDist: 0, 
+    startZoom: 1, 
+    lastX: 0, 
+    lastY: 0, 
+    isPinching: false,
+    pinchCenterX: 0,
+    pinchCenterY: 0,
+    startOffsetX: 0,
+    startOffsetY: 0
+};
 
 function addMapListeners() {
     if (mapListenersAdded || !spaceCanvas) return;
@@ -2109,6 +2197,13 @@ function getTouchDistance(touches) {
     return Math.sqrt(dx * dx + dy * dy);
 }
 
+function getTouchCenter(touches) {
+    return {
+        x: (touches[0].clientX + touches[1].clientX) / 2,
+        y: (touches[0].clientY + touches[1].clientY) / 2
+    };
+}
+
 function handleMapTouchStart(e) {
     e.preventDefault();
     if (e.touches.length === 2) {
@@ -2116,6 +2211,14 @@ function handleMapTouchStart(e) {
         touchState.isPinching = true;
         touchState.startDist = getTouchDistance(e.touches);
         touchState.startZoom = mapZoom;
+        touchState.startOffsetX = mapOffsetX;
+        touchState.startOffsetY = mapOffsetY;
+        
+        // Get pinch center relative to canvas
+        const rect = spaceCanvas.getBoundingClientRect();
+        const center = getTouchCenter(e.touches);
+        touchState.pinchCenterX = center.x - rect.left;
+        touchState.pinchCenterY = center.y - rect.top;
     } else if (e.touches.length === 1) {
         // Single finger pan
         touchState.isPinching = false;
@@ -2128,10 +2231,25 @@ function handleMapTouchStart(e) {
 function handleMapTouchMove(e) {
     e.preventDefault();
     if (e.touches.length === 2 && touchState.isPinching) {
-        // Pinch zoom
+        // Pinch zoom - zoom toward pinch center
         const currentDist = getTouchDistance(e.touches);
         const scale = currentDist / touchState.startDist;
-        mapZoom = Math.max(0.1, Math.min(5, touchState.startZoom * scale));
+        const newZoom = Math.max(0.1, Math.min(5, touchState.startZoom * scale));
+        
+        // Calculate offset to keep pinch center stationary
+        const canvasCenterX = spaceCanvas.clientWidth / 2;
+        const canvasCenterY = spaceCanvas.clientHeight / 2;
+        
+        // Vector from canvas center to pinch point
+        const pinchFromCenterX = touchState.pinchCenterX - canvasCenterX;
+        const pinchFromCenterY = touchState.pinchCenterY - canvasCenterY;
+        
+        // Adjust offset based on zoom change
+        const zoomDelta = newZoom / touchState.startZoom;
+        mapOffsetX = touchState.startOffsetX - pinchFromCenterX * (zoomDelta - 1);
+        mapOffsetY = touchState.startOffsetY - pinchFromCenterY * (zoomDelta - 1);
+        
+        mapZoom = newZoom;
     } else if (e.touches.length === 1 && isPanning) {
         // Pan
         const dx = e.touches[0].clientX - touchState.lastX;
