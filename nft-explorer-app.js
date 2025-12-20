@@ -443,12 +443,25 @@ const populateDistributionTables = () => {
 
 // Update the matching traits count display
 const updateMatchingTraitsCount = () => {
-    if (!matchingTraitsCount || !allNfts.length) return;
+    if (!allNfts.length) return;
     
-    const strictLevel = matchingTraitsSlider ? parseInt(matchingTraitsSlider.value) : 0;
+    // Get the slider - could be old hardcoded or new dynamic
+    const slider = document.querySelector('.status-slider[data-slider-key="matching_traits"]') || matchingTraitsSlider;
+    const strictLevel = slider ? parseInt(slider.value) : 1; // Default to 1 (P+I+O)
+    
+    // Count for current level
     const count = allNfts.filter(nft => hasMatchingTraits(nft, strictLevel)).length;
     
-    matchingTraitsCount.textContent = count.toLocaleString();
+    // Update both old and new count displays
+    if (matchingTraitsCount) {
+        matchingTraitsCount.textContent = count.toLocaleString();
+    }
+    
+    // Update dynamic count display
+    const dynamicCount = document.querySelector('[data-count-key="matching_traits"]');
+    if (dynamicCount) {
+        dynamicCount.textContent = count.toLocaleString();
+    }
 };
 
 // --- UI Population ---
@@ -460,9 +473,15 @@ const updateMatchingTraitsCount = () => {
     toggleLabel.className = 'toggle-label';
     toggleLabel.innerHTML = `<input type="checkbox" class="toggle-checkbox ${config.toggleClass}" data-key="${config.key}"><span class="toggle-switch mr-2"></span><span class="font-medium">${config.label}</span>`;
     
+    // For matching_traits, use only 2 positions (0 and 1), default to 1 (right)
+    const isMatchingTraits = config.key === 'matching_traits';
+    const sliderMin = 0;
+    const sliderMax = isMatchingTraits ? 1 : 2;
+    const sliderDefault = isMatchingTraits ? 1 : 1; // Default to right for matching traits
+    
     const sliderContainer = document.createElement('div');
     sliderContainer.className = 'flex flex-col items-center';
-    sliderContainer.innerHTML = `<span class="text-xs text-gray-400 h-4 ${config.countClass || ''}" data-count-key="${config.key}">${config.initialCount || '0'}</span><div class="direction-slider-container"><span class="text-xs text-gray-400">${config.left}</span><input type="range" min="0" max="2" value="1" class="direction-slider ${config.sliderClass}" data-slider-key="${config.key}" disabled><span class="text-xs text-gray-400">${config.right}</span></div>`;
+    sliderContainer.innerHTML = `<span class="text-xs text-gray-400 h-4 ${config.countClass || ''}" data-count-key="${config.key}">${config.initialCount || ''}</span><div class="direction-slider-container"><span class="text-xs text-gray-400">${config.left}</span><input type="range" min="${sliderMin}" max="${sliderMax}" value="${sliderDefault}" class="direction-slider ${config.sliderClass}" data-slider-key="${config.key}" disabled><span class="text-xs text-gray-400">${config.right}</span></div>`;
     
     container.appendChild(toggleLabel);
     container.appendChild(sliderContainer);
@@ -610,10 +629,22 @@ const addAllEventListeners = () => {
             if (slider) {
                 slider.disabled = !e.target.checked;
             }
+            // Update matching traits count if this is the matching traits toggle
+            if (e.target.dataset.key === 'matching_traits') {
+                updateMatchingTraitsCount();
+            }
             handleFilterChange();
         });
     });
-    document.querySelectorAll('.direction-slider').forEach(slider => slider.addEventListener('input', handleFilterChange));
+    document.querySelectorAll('.direction-slider').forEach(slider => {
+        slider.addEventListener('input', () => {
+            // Update matching traits count if this is the matching traits slider
+            if (slider.dataset.sliderKey === 'matching_traits') {
+                updateMatchingTraitsCount();
+            }
+            handleFilterChange();
+        });
+    });
     document.querySelectorAll('.trait-toggle').forEach(el => el.addEventListener('change', () => displayPage(currentPage)));
     // Note: multi-select-checkbox listeners are added in populateTraitFilters
     
@@ -1887,14 +1918,28 @@ const displayHolderPage = (page) => {
             e.preventDefault();
             e.stopPropagation();
             if (address) {
-                walletSearchAddressInput.value = address;
-                searchWallet();
-                // Highlight this row
+                // Debug: Log the dataset
+                console.log('Leaderboard row clicked:', address);
+                console.log('Dataset:', JSON.stringify({
+                    liquid: item.dataset.liquid,
+                    daodao: item.dataset.daodao,
+                    enterprise: item.dataset.enterprise,
+                    broken: item.dataset.broken,
+                    bbl: item.dataset.bbl,
+                    boost: item.dataset.boost,
+                    total: item.dataset.total
+                }));
+                
+                // Highlight this row immediately
                 document.querySelectorAll('#leaderboard-table .leaderboard-row').forEach(r => r.classList.remove('selected'));
                 item.classList.add('selected');
                 
-                // Show selected wallet details on mobile
+                // Show selected wallet details on mobile IMMEDIATELY (before search)
                 showSelectedWalletDetails(address, item.dataset);
+                
+                // Then trigger the wallet search
+                walletSearchAddressInput.value = address;
+                searchWallet();
             }
         });
         leaderboardTable.appendChild(item);
@@ -1929,7 +1974,7 @@ const updateHolderPaginationControls = () => {
 };
 
 // Show selected wallet details on mobile
-const showSelectedWalletDetails = (address, stats) => {
+const showSelectedWalletDetails = (address, datasetOrStats) => {
     // Only show on mobile (< 768px)
     if (window.innerWidth >= 768) return;
     
@@ -1938,7 +1983,13 @@ const showSelectedWalletDetails = (address, stats) => {
     const statsEl = document.getElementById('selected-wallet-stats');
     const clearBtn = document.getElementById('clear-selected-wallet');
     
-    if (!detailsContainer || !addressEl || !statsEl) return;
+    if (!detailsContainer || !addressEl || !statsEl) {
+        console.log('Missing DOM elements for wallet details');
+        return;
+    }
+    
+    // Debug: Log what we received
+    console.log('showSelectedWalletDetails called with:', address, datasetOrStats);
     
     // Show the container (remove hidden class)
     detailsContainer.classList.remove('hidden');
@@ -1948,14 +1999,16 @@ const showSelectedWalletDetails = (address, stats) => {
     addressEl.textContent = shortAddr;
     addressEl.title = address;
     
-    // Dataset values are strings, so we need to access them properly
-    // When passed from dataset, they come as DOMStringMap
-    const liquid = stats.liquid !== undefined ? stats.liquid : '0';
-    const daodao = stats.daodao !== undefined ? stats.daodao : '0';
-    const enterprise = stats.enterprise !== undefined ? stats.enterprise : '0';
-    const broken = stats.broken !== undefined ? stats.broken : '0';
-    const bbl = stats.bbl !== undefined ? stats.bbl : '0';
-    const boost = stats.boost !== undefined ? stats.boost : '0';
+    // Get values - dataset values are strings, direct stats are numbers
+    // Check both possible property names
+    const liquid = datasetOrStats.liquid ?? datasetOrStats.liquid ?? '0';
+    const daodao = datasetOrStats.daodao ?? datasetOrStats.daodaoStaked ?? '0';
+    const enterprise = datasetOrStats.enterprise ?? datasetOrStats.enterpriseStaked ?? '0';
+    const broken = datasetOrStats.broken ?? '0';
+    const bbl = datasetOrStats.bbl ?? datasetOrStats.bblListed ?? '0';
+    const boost = datasetOrStats.boost ?? datasetOrStats.boostListed ?? '0';
+    
+    console.log('Parsed values:', { liquid, daodao, enterprise, broken, bbl, boost });
     
     // Build stats grid
     statsEl.innerHTML = `
@@ -2299,15 +2352,13 @@ function handleMapTouchEnd(e) {
         const dy = Math.abs(touch.clientY - touchState.startY);
         const elapsed = Date.now() - touchState.startTime;
         
+        console.log('Touch end - dx:', dx, 'dy:', dy, 'elapsed:', elapsed);
+        
         // If movement is small and duration is short, treat as tap
-        if (dx < 15 && dy < 15 && elapsed < 300) {
-            // Simulate a click event for the tap
-            const clickEvent = new MouseEvent('click', {
-                clientX: touch.clientX,
-                clientY: touch.clientY,
-                bubbles: true
-            });
-            handleMapClick(clickEvent);
+        if (dx < 20 && dy < 20 && elapsed < 500) {
+            console.log('Detected as TAP - calling handleMapClick');
+            // Call handleMapClick directly with touch coordinates
+            handleMapClick({ clientX: touch.clientX, clientY: touch.clientY });
         }
     }
     
@@ -3133,7 +3184,7 @@ const searchWallet = () => {
         };
         
         renderBatch();
-    }, 10); // Small delay to let loading indicator show
+    }, 100); // Delay to let loading indicator show
 };
 
 // --- Hash Handling ---
