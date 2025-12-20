@@ -55,6 +55,10 @@ const togInhabBtn = document.getElementById('toggle-inhabitant-filters');
 const inhabArrow = document.getElementById('inhabitant-arrow');
 const togPlanBtn = document.getElementById('toggle-planet-filters');
 const planArrow = document.getElementById('planet-arrow');
+const togStatusBtn = document.getElementById('toggle-status-filters');
+const statusArrow = document.getElementById('status-arrow');
+const statusFiltersGrid = document.getElementById('status-filters-grid');
+const statusFiltersExtra = document.getElementById('status-filters-extra');
 // Address direction toggle buttons
 const addressDirectionToggle = document.getElementById('address-direction-toggle');
 const walletAddressDirectionToggle = document.getElementById('wallet-address-direction-toggle');
@@ -646,6 +650,15 @@ const addAllEventListeners = () => {
             planArrow.classList.toggle('rotate-180');
         });
     }
+    // Status filters toggle (for mobile)
+    if(togStatusBtn && statusFiltersGrid && statusArrow) {
+        togStatusBtn.addEventListener('click', () => {
+            statusFiltersGrid.classList.toggle('mobile-show');
+            if (statusFiltersExtra) statusFiltersExtra.classList.toggle('mobile-show');
+            statusArrow.classList.toggle('rotate-180');
+        });
+        // Start collapsed on mobile (don't add mobile-show class)
+    }
     
     // Add other listeners from the single file
     document.addEventListener('click', () => closeAllDropdowns());
@@ -1105,7 +1118,10 @@ const createNftCard = (nft, toggleSelector) => {
     // Primary: Cloudflare CDN, Fallback: IPFS gateway
     const imageUrl = getImageUrl(nft.id) || `https://placehold.co/300x300/1f2937/e5e7eb?text=No+Image`;
     const fallbackUrl = getIpfsFallbackUrl(nft.id, nft.thumbnail_image || nft.image);
-    const newTitle = (nft.name || `NFT #${nft.id || '?'}`).replace('The AllianceDAO NFT', 'AllianceDAO NFT');
+    
+    // Use shorter title format: "aDAO #XXXX" 
+    const shortTitle = `aDAO #${nft.id || '?'}`;
+    const fullTitle = (nft.name || `NFT #${nft.id || '?'}`).replace('The AllianceDAO NFT', 'AllianceDAO NFT');
 
     let traitsHtml = '';
     const visibleTraits = traitOrder.filter(t => {
@@ -1128,7 +1144,7 @@ const createNftCard = (nft, toggleSelector) => {
         traitsHtml += `<li class="flex justify-between items-center py-2 px-1 border-b border-gray-700 last:border-b-0"><span class="text-xs font-medium text-cyan-400 uppercase">${traitType}</span><span class="text-sm font-semibold text-white truncate" title="${value}">${value}</span></li>`;
     });
     
-    card.innerHTML = `<div class="image-container aspect-w-1-aspect-h-1 w-full"><img src="${imageUrl}" data-fallback="${fallbackUrl}" alt="${newTitle}" class="w-full h-full object-cover" loading="lazy" onerror="if(this.dataset.fallback && this.src !== this.dataset.fallback) { this.src = this.dataset.fallback; } else { this.onerror=null; this.src='https://placehold.co/300x300/1f2937/e5e7eb?text=Image+Error'; }"></div><div class="p-4 flex-grow flex flex-col"><h2 class="text-lg font-bold text-white mb-3 truncate" title="${newTitle}">${newTitle}</h2><ul class="text-sm flex-grow">${traitsHtml}</ul></div>`;
+    card.innerHTML = `<div class="image-container aspect-w-1-aspect-h-1 w-full"><img src="${imageUrl}" data-fallback="${fallbackUrl}" alt="${fullTitle}" class="w-full h-full object-cover" loading="lazy" onerror="if(this.dataset.fallback && this.src !== this.dataset.fallback) { this.src = this.dataset.fallback; } else { this.onerror=null; this.src='https://placehold.co/300x300/1f2937/e5e7eb?text=Image+Error'; }"></div><div class="p-4 flex-grow flex flex-col"><h2 class="text-lg font-bold text-white mb-3 truncate" title="${fullTitle}">${shortTitle}</h2><ul class="text-sm flex-grow">${traitsHtml}</ul></div>`;
     
     const imageContainer = card.querySelector('.image-container');
     if (!imageContainer) return card; // Safety check
@@ -1819,10 +1835,14 @@ const displayHolderPage = (page) => {
         item.style.gridTemplateColumns = 'minmax(60px, 1fr) 2.5fr repeat(8, 1fr)';
         item.dataset.address = address;
         const shortAddress = address ? `terra...${address.substring(address.length - 4)}` : 'N/A';
+        
+        // Stats summary for mobile view
+        const statsSummary = `Liq: ${stats.liquid || 0} | DAO: ${stats.daodaoStaked || 0} | Brk: ${stats.broken || 0}`;
+        item.dataset.stats = statsSummary;
 
         item.innerHTML = `
             <span class="text-center font-bold">#${rank}</span>
-            <span class="font-mono text-sm truncate" title="${address || ''}">${shortAddress}</span>
+            <span class="font-mono text-sm truncate leaderboard-address" title="${address || ''}">${shortAddress}</span>
             <span class="text-center">${stats.liquid || 0}</span>
             <span class="text-center ${stats.daodaoStaked > 0 ? 'text-cyan-400' : ''}">${stats.daodaoStaked || 0}</span>
             <span class="text-center ${stats.enterpriseStaked > 0 ? 'text-gray-400' : ''}">${stats.enterpriseStaked || 0}</span>
@@ -1830,7 +1850,7 @@ const displayHolderPage = (page) => {
             <span class="text-center ${stats.unbroken > 0 ? 'text-green-400' : ''}">${stats.unbroken || 0}</span>
             <span class="text-center ${stats.bblListed > 0 ? 'text-green-400' : ''}">${stats.bblListed || 0}</span>
             <span class="text-center ${stats.boostListed > 0 ? 'text-purple-400' : ''}">${stats.boostListed || 0}</span>
-            <span class="font-bold text-center">${stats.total || 0}</span>
+            <span class="font-bold text-center leaderboard-total">${stats.total || 0}</span>
         `;
         item.addEventListener('click', () => {
             if (address) {
@@ -2053,6 +2073,8 @@ const handleMapResize = debounce(() => {
 }, 250);
 
 let mapListenersAdded = false;
+let touchState = { startDist: 0, startZoom: 1, lastX: 0, lastY: 0, isPinching: false };
+
 function addMapListeners() {
     if (mapListenersAdded || !spaceCanvas) return;
     console.log("Adding map listeners");
@@ -2063,7 +2085,59 @@ function addMapListeners() {
     spaceCanvas.addEventListener('mousemove', handleMapMouseMove);
     spaceCanvas.addEventListener('wheel', handleMapWheel, { passive: false });
     spaceCanvas.addEventListener('click', handleMapClick);
+    
+    // Touch events for mobile
+    spaceCanvas.addEventListener('touchstart', handleMapTouchStart, { passive: false });
+    spaceCanvas.addEventListener('touchmove', handleMapTouchMove, { passive: false });
+    spaceCanvas.addEventListener('touchend', handleMapTouchEnd, { passive: false });
+    
     mapListenersAdded = true;
+}
+
+function getTouchDistance(touches) {
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+}
+
+function handleMapTouchStart(e) {
+    e.preventDefault();
+    if (e.touches.length === 2) {
+        // Pinch zoom start
+        touchState.isPinching = true;
+        touchState.startDist = getTouchDistance(e.touches);
+        touchState.startZoom = mapZoom;
+    } else if (e.touches.length === 1) {
+        // Single finger pan
+        touchState.isPinching = false;
+        touchState.lastX = e.touches[0].clientX;
+        touchState.lastY = e.touches[0].clientY;
+        isPanning = true;
+    }
+}
+
+function handleMapTouchMove(e) {
+    e.preventDefault();
+    if (e.touches.length === 2 && touchState.isPinching) {
+        // Pinch zoom
+        const currentDist = getTouchDistance(e.touches);
+        const scale = currentDist / touchState.startDist;
+        mapZoom = Math.max(0.1, Math.min(5, touchState.startZoom * scale));
+    } else if (e.touches.length === 1 && isPanning) {
+        // Pan
+        const dx = e.touches[0].clientX - touchState.lastX;
+        const dy = e.touches[0].clientY - touchState.lastY;
+        mapOffsetX += dx;
+        mapOffsetY += dy;
+        touchState.lastX = e.touches[0].clientX;
+        touchState.lastY = e.touches[0].clientY;
+    }
+}
+
+function handleMapTouchEnd(e) {
+    e.preventDefault();
+    touchState.isPinching = false;
+    isPanning = false;
 }
 
 const initializeStarfield = () => {
