@@ -593,7 +593,7 @@ const populateTraitToggles = () => {
 
 const populateWalletTraitToggles = () => {
     walletTraitTogglesContainer.innerHTML = '';
-    const walletTraits = ["Rank", "Planet", "Inhabitant", "Object"];
+    const walletTraits = ["Rarity", "Planet", "Inhabitant", "Object"];
     walletTraits.forEach(traitType => {
         const label = document.createElement('label');
         label.className = 'toggle-label';
@@ -699,12 +699,23 @@ const addAllEventListeners = () => {
             if (walletSearchAddressInput) walletSearchAddressInput.value = '';
             if (walletGallery) walletGallery.innerHTML = '';
             if (walletGalleryTitle) walletGalleryTitle.textContent = 'Wallet NFTs';
+            // Reset wallet status filters
+            document.querySelectorAll('.wallet-status-filter').forEach(cb => cb.checked = false);
              document.querySelectorAll('#leaderboard-table .leaderboard-row').forEach(row => {
                 row.classList.remove('selected');
             });
             showLoading(walletGallery,'Search for or select a wallet to see owned NFTs.'); // Reset gallery text
         });
     }
+    
+    // Wallet status filters - refresh display when toggled
+    document.querySelectorAll('.wallet-status-filter').forEach(cb => {
+        cb.addEventListener('change', () => {
+            if (walletSearchAddressInput?.value.trim()) {
+                searchWallet();
+            }
+        });
+    });
 
     if (walletSearchAddressInput) {
         walletSearchAddressInput.addEventListener('keypress', (e) => {
@@ -2281,16 +2292,15 @@ const initializeStarfield = () => {
         mapObjects = [];
         createStars();
         
-        // ***** THIS IS THE CORRECTED BLOCK *****
+        // Images from aDAO-Image-Planets-Empty repo
         const imageAssets = {
-            daodao: 'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/daodao-planet.png',
-            bbl: 'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/bbl-planet.png',
-            boost: 'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/boost-ship.png',
-            enterprise: 'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/enterprise-blackhole.png',
+            daodao: 'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/daodao-planet.png',
+            bbl: 'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/bbl-planet.png',
+            boost: 'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/boost-ship.png',
+            enterprise: 'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/enterprise-blackhole.png',
             allianceLogo: 'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/aDAO%20Logo%20No%20Background.png',
             terra: 'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Terra.PNG'
         };
-        // ***************************************
 
         const imagePromises = Object.entries(imageAssets).map(([id, url]) => {
             return new Promise((resolve, reject) => {
@@ -2806,11 +2816,41 @@ const searchWallet = () => {
         walletGalleryTitle.textContent = 'Wallet NFTs';
         return;
     }
-    const walletNfts = allNfts.filter(nft => nft.owner === address);
-    walletGalleryTitle.textContent = `Found ${walletNfts.length} NFTs for wallet:`;
+    
+    // Get wallet NFTs
+    let walletNfts = allNfts.filter(nft => nft.owner === address);
+    
+    // Apply wallet status filters
+    const liquidFilter = document.querySelector('.wallet-status-filter[data-status="liquid"]');
+    const stakedFilter = document.querySelector('.wallet-status-filter[data-status="staked"]');
+    const brokenFilter = document.querySelector('.wallet-status-filter[data-status="broken"]');
+    const listedFilter = document.querySelector('.wallet-status-filter[data-status="listed"]');
+    
+    if (liquidFilter?.checked) {
+        walletNfts = walletNfts.filter(nft => nft.liquid === true);
+    }
+    if (stakedFilter?.checked) {
+        walletNfts = walletNfts.filter(nft => nft.staked_enterprise_legacy || nft.staked_daodao);
+    }
+    if (brokenFilter?.checked) {
+        walletNfts = walletNfts.filter(nft => nft.broken === true);
+    }
+    if (listedFilter?.checked) {
+        walletNfts = walletNfts.filter(nft => nft.boost_market || nft.bbl_market);
+    }
+    
+    const totalForWallet = allNfts.filter(nft => nft.owner === address).length;
+    const filterActive = liquidFilter?.checked || stakedFilter?.checked || brokenFilter?.checked || listedFilter?.checked;
+    
+    if (filterActive) {
+        walletGalleryTitle.textContent = `Showing ${walletNfts.length} of ${totalForWallet} NFTs for wallet:`;
+    } else {
+        walletGalleryTitle.textContent = `Found ${walletNfts.length} NFTs for wallet:`;
+    }
+    
     walletGallery.innerHTML = '';
     if (walletNfts.length === 0) {
-        showLoading(walletGallery, 'No NFTs found for this address.');
+        showLoading(walletGallery, filterActive ? 'No NFTs match the selected filters.' : 'No NFTs found for this address.');
         return;
     }
     walletNfts.sort((a,b) => (b.rarityClass ?? 0) - (a.rarityClass ?? 0)).forEach(nft => {
