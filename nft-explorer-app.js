@@ -1625,9 +1625,11 @@ const findRarestTrait = (nft) => {
     let rarestTrait = null;
     let minCount = Infinity;
 
+    // Find the rarest trait by actual mint count
+    // Include: Planet, Inhabitant, Object (these affect the visual/value)
+    // Exclude: Weather, Light (per official docs, don't factor into rarity)
     nft.attributes.forEach(attr => {
-        // Only count traits that contribute to rarity score
-        if (traitCounts[attr.trait_type]?.[attr.value] && !['Weather', 'Light'].includes(attr.trait_type)) {
+        if (traitCounts[attr.trait_type]?.[attr.value] && !['Weather', 'Light', 'Rarity'].includes(attr.trait_type)) {
             const count = traitCounts[attr.trait_type][attr.value];
             if (count < minCount) {
                 minCount = count;
@@ -1727,14 +1729,39 @@ const generateShareImage = (nft, button) => {
             drawText(`Rarest: ${strength.value || 'N/A'}`, canvas.width / 2, bannerY + 75, 'center');
         }
         
+        // Create download - works better on mobile
         try {
-            const link = document.createElement('a');
-            link.download = `AllianceDAO_NFT_${nft.id || 'Unknown'}.png`;
-            link.href = canvas.toDataURL('image/png');
-            link.click();
-            button.textContent = 'Downloaded!';
+            canvas.toBlob((blob) => {
+                if (!blob) {
+                    button.textContent = 'Blob Error';
+                    setTimeout(() => { button.textContent = 'Download Post'; button.disabled = false; }, 2000);
+                    return;
+                }
+                
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.download = `AllianceDAO_NFT_${nft.id || 'Unknown'}.png`;
+                link.href = url;
+                
+                // For iOS Safari, we need to open in new tab
+                const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+                if (isIOS) {
+                    // Open image in new tab - user can long-press to save
+                    window.open(url, '_blank');
+                    button.textContent = 'Opened!';
+                } else {
+                    // Standard download for other browsers
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    button.textContent = 'Downloaded!';
+                }
+                
+                // Clean up blob URL after a delay
+                setTimeout(() => URL.revokeObjectURL(url), 5000);
+            }, 'image/png');
         } catch(e) {
-            console.error("Error creating download link:", e);
+            console.error("Error creating download:", e);
             button.textContent = 'DL Failed';
         }
 
