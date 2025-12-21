@@ -1,4 +1,4 @@
-// BUILD: Dec21-v9 - New text logo for download image
+// BUILD: Dec21-v10 - Logo fills 90% width
 // --- Global Elements ---
 const gallery = document.getElementById('nft-gallery');
 const paginationControls = document.getElementById('pagination-controls');
@@ -2146,13 +2146,13 @@ const drawPostImage = (canvas, ctx, img, logo, nft, button) => {
     ctx.lineTo(canvas.width, titleHeight - 1);
     ctx.stroke();
     
-    // Draw logo image centered (it already contains the text)
+    // Draw logo image centered - fill 90% of width
     if (logo && logo.width && logo.height) {
-        // Fit logo to header height with padding
-        const maxLogoHeight = 70;
+        // Fit logo to 90% of canvas width
+        const maxLogoWidth = canvas.width * 0.9; // 90% of width
         const aspectRatio = logo.width / logo.height;
-        const logoHeight = maxLogoHeight;
-        const logoWidth = logoHeight * aspectRatio;
+        const logoWidth = maxLogoWidth;
+        const logoHeight = logoWidth / aspectRatio;
         const logoX = (canvas.width - logoWidth) / 2;
         const logoY = (titleHeight - logoHeight) / 2;
         ctx.drawImage(logo, logoX, logoY, logoWidth, logoHeight);
