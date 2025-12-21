@@ -1,4 +1,4 @@
-// BUILD: Dec21-v18 - Snapshot with broken/unbroken floors + USD prices via CoinGecko
+// BUILD: Dec21-v19 - Snapshot with manual paste fields for BBL data
 // --- Global Elements ---
 const gallery = document.getElementById('nft-gallery');
 const paginationControls = document.getElementById('pagination-controls');
@@ -3784,16 +3784,40 @@ if (document.readyState === 'loading') {
 // --- Snapshot Tool ---
 const BBL_COLLECTION_API = 'https://warlock.backbonelabs.io/api/v1/dapps/necropolis/collections/terra1phr9fngjv7a8an4dhmhd0u0f98wazxfnzccqtyheq4zqrrp4fpuqw3apw9';
 const BBL_LISTINGS_API = 'https://warlock.backbonelabs.io/api/v1/dapps/necropolis/nfts?nftContract=terra1phr9fngjv7a8an4dhmhd0u0f98wazxfnzccqtyheq4zqrrp4fpuqw3apw9&page=1&perPage=100&types=buy_now&sort=price-asc&sisterChains=';
-const COINGECKO_PRICE_API = 'https://api.coingecko.com/api/v3/simple/price?ids=terra-luna-2,backbone-labs-staked-luna&vs_currencies=usd';
 
-// Token ID mappings for CoinGecko
-const TOKEN_COINGECKO_IDS = {
-    'bluna': 'backbone-labs-staked-luna',
-    'luna': 'terra-luna-2'
+// Read prices from CoinGecko widget on the page
+const getPricesFromWidget = () => {
+    const prices = {
+        luna: null,
+        ampluna: null,
+        arbluna: null,
+        bluna: null,
+        solid: null,
+        usdc: null
+    };
+    
+    // Try to find gecko widget and extract prices
+    const widget = document.querySelector('gecko-coin-price-static-headline-widget');
+    if (widget && widget.shadowRoot) {
+        const priceElements = widget.shadowRoot.querySelectorAll('[class*="price"]');
+        // This might not work due to shadow DOM - fallback to manual
+    }
+    
+    // Alternative: Look for any displayed prices on the page
+    // The widget renders prices - we can try to read them from the DOM
+    const allText = document.body.innerText;
+    
+    // Try to extract prices using regex patterns like "$0.4523"
+    const lunaMatch = allText.match(/LUNA[^$]*\$([0-9.]+)/i);
+    const blunaMatch = allText.match(/bLUNA[^$]*\$([0-9.]+)/i);
+    
+    if (lunaMatch) prices.luna = parseFloat(lunaMatch[1]);
+    if (blunaMatch) prices.bluna = parseFloat(blunaMatch[1]);
+    
+    return prices;
 };
 
 const showSnapshotTool = async () => {
-    // Create modal overlay
     const existingModal = document.getElementById('snapshot-modal');
     if (existingModal) existingModal.remove();
     
@@ -3801,7 +3825,7 @@ const showSnapshotTool = async () => {
     overlay.id = 'snapshot-modal';
     overlay.className = 'fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 overflow-y-auto';
     overlay.innerHTML = `
-        <div class="bg-gray-800 rounded-xl p-6 max-w-2xl w-full border border-gray-600 shadow-2xl my-4">
+        <div class="bg-gray-800 rounded-xl p-6 max-w-3xl w-full border border-gray-600 shadow-2xl my-4 max-h-[95vh] overflow-y-auto">
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-2xl font-bold text-yellow-400">📸 Snapshot Tool</h2>
                 <button id="snapshot-close" class="text-gray-400 hover:text-white text-2xl">&times;</button>
@@ -3809,60 +3833,27 @@ const showSnapshotTool = async () => {
             <div id="snapshot-content" class="text-gray-300">
                 <div class="text-center py-4">
                     <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-yellow-400 mb-2"></div>
-                    <p>Loading epoch, market & price data...</p>
+                    <p>Loading epoch data...</p>
                 </div>
             </div>
         </div>
     `;
     document.body.appendChild(overlay);
     
-    // Close handlers
     document.getElementById('snapshot-close').onclick = () => overlay.remove();
     overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
     
     const contentDiv = document.getElementById('snapshot-content');
     
     try {
-        // Fetch all data in parallel
-        const [epochResponse, bblCollectionRes, bblListingsRes, priceRes] = await Promise.all([
-            fetch('https://raw.githubusercontent.com/defipatriot/tla_json_storage/main/epoch_1-300_date.json'),
-            fetch(BBL_COLLECTION_API).catch(e => null),
-            fetch(BBL_LISTINGS_API).catch(e => null),
-            fetch(COINGECKO_PRICE_API).catch(e => null)
-        ]);
-        
+        // Fetch epoch data
+        const epochResponse = await fetch('https://raw.githubusercontent.com/defipatriot/tla_json_storage/main/epoch_1-300_date.json');
         if (!epochResponse.ok) throw new Error('Failed to fetch epoch data');
         const epochs = await epochResponse.json();
         
-        // Parse BBL collection data
-        let bblCollection = null;
-        if (bblCollectionRes && bblCollectionRes.ok) {
-            try { bblCollection = await bblCollectionRes.json(); } catch (e) {}
-        }
-        
-        // Parse BBL listings data
-        let bblListings = null;
-        if (bblListingsRes && bblListingsRes.ok) {
-            try { bblListings = await bblListingsRes.json(); } catch (e) {}
-        }
-        
-        // Parse price data
-        let prices = {};
-        if (priceRes && priceRes.ok) {
-            try {
-                const priceData = await priceRes.json();
-                prices = {
-                    bluna: priceData['backbone-labs-staked-luna']?.usd || null,
-                    luna: priceData['terra-luna-2']?.usd || null
-                };
-            } catch (e) {}
-        }
-        
-        // Get current time in UTC
         const now = new Date();
         const nowUTC = new Date(now.toISOString());
         
-        // Find current epoch
         let currentEpoch = null;
         let epochPosition = '';
         let hoursIntoEpoch = 0;
@@ -3883,7 +3874,7 @@ const showSnapshotTool = async () => {
         }
         
         if (!currentEpoch) {
-            contentDiv.innerHTML = '<p class="text-red-400">Could not determine current epoch. You may be outside the epoch range.</p>';
+            contentDiv.innerHTML = '<p class="text-red-400">Could not determine current epoch.</p>';
             return;
         }
         
@@ -3891,7 +3882,7 @@ const showSnapshotTool = async () => {
         const bblFilename = `bbl-listings_${currentEpoch.epoch}_${epochPosition}.json`;
         const daysRemaining = ((new Date(currentEpoch.end_time) - nowUTC) / (1000 * 60 * 60 * 24)).toFixed(1);
         
-        // Calculate stats from current data
+        // Stats from loaded data
         const stats = {
             total: allNfts.length,
             minted: allNfts.filter(n => !n.owned_by_alliance_dao).length,
@@ -3904,74 +3895,9 @@ const showSnapshotTool = async () => {
             unique_owners: new Set(allNfts.filter(n => !n.owned_by_alliance_dao).map(n => n.owner)).size
         };
         
-        // Process listings to calculate broken/unbroken floors
-        let floorBroken = null;
-        let floorUnbroken = null;
-        let floorBrokenNft = null;
-        let floorUnbrokenNft = null;
-        let totalListings = 0;
-        let brokenCount = 0;
-        let unbrokenCount = 0;
-        
-        if (bblListings && bblListings.nfts) {
-            totalListings = bblListings.nfts.length;
-            
-            for (const nft of bblListings.nfts) {
-                const price = nft.auction?.reserve_price ? nft.auction.reserve_price / 1000000 : null;
-                const isBroken = nft.special_trait === 'BROKEN';
-                
-                if (price) {
-                    if (isBroken) {
-                        brokenCount++;
-                        if (floorBroken === null || price < floorBroken) {
-                            floorBroken = price;
-                            floorBrokenNft = nft.nft_token_id;
-                        }
-                    } else {
-                        unbrokenCount++;
-                        if (floorUnbroken === null || price < floorUnbroken) {
-                            floorUnbroken = price;
-                            floorUnbrokenNft = nft.nft_token_id;
-                        }
-                    }
-                }
-            }
-        }
-        
-        // Helper function to format price with USD
-        const formatPrice = (bluna, showUsd = true) => {
-            if (bluna === null) return 'N/A';
-            const blunaStr = `${bluna.toLocaleString()} bLUNA`;
-            if (showUsd && prices.bluna) {
-                const usd = (bluna * prices.bluna).toFixed(2);
-                return `${blunaStr} <span class="text-gray-400">($${usd})</span>`;
-            }
-            return blunaStr;
-        };
-        
-        // BBL stats section - using calculated floors from listings
-        const bblSection = bblListings ? `
-            <div class="bg-purple-900/30 border border-purple-600 rounded-lg p-4">
-                <h3 class="text-lg font-semibold text-purple-400 mb-2">🦴 BBL Marketplace (Live)</h3>
-                <div class="grid grid-cols-2 gap-2 text-sm">
-                    <div>Floor (Unbroken):</div><div class="text-white font-bold">${formatPrice(floorUnbroken)}</div>
-                    <div class="text-gray-400 text-xs pl-4">└ NFT:</div><div class="text-gray-400 text-xs">${floorUnbrokenNft ? '#' + floorUnbrokenNft : 'N/A'}</div>
-                    <div>Floor (Broken):</div><div class="text-yellow-400">${formatPrice(floorBroken)}</div>
-                    <div class="text-gray-400 text-xs pl-4">└ NFT:</div><div class="text-gray-400 text-xs">${floorBrokenNft ? '#' + floorBrokenNft : 'N/A'}</div>
-                    <div>Total Listings:</div><div class="text-white">${totalListings} <span class="text-gray-400">(${unbrokenCount} unbroken, ${brokenCount} broken)</span></div>
-                    <div>Last Sale:</div><div class="text-white">${bblCollection?.last_sale_amount || 'N/A'} bLUNA <span class="text-gray-400">(#${bblCollection?.last_sale_token_id || 'N/A'})</span></div>
-                    <div>All-Time Volume:</div><div class="text-white">${formatPrice(bblCollection?.volume)}</div>
-                </div>
-                ${prices.bluna ? `<p class="text-xs text-gray-500 mt-2">bLUNA price: $${prices.bluna.toFixed(4)} (via CoinGecko)</p>` : ''}
-            </div>
-        ` : `
-            <div class="bg-gray-700/50 rounded-lg p-4 text-center text-gray-400">
-                <p>⚠️ Could not fetch BBL marketplace data</p>
-            </div>
-        `;
-        
         contentDiv.innerHTML = `
             <div class="space-y-4">
+                <!-- Epoch Info -->
                 <div class="bg-gray-700/50 rounded-lg p-4">
                     <h3 class="text-lg font-semibold text-cyan-400 mb-2">Current Epoch Info</h3>
                     <div class="grid grid-cols-2 gap-2 text-sm">
@@ -3979,11 +3905,10 @@ const showSnapshotTool = async () => {
                         <div>Position:</div><div class="text-white font-bold capitalize">${epochPosition}</div>
                         <div>Hours In:</div><div class="text-white">${hoursIntoEpoch.toFixed(1)}h / 168h</div>
                         <div>Days Left:</div><div class="text-white">${daysRemaining} days</div>
-                        <div>Start:</div><div class="text-gray-400 text-xs">${new Date(currentEpoch.start_time).toUTCString()}</div>
-                        <div>End:</div><div class="text-gray-400 text-xs">${new Date(currentEpoch.end_time).toUTCString()}</div>
                     </div>
                 </div>
                 
+                <!-- NFT Stats -->
                 <div class="bg-gray-700/50 rounded-lg p-4">
                     <h3 class="text-lg font-semibold text-cyan-400 mb-2">NFT Status (from deving.zone)</h3>
                     <div class="grid grid-cols-2 gap-2 text-sm">
@@ -3999,11 +3924,58 @@ const showSnapshotTool = async () => {
                     </div>
                 </div>
                 
-                ${bblSection}
+                <!-- Price Input -->
+                <div class="bg-blue-900/30 border border-blue-600 rounded-lg p-4">
+                    <h3 class="text-lg font-semibold text-blue-400 mb-2">💰 Token Prices (USD)</h3>
+                    <p class="text-xs text-gray-400 mb-3">Enter current prices from CoinGecko widget or leave blank</p>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        <div>
+                            <label class="text-xs text-gray-400">bLUNA</label>
+                            <input type="number" step="0.0001" id="price-bluna" placeholder="0.00" class="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-sm">
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-400">LUNA</label>
+                            <input type="number" step="0.0001" id="price-luna" placeholder="0.00" class="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-sm">
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-400">ampLUNA</label>
+                            <input type="number" step="0.0001" id="price-ampluna" placeholder="0.00" class="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-sm">
+                        </div>
+                    </div>
+                </div>
                 
+                <!-- Manual BBL Data Entry -->
+                <div class="bg-purple-900/30 border border-purple-600 rounded-lg p-4">
+                    <h3 class="text-lg font-semibold text-purple-400 mb-2">🦴 BBL Marketplace Data (Manual Entry)</h3>
+                    <p class="text-xs text-gray-400 mb-2">Paste JSON from browser DevTools Network tab</p>
+                    
+                    <div class="space-y-3">
+                        <div>
+                            <label class="text-sm text-gray-300 block mb-1">Collection Stats JSON:</label>
+                            <p class="text-xs text-gray-500 mb-1">URL: ${BBL_COLLECTION_API.substring(0, 60)}...</p>
+                            <textarea id="bbl-collection-json" rows="3" placeholder='Paste collection JSON here...' class="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-xs font-mono"></textarea>
+                        </div>
+                        
+                        <div>
+                            <label class="text-sm text-gray-300 block mb-1">Listings JSON:</label>
+                            <p class="text-xs text-gray-500 mb-1">URL: ${BBL_LISTINGS_API.substring(0, 60)}...</p>
+                            <textarea id="bbl-listings-json" rows="3" placeholder='Paste listings JSON here...' class="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-xs font-mono"></textarea>
+                        </div>
+                        
+                        <button id="parse-bbl-btn" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm">
+                            🔍 Parse BBL Data
+                        </button>
+                        
+                        <div id="bbl-parsed-results" class="hidden bg-gray-900 rounded p-3 text-sm">
+                            <!-- Parsed results will appear here -->
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Download Section -->
                 <div class="bg-yellow-900/30 border border-yellow-600 rounded-lg p-4">
                     <h3 class="text-lg font-semibold text-yellow-400 mb-2">📥 Download Snapshots</h3>
-                    <p class="text-sm text-gray-300 mb-3">Download data for epoch ${currentEpoch.epoch} (${epochPosition})</p>
+                    <p class="text-sm text-gray-300 mb-3">Epoch ${currentEpoch.epoch} (${epochPosition})</p>
                     
                     <div class="space-y-3">
                         <div class="flex flex-col sm:flex-row gap-2">
@@ -4014,15 +3986,11 @@ const showSnapshotTool = async () => {
                         </div>
                         
                         <div class="flex flex-col sm:flex-row gap-2">
-                            <button id="snapshot-bbl-btn" class="flex-1 bg-purple-600 hover:bg-purple-500 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm">
-                                🦴 BBL Listings
+                            <button id="snapshot-bbl-btn" class="flex-1 bg-purple-600 hover:bg-purple-500 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm" disabled>
+                                🦴 BBL Listings (Parse data first)
                             </button>
                             <code class="bg-gray-900 px-2 py-1 rounded text-purple-300 text-xs self-center">${bblFilename}</code>
                         </div>
-                        
-                        <button id="snapshot-both-btn" class="w-full bg-yellow-500 hover:bg-yellow-400 text-black font-bold py-3 px-4 rounded-lg transition-colors">
-                            ⬇️ Download Both
-                        </button>
                     </div>
                     
                     <p id="snapshot-status" class="text-center text-sm mt-3 text-gray-400"></p>
@@ -4030,200 +3998,248 @@ const showSnapshotTool = async () => {
             </div>
         `;
         
-        // Store data for download handlers
+        // Store state
         const downloadState = { 
             nftFilename, 
             bblFilename, 
             currentEpoch, 
             epochPosition,
-            prices,
-            bblCollection,
-            floorBroken,
-            floorUnbroken,
-            floorBrokenNft,
-            floorUnbrokenNft,
-            brokenCount,
-            unbrokenCount
+            bblCollection: null,
+            bblListings: null,
+            parsedData: null
         };
         
-        // Download handlers
-        document.getElementById('snapshot-nft-btn').onclick = () => downloadNftSnapshot(downloadState);
-        document.getElementById('snapshot-bbl-btn').onclick = () => downloadBblSnapshot(downloadState);
-        document.getElementById('snapshot-both-btn').onclick = async () => {
-            await downloadNftSnapshot(downloadState);
-            await new Promise(r => setTimeout(r, 500));
-            await downloadBblSnapshot(downloadState);
-        };
-        
-    } catch (error) {
-        console.error('Snapshot error:', error);
-        contentDiv.innerHTML = `<p class="text-red-400">Error loading data: ${error.message}</p>`;
-    }
-};
-
-const downloadNftSnapshot = async (state) => {
-    const statusEl = document.getElementById('snapshot-status');
-    const btn = document.getElementById('snapshot-nft-btn');
-    
-    btn.disabled = true;
-    btn.textContent = '⏳ Fetching...';
-    statusEl.textContent = 'Downloading NFT metadata from deving.zone...';
-    statusEl.className = 'text-center text-sm mt-3 text-gray-400';
-    
-    try {
-        const response = await fetch('https://deving.zone/api/nft/meta/terra1tpl03d6mvh2emu7lwl3062w8h3f7e7q5xd7zcx');
-        if (!response.ok) throw new Error('Failed to fetch from deving.zone');
-        const freshData = await response.json();
-        
-        const blob = new Blob([JSON.stringify(freshData, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = state.nftFilename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        
-        btn.textContent = '✅ Downloaded!';
-        btn.className = btn.className.replace('bg-cyan-600 hover:bg-cyan-500', 'bg-green-600');
-        statusEl.textContent = `NFT data saved as ${state.nftFilename}`;
-        statusEl.className = 'text-center text-sm mt-3 text-green-400';
-        
-    } catch (error) {
-        console.error('NFT Snapshot error:', error);
-        btn.textContent = '❌ Error';
-        btn.disabled = false;
-        statusEl.textContent = error.message;
-        statusEl.className = 'text-center text-sm mt-3 text-red-400';
-    }
-};
-
-const downloadBblSnapshot = async (state) => {
-    const statusEl = document.getElementById('snapshot-status');
-    const btn = document.getElementById('snapshot-bbl-btn');
-    
-    btn.disabled = true;
-    btn.textContent = '⏳ Fetching...';
-    statusEl.textContent = 'Downloading BBL listings...';
-    statusEl.className = 'text-center text-sm mt-3 text-gray-400';
-    
-    try {
-        // Fetch fresh listings data
-        const listingsRes = await fetch(BBL_LISTINGS_API);
-        if (!listingsRes.ok) throw new Error('Failed to fetch BBL listings');
-        const listingsData = await listingsRes.json();
-        
-        // Fetch fresh prices
-        let currentPrices = state.prices;
-        try {
-            const priceRes = await fetch(COINGECKO_PRICE_API);
-            if (priceRes.ok) {
-                const priceData = await priceRes.json();
-                currentPrices = {
-                    bluna: priceData['backbone-labs-staked-luna']?.usd || null,
-                    luna: priceData['terra-luna-2']?.usd || null
-                };
-            }
-        } catch (e) {}
-        
-        // Process listings
-        let processedListings = [];
-        let floorBroken = null, floorUnbroken = null;
-        let floorBrokenNft = null, floorUnbrokenNft = null;
-        let brokenCount = 0, unbrokenCount = 0;
-        
-        if (listingsData.nfts) {
-            for (const nft of listingsData.nfts) {
-                const price = nft.auction?.reserve_price ? nft.auction.reserve_price / 1000000 : null;
-                const isBroken = nft.special_trait === 'BROKEN';
+        // Parse BBL button handler
+        document.getElementById('parse-bbl-btn').onclick = () => {
+            const collectionJson = document.getElementById('bbl-collection-json').value.trim();
+            const listingsJson = document.getElementById('bbl-listings-json').value.trim();
+            const resultsDiv = document.getElementById('bbl-parsed-results');
+            const bblBtn = document.getElementById('snapshot-bbl-btn');
+            
+            // Get prices
+            const prices = {
+                bluna: parseFloat(document.getElementById('price-bluna').value) || null,
+                luna: parseFloat(document.getElementById('price-luna').value) || null,
+                ampluna: parseFloat(document.getElementById('price-ampluna').value) || null
+            };
+            
+            try {
+                let bblCollection = null;
+                let bblListings = null;
                 
-                if (price) {
-                    if (isBroken) {
-                        brokenCount++;
-                        if (floorBroken === null || price < floorBroken) {
-                            floorBroken = price;
-                            floorBrokenNft = nft.nft_token_id;
-                        }
-                    } else {
-                        unbrokenCount++;
-                        if (floorUnbroken === null || price < floorUnbroken) {
-                            floorUnbroken = price;
-                            floorUnbrokenNft = nft.nft_token_id;
+                if (collectionJson) {
+                    bblCollection = JSON.parse(collectionJson);
+                    downloadState.bblCollection = bblCollection;
+                }
+                
+                if (listingsJson) {
+                    bblListings = JSON.parse(listingsJson);
+                    downloadState.bblListings = bblListings;
+                }
+                
+                // Process listings for floor prices
+                let floorBroken = null, floorUnbroken = null;
+                let floorBrokenNft = null, floorUnbrokenNft = null;
+                let brokenCount = 0, unbrokenCount = 0;
+                let totalListings = 0;
+                
+                if (bblListings && bblListings.nfts) {
+                    totalListings = bblListings.nfts.length;
+                    
+                    for (const nft of bblListings.nfts) {
+                        const price = nft.auction?.reserve_price ? nft.auction.reserve_price / 1000000 : null;
+                        const isBroken = nft.special_trait === 'BROKEN';
+                        
+                        if (price) {
+                            if (isBroken) {
+                                brokenCount++;
+                                if (floorBroken === null || price < floorBroken) {
+                                    floorBroken = price;
+                                    floorBrokenNft = nft.nft_token_id;
+                                }
+                            } else {
+                                unbrokenCount++;
+                                if (floorUnbroken === null || price < floorUnbroken) {
+                                    floorUnbroken = price;
+                                    floorUnbrokenNft = nft.nft_token_id;
+                                }
+                            }
                         }
                     }
                 }
                 
-                processedListings.push({
-                    nft_id: nft.nft_token_id,
-                    seller: nft.auction?.seller || null,
-                    price_bluna: price,
-                    price_usd: price && currentPrices.bluna ? parseFloat((price * currentPrices.bluna).toFixed(2)) : null,
-                    auction_id: nft.auction?.auction_id || null,
-                    is_broken: isBroken,
-                    rank: nft.rank,
-                    rarity: nft.rarity
-                });
+                // Store parsed data
+                downloadState.parsedData = {
+                    prices,
+                    floorBroken,
+                    floorUnbroken,
+                    floorBrokenNft,
+                    floorUnbrokenNft,
+                    brokenCount,
+                    unbrokenCount,
+                    totalListings
+                };
+                
+                // Format price with USD
+                const formatPrice = (bluna) => {
+                    if (bluna === null) return 'N/A';
+                    let str = `${bluna.toLocaleString()} bLUNA`;
+                    if (prices.bluna) {
+                        str += ` ($${(bluna * prices.bluna).toFixed(2)})`;
+                    }
+                    return str;
+                };
+                
+                // Show results
+                resultsDiv.innerHTML = `
+                    <h4 class="text-purple-400 font-semibold mb-2">✅ Parsed Successfully!</h4>
+                    <div class="grid grid-cols-2 gap-2 text-xs">
+                        <div>Floor (Unbroken):</div><div class="text-green-400 font-bold">${formatPrice(floorUnbroken)} ${floorUnbrokenNft ? '(#' + floorUnbrokenNft + ')' : ''}</div>
+                        <div>Floor (Broken):</div><div class="text-yellow-400">${formatPrice(floorBroken)} ${floorBrokenNft ? '(#' + floorBrokenNft + ')' : ''}</div>
+                        <div>Total Listings:</div><div class="text-white">${totalListings} (${unbrokenCount} unbroken, ${brokenCount} broken)</div>
+                        ${bblCollection ? `
+                            <div>Last Sale:</div><div class="text-white">${bblCollection.last_sale_amount || 'N/A'} bLUNA (#${bblCollection.last_sale_token_id || 'N/A'})</div>
+                            <div>All-Time Volume:</div><div class="text-white">${formatPrice(bblCollection.volume)}</div>
+                        ` : ''}
+                        ${prices.bluna ? `<div>bLUNA Price:</div><div class="text-white">$${prices.bluna}</div>` : ''}
+                    </div>
+                `;
+                resultsDiv.classList.remove('hidden');
+                
+                // Enable BBL download button
+                bblBtn.disabled = false;
+                bblBtn.textContent = '🦴 BBL Listings';
+                bblBtn.className = bblBtn.className.replace('bg-purple-600', 'bg-purple-600');
+                
+            } catch (error) {
+                resultsDiv.innerHTML = `<p class="text-red-400">❌ Parse Error: ${error.message}</p>`;
+                resultsDiv.classList.remove('hidden');
             }
-        }
-        
-        // Create comprehensive snapshot
-        const bblSnapshot = {
-            snapshot_time: new Date().toISOString(),
-            epoch: state.currentEpoch.epoch,
-            epoch_position: state.epochPosition,
-            prices_at_snapshot: {
-                bluna_usd: currentPrices.bluna,
-                luna_usd: currentPrices.luna
-            },
-            collection_stats: {
-                volume_all_time_bluna: state.bblCollection?.volume || null,
-                volume_all_time_usd: state.bblCollection?.volume && currentPrices.bluna 
-                    ? parseFloat((state.bblCollection.volume * currentPrices.bluna).toFixed(2)) 
-                    : null,
-                last_sale_bluna: state.bblCollection?.last_sale_amount || null,
-                last_sale_token_id: state.bblCollection?.last_sale_token_id || null,
-                last_sale_auction_id: state.bblCollection?.last_sale_auction_id || null
-            },
-            floor_prices: {
-                unbroken: {
-                    price_bluna: floorUnbroken,
-                    price_usd: floorUnbroken && currentPrices.bluna ? parseFloat((floorUnbroken * currentPrices.bluna).toFixed(2)) : null,
-                    nft_id: floorUnbrokenNft,
-                    listings_count: unbrokenCount
-                },
-                broken: {
-                    price_bluna: floorBroken,
-                    price_usd: floorBroken && currentPrices.bluna ? parseFloat((floorBroken * currentPrices.bluna).toFixed(2)) : null,
-                    nft_id: floorBrokenNft,
-                    listings_count: brokenCount
-                }
-            },
-            total_listings: processedListings.length,
-            listings: processedListings
         };
         
-        const blob = new Blob([JSON.stringify(bblSnapshot, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = state.bblFilename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        // NFT download handler
+        document.getElementById('snapshot-nft-btn').onclick = async () => {
+            const statusEl = document.getElementById('snapshot-status');
+            const btn = document.getElementById('snapshot-nft-btn');
+            
+            btn.disabled = true;
+            btn.textContent = '⏳ Fetching...';
+            statusEl.textContent = 'Downloading from deving.zone...';
+            
+            try {
+                const response = await fetch('https://deving.zone/api/nft/meta/terra1tpl03d6mvh2emu7lwl3062w8h3f7e7q5xd7zcx');
+                if (!response.ok) throw new Error('Failed to fetch');
+                const freshData = await response.json();
+                
+                const blob = new Blob([JSON.stringify(freshData, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = downloadState.nftFilename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                btn.textContent = '✅ Downloaded!';
+                btn.className = btn.className.replace('bg-cyan-600 hover:bg-cyan-500', 'bg-green-600');
+                statusEl.textContent = `Saved as ${downloadState.nftFilename}`;
+                statusEl.className = 'text-center text-sm mt-3 text-green-400';
+                
+            } catch (error) {
+                btn.textContent = '❌ Error';
+                btn.disabled = false;
+                statusEl.textContent = error.message;
+                statusEl.className = 'text-center text-sm mt-3 text-red-400';
+            }
+        };
         
-        btn.textContent = '✅ Downloaded!';
-        btn.className = btn.className.replace('bg-purple-600 hover:bg-purple-500', 'bg-green-600');
-        statusEl.textContent = `BBL data saved as ${state.bblFilename} (${processedListings.length} listings)`;
-        statusEl.className = 'text-center text-sm mt-3 text-green-400';
+        // BBL download handler
+        document.getElementById('snapshot-bbl-btn').onclick = () => {
+            const statusEl = document.getElementById('snapshot-status');
+            const btn = document.getElementById('snapshot-bbl-btn');
+            
+            if (!downloadState.parsedData) {
+                statusEl.textContent = 'Please parse BBL data first!';
+                statusEl.className = 'text-center text-sm mt-3 text-red-400';
+                return;
+            }
+            
+            const { prices, floorBroken, floorUnbroken, floorBrokenNft, floorUnbrokenNft, brokenCount, unbrokenCount, totalListings } = downloadState.parsedData;
+            
+            // Process listings for export
+            let processedListings = [];
+            if (downloadState.bblListings && downloadState.bblListings.nfts) {
+                processedListings = downloadState.bblListings.nfts.map(nft => {
+                    const price = nft.auction?.reserve_price ? nft.auction.reserve_price / 1000000 : null;
+                    return {
+                        nft_id: nft.nft_token_id,
+                        seller: nft.auction?.seller || null,
+                        price_bluna: price,
+                        price_usd: price && prices.bluna ? parseFloat((price * prices.bluna).toFixed(2)) : null,
+                        auction_id: nft.auction?.auction_id || null,
+                        is_broken: nft.special_trait === 'BROKEN',
+                        rank: nft.rank,
+                        rarity: nft.rarity
+                    };
+                });
+            }
+            
+            const bblSnapshot = {
+                snapshot_time: new Date().toISOString(),
+                epoch: downloadState.currentEpoch.epoch,
+                epoch_position: downloadState.epochPosition,
+                prices_at_snapshot: {
+                    bluna_usd: prices.bluna,
+                    luna_usd: prices.luna,
+                    ampluna_usd: prices.ampluna
+                },
+                collection_stats: downloadState.bblCollection ? {
+                    volume_all_time_bluna: downloadState.bblCollection.volume || null,
+                    volume_all_time_usd: downloadState.bblCollection.volume && prices.bluna 
+                        ? parseFloat((downloadState.bblCollection.volume * prices.bluna).toFixed(2)) 
+                        : null,
+                    last_sale_bluna: downloadState.bblCollection.last_sale_amount || null,
+                    last_sale_token_id: downloadState.bblCollection.last_sale_token_id || null,
+                    last_sale_auction_id: downloadState.bblCollection.last_sale_auction_id || null
+                } : null,
+                floor_prices: {
+                    unbroken: {
+                        price_bluna: floorUnbroken,
+                        price_usd: floorUnbroken && prices.bluna ? parseFloat((floorUnbroken * prices.bluna).toFixed(2)) : null,
+                        nft_id: floorUnbrokenNft,
+                        listings_count: unbrokenCount
+                    },
+                    broken: {
+                        price_bluna: floorBroken,
+                        price_usd: floorBroken && prices.bluna ? parseFloat((floorBroken * prices.bluna).toFixed(2)) : null,
+                        nft_id: floorBrokenNft,
+                        listings_count: brokenCount
+                    }
+                },
+                total_listings: totalListings,
+                listings: processedListings
+            };
+            
+            const blob = new Blob([JSON.stringify(bblSnapshot, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = downloadState.bblFilename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            btn.textContent = '✅ Downloaded!';
+            btn.className = btn.className.replace('bg-purple-600 hover:bg-purple-500', 'bg-green-600');
+            statusEl.textContent = `Saved as ${downloadState.bblFilename} (${totalListings} listings)`;
+            statusEl.className = 'text-center text-sm mt-3 text-green-400';
+        };
         
     } catch (error) {
-        console.error('BBL Snapshot error:', error);
-        btn.textContent = '❌ Error';
-        btn.disabled = false;
-        statusEl.textContent = error.message;
-        statusEl.className = 'text-center text-sm mt-3 text-red-400';
+        console.error('Snapshot error:', error);
+        contentDiv.innerHTML = `<p class="text-red-400">Error: ${error.message}</p>`;
     }
 };
 
