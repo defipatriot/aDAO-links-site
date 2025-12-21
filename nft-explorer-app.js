@@ -1,4 +1,4 @@
-// BUILD: Dec21-v7 - Added border to download image
+// BUILD: Dec21-v8 - Logo centered, map click fix (closest object)
 // --- Global Elements ---
 const gallery = document.getElementById('nft-gallery');
 const paginationControls = document.getElementById('pagination-controls');
@@ -2146,28 +2146,52 @@ const drawPostImage = (canvas, ctx, img, logo, nft, button) => {
     ctx.lineTo(canvas.width, titleHeight - 1);
     ctx.stroke();
     
-    // Draw logo if loaded (on left side)
-    const logoSize = 70;
-    const logoX = 30;
-    const logoY = (titleHeight - logoSize) / 2;
-    if (logo) {
-        ctx.drawImage(logo, logoX, logoY, logoSize, logoSize);
+    // Calculate logo dimensions maintaining aspect ratio
+    let logoWidth = 0;
+    let logoHeight = 0;
+    let logoX = 0;
+    let logoY = 0;
+    
+    if (logo && logo.width && logo.height) {
+        // Logo is wider than tall, so fit by height
+        const maxLogoHeight = 60;
+        const aspectRatio = logo.width / logo.height;
+        logoHeight = maxLogoHeight;
+        logoWidth = logoHeight * aspectRatio;
+        logoY = (titleHeight - logoHeight) / 2;
     }
     
-    // Draw "The AllianceDAO" text with glow effect
-    const textX = logo ? logoX + logoSize + 20 : 40;
-    ctx.font = 'bold 42px Inter, sans-serif';
+    // Calculate total content width for centering
+    const textContent = 'The AllianceDAO';
+    ctx.font = 'bold 44px Inter, sans-serif';
+    const textWidth = ctx.measureText(textContent).width;
+    const gap = logo ? 15 : 0; // Gap between logo and text
+    const totalWidth = logoWidth + gap + textWidth;
+    const startX = (canvas.width - totalWidth) / 2;
+    
+    // Draw logo centered with text
+    if (logo && logoWidth > 0) {
+        logoX = startX;
+        ctx.drawImage(logo, logoX, logoY, logoWidth, logoHeight);
+    }
+    
+    // Draw "The AllianceDAO" text - clean style, no glow
+    const textX = logo ? startX + logoWidth + gap : (canvas.width - textWidth) / 2;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     
-    // Text shadow/glow
-    ctx.shadowColor = '#22d3ee';
-    ctx.shadowBlur = 15;
+    // Clean text with subtle shadow for depth
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetX = 2;
+    ctx.shadowOffsetY = 2;
     ctx.fillStyle = '#22d3ee';
-    ctx.fillText('The AllianceDAO', textX, titleHeight / 2);
+    ctx.fillText(textContent, textX, titleHeight / 2);
     
     // Reset shadow
     ctx.shadowBlur = 0;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
     
     // Draw the NFT image below the title
     try {
@@ -2659,21 +2683,32 @@ const handleMapClick = (e) => {
     const rotatedY = worldX * sinR + worldY * cosR;
 
     let clickedObject = null;
-    // Check in reverse to prioritize clicking top-most items (ships)
+    let closestDistance = Infinity;
+    
+    // Find the CLOSEST object to click point (not just first match)
     for (let i = mapObjects.length - 1; i >= 0; i--) {
         const obj = mapObjects[i];
-         if (!obj || typeof obj.x !== 'number' || typeof obj.y !== 'number' || typeof obj.width !== 'number' || typeof obj.height !== 'number' || typeof obj.scale !== 'number') continue;
+        if (!obj || typeof obj.x !== 'number' || typeof obj.y !== 'number' || typeof obj.width !== 'number' || typeof obj.height !== 'number' || typeof obj.scale !== 'number') continue;
 
         const displayWidth = obj.width * obj.scale;
         const displayHeight = obj.height * obj.scale;
-        // Minimum clickable area of 60 pixels for small objects
-        const minClickArea = 60;
+        // Smaller minimum clickable area to reduce overlap
+        const minClickArea = 30;
         const halfWidth = Math.max(displayWidth / 2, minClickArea);
         const halfHeight = Math.max(displayHeight / 2, minClickArea);
 
+        // Check if click is within this object's bounds
         if (rotatedX >= obj.x - halfWidth && rotatedX <= obj.x + halfWidth && rotatedY >= obj.y - halfHeight && rotatedY <= obj.y + halfHeight) {
-            clickedObject = obj;
-            break; 
+            // Calculate distance from click to object center
+            const dx = rotatedX - obj.x;
+            const dy = rotatedY - obj.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            // Keep the closest object
+            if (distance < closestDistance) {
+                closestDistance = distance;
+                clickedObject = obj;
+            }
         }
     }
 
