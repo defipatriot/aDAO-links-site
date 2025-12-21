@@ -445,14 +445,12 @@ const populateDistributionTables = () => {
 const updateMatchingTraitsCount = () => {
     if (!allNfts.length) return;
     
-    // Get the slider - try multiple selectors
-    const slider = document.querySelector('[data-slider-key="matching_traits"]') || matchingTraitsSlider;
+    // Get the slider - could be old hardcoded or new dynamic
+    const slider = document.querySelector('.status-slider[data-slider-key="matching_traits"]') || matchingTraitsSlider;
     const strictLevel = slider ? parseInt(slider.value) : 1; // Default to 1 (P+I+O)
     
     // Count for current level
     const count = allNfts.filter(nft => hasMatchingTraits(nft, strictLevel)).length;
-    
-    console.log('updateMatchingTraitsCount - strictLevel:', strictLevel, 'count:', count);
     
     // Update both old and new count displays
     if (matchingTraitsCount) {
@@ -749,7 +747,22 @@ const addAllEventListeners = () => {
     
     // Wallet status filters - refresh display when toggled
     document.querySelectorAll('.wallet-status-filter').forEach(cb => {
-        cb.addEventListener('change', () => {
+        cb.addEventListener('change', (e) => {
+            // Enable/disable the associated slider
+            const status = e.target.dataset.status;
+            const slider = document.querySelector(`.wallet-status-slider[data-slider-status="${status}"]`);
+            if (slider) {
+                slider.disabled = !e.target.checked;
+            }
+            if (walletSearchAddressInput?.value.trim()) {
+                searchWallet();
+            }
+        });
+    });
+    
+    // Wallet status sliders - refresh display when changed
+    document.querySelectorAll('.wallet-status-slider').forEach(slider => {
+        slider.addEventListener('input', () => {
             if (walletSearchAddressInput?.value.trim()) {
                 searchWallet();
             }
@@ -939,10 +952,9 @@ const applyFiltersAndSort = () => {
     
     // *** MATCHING TRAITS FILTER - check both old DOM element and new dynamic one ***
     const matchingToggle = document.querySelector('.status-toggle-cb[data-key="matching_traits"]') || matchingTraitsToggle;
-    const matchingSlider = document.querySelector('[data-slider-key="matching_traits"]') || matchingTraitsSlider;
+    const matchingSlider = document.querySelector('.status-slider[data-slider-key="matching_traits"]') || matchingTraitsSlider;
     if (matchingToggle?.checked) {
-        const strictLevel = matchingSlider ? parseInt(matchingSlider.value) : 1;
-        console.log('Matching filter active - strictLevel:', strictLevel);
+        const strictLevel = matchingSlider ? parseInt(matchingSlider.value) : 0;
         tempNfts = tempNfts.filter(nft => hasMatchingTraits(nft, strictLevel));
     }
     
@@ -2002,19 +2014,24 @@ const showSelectedWalletDetails = (address, datasetOrStats) => {
     addressEl.textContent = shortAddr;
     addressEl.title = address;
     
-    // Get values - dataset values are strings, direct stats are numbers
-    // Check both possible property names
-    const liquid = datasetOrStats.liquid ?? datasetOrStats.liquid ?? '0';
-    const daodao = datasetOrStats.daodao ?? datasetOrStats.daodaoStaked ?? '0';
-    const enterprise = datasetOrStats.enterprise ?? datasetOrStats.enterpriseStaked ?? '0';
-    const broken = datasetOrStats.broken ?? '0';
-    const bbl = datasetOrStats.bbl ?? datasetOrStats.bblListed ?? '0';
-    const boost = datasetOrStats.boost ?? datasetOrStats.boostListed ?? '0';
+    // Get values from dataset - all are strings
+    const liquid = datasetOrStats.liquid || '0';
+    const daodao = datasetOrStats.daodao || '0';
+    const enterprise = datasetOrStats.enterprise || '0';
+    const broken = datasetOrStats.broken || '0';
+    const unbroken = datasetOrStats.unbroken || '0';
+    const bbl = datasetOrStats.bbl || '0';
+    const boost = datasetOrStats.boost || '0';
+    const total = datasetOrStats.total || '0';
     
-    console.log('Parsed values:', { liquid, daodao, enterprise, broken, bbl, boost });
+    console.log('Parsed values:', { liquid, daodao, enterprise, broken, unbroken, bbl, boost, total });
     
-    // Build stats grid
+    // Build stats grid - show Total prominently, then breakdown
     statsEl.innerHTML = `
+        <div class="col-span-3 bg-cyan-900/50 rounded p-2 mb-2">
+            <div class="text-cyan-400 text-xs">Total NFTs</div>
+            <div class="text-white font-bold text-xl">${total}</div>
+        </div>
         <div class="bg-gray-700/50 rounded p-2">
             <div class="text-gray-400 text-xs">Liquid</div>
             <div class="text-white font-bold">${liquid}</div>
@@ -2030,6 +2047,10 @@ const showSelectedWalletDetails = (address, datasetOrStats) => {
         <div class="bg-gray-700/50 rounded p-2">
             <div class="text-red-400 text-xs">Broken</div>
             <div class="text-white font-bold">${broken}</div>
+        </div>
+        <div class="bg-gray-700/50 rounded p-2">
+            <div class="text-green-400 text-xs">Unbroken</div>
+            <div class="text-white font-bold">${unbroken}</div>
         </div>
         <div class="bg-gray-700/50 rounded p-2">
             <div class="text-green-400 text-xs">BBL</div>
@@ -2200,10 +2221,8 @@ const handleMapClick = (e) => {
 
         const displayWidth = obj.width * obj.scale;
         const displayHeight = obj.height * obj.scale;
-        // Minimum clickable size of 50 pixels for small objects
-        const minClickSize = 50;
-        const halfWidth = Math.max(displayWidth / 2, minClickSize);
-        const halfHeight = Math.max(displayHeight / 2, minClickSize);
+        const halfWidth = displayWidth / 2;
+        const halfHeight = displayHeight / 2;
 
         if (rotatedX >= obj.x - halfWidth && rotatedX <= obj.x + halfWidth && rotatedY >= obj.y - halfHeight && rotatedY <= obj.y + halfHeight) {
             clickedObject = obj;
@@ -3131,27 +3150,64 @@ const searchWallet = () => {
         // Get wallet NFTs
         let walletNfts = allNfts.filter(nft => nft.owner === address);
         
-        // Apply wallet status filters
-        const liquidFilter = document.querySelector('.wallet-status-filter[data-status="liquid"]');
+        // Apply wallet status filters with sliders
         const stakedFilter = document.querySelector('.wallet-status-filter[data-status="staked"]');
-        const brokenFilter = document.querySelector('.wallet-status-filter[data-status="broken"]');
+        const stakedSlider = document.querySelector('.wallet-status-slider[data-slider-status="staked"]');
+        const rewardsFilter = document.querySelector('.wallet-status-filter[data-status="rewards"]');
+        const rewardsSlider = document.querySelector('.wallet-status-slider[data-slider-status="rewards"]');
         const listedFilter = document.querySelector('.wallet-status-filter[data-status="listed"]');
+        const listedSlider = document.querySelector('.wallet-status-slider[data-slider-status="listed"]');
+        const liquidFilter = document.querySelector('.wallet-status-filter[data-status="liquid"]');
+        const liquidSlider = document.querySelector('.wallet-status-slider[data-slider-status="liquid"]');
         
-        if (liquidFilter?.checked) {
-            walletNfts = walletNfts.filter(nft => nft.liquid === true);
-        }
+        // Staked filter: 0=DAO only, 1=Both, 2=Enterprise only
         if (stakedFilter?.checked) {
-            walletNfts = walletNfts.filter(nft => nft.staked_enterprise_legacy || nft.staked_daodao);
+            const sliderVal = stakedSlider?.value || '1';
+            if (sliderVal === '0') {
+                walletNfts = walletNfts.filter(nft => nft.staked_daodao);
+            } else if (sliderVal === '2') {
+                walletNfts = walletNfts.filter(nft => nft.staked_enterprise_legacy);
+            } else {
+                walletNfts = walletNfts.filter(nft => nft.staked_daodao || nft.staked_enterprise_legacy);
+            }
         }
-        if (brokenFilter?.checked) {
-            walletNfts = walletNfts.filter(nft => nft.broken === true);
+        
+        // Rewards filter: 0=Broken, 1=Both, 2=Unbroken
+        if (rewardsFilter?.checked) {
+            const sliderVal = rewardsSlider?.value || '1';
+            if (sliderVal === '0') {
+                walletNfts = walletNfts.filter(nft => nft.broken === true);
+            } else if (sliderVal === '2') {
+                walletNfts = walletNfts.filter(nft => nft.broken === false);
+            }
+            // sliderVal '1' = both, no filter needed
         }
+        
+        // Listed filter: 0=BBL, 1=Both, 2=Boost
         if (listedFilter?.checked) {
-            walletNfts = walletNfts.filter(nft => nft.boost_market || nft.bbl_market);
+            const sliderVal = listedSlider?.value || '1';
+            if (sliderVal === '0') {
+                walletNfts = walletNfts.filter(nft => nft.bbl_market);
+            } else if (sliderVal === '2') {
+                walletNfts = walletNfts.filter(nft => nft.boost_market);
+            } else {
+                walletNfts = walletNfts.filter(nft => nft.bbl_market || nft.boost_market);
+            }
+        }
+        
+        // Liquid filter: 0=Show liquid, 1=Both (no filter), 2=Hide liquid (show non-liquid)
+        if (liquidFilter?.checked) {
+            const sliderVal = liquidSlider?.value || '0';
+            if (sliderVal === '0') {
+                walletNfts = walletNfts.filter(nft => nft.liquid === true);
+            } else if (sliderVal === '2') {
+                walletNfts = walletNfts.filter(nft => nft.liquid === false);
+            }
+            // sliderVal '1' = both, no filter needed
         }
         
         const totalForWallet = allNfts.filter(nft => nft.owner === address).length;
-        const filterActive = liquidFilter?.checked || stakedFilter?.checked || brokenFilter?.checked || listedFilter?.checked;
+        const filterActive = stakedFilter?.checked || rewardsFilter?.checked || listedFilter?.checked || liquidFilter?.checked;
         
         if (filterActive) {
             walletGalleryTitle.textContent = `Showing ${walletNfts.length} of ${totalForWallet} NFTs for wallet:`;
