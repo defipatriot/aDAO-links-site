@@ -1,4 +1,4 @@
-// BUILD: Dec21-v11 - Taller header (140px), black border (8px)
+// BUILD: Dec21-v12 - ID search fix, matching count, wallet filters, single card size
 // --- Global Elements ---
 const gallery = document.getElementById('nft-gallery');
 const paginationControls = document.getElementById('pagination-controls');
@@ -810,6 +810,7 @@ const addAllEventListeners = () => {
         });
         // Stop click propagation on the checkbox
         cb.addEventListener('click', (e) => e.stopPropagation());
+        cb.addEventListener('touchend', (e) => e.stopPropagation(), { passive: true });
     });
     
     // Wallet status sliders - refresh when changed, prevent event bubbling
@@ -818,20 +819,31 @@ const addAllEventListeners = () => {
             e.stopPropagation();
             if (walletSearchAddressInput?.value.trim()) searchWallet();
         });
-        // Prevent all click events from bubbling up
+        slider.addEventListener('change', (e) => {
+            e.stopPropagation();
+            if (walletSearchAddressInput?.value.trim()) searchWallet();
+        });
+        // Prevent all events from bubbling up
         slider.addEventListener('click', (e) => e.stopPropagation());
         slider.addEventListener('mousedown', (e) => e.stopPropagation());
         slider.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
+        slider.addEventListener('touchmove', (e) => e.stopPropagation(), { passive: true });
+        slider.addEventListener('touchend', (e) => e.stopPropagation(), { passive: true });
     });
     
     // Also stop propagation on the filter container itself
     const walletStatusFilters = document.getElementById('wallet-status-filters');
     if (walletStatusFilters) {
-        walletStatusFilters.addEventListener('click', (e) => {
-            // Only stop if clicking on interactive elements
-            if (e.target.closest('.wallet-status-filter') || e.target.closest('.wallet-status-slider')) {
-                e.stopPropagation();
-            }
+        ['click', 'touchstart', 'touchend'].forEach(eventType => {
+            walletStatusFilters.addEventListener(eventType, (e) => {
+                // Stop propagation for any interaction within this container
+                if (e.target.closest('.wallet-status-filter') || 
+                    e.target.closest('.wallet-status-slider') ||
+                    e.target.closest('.direction-slider-container') ||
+                    e.target.closest('.toggle-label')) {
+                    e.stopPropagation();
+                }
+            }, eventType.startsWith('touch') ? { passive: true } : undefined);
         });
     }
 
@@ -1285,9 +1297,14 @@ const displayPage = (page) => {
         return;
     }
     
-    // Auto-open modal if exactly 1 NFT found via ID search
-    if (filteredNfts.length === 1 && searchInput?.value.trim()) {
-        showNftDetails(filteredNfts[0]);
+    // Auto-open modal if exactly 1 NFT found via complete ID search
+    // Only trigger if: input is a number AND matches the found NFT's ID exactly
+    const searchValue = searchInput?.value.trim();
+    if (filteredNfts.length === 1 && searchValue && /^\d+$/.test(searchValue)) {
+        const searchedId = parseInt(searchValue, 10);
+        if (filteredNfts[0].id === searchedId) {
+            showNftDetails(filteredNfts[0]);
+        }
     }
     
     const totalPages = Math.ceil(filteredNfts.length / itemsPerPage);
@@ -1571,6 +1588,10 @@ const updateFilterCounts = (currentNfts) => { // Pass in the list to count
             if(slider.value === '0') count = liquidCount;
             else if (slider.value === '1') count = liquidCount + notLiquidCount;
             else if (slider.value === '2') count = notLiquidCount;
+        } else if (key === 'matching_traits') {
+            // Matching traits: P+I (value 0) or P+I+O (value 1)
+            const strictLevel = parseInt(slider.value);
+            count = list.filter(nft => hasMatchingTraits(nft, strictLevel)).length;
         }
         countSpan.textContent = count;
     });
