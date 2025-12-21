@@ -1,4 +1,4 @@
-// BUILD: Dec21-v4 - Mobile fixes: dropdown, reset clear, auto-modal, buttons, map touch, boost banner
+// BUILD: Dec21-v5 - Wallet freeze fix, button text, download image title
 // --- Global Elements ---
 const gallery = document.getElementById('nft-gallery');
 const paginationControls = document.getElementById('pagination-controls');
@@ -778,12 +778,24 @@ const addAllEventListeners = () => {
             if (walletSearchAddressInput) walletSearchAddressInput.value = '';
             if (walletGallery) walletGallery.innerHTML = '';
             if (walletGalleryTitle) walletGalleryTitle.textContent = 'Wallet NFTs';
-            // Reset wallet status filters
-            document.querySelectorAll('.wallet-status-filter').forEach(cb => cb.checked = false);
-             document.querySelectorAll('#leaderboard-table .leaderboard-row').forEach(row => {
+            // Reset wallet status filters and sliders
+            document.querySelectorAll('.wallet-status-filter').forEach(cb => {
+                cb.checked = false;
+            });
+            document.querySelectorAll('.wallet-status-slider').forEach(slider => {
+                slider.disabled = true;
+                slider.value = '1';
+            });
+            document.querySelectorAll('#leaderboard-table .leaderboard-row').forEach(row => {
                 row.classList.remove('selected');
             });
-            showLoading(walletGallery,'Search for or select a wallet to see owned NFTs.'); // Reset gallery text
+            // Hide mobile wallet details popup
+            const detailsContainer = document.getElementById('selected-wallet-details');
+            if (detailsContainer) detailsContainer.classList.add('hidden');
+            // Clear mobile search fields
+            if (walletMobileSearchAddress) walletMobileSearchAddress.value = '';
+            if (walletSearchLast4) walletSearchLast4.value = '';
+            showLoading(walletGallery,'Search for or select a wallet to see owned NFTs.');
         });
     }
     
@@ -2079,10 +2091,23 @@ const generateShareImage = (nft, button) => {
     img.src = primaryUrl || fallbackUrl;
 
     img.onload = () => {
-        canvas.width = 1080; canvas.height = 1080;
-        ctx.clearRect(0, 0, 1080, 1080);
+        // Add extra height for title banner at top
+        const titleHeight = 80;
+        canvas.width = 1080; 
+        canvas.height = 1080 + titleHeight;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Draw title banner at top
+        ctx.fillStyle = '#0e1729'; // Dark background matching site
+        ctx.fillRect(0, 0, canvas.width, titleHeight);
+        ctx.fillStyle = '#22d3ee'; // Cyan color
+        ctx.font = 'bold 36px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('The AllianceDAO', canvas.width / 2, titleHeight / 2 + 12);
+        
+        // Draw the NFT image below the title
         try {
-            ctx.drawImage(img, 0, 0, 1080, 1080);
+            ctx.drawImage(img, 0, titleHeight, 1080, 1080);
         } catch (e) {
             console.error("Error drawing image to canvas:", e);
             button.textContent = 'Draw Error';
@@ -2095,6 +2120,7 @@ const generateShareImage = (nft, button) => {
         ctx.lineWidth = 8; ctx.font = 'bold 48px Inter, sans-serif';
         ctx.lineJoin = 'round'; // Smoother text corners
         const margin = 40;
+        const imageTop = titleHeight; // Offset for title
 
         const drawText = (text, x, y, align = 'left') => {
             ctx.textAlign = align;
@@ -2102,20 +2128,20 @@ const generateShareImage = (nft, button) => {
             ctx.fillText(text, x, y);
         };
 
-        drawText(`NFT #${nft.id || '?'}`, margin, margin + 48, 'left');
+        drawText(`NFT #${nft.id || '?'}`, margin, imageTop + margin + 48, 'left');
         const rarityDisplay = (nft.rarityClass != null && nft.subRank != null) 
             ? `${nft.rarityClass}/${nft.subRank}` 
             : (nft.rarityClass || 'N/A');
-        drawText(`Rarity ${rarityDisplay}`, canvas.width - margin, margin + 48, 'right');
-        drawText(getTrait('Planet'), margin, canvas.height - margin, 'left');
+        drawText(`Rarity ${rarityDisplay}`, canvas.width - margin, imageTop + margin + 48, 'right');
+        drawText(getTrait('Planet'), margin, imageTop + 1080 - margin, 'left');
         
         let inhabitantText = getTrait('Inhabitant');
         if (inhabitantText.endsWith(' M')) inhabitantText = inhabitantText.replace(' M', ' Male');
         else if (inhabitantText.endsWith(' F')) inhabitantText = inhabitantText.replace(' F', ' Female');
-        drawText(inhabitantText, canvas.width - margin, canvas.height - margin, 'right');
+        drawText(inhabitantText, canvas.width - margin, imageTop + 1080 - margin, 'right');
         
         const bannerHeight = 120;
-        const bannerY = canvas.height - bannerHeight - 80;
+        const bannerY = imageTop + 1080 - bannerHeight - 80;
         
         if (nft.broken) {
             ctx.fillStyle = 'rgba(220, 38, 38, 0.85)'; // Red
