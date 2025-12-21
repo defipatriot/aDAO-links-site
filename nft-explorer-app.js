@@ -1,4 +1,4 @@
-// BUILD: Dec21-v12 - ID search fix, matching count, wallet filters, single card size
+// BUILD: Dec21-v13 - Remove auto-open, fix map coords, debounce wallet filters
 // --- Global Elements ---
 const gallery = document.getElementById('nft-gallery');
 const paginationControls = document.getElementById('pagination-controls');
@@ -800,52 +800,29 @@ const addAllEventListeners = () => {
     }
     
     // Wallet status filters - refresh display when toggled and enable/disable sliders
+    // Wallet status filters - simple handler, debounced
+    let walletFilterTimeout = null;
+    const triggerWalletSearch = () => {
+        if (walletFilterTimeout) clearTimeout(walletFilterTimeout);
+        walletFilterTimeout = setTimeout(() => {
+            if (walletSearchAddressInput?.value.trim()) searchWallet();
+        }, 100);
+    };
+    
     document.querySelectorAll('.wallet-status-filter').forEach(cb => {
         cb.addEventListener('change', (e) => {
-            e.stopPropagation();
             const status = e.target.dataset.status;
             const slider = document.querySelector(`.wallet-status-slider[data-slider-status="${status}"]`);
             if (slider) slider.disabled = !e.target.checked;
-            if (walletSearchAddressInput?.value.trim()) searchWallet();
+            triggerWalletSearch();
         });
-        // Stop click propagation on the checkbox
-        cb.addEventListener('click', (e) => e.stopPropagation());
-        cb.addEventListener('touchend', (e) => e.stopPropagation(), { passive: true });
     });
     
-    // Wallet status sliders - refresh when changed, prevent event bubbling
+    // Wallet status sliders
     document.querySelectorAll('.wallet-status-slider').forEach(slider => {
-        slider.addEventListener('input', (e) => {
-            e.stopPropagation();
-            if (walletSearchAddressInput?.value.trim()) searchWallet();
-        });
-        slider.addEventListener('change', (e) => {
-            e.stopPropagation();
-            if (walletSearchAddressInput?.value.trim()) searchWallet();
-        });
-        // Prevent all events from bubbling up
-        slider.addEventListener('click', (e) => e.stopPropagation());
-        slider.addEventListener('mousedown', (e) => e.stopPropagation());
-        slider.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
-        slider.addEventListener('touchmove', (e) => e.stopPropagation(), { passive: true });
-        slider.addEventListener('touchend', (e) => e.stopPropagation(), { passive: true });
+        slider.addEventListener('input', triggerWalletSearch);
+        slider.addEventListener('change', triggerWalletSearch);
     });
-    
-    // Also stop propagation on the filter container itself
-    const walletStatusFilters = document.getElementById('wallet-status-filters');
-    if (walletStatusFilters) {
-        ['click', 'touchstart', 'touchend'].forEach(eventType => {
-            walletStatusFilters.addEventListener(eventType, (e) => {
-                // Stop propagation for any interaction within this container
-                if (e.target.closest('.wallet-status-filter') || 
-                    e.target.closest('.wallet-status-slider') ||
-                    e.target.closest('.direction-slider-container') ||
-                    e.target.closest('.toggle-label')) {
-                    e.stopPropagation();
-                }
-            }, eventType.startsWith('touch') ? { passive: true } : undefined);
-        });
-    }
 
     if (walletSearchAddressInput) {
         walletSearchAddressInput.addEventListener('keypress', (e) => {
@@ -1295,16 +1272,6 @@ const displayPage = (page) => {
         showLoading(gallery, 'No NFTs match the current filters.');
         updatePaginationControls(0);
         return;
-    }
-    
-    // Auto-open modal if exactly 1 NFT found via complete ID search
-    // Only trigger if: input is a number AND matches the found NFT's ID exactly
-    const searchValue = searchInput?.value.trim();
-    if (filteredNfts.length === 1 && searchValue && /^\d+$/.test(searchValue)) {
-        const searchedId = parseInt(searchValue, 10);
-        if (filteredNfts[0].id === searchedId) {
-            showNftDetails(filteredNfts[0]);
-        }
     }
     
     const totalPages = Math.ceil(filteredNfts.length / itemsPerPage);
@@ -2563,7 +2530,7 @@ const handleMapMouseMove = (e) => {
     // Check if mouse is inside canvas bounds
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
-    if (mouseX < 0 || mouseX > spaceCanvas.width || mouseY < 0 || mouseY > spaceCanvas.height) {
+    if (mouseX < 0 || mouseX > rect.width || mouseY < 0 || mouseY > rect.height) {
         // Mouse left the canvas area, stop panning/rotating
         if (isPanning || isRotating) {
             isPanning = false;
@@ -2573,10 +2540,10 @@ const handleMapMouseMove = (e) => {
         return;
     }
 
-    // Convert mouse coords to world coords
+    // Convert mouse coords to world coords - use CSS dimensions (rect) not canvas dimensions
     const currentZoom = (mapZoom === 0) ? 0.0001 : mapZoom; // Avoid divide by zero
-    const worldX = (mouseX - (spaceCanvas.width / 2 + mapOffsetX)) / currentZoom;
-    const worldY = (mouseY - (spaceCanvas.height / 2 + mapOffsetY)) / currentZoom;
+    const worldX = (mouseX - (rect.width / 2 + mapOffsetX)) / currentZoom;
+    const worldY = (mouseY - (rect.height / 2 + mapOffsetY)) / currentZoom;
     const sinR = Math.sin(-mapRotation);
     const cosR = Math.cos(-mapRotation);
     const rotatedX = worldX * cosR - worldY * sinR;
@@ -2630,9 +2597,9 @@ const handleMapWheel = (e) => {
     
     const currentZoom = (mapZoom === 0) ? 0.0001 : mapZoom;
     
-    // Mouse position in world space before zoom
-    const mouseBeforeZoomX = (mouseX - (spaceCanvas.width / 2 + mapOffsetX)) / currentZoom;
-    const mouseBeforeZoomY = (mouseY - (spaceCanvas.height / 2 + mapOffsetY)) / currentZoom;
+    // Mouse position in world space before zoom - use CSS dimensions (rect)
+    const mouseBeforeZoomX = (mouseX - (rect.width / 2 + mapOffsetX)) / currentZoom;
+    const mouseBeforeZoomY = (mouseY - (rect.height / 2 + mapOffsetY)) / currentZoom;
 
     let newZoom;
     if (e.deltaY < 0) { // Zoom in
@@ -2642,9 +2609,9 @@ const handleMapWheel = (e) => {
     }
     if (newZoom <= 0) newZoom = minZoom; // Prevent zero or negative zoom
 
-    // Mouse position in world space after zoom
-    const mouseAfterZoomX = (mouseX - (spaceCanvas.width / 2 + mapOffsetX)) / newZoom;
-    const mouseAfterZoomY = (mouseY - (spaceCanvas.height / 2 + mapOffsetY)) / newZoom;
+    // Mouse position in world space after zoom - use CSS dimensions (rect)
+    const mouseAfterZoomX = (mouseX - (rect.width / 2 + mapOffsetX)) / newZoom;
+    const mouseAfterZoomY = (mouseY - (rect.height / 2 + mapOffsetY)) / newZoom;
 
     // Adjust offset to keep mouse position stable
     mapOffsetX += (mouseAfterZoomX - mouseBeforeZoomX) * newZoom;
@@ -2656,12 +2623,14 @@ const handleMapClick = (e) => {
     const rect = spaceCanvas.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return;
 
+    // Use CSS dimensions (rect) not canvas dimensions (which are DPI-scaled)
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
     const currentZoom = (mapZoom === 0) ? 0.0001 : mapZoom;
-    const worldX = (mouseX - (spaceCanvas.width / 2 + mapOffsetX)) / currentZoom;
-    const worldY = (mouseY - (spaceCanvas.height / 2 + mapOffsetY)) / currentZoom;
+    // Use rect dimensions for coordinate transformation (matches rendering)
+    const worldX = (mouseX - (rect.width / 2 + mapOffsetX)) / currentZoom;
+    const worldY = (mouseY - (rect.height / 2 + mapOffsetY)) / currentZoom;
     const sinR = Math.sin(-mapRotation);
     const cosR = Math.cos(-mapRotation);
     const rotatedX = worldX * cosR - worldY * sinR;
@@ -2677,8 +2646,8 @@ const handleMapClick = (e) => {
 
         const displayWidth = obj.width * obj.scale;
         const displayHeight = obj.height * obj.scale;
-        // Smaller minimum clickable area to reduce overlap
-        const minClickArea = 30;
+        // Minimum clickable area for small objects
+        const minClickArea = 40;
         const halfWidth = Math.max(displayWidth / 2, minClickArea);
         const halfHeight = Math.max(displayHeight / 2, minClickArea);
 
