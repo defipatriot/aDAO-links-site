@@ -1,4 +1,4 @@
-// BUILD: Dec21-v10 - Logo fills 90% width
+// BUILD: Dec21-v11 - Taller header (140px), black border (8px)
 // --- Global Elements ---
 const gallery = document.getElementById('nft-gallery');
 const paginationControls = document.getElementById('pagination-controls');
@@ -2125,7 +2125,7 @@ const generateShareImage = (nft, button) => {
 const drawPostImage = (canvas, ctx, img, logo, nft, button) => {
   try {
     // Header with logo image (contains "THE ALLIANCE DAO" text)
-    const titleHeight = 100;
+    const titleHeight = 140; // Taller header to fit logo properly
     canvas.width = 1080; 
     canvas.height = 1080 + titleHeight;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -2137,14 +2137,6 @@ const drawPostImage = (canvas, ctx, img, logo, nft, button) => {
     gradient.addColorStop(1, '#0c1220');
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, canvas.width, titleHeight);
-    
-    // Add subtle border at bottom of header
-    ctx.strokeStyle = '#22d3ee';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(0, titleHeight - 1);
-    ctx.lineTo(canvas.width, titleHeight - 1);
-    ctx.stroke();
     
     // Draw logo image centered - fill 90% of width
     if (logo && logo.width && logo.height) {
@@ -2219,9 +2211,9 @@ const drawPostImage = (canvas, ctx, img, logo, nft, button) => {
             drawText(`Rarest: ${strength.value || 'N/A'}`, canvas.width / 2, bannerY + 75, 'center');
         }
         
-        // Add subtle border around entire image (easy to crop if needed)
-        const borderWidth = 4;
-        ctx.strokeStyle = '#22d3ee'; // Cyan to match theme
+        // Add black border around entire image (easy to crop if needed)
+        const borderWidth = 8;
+        ctx.strokeStyle = '#000000'; // Black border
         ctx.lineWidth = borderWidth;
         ctx.strokeRect(borderWidth/2, borderWidth/2, canvas.width - borderWidth, canvas.height - borderWidth);
         
