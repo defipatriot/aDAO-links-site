@@ -1,4 +1,4 @@
-// BUILD: Dec21-FULL - Search redesign, Matching fix, Wallet sliders OR logic, Map click, Popup total
+// BUILD: Dec21-v3 - Paste btns, Red reset, Wallet search redesign, Map fix
 // --- Global Elements ---
 const gallery = document.getElementById('nft-gallery');
 const paginationControls = document.getElementById('pagination-controls');
@@ -80,11 +80,31 @@ const mobileAsReadBtn = document.getElementById('mobile-as-read-btn');
 const mobileLast4LtrBtn = document.getElementById('mobile-last4-ltr-btn');
 const mobileLast4RtlBtn = document.getElementById('mobile-last4-rtl-btn');
 const mobileCopyBtn = document.getElementById('mobile-copy-btn');
+// NEW: Paste buttons
+const pasteAddressBtn = document.getElementById('paste-address-btn');
+const mobilePasteBtn = document.getElementById('mobile-paste-btn');
+// NEW: Wallet page search elements
+const walletSearchLast4 = document.getElementById('wallet-search-last4');
+const walletLast4Suggestions = document.getElementById('wallet-last4-suggestions');
+const walletLast4LtrBtn = document.getElementById('wallet-last4-ltr-btn');
+const walletLast4RtlBtn = document.getElementById('wallet-last4-rtl-btn');
+const walletPasteBtn = document.getElementById('wallet-paste-btn');
+const walletCopyLast4Btn = document.getElementById('wallet-copy-last4-btn');
+const walletMobileSearchAddress = document.getElementById('wallet-mobile-search-address');
+const walletMobileSuggestions = document.getElementById('wallet-mobile-suggestions');
+const walletMobileAsReadBtn = document.getElementById('wallet-mobile-as-read-btn');
+const walletMobileLast4LtrBtn = document.getElementById('wallet-mobile-last4-ltr-btn');
+const walletMobileLast4RtlBtn = document.getElementById('wallet-mobile-last4-rtl-btn');
+const walletMobilePasteBtn = document.getElementById('wallet-mobile-paste-btn');
+const walletMobileCopyBtn = document.getElementById('wallet-mobile-copy-btn');
+const walletResetBtnMobile = document.getElementById('wallet-reset-btn-mobile');
 
 // --- Address Search State ---
 // false = suffix/right-to-left (default, type ending), true = prefix/left-to-right (type beginning)
 let addressSearchDirection = false; 
 let walletAddressSearchDirection = false;
+let walletLast4SearchMode = 'ltr';
+let walletMobileSearchMode = 'full';
 
 
 // --- Config ---
@@ -841,7 +861,7 @@ const addAllEventListeners = () => {
             last4SearchMode = 'ltr';
             last4LtrBtn.classList.add('bg-cyan-600', 'border-cyan-500');
             last4RtlBtn?.classList.remove('bg-cyan-600', 'border-cyan-500');
-            if (searchLast4Input) { searchLast4Input.placeholder = 'Type 7ulw'; searchLast4Input.value = ''; searchLast4Input.focus(); }
+            if (searchLast4Input) { searchLast4Input.placeholder = 'As you read it'; searchLast4Input.value = ''; searchLast4Input.focus(); }
         });
     }
     if (last4RtlBtn) {
@@ -849,7 +869,7 @@ const addAllEventListeners = () => {
             last4SearchMode = 'rtl';
             last4RtlBtn.classList.add('bg-cyan-600', 'border-cyan-500');
             last4LtrBtn?.classList.remove('bg-cyan-600', 'border-cyan-500');
-            if (searchLast4Input) { searchLast4Input.placeholder = 'Type wlu7'; searchLast4Input.value = ''; searchLast4Input.focus(); }
+            if (searchLast4Input) { searchLast4Input.placeholder = 'Last char first'; searchLast4Input.value = ''; searchLast4Input.focus(); }
         });
     }
     if (copyLast4Btn) copyLast4Btn.addEventListener('click', () => copyWithVerification(searchAddressInput?.value));
@@ -857,7 +877,11 @@ const addAllEventListeners = () => {
     if (copyVerifyBtn) copyVerifyBtn.addEventListener('click', () => copyVerifyModal?.classList.add('hidden'));
     if (copyVerifyModal) copyVerifyModal.addEventListener('click', (e) => { if (e.target === copyVerifyModal) copyVerifyModal.classList.add('hidden'); });
     
-    // NEW: Mobile search
+    // NEW: Paste buttons
+    if (pasteAddressBtn) pasteAddressBtn.addEventListener('click', () => pasteFromClipboard(searchAddressInput, handleFilterChange));
+    if (mobilePasteBtn) mobilePasteBtn.addEventListener('click', () => pasteFromClipboard(mobileSearchAddress, () => { if (searchAddressInput) searchAddressInput.value = mobileSearchAddress.value; handleFilterChange(); }));
+    
+    // NEW: Mobile search (Collection page)
     if (mobileAsReadBtn) mobileAsReadBtn.addEventListener('click', () => { mobileSearchMode = 'full'; updateMobileSearchUI(); });
     if (mobileLast4LtrBtn) mobileLast4LtrBtn.addEventListener('click', () => { mobileSearchMode = 'last4-ltr'; updateMobileSearchUI(); });
     if (mobileLast4RtlBtn) mobileLast4RtlBtn.addEventListener('click', () => { mobileSearchMode = 'last4-rtl'; updateMobileSearchUI(); });
@@ -868,6 +892,32 @@ const addAllEventListeners = () => {
         if (searchAddressInput) searchAddressInput.value = mobileAddressDropdown.value;
         handleFilterChange();
     });
+    
+    // NEW: Wallet page search (Desktop)
+    if (walletPasteBtn) walletPasteBtn.addEventListener('click', () => pasteFromClipboard(walletSearchAddressInput, searchWallet));
+    if (walletSearchLast4) walletSearchLast4.addEventListener('input', () => handleWalletLast4Input());
+    if (walletLast4LtrBtn) walletLast4LtrBtn.addEventListener('click', () => {
+        walletLast4SearchMode = 'ltr';
+        walletLast4LtrBtn.classList.add('bg-cyan-600', 'border-cyan-500');
+        walletLast4RtlBtn?.classList.remove('bg-cyan-600', 'border-cyan-500');
+        if (walletSearchLast4) { walletSearchLast4.placeholder = 'As you read it'; walletSearchLast4.value = ''; walletSearchLast4.focus(); }
+    });
+    if (walletLast4RtlBtn) walletLast4RtlBtn.addEventListener('click', () => {
+        walletLast4SearchMode = 'rtl';
+        walletLast4RtlBtn.classList.add('bg-cyan-600', 'border-cyan-500');
+        walletLast4LtrBtn?.classList.remove('bg-cyan-600', 'border-cyan-500');
+        if (walletSearchLast4) { walletSearchLast4.placeholder = 'Last char first'; walletSearchLast4.value = ''; walletSearchLast4.focus(); }
+    });
+    if (walletCopyLast4Btn) walletCopyLast4Btn.addEventListener('click', () => copyWithVerification(walletSearchAddressInput?.value));
+    
+    // NEW: Wallet page search (Mobile)
+    if (walletMobilePasteBtn) walletMobilePasteBtn.addEventListener('click', () => pasteFromClipboard(walletMobileSearchAddress, () => { if (walletSearchAddressInput) walletSearchAddressInput.value = walletMobileSearchAddress.value; searchWallet(); }));
+    if (walletMobileAsReadBtn) walletMobileAsReadBtn.addEventListener('click', () => { walletMobileSearchMode = 'full'; updateWalletMobileSearchUI(); });
+    if (walletMobileLast4LtrBtn) walletMobileLast4LtrBtn.addEventListener('click', () => { walletMobileSearchMode = 'last4-ltr'; updateWalletMobileSearchUI(); });
+    if (walletMobileLast4RtlBtn) walletMobileLast4RtlBtn.addEventListener('click', () => { walletMobileSearchMode = 'last4-rtl'; updateWalletMobileSearchUI(); });
+    if (walletMobileSearchAddress) walletMobileSearchAddress.addEventListener('input', handleWalletMobileAddressInput);
+    if (walletMobileCopyBtn) walletMobileCopyBtn.addEventListener('click', () => copyWithVerification(walletMobileSearchAddress?.value || walletSearchAddressInput?.value));
+    if (walletResetBtnMobile) walletResetBtnMobile.addEventListener('click', () => walletResetBtn?.click());
     
     // Map listeners
     addMapListeners(); // Add map listeners
@@ -1598,6 +1648,22 @@ const copyWithVerification = (textToCopy) => {
     }).catch(err => { console.error('Copy failed:', err); showCopyToast('Copy failed'); });
 };
 
+// Paste from clipboard into input field
+const pasteFromClipboard = async (inputEl, callback) => {
+    if (!inputEl) return;
+    try {
+        const text = await navigator.clipboard.readText();
+        if (text) {
+            inputEl.value = text.trim();
+            showCopyToast('Pasted from clipboard');
+            if (callback) callback();
+        }
+    } catch (err) {
+        console.error('Paste failed:', err);
+        showCopyToast('Paste failed - check permissions');
+    }
+};
+
 // Handle Last 4 search input (Desktop)
 const handleLast4Input = () => {
     if (!searchLast4Input || !last4Suggestions) return;
@@ -1649,11 +1715,11 @@ const updateMobileSearchUI = () => {
         mobileSearchAddress.maxLength = 100;
     } else if (mobileSearchMode === 'last4-ltr' && mobileLast4LtrBtn) {
         mobileLast4LtrBtn.classList.add('bg-cyan-600', 'border-cyan-500');
-        mobileSearchAddress.placeholder = 'Type 7ulw';
+        mobileSearchAddress.placeholder = 'As you read it';
         mobileSearchAddress.maxLength = 4;
     } else if (mobileSearchMode === 'last4-rtl' && mobileLast4RtlBtn) {
         mobileLast4RtlBtn.classList.add('bg-cyan-600', 'border-cyan-500');
-        mobileSearchAddress.placeholder = 'Type wlu7';
+        mobileSearchAddress.placeholder = 'Last char first';
         mobileSearchAddress.maxLength = 4;
     }
     mobileSearchAddress.value = '';
@@ -1701,6 +1767,109 @@ const handleMobileAddressInput = () => {
         });
         mobileAddressSuggestions.classList.remove('hidden');
     } else { mobileAddressSuggestions.classList.add('hidden'); }
+};
+
+// Handle Wallet page Last 4 search input (Desktop)
+const handleWalletLast4Input = () => {
+    if (!walletSearchLast4 || !walletLast4Suggestions) return;
+    let input = walletSearchLast4.value.toLowerCase().trim();
+    walletLast4Suggestions.innerHTML = '';
+    if (!input) { walletLast4Suggestions.classList.add('hidden'); return; }
+    
+    let searchPattern = walletLast4SearchMode === 'rtl' ? input.split('').reverse().join('') : input;
+    
+    const matches = ownerAddresses.filter(addr => {
+        const last4 = addr.slice(-4).toLowerCase();
+        return last4.startsWith(searchPattern) || last4.includes(searchPattern);
+    }).slice(0, 10);
+    
+    if (matches.length === 1 && matches[0].slice(-4).toLowerCase() === searchPattern) {
+        walletSearchLast4.value = matches[0].slice(-4);
+        if (walletSearchAddressInput) walletSearchAddressInput.value = matches[0];
+        walletLast4Suggestions.classList.add('hidden');
+        searchWallet();
+        return;
+    }
+    
+    if (matches.length > 0) {
+        matches.forEach(addr => {
+            const item = document.createElement('div');
+            item.className = 'address-suggestion-item';
+            item.innerHTML = `<span class="text-gray-400">${addr.slice(0, -4)}</span><strong class="text-cyan-400">${addr.slice(-4)}</strong>`;
+            item.onclick = () => {
+                walletSearchLast4.value = addr.slice(-4);
+                if (walletSearchAddressInput) walletSearchAddressInput.value = addr;
+                walletLast4Suggestions.classList.add('hidden');
+                searchWallet();
+            };
+            walletLast4Suggestions.appendChild(item);
+        });
+        walletLast4Suggestions.classList.remove('hidden');
+    } else { walletLast4Suggestions.classList.add('hidden'); }
+};
+
+// Update wallet mobile search UI
+const updateWalletMobileSearchUI = () => {
+    if (!walletMobileSearchAddress) return;
+    [walletMobileAsReadBtn, walletMobileLast4LtrBtn, walletMobileLast4RtlBtn].forEach(btn => btn?.classList.remove('bg-cyan-600', 'border-cyan-500'));
+    if (walletMobileSearchMode === 'full' && walletMobileAsReadBtn) {
+        walletMobileAsReadBtn.classList.add('bg-cyan-600', 'border-cyan-500');
+        walletMobileSearchAddress.placeholder = 'Paste or type address';
+        walletMobileSearchAddress.maxLength = 100;
+    } else if (walletMobileSearchMode === 'last4-ltr' && walletMobileLast4LtrBtn) {
+        walletMobileLast4LtrBtn.classList.add('bg-cyan-600', 'border-cyan-500');
+        walletMobileSearchAddress.placeholder = 'As you read it';
+        walletMobileSearchAddress.maxLength = 4;
+    } else if (walletMobileSearchMode === 'last4-rtl' && walletMobileLast4RtlBtn) {
+        walletMobileLast4RtlBtn.classList.add('bg-cyan-600', 'border-cyan-500');
+        walletMobileSearchAddress.placeholder = 'Last char first';
+        walletMobileSearchAddress.maxLength = 4;
+    }
+    walletMobileSearchAddress.value = '';
+    walletMobileSearchAddress.focus();
+};
+
+// Handle wallet mobile address input
+const handleWalletMobileAddressInput = () => {
+    if (!walletMobileSearchAddress || !walletMobileSuggestions) return;
+    const input = walletMobileSearchAddress.value.toLowerCase().trim();
+    walletMobileSuggestions.innerHTML = '';
+    if (!input) { walletMobileSuggestions.classList.add('hidden'); return; }
+    
+    let matches = [];
+    if (walletMobileSearchMode === 'full') {
+        matches = ownerAddresses.filter(addr => addr.toLowerCase().startsWith(input) || addr.toLowerCase().includes(input));
+    } else if (walletMobileSearchMode === 'last4-ltr') {
+        matches = ownerAddresses.filter(addr => addr.slice(-4).toLowerCase().startsWith(input));
+    } else if (walletMobileSearchMode === 'last4-rtl') {
+        const reversed = input.split('').reverse().join('');
+        matches = ownerAddresses.filter(addr => addr.slice(-4).toLowerCase().startsWith(reversed));
+    }
+    matches = matches.slice(0, 10);
+    
+    if (matches.length === 1) {
+        walletMobileSearchAddress.value = matches[0];
+        if (walletSearchAddressInput) walletSearchAddressInput.value = matches[0];
+        walletMobileSuggestions.classList.add('hidden');
+        searchWallet();
+        return;
+    }
+    
+    if (matches.length > 0) {
+        matches.forEach(addr => {
+            const item = document.createElement('div');
+            item.className = 'address-suggestion-item';
+            item.textContent = addr;
+            item.onclick = () => {
+                walletMobileSearchAddress.value = addr;
+                if (walletSearchAddressInput) walletSearchAddressInput.value = addr;
+                walletMobileSuggestions.classList.add('hidden');
+                searchWallet();
+            };
+            walletMobileSuggestions.appendChild(item);
+        });
+        walletMobileSuggestions.classList.remove('hidden');
+    } else { walletMobileSuggestions.classList.add('hidden'); }
 };
 
 const showNftDetails = (nft) => {
