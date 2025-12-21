@@ -1,4 +1,4 @@
-// BUILD: Dec21-v5 - Wallet freeze fix, button text, download image title
+// BUILD: Dec21-v7 - Added border to download image
 // --- Global Elements ---
 const gallery = document.getElementById('nft-gallery');
 const paginationControls = document.getElementById('pagination-controls');
@@ -802,19 +802,38 @@ const addAllEventListeners = () => {
     // Wallet status filters - refresh display when toggled and enable/disable sliders
     document.querySelectorAll('.wallet-status-filter').forEach(cb => {
         cb.addEventListener('change', (e) => {
+            e.stopPropagation();
             const status = e.target.dataset.status;
             const slider = document.querySelector(`.wallet-status-slider[data-slider-status="${status}"]`);
             if (slider) slider.disabled = !e.target.checked;
             if (walletSearchAddressInput?.value.trim()) searchWallet();
         });
+        // Stop click propagation on the checkbox
+        cb.addEventListener('click', (e) => e.stopPropagation());
     });
     
-    // Wallet status sliders - refresh when changed
+    // Wallet status sliders - refresh when changed, prevent event bubbling
     document.querySelectorAll('.wallet-status-slider').forEach(slider => {
-        slider.addEventListener('input', () => {
+        slider.addEventListener('input', (e) => {
+            e.stopPropagation();
             if (walletSearchAddressInput?.value.trim()) searchWallet();
         });
+        // Prevent all click events from bubbling up
+        slider.addEventListener('click', (e) => e.stopPropagation());
+        slider.addEventListener('mousedown', (e) => e.stopPropagation());
+        slider.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
     });
+    
+    // Also stop propagation on the filter container itself
+    const walletStatusFilters = document.getElementById('wallet-status-filters');
+    if (walletStatusFilters) {
+        walletStatusFilters.addEventListener('click', (e) => {
+            // Only stop if clicking on interactive elements
+            if (e.target.closest('.wallet-status-filter') || e.target.closest('.wallet-status-slider')) {
+                e.stopPropagation();
+            }
+        });
+    }
 
     if (walletSearchAddressInput) {
         walletSearchAddressInput.addEventListener('keypress', (e) => {
@@ -2079,6 +2098,11 @@ const generateShareImage = (nft, button) => {
         return;
     }
     
+    // Load both NFT image and logo
+    const logoUrl = 'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/aDAO%20Logo%20No%20Background.png';
+    const logo = new Image();
+    logo.crossOrigin = "anonymous";
+    
     // Try primary first, fall back to IPFS on error
     img.onerror = function() {
         if (fallbackUrl && this.src !== fallbackUrl) {
@@ -2091,72 +2115,119 @@ const generateShareImage = (nft, button) => {
     img.src = primaryUrl || fallbackUrl;
 
     img.onload = () => {
-        // Add extra height for title banner at top
-        const titleHeight = 80;
-        canvas.width = 1080; 
-        canvas.height = 1080 + titleHeight;
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        
-        // Draw title banner at top
-        ctx.fillStyle = '#0e1729'; // Dark background matching site
-        ctx.fillRect(0, 0, canvas.width, titleHeight);
-        ctx.fillStyle = '#22d3ee'; // Cyan color
-        ctx.font = 'bold 36px Inter, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('The AllianceDAO', canvas.width / 2, titleHeight / 2 + 12);
-        
-        // Draw the NFT image below the title
-        try {
-            ctx.drawImage(img, 0, titleHeight, 1080, 1080);
-        } catch (e) {
-            console.error("Error drawing image to canvas:", e);
-            button.textContent = 'Draw Error';
-            setTimeout(() => { button.textContent = 'Download Post'; button.disabled = false; }, 2000);
-            return;
-        }
+        // Load logo after NFT image loads
+        logo.onload = () => drawPostImage(canvas, ctx, img, logo, nft, button);
+        logo.onerror = () => drawPostImage(canvas, ctx, img, null, nft, button); // Continue without logo if fails
+        logo.src = logoUrl;
+    };
+};
 
-        const getTrait = (type) => nft.attributes?.find(a => a.trait_type === type)?.value || 'N/A';
-        ctx.fillStyle = 'white'; ctx.strokeStyle = 'black';
-        ctx.lineWidth = 8; ctx.font = 'bold 48px Inter, sans-serif';
-        ctx.lineJoin = 'round'; // Smoother text corners
-        const margin = 40;
-        const imageTop = titleHeight; // Offset for title
+const drawPostImage = (canvas, ctx, img, logo, nft, button) => {
+  try {
+    // Header with logo and text
+    const titleHeight = 100;
+    canvas.width = 1080; 
+    canvas.height = 1080 + titleHeight;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Draw gradient header background
+    const gradient = ctx.createLinearGradient(0, 0, canvas.width, 0);
+    gradient.addColorStop(0, '#0c1220');
+    gradient.addColorStop(0.5, '#1a2744');
+    gradient.addColorStop(1, '#0c1220');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, canvas.width, titleHeight);
+    
+    // Add subtle border at bottom of header
+    ctx.strokeStyle = '#22d3ee';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, titleHeight - 1);
+    ctx.lineTo(canvas.width, titleHeight - 1);
+    ctx.stroke();
+    
+    // Draw logo if loaded (on left side)
+    const logoSize = 70;
+    const logoX = 30;
+    const logoY = (titleHeight - logoSize) / 2;
+    if (logo) {
+        ctx.drawImage(logo, logoX, logoY, logoSize, logoSize);
+    }
+    
+    // Draw "The AllianceDAO" text with glow effect
+    const textX = logo ? logoX + logoSize + 20 : 40;
+    ctx.font = 'bold 42px Inter, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    
+    // Text shadow/glow
+    ctx.shadowColor = '#22d3ee';
+    ctx.shadowBlur = 15;
+    ctx.fillStyle = '#22d3ee';
+    ctx.fillText('The AllianceDAO', textX, titleHeight / 2);
+    
+    // Reset shadow
+    ctx.shadowBlur = 0;
+    
+    // Draw the NFT image below the title
+    try {
+        ctx.drawImage(img, 0, titleHeight, 1080, 1080);
+    } catch (e) {
+        console.error("Error drawing image to canvas:", e);
+        button.textContent = 'Draw Error';
+        setTimeout(() => { button.textContent = 'Download Post'; button.disabled = false; }, 2000);
+        return;
+    }
 
-        const drawText = (text, x, y, align = 'left') => {
-            ctx.textAlign = align;
-            ctx.strokeText(text, x, y);
-            ctx.fillText(text, x, y);
-        };
+    const getTrait = (type) => nft.attributes?.find(a => a.trait_type === type)?.value || 'N/A';
+    ctx.fillStyle = 'white'; ctx.strokeStyle = 'black';
+    ctx.lineWidth = 8; ctx.font = 'bold 48px Inter, sans-serif';
+    ctx.lineJoin = 'round'; // Smoother text corners
+    ctx.textBaseline = 'alphabetic'; // Reset baseline
+    const margin = 40;
+    const imageTop = titleHeight; // Offset for title
 
-        drawText(`NFT #${nft.id || '?'}`, margin, imageTop + margin + 48, 'left');
-        const rarityDisplay = (nft.rarityClass != null && nft.subRank != null) 
-            ? `${nft.rarityClass}/${nft.subRank}` 
-            : (nft.rarityClass || 'N/A');
-        drawText(`Rarity ${rarityDisplay}`, canvas.width - margin, imageTop + margin + 48, 'right');
-        drawText(getTrait('Planet'), margin, imageTop + 1080 - margin, 'left');
-        
-        let inhabitantText = getTrait('Inhabitant');
-        if (inhabitantText.endsWith(' M')) inhabitantText = inhabitantText.replace(' M', ' Male');
-        else if (inhabitantText.endsWith(' F')) inhabitantText = inhabitantText.replace(' F', ' Female');
-        drawText(inhabitantText, canvas.width - margin, imageTop + 1080 - margin, 'right');
-        
-        const bannerHeight = 120;
-        const bannerY = imageTop + 1080 - bannerHeight - 80;
-        
-        if (nft.broken) {
-            ctx.fillStyle = 'rgba(220, 38, 38, 0.85)'; // Red
-            ctx.fillRect(0, bannerY, canvas.width, bannerHeight);
-            ctx.fillStyle = 'white';
-            ctx.font = 'bold 60px Inter, sans-serif';
-            drawText('BROKEN', canvas.width / 2, bannerY + 85, 'center');
-        } else {
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'; // Dark
-            ctx.fillRect(0, bannerY, canvas.width, bannerHeight);
-            const strength = findRarestTrait(nft);
-            ctx.fillStyle = 'white';
+    const drawText = (text, x, y, align = 'left') => {
+        ctx.textAlign = align;
+        ctx.strokeText(text, x, y);
+        ctx.fillText(text, x, y);
+    };
+
+    drawText(`NFT #${nft.id || '?'}`, margin, imageTop + margin + 48, 'left');
+    const rarityDisplay = (nft.rarityClass != null && nft.subRank != null) 
+        ? `${nft.rarityClass}/${nft.subRank}` 
+        : (nft.rarityClass || 'N/A');
+    drawText(`Rarity ${rarityDisplay}`, canvas.width - margin, imageTop + margin + 48, 'right');
+    drawText(getTrait('Planet'), margin, imageTop + 1080 - margin, 'left');
+    
+    let inhabitantText = getTrait('Inhabitant');
+    if (inhabitantText.endsWith(' M')) inhabitantText = inhabitantText.replace(' M', ' Male');
+    else if (inhabitantText.endsWith(' F')) inhabitantText = inhabitantText.replace(' F', ' Female');
+    drawText(inhabitantText, canvas.width - margin, imageTop + 1080 - margin, 'right');
+    
+    const bannerHeight = 120;
+    const bannerY = imageTop + 1080 - bannerHeight - 80;
+    
+    if (nft.broken) {
+        ctx.fillStyle = 'rgba(220, 38, 38, 0.85)'; // Red
+        ctx.fillRect(0, bannerY, canvas.width, bannerHeight);
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 60px Inter, sans-serif';
+        drawText('BROKEN', canvas.width / 2, bannerY + 85, 'center');
+    } else {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'; // Dark
+        ctx.fillRect(0, bannerY, canvas.width, bannerHeight);
+        const strength = findRarestTrait(nft);
+        ctx.fillStyle = 'white';
             ctx.font = 'bold 40px Inter, sans-serif';
             drawText(`Rarest: ${strength.value || 'N/A'}`, canvas.width / 2, bannerY + 75, 'center');
         }
+        
+        // Add subtle border around entire image (easy to crop if needed)
+        const borderWidth = 4;
+        ctx.strokeStyle = '#22d3ee'; // Cyan to match theme
+        ctx.lineWidth = borderWidth;
+        ctx.strokeRect(borderWidth/2, borderWidth/2, canvas.width - borderWidth, canvas.height - borderWidth);
         
         // Create download - works better on mobile
         try {
@@ -2195,11 +2266,10 @@ const generateShareImage = (nft, button) => {
         }
 
         setTimeout(() => { button.textContent = 'Download Post'; button.disabled = false; }, 2000);
-    };
-    img.onerror = () => {
-        console.error("Could not load image to generate post for download.");
-        button.textContent = 'Load Error';
-        setTimeout(() => { button.textContent = 'Download Post'; button.disabled = false; }, 3000);
+    } catch (err) {
+        console.error("Error in drawPostImage:", err);
+        button.textContent = 'Error';
+        setTimeout(() => { button.textContent = 'Download Post'; button.disabled = false; }, 2000);
     }
 };
 
@@ -3076,7 +3146,7 @@ const initializeStarfield = () => {
 
         addSystemCenter('daodao', 'daodao', 'planet', 0.5, true);
         addSystemCenter('bbl', 'bbl', 'planet', bblCount > 0 ? (bblCount / 59) * 0.5 : 0.1, true); // Use count, default 0.1
-        addSystemCenter('boost', 'boost', 'ship_main', boostCount > 0 ? (boostCount / 59) * 0.5 : 0.1, true);
+        addSystemCenter('boost', 'boost', 'ship_main', 0.5, true); // Fixed size to match other planets
         addSystemCenter('enterprise', 'enterprise', 'blackhole', enterpriseCount > 0 ? (enterpriseCount / 515) * 0.5 : 0.1, true);
 
 
