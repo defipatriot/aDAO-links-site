@@ -1,4 +1,4 @@
-// BUILD: Dec21-v8 - Logo centered, map click fix (closest object)
+// BUILD: Dec21-v9 - New text logo for download image
 // --- Global Elements ---
 const gallery = document.getElementById('nft-gallery');
 const paginationControls = document.getElementById('pagination-controls');
@@ -2098,8 +2098,8 @@ const generateShareImage = (nft, button) => {
         return;
     }
     
-    // Load both NFT image and logo
-    const logoUrl = 'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/aDAO%20Logo%20No%20Background.png';
+    // Load both NFT image and logo (text logo with "THE ALLIANCE DAO")
+    const logoUrl = 'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/aDAO%20Logo%20txt%20no%20background%20.png';
     const logo = new Image();
     logo.crossOrigin = "anonymous";
     
@@ -2124,7 +2124,7 @@ const generateShareImage = (nft, button) => {
 
 const drawPostImage = (canvas, ctx, img, logo, nft, button) => {
   try {
-    // Header with logo and text
+    // Header with logo image (contains "THE ALLIANCE DAO" text)
     const titleHeight = 100;
     canvas.width = 1080; 
     canvas.height = 1080 + titleHeight;
@@ -2146,52 +2146,24 @@ const drawPostImage = (canvas, ctx, img, logo, nft, button) => {
     ctx.lineTo(canvas.width, titleHeight - 1);
     ctx.stroke();
     
-    // Calculate logo dimensions maintaining aspect ratio
-    let logoWidth = 0;
-    let logoHeight = 0;
-    let logoX = 0;
-    let logoY = 0;
-    
+    // Draw logo image centered (it already contains the text)
     if (logo && logo.width && logo.height) {
-        // Logo is wider than tall, so fit by height
-        const maxLogoHeight = 60;
+        // Fit logo to header height with padding
+        const maxLogoHeight = 70;
         const aspectRatio = logo.width / logo.height;
-        logoHeight = maxLogoHeight;
-        logoWidth = logoHeight * aspectRatio;
-        logoY = (titleHeight - logoHeight) / 2;
-    }
-    
-    // Calculate total content width for centering
-    const textContent = 'The AllianceDAO';
-    ctx.font = 'bold 44px Inter, sans-serif';
-    const textWidth = ctx.measureText(textContent).width;
-    const gap = logo ? 15 : 0; // Gap between logo and text
-    const totalWidth = logoWidth + gap + textWidth;
-    const startX = (canvas.width - totalWidth) / 2;
-    
-    // Draw logo centered with text
-    if (logo && logoWidth > 0) {
-        logoX = startX;
+        const logoHeight = maxLogoHeight;
+        const logoWidth = logoHeight * aspectRatio;
+        const logoX = (canvas.width - logoWidth) / 2;
+        const logoY = (titleHeight - logoHeight) / 2;
         ctx.drawImage(logo, logoX, logoY, logoWidth, logoHeight);
+    } else {
+        // Fallback: draw text if logo fails to load
+        ctx.font = 'bold 44px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#22d3ee';
+        ctx.fillText('The AllianceDAO', canvas.width / 2, titleHeight / 2);
     }
-    
-    // Draw "The AllianceDAO" text - clean style, no glow
-    const textX = logo ? startX + logoWidth + gap : (canvas.width - textWidth) / 2;
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    
-    // Clean text with subtle shadow for depth
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
-    ctx.shadowBlur = 4;
-    ctx.shadowOffsetX = 2;
-    ctx.shadowOffsetY = 2;
-    ctx.fillStyle = '#22d3ee';
-    ctx.fillText(textContent, textX, titleHeight / 2);
-    
-    // Reset shadow
-    ctx.shadowBlur = 0;
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 0;
     
     // Draw the NFT image below the title
     try {
