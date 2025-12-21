@@ -1,4 +1,4 @@
-// BUILD: Dec21-v19 - Snapshot with manual paste fields for BBL data
+// BUILD: Dec21-v21 - Full snapshot tool with BBL+Boost manual entry, sales tracking, price extraction
 // --- Global Elements ---
 const gallery = document.getElementById('nft-gallery');
 const paginationControls = document.getElementById('pagination-controls');
@@ -3785,39 +3785,30 @@ if (document.readyState === 'loading') {
 const BBL_COLLECTION_API = 'https://warlock.backbonelabs.io/api/v1/dapps/necropolis/collections/terra1phr9fngjv7a8an4dhmhd0u0f98wazxfnzccqtyheq4zqrrp4fpuqw3apw9';
 const BBL_LISTINGS_API = 'https://warlock.backbonelabs.io/api/v1/dapps/necropolis/nfts?nftContract=terra1phr9fngjv7a8an4dhmhd0u0f98wazxfnzccqtyheq4zqrrp4fpuqw3apw9&page=1&perPage=100&types=buy_now&sort=price-asc&sisterChains=';
 
-// Read prices from CoinGecko widget on the page
-const getPricesFromWidget = () => {
-    const prices = {
-        luna: null,
-        ampluna: null,
-        arbluna: null,
-        bluna: null,
-        solid: null,
-        usdc: null
-    };
-    
-    // Try to find gecko widget and extract prices
-    const widget = document.querySelector('gecko-coin-price-static-headline-widget');
-    if (widget && widget.shadowRoot) {
-        const priceElements = widget.shadowRoot.querySelectorAll('[class*="price"]');
-        // This might not work due to shadow DOM - fallback to manual
+// Snapshot state to track sales
+let snapshotState = {
+    prices: {},
+    bbl: {
+        floorUnbroken: null,
+        floorBroken: null,
+        epochSales: [],
+        parsedListings: []
+    },
+    boost: {
+        floorUnbroken: null,
+        floorBroken: null,
+        epochSales: []
     }
-    
-    // Alternative: Look for any displayed prices on the page
-    // The widget renders prices - we can try to read them from the DOM
-    const allText = document.body.innerText;
-    
-    // Try to extract prices using regex patterns like "$0.4523"
-    const lunaMatch = allText.match(/LUNA[^$]*\$([0-9.]+)/i);
-    const blunaMatch = allText.match(/bLUNA[^$]*\$([0-9.]+)/i);
-    
-    if (lunaMatch) prices.luna = parseFloat(lunaMatch[1]);
-    if (blunaMatch) prices.bluna = parseFloat(blunaMatch[1]);
-    
-    return prices;
 };
 
 const showSnapshotTool = async () => {
+    // Reset state
+    snapshotState = {
+        prices: {},
+        bbl: { floorUnbroken: null, floorBroken: null, epochSales: [], parsedListings: [] },
+        boost: { floorUnbroken: null, floorBroken: null, epochSales: [] }
+    };
+    
     const existingModal = document.getElementById('snapshot-modal');
     if (existingModal) existingModal.remove();
     
@@ -3825,7 +3816,7 @@ const showSnapshotTool = async () => {
     overlay.id = 'snapshot-modal';
     overlay.className = 'fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 overflow-y-auto';
     overlay.innerHTML = `
-        <div class="bg-gray-800 rounded-xl p-6 max-w-3xl w-full border border-gray-600 shadow-2xl my-4 max-h-[95vh] overflow-y-auto">
+        <div class="bg-gray-800 rounded-xl p-6 max-w-4xl w-full border border-gray-600 shadow-2xl my-4 max-h-[95vh] overflow-y-auto">
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-2xl font-bold text-yellow-400">📸 Snapshot Tool</h2>
                 <button id="snapshot-close" class="text-gray-400 hover:text-white text-2xl">&times;</button>
@@ -3846,7 +3837,6 @@ const showSnapshotTool = async () => {
     const contentDiv = document.getElementById('snapshot-content');
     
     try {
-        // Fetch epoch data
         const epochResponse = await fetch('https://raw.githubusercontent.com/defipatriot/tla_json_storage/main/epoch_1-300_date.json');
         if (!epochResponse.ok) throw new Error('Failed to fetch epoch data');
         const epochs = await epochResponse.json();
@@ -3882,7 +3872,6 @@ const showSnapshotTool = async () => {
         const bblFilename = `bbl-listings_${currentEpoch.epoch}_${epochPosition}.json`;
         const daysRemaining = ((new Date(currentEpoch.end_time) - nowUTC) / (1000 * 60 * 60 * 24)).toFixed(1);
         
-        // Stats from loaded data
         const stats = {
             total: allNfts.length,
             minted: allNfts.filter(n => !n.owned_by_alliance_dao).length,
@@ -3900,7 +3889,7 @@ const showSnapshotTool = async () => {
                 <!-- Epoch Info -->
                 <div class="bg-gray-700/50 rounded-lg p-4">
                     <h3 class="text-lg font-semibold text-cyan-400 mb-2">Current Epoch Info</h3>
-                    <div class="grid grid-cols-2 gap-2 text-sm">
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
                         <div>Epoch:</div><div class="text-white font-bold">${currentEpoch.epoch}</div>
                         <div>Position:</div><div class="text-white font-bold capitalize">${epochPosition}</div>
                         <div>Hours In:</div><div class="text-white">${hoursIntoEpoch.toFixed(1)}h / 168h</div>
@@ -3910,64 +3899,232 @@ const showSnapshotTool = async () => {
                 
                 <!-- NFT Stats -->
                 <div class="bg-gray-700/50 rounded-lg p-4">
-                    <h3 class="text-lg font-semibold text-cyan-400 mb-2">NFT Status (from deving.zone)</h3>
-                    <div class="grid grid-cols-2 gap-2 text-sm">
-                        <div>Total NFTs:</div><div class="text-white">${stats.total.toLocaleString()}</div>
+                    <h3 class="text-lg font-semibold text-cyan-400 mb-2">NFT Status (deving.zone)</h3>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+                        <div>Total:</div><div class="text-white">${stats.total.toLocaleString()}</div>
                         <div>Minted:</div><div class="text-white">${stats.minted.toLocaleString()}</div>
-                        <div>Staked (DAODAO):</div><div class="text-white">${stats.staked_daodao.toLocaleString()}</div>
-                        <div>Staked (Enterprise):</div><div class="text-white">${stats.staked_enterprise.toLocaleString()}</div>
-                        <div>Listed (BBL):</div><div class="text-white">${stats.listed_bbl.toLocaleString()}</div>
-                        <div>Listed (Boost):</div><div class="text-white">${stats.listed_boost.toLocaleString()}</div>
+                        <div>Staked DAODAO:</div><div class="text-white">${stats.staked_daodao.toLocaleString()}</div>
+                        <div>Staked Enterprise:</div><div class="text-white">${stats.staked_enterprise.toLocaleString()}</div>
+                        <div>Listed BBL:</div><div class="text-white">${stats.listed_bbl.toLocaleString()}</div>
+                        <div>Listed Boost:</div><div class="text-white">${stats.listed_boost.toLocaleString()}</div>
                         <div>Broken:</div><div class="text-white">${stats.broken.toLocaleString()}</div>
-                        <div>Liquid:</div><div class="text-white">${stats.liquid.toLocaleString()}</div>
                         <div>Unique Owners:</div><div class="text-white">${stats.unique_owners.toLocaleString()}</div>
                     </div>
                 </div>
                 
-                <!-- Price Input -->
+                <!-- Token Prices -->
                 <div class="bg-blue-900/30 border border-blue-600 rounded-lg p-4">
                     <h3 class="text-lg font-semibold text-blue-400 mb-2">💰 Token Prices (USD)</h3>
-                    <p class="text-xs text-gray-400 mb-3">Enter current prices from CoinGecko widget or leave blank</p>
-                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                        <div>
-                            <label class="text-xs text-gray-400">bLUNA</label>
-                            <input type="number" step="0.0001" id="price-bluna" placeholder="0.00" class="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-sm">
-                        </div>
+                    
+                    <div class="mb-3 overflow-x-auto" id="coingecko-widget-container">
+                        <gecko-coin-price-static-headline-widget locale="en" dark-mode="true" outlined="true" coin-ids="terra-luna-2,eris-amplified-luna,eris-arbitrage-luna,backbone-labs-staked-luna,solid-2,usd-coin" initial-currency="usd"></gecko-coin-price-static-headline-widget>
+                    </div>
+                    
+                    <button id="extract-prices-btn" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm mb-3">
+                        🔍 Extract Prices from Widget
+                    </button>
+                    
+                    <div id="extracted-prices-display" class="hidden bg-gray-900 rounded p-3 mb-3 text-sm text-green-400">
+                    </div>
+                    
+                    <p class="text-xs text-gray-400 mb-2">Or manually enter prices:</p>
+                    <div class="grid grid-cols-3 sm:grid-cols-6 gap-2">
                         <div>
                             <label class="text-xs text-gray-400">LUNA</label>
-                            <input type="number" step="0.0001" id="price-luna" placeholder="0.00" class="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-sm">
+                            <input type="number" step="0.0001" id="price-luna" placeholder="0.00" class="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-xs">
                         </div>
                         <div>
                             <label class="text-xs text-gray-400">ampLUNA</label>
-                            <input type="number" step="0.0001" id="price-ampluna" placeholder="0.00" class="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-sm">
+                            <input type="number" step="0.0001" id="price-ampluna" placeholder="0.00" class="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-xs">
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-400">arbLUNA</label>
+                            <input type="number" step="0.0001" id="price-arbluna" placeholder="0.00" class="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-xs">
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-400">bLUNA</label>
+                            <input type="number" step="0.0001" id="price-bluna" placeholder="0.00" class="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-xs">
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-400">SOLID</label>
+                            <input type="number" step="0.0001" id="price-solid" placeholder="0.00" class="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-xs">
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-400">USDC</label>
+                            <input type="number" step="0.0001" id="price-usdc" placeholder="1.00" class="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-xs">
                         </div>
                     </div>
                 </div>
                 
-                <!-- Manual BBL Data Entry -->
+                <!-- BBL Marketplace Section -->
                 <div class="bg-purple-900/30 border border-purple-600 rounded-lg p-4">
-                    <h3 class="text-lg font-semibold text-purple-400 mb-2">🦴 BBL Marketplace Data (Manual Entry)</h3>
-                    <p class="text-xs text-gray-400 mb-2">Paste JSON from browser DevTools Network tab</p>
+                    <h3 class="text-lg font-semibold text-purple-400 mb-3">🦴 BBL Marketplace</h3>
                     
-                    <div class="space-y-3">
-                        <div>
-                            <label class="text-sm text-gray-300 block mb-1">Collection Stats JSON:</label>
-                            <p class="text-xs text-gray-500 mb-1">URL: ${BBL_COLLECTION_API.substring(0, 60)}...</p>
-                            <textarea id="bbl-collection-json" rows="3" placeholder='Paste collection JSON here...' class="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-xs font-mono"></textarea>
+                    <!-- BBL Listings JSON Paste -->
+                    <div class="mb-4">
+                        <label class="text-sm text-gray-300 block mb-1">Paste Listings JSON (optional):</label>
+                        <textarea id="bbl-listings-json" rows="2" placeholder='Paste BBL listings JSON from DevTools...' class="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-xs font-mono"></textarea>
+                        <button id="parse-bbl-btn" class="mt-2 bg-purple-600 hover:bg-purple-500 text-white text-sm py-1 px-3 rounded">Parse Listings</button>
+                        <span id="bbl-parse-status" class="ml-2 text-xs text-gray-400"></span>
+                    </div>
+                    
+                    <!-- BBL Floor Prices -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                        <div class="bg-gray-800 rounded p-3">
+                            <h4 class="text-sm font-semibold text-green-400 mb-2">Floor (Unbroken)</h4>
+                            <div class="grid grid-cols-3 gap-2">
+                                <div>
+                                    <label class="text-xs text-gray-400">NFT ID</label>
+                                    <input type="text" id="bbl-floor-unbroken-id" placeholder="#" class="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-xs">
+                                </div>
+                                <div>
+                                    <label class="text-xs text-gray-400">Amount</label>
+                                    <input type="number" step="0.01" id="bbl-floor-unbroken-amount" placeholder="0" class="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-xs">
+                                </div>
+                                <div>
+                                    <label class="text-xs text-gray-400">Token</label>
+                                    <select id="bbl-floor-unbroken-token" class="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-xs">
+                                        <option value="bLUNA">bLUNA</option>
+                                    </select>
+                                </div>
+                            </div>
                         </div>
-                        
-                        <div>
-                            <label class="text-sm text-gray-300 block mb-1">Listings JSON:</label>
-                            <p class="text-xs text-gray-500 mb-1">URL: ${BBL_LISTINGS_API.substring(0, 60)}...</p>
-                            <textarea id="bbl-listings-json" rows="3" placeholder='Paste listings JSON here...' class="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-xs font-mono"></textarea>
+                        <div class="bg-gray-800 rounded p-3">
+                            <h4 class="text-sm font-semibold text-yellow-400 mb-2">Floor (Broken)</h4>
+                            <div class="grid grid-cols-3 gap-2">
+                                <div>
+                                    <label class="text-xs text-gray-400">NFT ID</label>
+                                    <input type="text" id="bbl-floor-broken-id" placeholder="#" class="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-xs">
+                                </div>
+                                <div>
+                                    <label class="text-xs text-gray-400">Amount</label>
+                                    <input type="number" step="0.01" id="bbl-floor-broken-amount" placeholder="0" class="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-xs">
+                                </div>
+                                <div>
+                                    <label class="text-xs text-gray-400">Token</label>
+                                    <select id="bbl-floor-broken-token" class="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-xs">
+                                        <option value="bLUNA">bLUNA</option>
+                                    </select>
+                                </div>
+                            </div>
                         </div>
-                        
-                        <button id="parse-bbl-btn" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm">
-                            🔍 Parse BBL Data
-                        </button>
-                        
-                        <div id="bbl-parsed-results" class="hidden bg-gray-900 rounded p-3 text-sm">
-                            <!-- Parsed results will appear here -->
+                    </div>
+                    
+                    <!-- BBL Epoch Sales -->
+                    <div class="bg-gray-800 rounded p-3">
+                        <h4 class="text-sm font-semibold text-purple-300 mb-2">Epoch Sales (Add one at a time)</h4>
+                        <div class="grid grid-cols-4 gap-2 mb-2">
+                            <div>
+                                <label class="text-xs text-gray-400">NFT ID</label>
+                                <input type="text" id="bbl-sale-id" placeholder="#" class="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-xs">
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-400">Amount</label>
+                                <input type="number" step="0.01" id="bbl-sale-amount" placeholder="0" class="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-xs">
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-400">Token</label>
+                                <select id="bbl-sale-token" class="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-xs">
+                                    <option value="bLUNA">bLUNA</option>
+                                </select>
+                            </div>
+                            <div class="flex items-end">
+                                <button id="bbl-add-sale-btn" class="w-full bg-purple-600 hover:bg-purple-500 text-white text-xs py-1 px-2 rounded">+ Add Sale</button>
+                            </div>
+                        </div>
+                        <div id="bbl-sales-list" class="text-xs text-gray-400 max-h-24 overflow-y-auto mb-2"></div>
+                        <div id="bbl-sales-summary" class="text-sm font-semibold text-purple-300">
+                            Total Sales: 0 | Volume: 0 bLUNA ($0.00)
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Boost Marketplace Section -->
+                <div class="bg-orange-900/30 border border-orange-600 rounded-lg p-4">
+                    <h3 class="text-lg font-semibold text-orange-400 mb-3">🚀 Boost Marketplace</h3>
+                    
+                    <!-- Boost Floor Prices -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                        <div class="bg-gray-800 rounded p-3">
+                            <h4 class="text-sm font-semibold text-green-400 mb-2">Floor (Unbroken)</h4>
+                            <div class="grid grid-cols-3 gap-2">
+                                <div>
+                                    <label class="text-xs text-gray-400">NFT ID</label>
+                                    <input type="text" id="boost-floor-unbroken-id" placeholder="#" class="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-xs">
+                                </div>
+                                <div>
+                                    <label class="text-xs text-gray-400">Amount</label>
+                                    <input type="number" step="0.01" id="boost-floor-unbroken-amount" placeholder="0" class="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-xs">
+                                </div>
+                                <div>
+                                    <label class="text-xs text-gray-400">Token</label>
+                                    <select id="boost-floor-unbroken-token" class="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-xs">
+                                        <option value="LUNA">LUNA</option>
+                                        <option value="ampLUNA">ampLUNA</option>
+                                        <option value="arbLUNA">arbLUNA</option>
+                                        <option value="bLUNA">bLUNA</option>
+                                        <option value="SOLID">SOLID</option>
+                                        <option value="USDC">USDC</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="bg-gray-800 rounded p-3">
+                            <h4 class="text-sm font-semibold text-yellow-400 mb-2">Floor (Broken)</h4>
+                            <div class="grid grid-cols-3 gap-2">
+                                <div>
+                                    <label class="text-xs text-gray-400">NFT ID</label>
+                                    <input type="text" id="boost-floor-broken-id" placeholder="#" class="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-xs">
+                                </div>
+                                <div>
+                                    <label class="text-xs text-gray-400">Amount</label>
+                                    <input type="number" step="0.01" id="boost-floor-broken-amount" placeholder="0" class="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-xs">
+                                </div>
+                                <div>
+                                    <label class="text-xs text-gray-400">Token</label>
+                                    <select id="boost-floor-broken-token" class="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-xs">
+                                        <option value="LUNA">LUNA</option>
+                                        <option value="ampLUNA">ampLUNA</option>
+                                        <option value="arbLUNA">arbLUNA</option>
+                                        <option value="bLUNA">bLUNA</option>
+                                        <option value="SOLID">SOLID</option>
+                                        <option value="USDC">USDC</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Boost Epoch Sales -->
+                    <div class="bg-gray-800 rounded p-3">
+                        <h4 class="text-sm font-semibold text-orange-300 mb-2">Epoch Sales (Add one at a time)</h4>
+                        <div class="grid grid-cols-4 gap-2 mb-2">
+                            <div>
+                                <label class="text-xs text-gray-400">NFT ID</label>
+                                <input type="text" id="boost-sale-id" placeholder="#" class="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-xs">
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-400">Amount</label>
+                                <input type="number" step="0.01" id="boost-sale-amount" placeholder="0" class="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-xs">
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-400">Token</label>
+                                <select id="boost-sale-token" class="w-full bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-xs">
+                                    <option value="LUNA">LUNA</option>
+                                    <option value="ampLUNA">ampLUNA</option>
+                                    <option value="arbLUNA">arbLUNA</option>
+                                    <option value="bLUNA">bLUNA</option>
+                                    <option value="SOLID">SOLID</option>
+                                    <option value="USDC">USDC</option>
+                                </select>
+                            </div>
+                            <div class="flex items-end">
+                                <button id="boost-add-sale-btn" class="w-full bg-orange-600 hover:bg-orange-500 text-white text-xs py-1 px-2 rounded">+ Add Sale</button>
+                            </div>
+                        </div>
+                        <div id="boost-sales-list" class="text-xs text-gray-400 max-h-24 overflow-y-auto mb-2"></div>
+                        <div id="boost-sales-summary" class="text-sm font-semibold text-orange-300">
+                            Total Sales: 0 | Volume: $0.00 USD
                         </div>
                     </div>
                 </div>
@@ -3977,20 +4134,13 @@ const showSnapshotTool = async () => {
                     <h3 class="text-lg font-semibold text-yellow-400 mb-2">📥 Download Snapshots</h3>
                     <p class="text-sm text-gray-300 mb-3">Epoch ${currentEpoch.epoch} (${epochPosition})</p>
                     
-                    <div class="space-y-3">
-                        <div class="flex flex-col sm:flex-row gap-2">
-                            <button id="snapshot-nft-btn" class="flex-1 bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm">
-                                📄 NFT Metadata
-                            </button>
-                            <code class="bg-gray-900 px-2 py-1 rounded text-cyan-300 text-xs self-center">${nftFilename}</code>
-                        </div>
-                        
-                        <div class="flex flex-col sm:flex-row gap-2">
-                            <button id="snapshot-bbl-btn" class="flex-1 bg-purple-600 hover:bg-purple-500 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm" disabled>
-                                🦴 BBL Listings (Parse data first)
-                            </button>
-                            <code class="bg-gray-900 px-2 py-1 rounded text-purple-300 text-xs self-center">${bblFilename}</code>
-                        </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <button id="snapshot-nft-btn" class="bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm">
+                            📄 NFT Metadata<br><span class="text-xs opacity-75">${nftFilename}</span>
+                        </button>
+                        <button id="snapshot-market-btn" class="bg-gradient-to-r from-purple-600 to-orange-600 hover:from-purple-500 hover:to-orange-500 text-white font-bold py-2 px-4 rounded-lg transition-colors text-sm">
+                            🛒 Marketplace Data<br><span class="text-xs opacity-75">${bblFilename}</span>
+                        </button>
                     </div>
                     
                     <p id="snapshot-status" class="text-center text-sm mt-3 text-gray-400"></p>
@@ -3998,140 +4148,236 @@ const showSnapshotTool = async () => {
             </div>
         `;
         
-        // Store state
-        const downloadState = { 
-            nftFilename, 
-            bblFilename, 
-            currentEpoch, 
-            epochPosition,
-            bblCollection: null,
-            bblListings: null,
-            parsedData: null
-        };
+        // Store download state
+        const downloadState = { nftFilename, bblFilename, currentEpoch, epochPosition };
         
-        // Parse BBL button handler
-        document.getElementById('parse-bbl-btn').onclick = () => {
-            const collectionJson = document.getElementById('bbl-collection-json').value.trim();
-            const listingsJson = document.getElementById('bbl-listings-json').value.trim();
-            const resultsDiv = document.getElementById('bbl-parsed-results');
-            const bblBtn = document.getElementById('snapshot-bbl-btn');
+        // --- Event Handlers ---
+        
+        // Extract prices button
+        document.getElementById('extract-prices-btn').onclick = () => {
+            const displayEl = document.getElementById('extracted-prices-display');
             
-            // Get prices
-            const prices = {
-                bluna: parseFloat(document.getElementById('price-bluna').value) || null,
-                luna: parseFloat(document.getElementById('price-luna').value) || null,
-                ampluna: parseFloat(document.getElementById('price-ampluna').value) || null
+            // Try to get prices from widget text content
+            const widgetContainer = document.getElementById('coingecko-widget-container');
+            const widgetText = widgetContainer?.innerText || '';
+            
+            // Parse prices from widget text (format: "LUNA $0.4523 ...")
+            const extractPrice = (text, tokenName) => {
+                const patterns = [
+                    new RegExp(tokenName + '[^$]*\\$([0-9.]+)', 'i'),
+                    new RegExp('\\$([0-9.]+)[^$]*' + tokenName, 'i')
+                ];
+                for (const pattern of patterns) {
+                    const match = text.match(pattern);
+                    if (match) return parseFloat(match[1]);
+                }
+                return null;
             };
             
+            const prices = {
+                luna: extractPrice(widgetText, 'LUNA') || extractPrice(widgetText, 'Terra'),
+                ampluna: extractPrice(widgetText, 'ampLUNA') || extractPrice(widgetText, 'Amplified'),
+                arbluna: extractPrice(widgetText, 'arbLUNA') || extractPrice(widgetText, 'Arbitrage'),
+                bluna: extractPrice(widgetText, 'bLUNA') || extractPrice(widgetText, 'Staked'),
+                solid: extractPrice(widgetText, 'SOLID'),
+                usdc: extractPrice(widgetText, 'USDC') || 1.00
+            };
+            
+            // Fill in the input fields
+            if (prices.luna) document.getElementById('price-luna').value = prices.luna;
+            if (prices.ampluna) document.getElementById('price-ampluna').value = prices.ampluna;
+            if (prices.arbluna) document.getElementById('price-arbluna').value = prices.arbluna;
+            if (prices.bluna) document.getElementById('price-bluna').value = prices.bluna;
+            if (prices.solid) document.getElementById('price-solid').value = prices.solid;
+            if (prices.usdc) document.getElementById('price-usdc').value = prices.usdc;
+            
+            snapshotState.prices = prices;
+            
+            // Show extracted prices
+            const foundPrices = Object.entries(prices).filter(([k,v]) => v).map(([k,v]) => `${k.toUpperCase()}: $${v}`).join(' | ');
+            displayEl.innerHTML = foundPrices ? `✅ Extracted: ${foundPrices}` : '⚠️ Could not extract prices - please enter manually';
+            displayEl.classList.remove('hidden');
+        };
+        
+        // Parse BBL listings
+        document.getElementById('parse-bbl-btn').onclick = () => {
+            const json = document.getElementById('bbl-listings-json').value.trim();
+            const statusEl = document.getElementById('bbl-parse-status');
+            
+            if (!json) {
+                statusEl.textContent = '⚠️ No JSON pasted';
+                return;
+            }
+            
             try {
-                let bblCollection = null;
-                let bblListings = null;
-                
-                if (collectionJson) {
-                    bblCollection = JSON.parse(collectionJson);
-                    downloadState.bblCollection = bblCollection;
-                }
-                
-                if (listingsJson) {
-                    bblListings = JSON.parse(listingsJson);
-                    downloadState.bblListings = bblListings;
-                }
-                
-                // Process listings for floor prices
+                const data = JSON.parse(json);
                 let floorBroken = null, floorUnbroken = null;
-                let floorBrokenNft = null, floorUnbrokenNft = null;
-                let brokenCount = 0, unbrokenCount = 0;
-                let totalListings = 0;
+                let floorBrokenId = null, floorUnbrokenId = null;
                 
-                if (bblListings && bblListings.nfts) {
-                    totalListings = bblListings.nfts.length;
+                if (data.nfts) {
+                    snapshotState.bbl.parsedListings = data.nfts;
                     
-                    for (const nft of bblListings.nfts) {
+                    for (const nft of data.nfts) {
                         const price = nft.auction?.reserve_price ? nft.auction.reserve_price / 1000000 : null;
                         const isBroken = nft.special_trait === 'BROKEN';
                         
                         if (price) {
                             if (isBroken) {
-                                brokenCount++;
                                 if (floorBroken === null || price < floorBroken) {
                                     floorBroken = price;
-                                    floorBrokenNft = nft.nft_token_id;
+                                    floorBrokenId = nft.nft_token_id;
                                 }
                             } else {
-                                unbrokenCount++;
                                 if (floorUnbroken === null || price < floorUnbroken) {
                                     floorUnbroken = price;
-                                    floorUnbrokenNft = nft.nft_token_id;
+                                    floorUnbrokenId = nft.nft_token_id;
                                 }
                             }
                         }
                     }
-                }
-                
-                // Store parsed data
-                downloadState.parsedData = {
-                    prices,
-                    floorBroken,
-                    floorUnbroken,
-                    floorBrokenNft,
-                    floorUnbrokenNft,
-                    brokenCount,
-                    unbrokenCount,
-                    totalListings
-                };
-                
-                // Format price with USD
-                const formatPrice = (bluna) => {
-                    if (bluna === null) return 'N/A';
-                    let str = `${bluna.toLocaleString()} bLUNA`;
-                    if (prices.bluna) {
-                        str += ` ($${(bluna * prices.bluna).toFixed(2)})`;
+                    
+                    // Auto-fill floor fields
+                    if (floorUnbroken) {
+                        document.getElementById('bbl-floor-unbroken-id').value = floorUnbrokenId;
+                        document.getElementById('bbl-floor-unbroken-amount').value = floorUnbroken;
                     }
-                    return str;
-                };
-                
-                // Show results
-                resultsDiv.innerHTML = `
-                    <h4 class="text-purple-400 font-semibold mb-2">✅ Parsed Successfully!</h4>
-                    <div class="grid grid-cols-2 gap-2 text-xs">
-                        <div>Floor (Unbroken):</div><div class="text-green-400 font-bold">${formatPrice(floorUnbroken)} ${floorUnbrokenNft ? '(#' + floorUnbrokenNft + ')' : ''}</div>
-                        <div>Floor (Broken):</div><div class="text-yellow-400">${formatPrice(floorBroken)} ${floorBrokenNft ? '(#' + floorBrokenNft + ')' : ''}</div>
-                        <div>Total Listings:</div><div class="text-white">${totalListings} (${unbrokenCount} unbroken, ${brokenCount} broken)</div>
-                        ${bblCollection ? `
-                            <div>Last Sale:</div><div class="text-white">${bblCollection.last_sale_amount || 'N/A'} bLUNA (#${bblCollection.last_sale_token_id || 'N/A'})</div>
-                            <div>All-Time Volume:</div><div class="text-white">${formatPrice(bblCollection.volume)}</div>
-                        ` : ''}
-                        ${prices.bluna ? `<div>bLUNA Price:</div><div class="text-white">$${prices.bluna}</div>` : ''}
-                    </div>
-                `;
-                resultsDiv.classList.remove('hidden');
-                
-                // Enable BBL download button
-                bblBtn.disabled = false;
-                bblBtn.textContent = '🦴 BBL Listings';
-                bblBtn.className = bblBtn.className.replace('bg-purple-600', 'bg-purple-600');
-                
-            } catch (error) {
-                resultsDiv.innerHTML = `<p class="text-red-400">❌ Parse Error: ${error.message}</p>`;
-                resultsDiv.classList.remove('hidden');
+                    if (floorBroken) {
+                        document.getElementById('bbl-floor-broken-id').value = floorBrokenId;
+                        document.getElementById('bbl-floor-broken-amount').value = floorBroken;
+                    }
+                    
+                    statusEl.textContent = `✅ Parsed ${data.nfts.length} listings. Floors auto-filled!`;
+                    statusEl.className = 'ml-2 text-xs text-green-400';
+                }
+            } catch (e) {
+                statusEl.textContent = `❌ Parse error: ${e.message}`;
+                statusEl.className = 'ml-2 text-xs text-red-400';
             }
         };
         
-        // NFT download handler
+        // Helper to get current prices from inputs
+        const getCurrentPrices = () => ({
+            luna: parseFloat(document.getElementById('price-luna').value) || 0,
+            ampluna: parseFloat(document.getElementById('price-ampluna').value) || 0,
+            arbluna: parseFloat(document.getElementById('price-arbluna').value) || 0,
+            bluna: parseFloat(document.getElementById('price-bluna').value) || 0,
+            solid: parseFloat(document.getElementById('price-solid').value) || 0,
+            usdc: parseFloat(document.getElementById('price-usdc').value) || 1
+        });
+        
+        // Helper to convert to USD
+        const toUSD = (amount, token, prices) => {
+            const tokenMap = {
+                'LUNA': prices.luna,
+                'ampLUNA': prices.ampluna,
+                'arbLUNA': prices.arbluna,
+                'bLUNA': prices.bluna,
+                'SOLID': prices.solid,
+                'USDC': prices.usdc
+            };
+            return amount * (tokenMap[token] || 0);
+        };
+        
+        // BBL Add Sale
+        document.getElementById('bbl-add-sale-btn').onclick = () => {
+            const id = document.getElementById('bbl-sale-id').value.trim();
+            const amount = parseFloat(document.getElementById('bbl-sale-amount').value) || 0;
+            const token = document.getElementById('bbl-sale-token').value;
+            
+            if (!id || !amount) return;
+            
+            const prices = getCurrentPrices();
+            const usdValue = toUSD(amount, token, prices);
+            
+            snapshotState.bbl.epochSales.push({ id, amount, token, usdValue });
+            
+            // Clear inputs
+            document.getElementById('bbl-sale-id').value = '';
+            document.getElementById('bbl-sale-amount').value = '';
+            
+            // Update list
+            const listEl = document.getElementById('bbl-sales-list');
+            listEl.innerHTML = snapshotState.bbl.epochSales.map((s, i) => 
+                `<div>#${s.id}: ${s.amount} ${s.token} ($${s.usdValue.toFixed(2)}) <button onclick="removeBblSale(${i})" class="text-red-400 ml-1">×</button></div>`
+            ).join('');
+            
+            // Update summary
+            const totalSales = snapshotState.bbl.epochSales.length;
+            const totalBLuna = snapshotState.bbl.epochSales.filter(s => s.token === 'bLUNA').reduce((sum, s) => sum + s.amount, 0);
+            const totalUSD = snapshotState.bbl.epochSales.reduce((sum, s) => sum + s.usdValue, 0);
+            document.getElementById('bbl-sales-summary').innerHTML = `Total Sales: ${totalSales} | Volume: ${totalBLuna.toFixed(2)} bLUNA ($${totalUSD.toFixed(2)})`;
+        };
+        
+        // Boost Add Sale
+        document.getElementById('boost-add-sale-btn').onclick = () => {
+            const id = document.getElementById('boost-sale-id').value.trim();
+            const amount = parseFloat(document.getElementById('boost-sale-amount').value) || 0;
+            const token = document.getElementById('boost-sale-token').value;
+            
+            if (!id || !amount) return;
+            
+            const prices = getCurrentPrices();
+            const usdValue = toUSD(amount, token, prices);
+            
+            snapshotState.boost.epochSales.push({ id, amount, token, usdValue });
+            
+            // Clear inputs
+            document.getElementById('boost-sale-id').value = '';
+            document.getElementById('boost-sale-amount').value = '';
+            
+            // Update list
+            const listEl = document.getElementById('boost-sales-list');
+            listEl.innerHTML = snapshotState.boost.epochSales.map((s, i) => 
+                `<div>#${s.id}: ${s.amount} ${s.token} ($${s.usdValue.toFixed(2)}) <button onclick="removeBoostSale(${i})" class="text-red-400 ml-1">×</button></div>`
+            ).join('');
+            
+            // Update summary
+            const totalSales = snapshotState.boost.epochSales.length;
+            const totalUSD = snapshotState.boost.epochSales.reduce((sum, s) => sum + s.usdValue, 0);
+            document.getElementById('boost-sales-summary').innerHTML = `Total Sales: ${totalSales} | Volume: $${totalUSD.toFixed(2)} USD`;
+        };
+        
+        // Global remove functions
+        window.removeBblSale = (index) => {
+            snapshotState.bbl.epochSales.splice(index, 1);
+            document.getElementById('bbl-add-sale-btn').click(); // Trigger refresh (hacky but works)
+            // Actually just refresh the list manually
+            const listEl = document.getElementById('bbl-sales-list');
+            const prices = getCurrentPrices();
+            listEl.innerHTML = snapshotState.bbl.epochSales.map((s, i) => 
+                `<div>#${s.id}: ${s.amount} ${s.token} ($${s.usdValue.toFixed(2)}) <button onclick="removeBblSale(${i})" class="text-red-400 ml-1">×</button></div>`
+            ).join('');
+            const totalSales = snapshotState.bbl.epochSales.length;
+            const totalBLuna = snapshotState.bbl.epochSales.filter(s => s.token === 'bLUNA').reduce((sum, s) => sum + s.amount, 0);
+            const totalUSD = snapshotState.bbl.epochSales.reduce((sum, s) => sum + s.usdValue, 0);
+            document.getElementById('bbl-sales-summary').innerHTML = `Total Sales: ${totalSales} | Volume: ${totalBLuna.toFixed(2)} bLUNA ($${totalUSD.toFixed(2)})`;
+        };
+        
+        window.removeBoostSale = (index) => {
+            snapshotState.boost.epochSales.splice(index, 1);
+            const listEl = document.getElementById('boost-sales-list');
+            listEl.innerHTML = snapshotState.boost.epochSales.map((s, i) => 
+                `<div>#${s.id}: ${s.amount} ${s.token} ($${s.usdValue.toFixed(2)}) <button onclick="removeBoostSale(${i})" class="text-red-400 ml-1">×</button></div>`
+            ).join('');
+            const totalSales = snapshotState.boost.epochSales.length;
+            const totalUSD = snapshotState.boost.epochSales.reduce((sum, s) => sum + s.usdValue, 0);
+            document.getElementById('boost-sales-summary').innerHTML = `Total Sales: ${totalSales} | Volume: $${totalUSD.toFixed(2)} USD`;
+        };
+        
+        // NFT Download
         document.getElementById('snapshot-nft-btn').onclick = async () => {
-            const statusEl = document.getElementById('snapshot-status');
             const btn = document.getElementById('snapshot-nft-btn');
+            const statusEl = document.getElementById('snapshot-status');
             
             btn.disabled = true;
-            btn.textContent = '⏳ Fetching...';
             statusEl.textContent = 'Downloading from deving.zone...';
             
             try {
                 const response = await fetch('https://deving.zone/api/nft/meta/terra1tpl03d6mvh2emu7lwl3062w8h3f7e7q5xd7zcx');
                 if (!response.ok) throw new Error('Failed to fetch');
-                const freshData = await response.json();
+                const data = await response.json();
                 
-                const blob = new Blob([JSON.stringify(freshData, null, 2)], { type: 'application/json' });
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
@@ -4141,87 +4387,92 @@ const showSnapshotTool = async () => {
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
                 
-                btn.textContent = '✅ Downloaded!';
-                btn.className = btn.className.replace('bg-cyan-600 hover:bg-cyan-500', 'bg-green-600');
-                statusEl.textContent = `Saved as ${downloadState.nftFilename}`;
+                btn.innerHTML = `✅ Downloaded!<br><span class="text-xs opacity-75">${downloadState.nftFilename}</span>`;
+                statusEl.textContent = `Saved ${downloadState.nftFilename}`;
                 statusEl.className = 'text-center text-sm mt-3 text-green-400';
-                
-            } catch (error) {
-                btn.textContent = '❌ Error';
+            } catch (e) {
                 btn.disabled = false;
-                statusEl.textContent = error.message;
+                statusEl.textContent = `Error: ${e.message}`;
                 statusEl.className = 'text-center text-sm mt-3 text-red-400';
             }
         };
         
-        // BBL download handler
-        document.getElementById('snapshot-bbl-btn').onclick = () => {
+        // Marketplace Download
+        document.getElementById('snapshot-market-btn').onclick = () => {
+            const btn = document.getElementById('snapshot-market-btn');
             const statusEl = document.getElementById('snapshot-status');
-            const btn = document.getElementById('snapshot-bbl-btn');
+            const prices = getCurrentPrices();
             
-            if (!downloadState.parsedData) {
-                statusEl.textContent = 'Please parse BBL data first!';
-                statusEl.className = 'text-center text-sm mt-3 text-red-400';
-                return;
-            }
+            // Gather all floor data
+            const bblFloorUnbroken = {
+                nft_id: document.getElementById('bbl-floor-unbroken-id').value || null,
+                amount: parseFloat(document.getElementById('bbl-floor-unbroken-amount').value) || null,
+                token: document.getElementById('bbl-floor-unbroken-token').value,
+                usd: null
+            };
+            if (bblFloorUnbroken.amount) bblFloorUnbroken.usd = toUSD(bblFloorUnbroken.amount, bblFloorUnbroken.token, prices);
             
-            const { prices, floorBroken, floorUnbroken, floorBrokenNft, floorUnbrokenNft, brokenCount, unbrokenCount, totalListings } = downloadState.parsedData;
+            const bblFloorBroken = {
+                nft_id: document.getElementById('bbl-floor-broken-id').value || null,
+                amount: parseFloat(document.getElementById('bbl-floor-broken-amount').value) || null,
+                token: document.getElementById('bbl-floor-broken-token').value,
+                usd: null
+            };
+            if (bblFloorBroken.amount) bblFloorBroken.usd = toUSD(bblFloorBroken.amount, bblFloorBroken.token, prices);
             
-            // Process listings for export
-            let processedListings = [];
-            if (downloadState.bblListings && downloadState.bblListings.nfts) {
-                processedListings = downloadState.bblListings.nfts.map(nft => {
-                    const price = nft.auction?.reserve_price ? nft.auction.reserve_price / 1000000 : null;
-                    return {
-                        nft_id: nft.nft_token_id,
-                        seller: nft.auction?.seller || null,
-                        price_bluna: price,
-                        price_usd: price && prices.bluna ? parseFloat((price * prices.bluna).toFixed(2)) : null,
-                        auction_id: nft.auction?.auction_id || null,
-                        is_broken: nft.special_trait === 'BROKEN',
-                        rank: nft.rank,
-                        rarity: nft.rarity
-                    };
-                });
-            }
+            const boostFloorUnbroken = {
+                nft_id: document.getElementById('boost-floor-unbroken-id').value || null,
+                amount: parseFloat(document.getElementById('boost-floor-unbroken-amount').value) || null,
+                token: document.getElementById('boost-floor-unbroken-token').value,
+                usd: null
+            };
+            if (boostFloorUnbroken.amount) boostFloorUnbroken.usd = toUSD(boostFloorUnbroken.amount, boostFloorUnbroken.token, prices);
             
-            const bblSnapshot = {
+            const boostFloorBroken = {
+                nft_id: document.getElementById('boost-floor-broken-id').value || null,
+                amount: parseFloat(document.getElementById('boost-floor-broken-amount').value) || null,
+                token: document.getElementById('boost-floor-broken-token').value,
+                usd: null
+            };
+            if (boostFloorBroken.amount) boostFloorBroken.usd = toUSD(boostFloorBroken.amount, boostFloorBroken.token, prices);
+            
+            // Calculate volumes
+            const bblVolumeBLuna = snapshotState.bbl.epochSales.filter(s => s.token === 'bLUNA').reduce((sum, s) => sum + s.amount, 0);
+            const bblVolumeUSD = snapshotState.bbl.epochSales.reduce((sum, s) => sum + s.usdValue, 0);
+            const boostVolumeUSD = snapshotState.boost.epochSales.reduce((sum, s) => sum + s.usdValue, 0);
+            
+            const snapshot = {
                 snapshot_time: new Date().toISOString(),
                 epoch: downloadState.currentEpoch.epoch,
                 epoch_position: downloadState.epochPosition,
                 prices_at_snapshot: {
-                    bluna_usd: prices.bluna,
-                    luna_usd: prices.luna,
-                    ampluna_usd: prices.ampluna
+                    luna_usd: prices.luna || null,
+                    ampluna_usd: prices.ampluna || null,
+                    arbluna_usd: prices.arbluna || null,
+                    bluna_usd: prices.bluna || null,
+                    solid_usd: prices.solid || null,
+                    usdc_usd: prices.usdc || null
                 },
-                collection_stats: downloadState.bblCollection ? {
-                    volume_all_time_bluna: downloadState.bblCollection.volume || null,
-                    volume_all_time_usd: downloadState.bblCollection.volume && prices.bluna 
-                        ? parseFloat((downloadState.bblCollection.volume * prices.bluna).toFixed(2)) 
-                        : null,
-                    last_sale_bluna: downloadState.bblCollection.last_sale_amount || null,
-                    last_sale_token_id: downloadState.bblCollection.last_sale_token_id || null,
-                    last_sale_auction_id: downloadState.bblCollection.last_sale_auction_id || null
-                } : null,
-                floor_prices: {
-                    unbroken: {
-                        price_bluna: floorUnbroken,
-                        price_usd: floorUnbroken && prices.bluna ? parseFloat((floorUnbroken * prices.bluna).toFixed(2)) : null,
-                        nft_id: floorUnbrokenNft,
-                        listings_count: unbrokenCount
-                    },
-                    broken: {
-                        price_bluna: floorBroken,
-                        price_usd: floorBroken && prices.bluna ? parseFloat((floorBroken * prices.bluna).toFixed(2)) : null,
-                        nft_id: floorBrokenNft,
-                        listings_count: brokenCount
-                    }
+                bbl_marketplace: {
+                    floor_unbroken: bblFloorUnbroken,
+                    floor_broken: bblFloorBroken,
+                    epoch_sales: snapshotState.bbl.epochSales,
+                    epoch_sales_count: snapshotState.bbl.epochSales.length,
+                    epoch_volume_bluna: bblVolumeBLuna,
+                    epoch_volume_usd: bblVolumeUSD,
+                    parsed_listings_count: snapshotState.bbl.parsedListings.length
                 },
-                total_listings: totalListings,
-                listings: processedListings
+                boost_marketplace: {
+                    floor_unbroken: boostFloorUnbroken,
+                    floor_broken: boostFloorBroken,
+                    epoch_sales: snapshotState.boost.epochSales,
+                    epoch_sales_count: snapshotState.boost.epochSales.length,
+                    epoch_volume_usd: boostVolumeUSD
+                },
+                combined_epoch_volume_usd: bblVolumeUSD + boostVolumeUSD
             };
             
-            const blob = new Blob([JSON.stringify(bblSnapshot, null, 2)], { type: 'application/json' });
+            const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -4231,9 +4482,8 @@ const showSnapshotTool = async () => {
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
             
-            btn.textContent = '✅ Downloaded!';
-            btn.className = btn.className.replace('bg-purple-600 hover:bg-purple-500', 'bg-green-600');
-            statusEl.textContent = `Saved as ${downloadState.bblFilename} (${totalListings} listings)`;
+            btn.innerHTML = `✅ Downloaded!<br><span class="text-xs opacity-75">${downloadState.bblFilename}</span>`;
+            statusEl.textContent = `Saved ${downloadState.bblFilename} (BBL: ${snapshotState.bbl.epochSales.length} sales, Boost: ${snapshotState.boost.epochSales.length} sales)`;
             statusEl.className = 'text-center text-sm mt-3 text-green-400';
         };
         
