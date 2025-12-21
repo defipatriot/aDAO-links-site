@@ -445,12 +445,14 @@ const populateDistributionTables = () => {
 const updateMatchingTraitsCount = () => {
     if (!allNfts.length) return;
     
-    // Get the slider - could be old hardcoded or new dynamic
-    const slider = document.querySelector('.status-slider[data-slider-key="matching_traits"]') || matchingTraitsSlider;
+    // Get the slider - try multiple selectors
+    const slider = document.querySelector('[data-slider-key="matching_traits"]') || matchingTraitsSlider;
     const strictLevel = slider ? parseInt(slider.value) : 1; // Default to 1 (P+I+O)
     
     // Count for current level
     const count = allNfts.filter(nft => hasMatchingTraits(nft, strictLevel)).length;
+    
+    console.log('updateMatchingTraitsCount - strictLevel:', strictLevel, 'count:', count);
     
     // Update both old and new count displays
     if (matchingTraitsCount) {
@@ -937,9 +939,10 @@ const applyFiltersAndSort = () => {
     
     // *** MATCHING TRAITS FILTER - check both old DOM element and new dynamic one ***
     const matchingToggle = document.querySelector('.status-toggle-cb[data-key="matching_traits"]') || matchingTraitsToggle;
-    const matchingSlider = document.querySelector('.status-slider[data-slider-key="matching_traits"]') || matchingTraitsSlider;
+    const matchingSlider = document.querySelector('[data-slider-key="matching_traits"]') || matchingTraitsSlider;
     if (matchingToggle?.checked) {
-        const strictLevel = matchingSlider ? parseInt(matchingSlider.value) : 0;
+        const strictLevel = matchingSlider ? parseInt(matchingSlider.value) : 1;
+        console.log('Matching filter active - strictLevel:', strictLevel);
         tempNfts = tempNfts.filter(nft => hasMatchingTraits(nft, strictLevel));
     }
     
@@ -2197,8 +2200,10 @@ const handleMapClick = (e) => {
 
         const displayWidth = obj.width * obj.scale;
         const displayHeight = obj.height * obj.scale;
-        const halfWidth = displayWidth / 2;
-        const halfHeight = displayHeight / 2;
+        // Minimum clickable size of 50 pixels for small objects
+        const minClickSize = 50;
+        const halfWidth = Math.max(displayWidth / 2, minClickSize);
+        const halfHeight = Math.max(displayHeight / 2, minClickSize);
 
         if (rotatedX >= obj.x - halfWidth && rotatedX <= obj.x + halfWidth && rotatedY >= obj.y - halfHeight && rotatedY <= obj.y + halfHeight) {
             clickedObject = obj;
