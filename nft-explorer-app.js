@@ -1,4 +1,4 @@
-// BUILD: Dec21-v3 - Paste btns, Red reset, Wallet search redesign, Map fix
+// BUILD: Dec21-v4 - Mobile fixes: dropdown, reset clear, auto-modal, buttons, map touch, boost banner
 // --- Global Elements ---
 const gallery = document.getElementById('nft-gallery');
 const paginationControls = document.getElementById('pagination-controls');
@@ -965,20 +965,26 @@ const updateAddressDropdown = (nftList) => {
         .sort(([, countA], [, countB]) => countB - countA);
 
     // Remember the currently selected value before clearing
-    const currentSelectedAddress = addressDropdown.value;
+    const currentSelectedAddress = addressDropdown?.value;
     let selectionStillExists = false;
 
-    // Clear existing options (except the first "Holders" option)
-    while (addressDropdown.options.length > 1) {
-        addressDropdown.remove(addressDropdown.options.length - 1);
-    }
+    // Clear existing options (except the first "Holders" option) for both dropdowns
+    [addressDropdown, mobileAddressDropdown].forEach(dropdown => {
+        if (!dropdown) return;
+        while (dropdown.options.length > 1) {
+            dropdown.remove(dropdown.options.length - 1);
+        }
+    });
 
     // Populate with new sorted owners and counts
     sortedOwners.forEach(([address, count]) => {
-        const option = document.createElement('option');
-        option.value = address;
-        option.textContent = `(${count}) ${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
-        addressDropdown.appendChild(option);
+        [addressDropdown, mobileAddressDropdown].forEach(dropdown => {
+            if (!dropdown) return;
+            const option = document.createElement('option');
+            option.value = address;
+            option.textContent = `(${count}) ${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
+            dropdown.appendChild(option);
+        });
         // Check if the previously selected address is in the new list
         if (address === currentSelectedAddress) {
             selectionStillExists = true;
@@ -987,21 +993,19 @@ const updateAddressDropdown = (nftList) => {
 
     // Re-select the previous address if it still exists in the filtered list
     if (selectionStillExists) {
-        addressDropdown.value = currentSelectedAddress;
+        if (addressDropdown) addressDropdown.value = currentSelectedAddress;
+        if (mobileAddressDropdown) mobileAddressDropdown.value = currentSelectedAddress;
     } else {
         // If the previously selected holder is filtered out,
         // check if the address input field still has a value.
-        // If the input field *also* doesn't match anyone in the new list,
-        // reset the dropdown to the default "Holders".
-        const currentInputAddress = searchAddressInput.value;
+        const currentInputAddress = searchAddressInput?.value;
         const inputAddressExists = sortedOwners.some(([adr]) => adr === currentInputAddress);
         if (!inputAddressExists) {
-             addressDropdown.value = ""; // Reset to default "Holders"
-             // Optionally clear the input field if the dropdown drove the filter
-             // searchAddressInput.value = "";
+             if (addressDropdown) addressDropdown.value = "";
+             if (mobileAddressDropdown) mobileAddressDropdown.value = "";
         } else {
-            // Keep the dropdown showing the address from the input field if it exists
-            addressDropdown.value = currentInputAddress;
+            if (addressDropdown) addressDropdown.value = currentInputAddress;
+            if (mobileAddressDropdown) mobileAddressDropdown.value = currentInputAddress;
         }
     }
 };
@@ -1249,6 +1253,12 @@ const displayPage = (page) => {
         updatePaginationControls(0);
         return;
     }
+    
+    // Auto-open modal if exactly 1 NFT found via ID search
+    if (filteredNfts.length === 1 && searchInput?.value.trim()) {
+        showNftDetails(filteredNfts[0]);
+    }
+    
     const totalPages = Math.ceil(filteredNfts.length / itemsPerPage);
     page = Math.max(1, Math.min(page, totalPages)); // Clamp page number
     currentPage = page; // Update global state
@@ -1386,6 +1396,11 @@ const resetAll = () => {
         matchingTraitsSlider.value = 0;
         matchingTraitsSlider.disabled = true;
     }
+    
+    // Clear mobile search fields too
+    if(mobileSearchAddress) mobileSearchAddress.value = '';
+    if(mobileAddressDropdown) mobileAddressDropdown.value = '';
+    if(searchLast4Input) searchLast4Input.value = '';
     
     document.querySelectorAll('.toggle-checkbox').forEach(toggle => {
         if (['status-toggle-cb', 'planet-toggle-cb', 'inhabitant-toggle-cb'].some(cls => toggle.classList.contains(cls))) {
@@ -2570,7 +2585,10 @@ const handleMapClick = (e) => {
         console.log("Map click on object:", clickedObject);
         if (clickedObject.address) {
             showWalletExplorerModal(clickedObject.address);
-        } else if (['daodao', 'bbl', 'boost', 'enterprise'].includes(clickedObject.id)) {
+        } else if (clickedObject.id === 'boost') {
+            // Boost ship shows just a warning banner, not the full leaderboard
+            showBoostWarningBanner();
+        } else if (['daodao', 'bbl', 'enterprise'].includes(clickedObject.id)) {
              showSystemLeaderboardModal(clickedObject.id);
         }
     }
@@ -3151,7 +3169,8 @@ const initializeStarfield = () => {
 
         createFleetSystem('daodao', 'daodaoStaked');
         createFleetSystem('bbl', 'bblListed');
-        createFleetSystem('boost', 'boostListed');
+        // NOTE: Boost does not get fleet system - just the ship with banner warning
+        // createFleetSystem('boost', 'boostListed');
         createEnterpriseSystem();
         console.log("Galaxy built.");
     }
@@ -3457,6 +3476,40 @@ const displaySystemLeaderboardPage = (data, statKey, page) => {
 
 const hideSystemLeaderboardModal = () => {
     if (systemLeaderboardModal) systemLeaderboardModal.classList.add('hidden');
+};
+
+// Show a simple warning banner for Boost ship (no leaderboard)
+const showBoostWarningBanner = () => {
+    // Create a temporary overlay banner
+    const existing = document.getElementById('boost-warning-overlay');
+    if (existing) existing.remove();
+    
+    const overlay = document.createElement('div');
+    overlay.id = 'boost-warning-overlay';
+    overlay.className = 'fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4';
+    overlay.innerHTML = `
+        <div class="bg-gray-800 rounded-lg p-6 max-w-lg w-full border-2 border-purple-500 text-center">
+            <div class="text-4xl mb-4">🚀</div>
+            <h3 class="text-xl font-bold text-purple-400 mb-3">Boost Marketplace</h3>
+            <p class="text-gray-300 mb-4">
+                <strong class="text-yellow-400">⚠️ Note:</strong> NFTs listed on Boost are held by the Boost contract 
+                (<span class="font-mono text-xs">...f4at</span>), not the original owner's wallet.
+            </p>
+            <p class="text-gray-400 text-sm mb-4">
+                We cannot track individual owners for Boost listings. We hope Boost updates their platform 
+                to allow for individual owner identification in the future.
+            </p>
+            <button id="boost-warning-close" class="px-6 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-medium transition-colors">
+                Got it!
+            </button>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+    
+    // Close handlers
+    const closeBtn = document.getElementById('boost-warning-close');
+    if (closeBtn) closeBtn.onclick = () => overlay.remove();
+    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
 };
 
 const searchWallet = () => {
