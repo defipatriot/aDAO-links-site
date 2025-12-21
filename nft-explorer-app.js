@@ -1,3 +1,4 @@
+// BUILD: Dec21-FULL - Search redesign, Matching fix, Wallet sliders OR logic, Map click, Popup total
 // --- Global Elements ---
 const gallery = document.getElementById('nft-gallery');
 const paginationControls = document.getElementById('pagination-controls');
@@ -49,7 +50,7 @@ const walletExplorerModal = document.getElementById('wallet-explorer-modal');
 const walletModalCloseBtn = document.getElementById('wallet-modal-close');
 const systemLeaderboardModal = document.getElementById('system-leaderboard-modal');
 const systemModalCloseBtn = document.getElementById('system-modal-close');
-const spaceCanvas = document.getElementById('space-canvas'); // Added spaceCanvas
+const spaceCanvas = document.getElementById('space-canvas');
 // Add references for new toggles
 const togInhabBtn = document.getElementById('toggle-inhabitant-filters');
 const inhabArrow = document.getElementById('inhabitant-arrow');
@@ -58,9 +59,27 @@ const planArrow = document.getElementById('planet-arrow');
 const togStatusBtn = document.getElementById('toggle-status-filters');
 const statusArrow = document.getElementById('status-arrow');
 const statusFiltersExtra = document.getElementById('status-filters-extra');
-// Address direction toggle buttons
+// Address direction toggle buttons (old)
 const addressDirectionToggle = document.getElementById('address-direction-toggle');
 const walletAddressDirectionToggle = document.getElementById('wallet-address-direction-toggle');
+// NEW: Last 4 search elements (Desktop)
+const searchLast4Input = document.getElementById('search-last4');
+const last4Suggestions = document.getElementById('last4-suggestions');
+const last4LtrBtn = document.getElementById('last4-ltr-btn');
+const last4RtlBtn = document.getElementById('last4-rtl-btn');
+const copyLast4Btn = document.getElementById('copy-last4-btn');
+// NEW: Copy verification modal
+const copyVerifyModal = document.getElementById('copy-verify-modal');
+const copyVerifyAddress = document.getElementById('copy-verify-address');
+const copyVerifyBtn = document.getElementById('copy-verify-btn');
+// NEW: Mobile search elements
+const mobileSearchAddress = document.getElementById('mobile-search-address');
+const mobileAddressSuggestions = document.getElementById('mobile-address-suggestions');
+const mobileAddressDropdown = document.getElementById('mobile-address-dropdown');
+const mobileAsReadBtn = document.getElementById('mobile-as-read-btn');
+const mobileLast4LtrBtn = document.getElementById('mobile-last4-ltr-btn');
+const mobileLast4RtlBtn = document.getElementById('mobile-last4-rtl-btn');
+const mobileCopyBtn = document.getElementById('mobile-copy-btn');
 
 // --- Address Search State ---
 // false = suffix/right-to-left (default, type ending), true = prefix/left-to-right (type beginning)
@@ -157,6 +176,9 @@ let lastMouseX = 0, lastMouseY = 0;
 let mapStars = [];
 let mapObjects = [];
 let isInitialLoad = true;
+// NEW: Search mode state
+let last4SearchMode = 'ltr'; // 'ltr' = left to right (type 7ulw), 'rtl' = right to left (type wlu7)
+let mobileSearchMode = 'full'; // 'full', 'last4-ltr', 'last4-rtl'
 
 
 // --- Utility Functions ---
@@ -445,22 +467,22 @@ const populateDistributionTables = () => {
 const updateMatchingTraitsCount = () => {
     if (!allNfts.length) return;
     
-    // Get the slider - could be old hardcoded or new dynamic
-    const slider = document.querySelector('.status-slider[data-slider-key="matching_traits"]') || matchingTraitsSlider;
+    // Get the slider using attribute selector (works regardless of class names)
+    const slider = document.querySelector('[data-slider-key="matching_traits"]') || matchingTraitsSlider;
     const strictLevel = slider ? parseInt(slider.value) : 1; // Default to 1 (P+I+O)
     
     // Count for current level
     const count = allNfts.filter(nft => hasMatchingTraits(nft, strictLevel)).length;
     
-    // Update both old and new count displays
-    if (matchingTraitsCount) {
-        matchingTraitsCount.textContent = count.toLocaleString();
-    }
-    
-    // Update dynamic count display
+    // Update dynamic count display (above the slider)
     const dynamicCount = document.querySelector('[data-count-key="matching_traits"]');
     if (dynamicCount) {
         dynamicCount.textContent = count.toLocaleString();
+    }
+    
+    // Also update old hardcoded element if exists
+    if (matchingTraitsCount) {
+        matchingTraitsCount.textContent = count.toLocaleString();
     }
 };
 
@@ -745,27 +767,20 @@ const addAllEventListeners = () => {
         });
     }
     
-    // Wallet status filters - refresh display when toggled
+    // Wallet status filters - refresh display when toggled and enable/disable sliders
     document.querySelectorAll('.wallet-status-filter').forEach(cb => {
         cb.addEventListener('change', (e) => {
-            // Enable/disable the associated slider
             const status = e.target.dataset.status;
             const slider = document.querySelector(`.wallet-status-slider[data-slider-status="${status}"]`);
-            if (slider) {
-                slider.disabled = !e.target.checked;
-            }
-            if (walletSearchAddressInput?.value.trim()) {
-                searchWallet();
-            }
+            if (slider) slider.disabled = !e.target.checked;
+            if (walletSearchAddressInput?.value.trim()) searchWallet();
         });
     });
     
-    // Wallet status sliders - refresh display when changed
+    // Wallet status sliders - refresh when changed
     document.querySelectorAll('.wallet-status-slider').forEach(slider => {
         slider.addEventListener('input', () => {
-            if (walletSearchAddressInput?.value.trim()) {
-                searchWallet();
-            }
+            if (walletSearchAddressInput?.value.trim()) searchWallet();
         });
     });
 
@@ -816,6 +831,43 @@ const addAllEventListeners = () => {
     // Setup address direction toggles
     setupAddressDirectionToggle(addressDirectionToggle, searchAddressInput, false);
     setupAddressDirectionToggle(walletAddressDirectionToggle, walletSearchAddressInput, true);
+    
+    // NEW: Last 4 search (Desktop)
+    if (searchLast4Input) {
+        searchLast4Input.addEventListener('input', () => handleLast4Input());
+    }
+    if (last4LtrBtn) {
+        last4LtrBtn.addEventListener('click', () => {
+            last4SearchMode = 'ltr';
+            last4LtrBtn.classList.add('bg-cyan-600', 'border-cyan-500');
+            last4RtlBtn?.classList.remove('bg-cyan-600', 'border-cyan-500');
+            if (searchLast4Input) { searchLast4Input.placeholder = 'Type 7ulw'; searchLast4Input.value = ''; searchLast4Input.focus(); }
+        });
+    }
+    if (last4RtlBtn) {
+        last4RtlBtn.addEventListener('click', () => {
+            last4SearchMode = 'rtl';
+            last4RtlBtn.classList.add('bg-cyan-600', 'border-cyan-500');
+            last4LtrBtn?.classList.remove('bg-cyan-600', 'border-cyan-500');
+            if (searchLast4Input) { searchLast4Input.placeholder = 'Type wlu7'; searchLast4Input.value = ''; searchLast4Input.focus(); }
+        });
+    }
+    if (copyLast4Btn) copyLast4Btn.addEventListener('click', () => copyWithVerification(searchAddressInput?.value));
+    if (copyAddressBtn) copyAddressBtn.addEventListener('click', (e) => { e.preventDefault(); copyWithVerification(searchAddressInput?.value); });
+    if (copyVerifyBtn) copyVerifyBtn.addEventListener('click', () => copyVerifyModal?.classList.add('hidden'));
+    if (copyVerifyModal) copyVerifyModal.addEventListener('click', (e) => { if (e.target === copyVerifyModal) copyVerifyModal.classList.add('hidden'); });
+    
+    // NEW: Mobile search
+    if (mobileAsReadBtn) mobileAsReadBtn.addEventListener('click', () => { mobileSearchMode = 'full'; updateMobileSearchUI(); });
+    if (mobileLast4LtrBtn) mobileLast4LtrBtn.addEventListener('click', () => { mobileSearchMode = 'last4-ltr'; updateMobileSearchUI(); });
+    if (mobileLast4RtlBtn) mobileLast4RtlBtn.addEventListener('click', () => { mobileSearchMode = 'last4-rtl'; updateMobileSearchUI(); });
+    if (mobileSearchAddress) mobileSearchAddress.addEventListener('input', handleMobileAddressInput);
+    if (mobileCopyBtn) mobileCopyBtn.addEventListener('click', () => copyWithVerification(mobileSearchAddress?.value || searchAddressInput?.value));
+    if (mobileAddressDropdown) mobileAddressDropdown.addEventListener('change', () => {
+        if (mobileSearchAddress) mobileSearchAddress.value = mobileAddressDropdown.value;
+        if (searchAddressInput) searchAddressInput.value = mobileAddressDropdown.value;
+        handleFilterChange();
+    });
     
     // Map listeners
     addMapListeners(); // Add map listeners
@@ -1024,8 +1076,12 @@ const applyFiltersAndSort = () => {
             if (a.rarityClass !== b.rarityClass) return a.rarityClass - b.rarityClass;
             return (a.subRank ?? 0) - (b.subRank ?? 0); // Within same class, lower subRank first
         });
-    } else if (sortValue === 'id') {
+    } else if (sortValue === 'id-asc') {
+        // ID Low to High
         tempNfts.sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
+    } else if (sortValue === 'id-desc') {
+        // ID High to Low
+        tempNfts.sort((a, b) => (b.id ?? 0) - (a.id ?? 0));
     }
 
     filteredNfts = tempNfts;
@@ -1514,7 +1570,7 @@ const copyToClipboard = (textToCopy, typeName = 'Address') => {
     }).catch(err => {
         console.error('Clipboard copy failed, falling back to execCommand:', err);
         try {
-            const tempInput = document.createElement('textarea'); // Use textarea for better compatibility
+            const tempInput = document.createElement('textarea');
             tempInput.value = textToCopy;
             tempInput.style.position = 'absolute';
             tempInput.style.left = '-9999px';
@@ -1530,6 +1586,123 @@ const copyToClipboard = (textToCopy, typeName = 'Address') => {
         }
     });
 };
+
+// Copy with verification modal
+const copyWithVerification = (textToCopy) => {
+    if (!textToCopy) { showCopyToast('No address to copy'); return; }
+    navigator.clipboard.writeText(textToCopy).then(() => {
+        if (copyVerifyModal && copyVerifyAddress) {
+            copyVerifyAddress.textContent = textToCopy;
+            copyVerifyModal.classList.remove('hidden');
+        }
+    }).catch(err => { console.error('Copy failed:', err); showCopyToast('Copy failed'); });
+};
+
+// Handle Last 4 search input (Desktop)
+const handleLast4Input = () => {
+    if (!searchLast4Input || !last4Suggestions) return;
+    let input = searchLast4Input.value.toLowerCase().trim();
+    last4Suggestions.innerHTML = '';
+    if (!input) { last4Suggestions.classList.add('hidden'); return; }
+    
+    // Reverse if RTL mode
+    let searchPattern = last4SearchMode === 'rtl' ? input.split('').reverse().join('') : input;
+    
+    // Find matching addresses
+    const matches = ownerAddresses.filter(addr => {
+        const last4 = addr.slice(-4).toLowerCase();
+        return last4.startsWith(searchPattern) || last4.includes(searchPattern);
+    }).slice(0, 10);
+    
+    if (matches.length === 1 && matches[0].slice(-4).toLowerCase() === searchPattern) {
+        searchLast4Input.value = matches[0].slice(-4);
+        if (searchAddressInput) searchAddressInput.value = matches[0];
+        last4Suggestions.classList.add('hidden');
+        handleFilterChange();
+        return;
+    }
+    
+    if (matches.length > 0) {
+        matches.forEach(addr => {
+            const item = document.createElement('div');
+            item.className = 'address-suggestion-item';
+            item.innerHTML = `<span class="text-gray-400">${addr.slice(0, -4)}</span><strong class="text-cyan-400">${addr.slice(-4)}</strong>`;
+            item.onclick = () => {
+                searchLast4Input.value = addr.slice(-4);
+                if (searchAddressInput) searchAddressInput.value = addr;
+                last4Suggestions.classList.add('hidden');
+                handleFilterChange();
+            };
+            last4Suggestions.appendChild(item);
+        });
+        last4Suggestions.classList.remove('hidden');
+    } else { last4Suggestions.classList.add('hidden'); }
+};
+
+// Update mobile search UI
+const updateMobileSearchUI = () => {
+    if (!mobileSearchAddress) return;
+    [mobileAsReadBtn, mobileLast4LtrBtn, mobileLast4RtlBtn].forEach(btn => btn?.classList.remove('bg-cyan-600', 'border-cyan-500'));
+    if (mobileSearchMode === 'full' && mobileAsReadBtn) {
+        mobileAsReadBtn.classList.add('bg-cyan-600', 'border-cyan-500');
+        mobileSearchAddress.placeholder = 'Paste or type address';
+        mobileSearchAddress.maxLength = 100;
+    } else if (mobileSearchMode === 'last4-ltr' && mobileLast4LtrBtn) {
+        mobileLast4LtrBtn.classList.add('bg-cyan-600', 'border-cyan-500');
+        mobileSearchAddress.placeholder = 'Type 7ulw';
+        mobileSearchAddress.maxLength = 4;
+    } else if (mobileSearchMode === 'last4-rtl' && mobileLast4RtlBtn) {
+        mobileLast4RtlBtn.classList.add('bg-cyan-600', 'border-cyan-500');
+        mobileSearchAddress.placeholder = 'Type wlu7';
+        mobileSearchAddress.maxLength = 4;
+    }
+    mobileSearchAddress.value = '';
+    mobileSearchAddress.focus();
+};
+
+// Handle mobile address input
+const handleMobileAddressInput = () => {
+    if (!mobileSearchAddress || !mobileAddressSuggestions) return;
+    const input = mobileSearchAddress.value.toLowerCase().trim();
+    mobileAddressSuggestions.innerHTML = '';
+    if (!input) { mobileAddressSuggestions.classList.add('hidden'); return; }
+    
+    let matches = [];
+    if (mobileSearchMode === 'full') {
+        matches = ownerAddresses.filter(addr => addr.toLowerCase().startsWith(input) || addr.toLowerCase().includes(input));
+    } else if (mobileSearchMode === 'last4-ltr') {
+        matches = ownerAddresses.filter(addr => addr.slice(-4).toLowerCase().startsWith(input));
+    } else if (mobileSearchMode === 'last4-rtl') {
+        const reversed = input.split('').reverse().join('');
+        matches = ownerAddresses.filter(addr => addr.slice(-4).toLowerCase().startsWith(reversed));
+    }
+    matches = matches.slice(0, 10);
+    
+    if (matches.length === 1) {
+        mobileSearchAddress.value = matches[0];
+        if (searchAddressInput) searchAddressInput.value = matches[0];
+        mobileAddressSuggestions.classList.add('hidden');
+        handleFilterChange();
+        return;
+    }
+    
+    if (matches.length > 0) {
+        matches.forEach(addr => {
+            const item = document.createElement('div');
+            item.className = 'address-suggestion-item';
+            item.textContent = addr;
+            item.onclick = () => {
+                mobileSearchAddress.value = addr;
+                if (searchAddressInput) searchAddressInput.value = addr;
+                mobileAddressSuggestions.classList.add('hidden');
+                handleFilterChange();
+            };
+            mobileAddressSuggestions.appendChild(item);
+        });
+        mobileAddressSuggestions.classList.remove('hidden');
+    } else { mobileAddressSuggestions.classList.add('hidden'); }
+};
+
 const showNftDetails = (nft) => {
     if (!nftModal || !nft) return;
     const imgEl = document.getElementById('modal-image');
@@ -1998,15 +2171,9 @@ const showSelectedWalletDetails = (address, datasetOrStats) => {
     const statsEl = document.getElementById('selected-wallet-stats');
     const clearBtn = document.getElementById('clear-selected-wallet');
     
-    if (!detailsContainer || !addressEl || !statsEl) {
-        console.log('Missing DOM elements for wallet details');
-        return;
-    }
+    if (!detailsContainer || !addressEl || !statsEl) return;
     
-    // Debug: Log what we received
-    console.log('showSelectedWalletDetails called with:', address, datasetOrStats);
-    
-    // Show the container (remove hidden class)
+    // Show the container
     detailsContainer.classList.remove('hidden');
     
     // Set address
@@ -2014,7 +2181,8 @@ const showSelectedWalletDetails = (address, datasetOrStats) => {
     addressEl.textContent = shortAddr;
     addressEl.title = address;
     
-    // Get values from dataset - all are strings
+    // Get values from dataset (all are strings)
+    const total = datasetOrStats.total || '0';
     const liquid = datasetOrStats.liquid || '0';
     const daodao = datasetOrStats.daodao || '0';
     const enterprise = datasetOrStats.enterprise || '0';
@@ -2022,15 +2190,12 @@ const showSelectedWalletDetails = (address, datasetOrStats) => {
     const unbroken = datasetOrStats.unbroken || '0';
     const bbl = datasetOrStats.bbl || '0';
     const boost = datasetOrStats.boost || '0';
-    const total = datasetOrStats.total || '0';
     
-    console.log('Parsed values:', { liquid, daodao, enterprise, broken, unbroken, bbl, boost, total });
-    
-    // Build stats grid - show Total prominently, then breakdown
+    // Build stats grid - Total prominently at top
     statsEl.innerHTML = `
-        <div class="col-span-3 bg-cyan-900/50 rounded p-2 mb-2">
+        <div class="col-span-3 bg-cyan-900/50 rounded p-2 mb-1">
             <div class="text-cyan-400 text-xs">Total NFTs</div>
-            <div class="text-white font-bold text-xl">${total}</div>
+            <div class="text-white font-bold text-lg">${total}</div>
         </div>
         <div class="bg-gray-700/50 rounded p-2">
             <div class="text-gray-400 text-xs">Liquid</div>
@@ -2221,8 +2386,10 @@ const handleMapClick = (e) => {
 
         const displayWidth = obj.width * obj.scale;
         const displayHeight = obj.height * obj.scale;
-        const halfWidth = displayWidth / 2;
-        const halfHeight = displayHeight / 2;
+        // Minimum clickable area of 60 pixels for small objects
+        const minClickArea = 60;
+        const halfWidth = Math.max(displayWidth / 2, minClickArea);
+        const halfHeight = Math.max(displayHeight / 2, minClickArea);
 
         if (rotatedX >= obj.x - halfWidth && rotatedX <= obj.x + halfWidth && rotatedY >= obj.y - halfHeight && rotatedY <= obj.y + halfHeight) {
             clickedObject = obj;
@@ -2237,8 +2404,6 @@ const handleMapClick = (e) => {
         } else if (['daodao', 'bbl', 'boost', 'enterprise'].includes(clickedObject.id)) {
              showSystemLeaderboardModal(clickedObject.id);
         }
-    } else {
-        console.log("Map click on empty space.");
     }
 };
 const handleMapResize = debounce(() => {
@@ -3147,10 +3312,11 @@ const searchWallet = () => {
     
     // Use setTimeout to allow UI to update before heavy processing
     setTimeout(() => {
-        // Get wallet NFTs
-        let walletNfts = allNfts.filter(nft => nft.owner === address);
+        // Get ALL wallet NFTs first
+        const allWalletNfts = allNfts.filter(nft => nft.owner === address);
+        const totalForWallet = allWalletNfts.length;
         
-        // Apply wallet status filters with sliders
+        // Get filter states with sliders
         const stakedFilter = document.querySelector('.wallet-status-filter[data-status="staked"]');
         const stakedSlider = document.querySelector('.wallet-status-slider[data-slider-status="staked"]');
         const rewardsFilter = document.querySelector('.wallet-status-filter[data-status="rewards"]');
@@ -3160,56 +3326,55 @@ const searchWallet = () => {
         const liquidFilter = document.querySelector('.wallet-status-filter[data-status="liquid"]');
         const liquidSlider = document.querySelector('.wallet-status-slider[data-slider-status="liquid"]');
         
-        // Staked filter: 0=DAO only, 1=Both, 2=Enterprise only
-        if (stakedFilter?.checked) {
-            const sliderVal = stakedSlider?.value || '1';
-            if (sliderVal === '0') {
-                walletNfts = walletNfts.filter(nft => nft.staked_daodao);
-            } else if (sliderVal === '2') {
-                walletNfts = walletNfts.filter(nft => nft.staked_enterprise_legacy);
-            } else {
-                walletNfts = walletNfts.filter(nft => nft.staked_daodao || nft.staked_enterprise_legacy);
-            }
+        const anyFilterActive = stakedFilter?.checked || rewardsFilter?.checked || listedFilter?.checked || liquidFilter?.checked;
+        
+        let walletNfts;
+        
+        if (!anyFilterActive) {
+            // No filters - show ALL NFTs
+            walletNfts = allWalletNfts;
+        } else {
+            // Filters active - use OR logic (show NFTs matching ANY active filter)
+            walletNfts = allWalletNfts.filter(nft => {
+                let matchesAny = false;
+                
+                // Staked: 0=DAO, 1=Both, 2=Enterprise
+                if (stakedFilter?.checked) {
+                    const val = stakedSlider?.value || '1';
+                    if (val === '0' && nft.staked_daodao) matchesAny = true;
+                    else if (val === '2' && nft.staked_enterprise_legacy) matchesAny = true;
+                    else if (val === '1' && (nft.staked_daodao || nft.staked_enterprise_legacy)) matchesAny = true;
+                }
+                
+                // Rewards: 0=Broken, 1=Both, 2=Unbroken
+                if (rewardsFilter?.checked) {
+                    const val = rewardsSlider?.value || '1';
+                    if (val === '0' && nft.broken === true) matchesAny = true;
+                    else if (val === '2' && nft.broken === false) matchesAny = true;
+                    else if (val === '1') matchesAny = true; // Both
+                }
+                
+                // Listed: 0=BBL, 1=Both, 2=Boost
+                if (listedFilter?.checked) {
+                    const val = listedSlider?.value || '1';
+                    if (val === '0' && nft.bbl_market) matchesAny = true;
+                    else if (val === '2' && nft.boost_market) matchesAny = true;
+                    else if (val === '1' && (nft.bbl_market || nft.boost_market)) matchesAny = true;
+                }
+                
+                // Liquid: 0=Show liquid, 1=Both, 2=Hide liquid
+                if (liquidFilter?.checked) {
+                    const val = liquidSlider?.value || '0';
+                    if (val === '0' && nft.liquid === true) matchesAny = true;
+                    else if (val === '2' && nft.liquid === false) matchesAny = true;
+                    else if (val === '1') matchesAny = true; // Both
+                }
+                
+                return matchesAny;
+            });
         }
         
-        // Rewards filter: 0=Broken, 1=Both, 2=Unbroken
-        if (rewardsFilter?.checked) {
-            const sliderVal = rewardsSlider?.value || '1';
-            if (sliderVal === '0') {
-                walletNfts = walletNfts.filter(nft => nft.broken === true);
-            } else if (sliderVal === '2') {
-                walletNfts = walletNfts.filter(nft => nft.broken === false);
-            }
-            // sliderVal '1' = both, no filter needed
-        }
-        
-        // Listed filter: 0=BBL, 1=Both, 2=Boost
-        if (listedFilter?.checked) {
-            const sliderVal = listedSlider?.value || '1';
-            if (sliderVal === '0') {
-                walletNfts = walletNfts.filter(nft => nft.bbl_market);
-            } else if (sliderVal === '2') {
-                walletNfts = walletNfts.filter(nft => nft.boost_market);
-            } else {
-                walletNfts = walletNfts.filter(nft => nft.bbl_market || nft.boost_market);
-            }
-        }
-        
-        // Liquid filter: 0=Show liquid, 1=Both (no filter), 2=Hide liquid (show non-liquid)
-        if (liquidFilter?.checked) {
-            const sliderVal = liquidSlider?.value || '0';
-            if (sliderVal === '0') {
-                walletNfts = walletNfts.filter(nft => nft.liquid === true);
-            } else if (sliderVal === '2') {
-                walletNfts = walletNfts.filter(nft => nft.liquid === false);
-            }
-            // sliderVal '1' = both, no filter needed
-        }
-        
-        const totalForWallet = allNfts.filter(nft => nft.owner === address).length;
-        const filterActive = stakedFilter?.checked || rewardsFilter?.checked || listedFilter?.checked || liquidFilter?.checked;
-        
-        if (filterActive) {
+        if (anyFilterActive) {
             walletGalleryTitle.textContent = `Showing ${walletNfts.length} of ${totalForWallet} NFTs for wallet:`;
         } else {
             walletGalleryTitle.textContent = `Found ${walletNfts.length} NFTs for wallet:`;
@@ -3217,7 +3382,7 @@ const searchWallet = () => {
         
         walletGallery.innerHTML = '';
         if (walletNfts.length === 0) {
-            showLoading(walletGallery, filterActive ? 'No NFTs match the selected filters.' : 'No NFTs found for this address.');
+            showLoading(walletGallery, anyFilterActive ? 'No NFTs match the selected filters.' : 'No NFTs found for this address.');
             return;
         }
         

@@ -1,3 +1,4 @@
+<!-- BUILD: Dec21-FULL -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -53,52 +54,98 @@
         
         <div id="collection-view">
             <div id="controls" class="p-4 bg-gray-800/50 rounded-lg border border-gray-700">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-end mb-4">
+                
+                <!-- ADDRESS SEARCH SECTION - DESKTOP -->
+                <div class="hidden md:block mb-4">
+                    <div class="grid grid-cols-2 gap-4 mb-2">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-300 mb-1">Search by Address</label>
+                            <div class="relative">
+                                <input type="text" id="search-address" placeholder="Paste Address or type left to right" class="form-input w-full pr-10">
+                                <button id="copy-address-btn" class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-cyan-400" title="Copy Address">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                                </button>
+                                <div id="address-suggestions" class="address-suggestions hidden"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-300 mb-1">Last 4 of Address</label>
+                            <div class="relative">
+                                <input type="text" id="search-last4" placeholder="Type last 4 to locate" class="form-input w-full pr-10" maxlength="4">
+                                <button id="copy-last4-btn" class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-cyan-400" title="Copy Address">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                                </button>
+                                <div id="last4-suggestions" class="address-suggestions hidden"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <select id="address-dropdown" class="form-select w-full">
+                                <option value="">Holders - Search Addresses</option>
+                            </select>
+                        </div>
+                        <div class="flex gap-2">
+                            <button id="last4-ltr-btn" class="control-btn h-10 flex-1 text-xs bg-cyan-600 border-cyan-500" title="Left to Right - type 7ulw">Left to Right</button>
+                            <button id="last4-rtl-btn" class="control-btn h-10 flex-1 text-xs" title="Right to Left - type wlu7">Right to Left</button>
+                            <button class="control-btn h-10 flex-1 text-xs opacity-50 cursor-not-allowed" title="Coming Soon" disabled>DAO Member <span class="text-[10px]">(Soon)</span></button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- ADDRESS SEARCH SECTION - MOBILE -->
+                <div class="md:hidden mb-4">
+                    <label class="block text-sm font-medium text-gray-300 mb-1">Search by Address</label>
+                    <div class="flex gap-2 mb-2">
+                        <button id="mobile-as-read-btn" class="control-btn h-10 flex-1 text-xs bg-cyan-600 border-cyan-500">As it reads</button>
+                        <button id="mobile-last4-ltr-btn" class="control-btn h-10 flex-1 text-xs">Last 4 →</button>
+                        <button id="mobile-last4-rtl-btn" class="control-btn h-10 flex-1 text-xs">← Last 4</button>
+                        <button id="mobile-copy-btn" class="control-btn h-10 px-3" title="Copy Address">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                        </button>
+                    </div>
+                    <div class="relative mb-2">
+                        <input type="text" id="mobile-search-address" placeholder="Paste or type address" class="form-input w-full">
+                        <div id="mobile-address-suggestions" class="address-suggestions hidden"></div>
+                    </div>
+                    <select id="mobile-address-dropdown" class="form-select w-full">
+                        <option value="">Holders</option>
+                    </select>
+                </div>
+                
+                <!-- COPY VERIFICATION MODAL -->
+                <div id="copy-verify-modal" class="hidden fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+                    <div class="bg-gray-800 rounded-lg p-6 max-w-md w-full border border-cyan-500/50">
+                        <h3 class="text-lg font-bold text-white mb-2">Copied to Clipboard!</h3>
+                        <p class="text-sm text-gray-400 mb-3">Please verify this is the correct address:</p>
+                        <div id="copy-verify-address" class="bg-gray-900 p-3 rounded font-mono text-sm text-cyan-400 break-all mb-4"></div>
+                        <button id="copy-verify-btn" class="control-btn w-full">Verify & Close</button>
+                    </div>
+                </div>
+                
+                <!-- ID, AMOUNT, SORT, RESET ROW -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 items-end mb-4">
                     <div>
                         <label for="search-id" class="block text-sm font-medium text-gray-300 mb-1">Search by ID</label>
                         <input type="number" id="search-id" placeholder="Enter NFT ID..." class="form-input w-full">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-1">Amount</label>
+                        <div id="results-count" class="h-10 bg-gray-900/50 rounded-lg flex items-center justify-center border border-gray-700 text-lg font-semibold text-cyan-400 whitespace-nowrap px-4"></div>
                     </div>
                     <div>
                         <label for="sort-rank" class="block text-sm font-medium text-gray-300 mb-1">Sort By</label>
                         <select id="sort-rank" class="form-select w-full">
                             <option value="desc" selected>Rarity: High to Low</option>
                             <option value="asc">Rarity: Low to High</option>
-                            <option value="id">ID</option>
+                            <option value="id-asc">ID: Low to High</option>
+                            <option value="id-desc">ID: High to Low</option>
                         </select>
                     </div>
-                </div>
-                
-                <!-- Address Search Section -->
-                <div class="mb-4">
-                    <label for="search-address" class="block text-sm font-medium text-gray-300 mb-1">Search by Address</label>
-                    <!-- Line 1: Search Input (constrained width on desktop) -->
-                    <div class="relative md:max-w-md mb-2">
-                        <input type="text" id="search-address" placeholder="Type from end (last char first)" class="form-input w-full" style="text-align: right;">
-                        <div id="address-suggestions" class="address-suggestions hidden"></div>
-                    </div>
-                    <!-- Line 2: Toggle, Dropdown, Copy -->
-                    <div class="flex items-center gap-2 flex-wrap">
-                        <button id="address-direction-toggle" class="control-btn h-10 px-3 text-xs" title="Toggle search direction">End ⇄</button>
-                        <select id="address-dropdown" class="form-select w-48">
-                            <option value="">Holders</option>
-                        </select>
-                        <button id="copy-address-btn" class="control-btn h-10 flex-shrink-0" title="Copy Address">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
-                        </button>
+                    <div class="flex items-end">
+                        <button id="reset-filters" class="control-btn h-10 w-full">Reset</button>
                     </div>
                 </div>
-                
-                <!-- Amount and Reset Row -->
-                <div class="flex justify-between items-end gap-4 mb-4">
-                    <div class="text-center">
-                        <label class="block text-sm font-medium text-gray-300 mb-1">AMOUNT</label>
-                        <div id="results-count" class="h-10 bg-gray-900/50 rounded-lg flex items-center justify-center border border-gray-700 text-lg font-semibold text-cyan-400 whitespace-nowrap px-4"></div>
-                    </div>
-                    <div>
-                       <button id="reset-filters" class="control-btn h-10">Reset</button>
-                    </div>
-                </div>
-
 
                  <div class="pt-4 border-t border-gray-700">
                     <div id="toggle-status-filters" class="flex justify-between items-center cursor-pointer">
@@ -221,13 +268,13 @@
                         <!-- Liquid Filter -->
                         <div class="flex flex-col items-center">
                             <label class="toggle-label mb-1">
-                                <input type="checkbox" class="toggle-checkbox wallet-status-filter" data-status="liquid" checked>
+                                <input type="checkbox" class="toggle-checkbox wallet-status-filter" data-status="liquid">
                                 <span class="toggle-switch mr-2"></span>
                                 <span class="font-medium text-sm">Liquid</span>
                             </label>
                             <div class="direction-slider-container">
                                 <span class="text-xs text-gray-400">Show</span>
-                                <input type="range" min="0" max="2" value="0" class="direction-slider wallet-status-slider" data-slider-status="liquid">
+                                <input type="range" min="0" max="2" value="0" class="direction-slider wallet-status-slider" data-slider-status="liquid" disabled>
                                 <span class="text-xs text-gray-400">Hide</span>
                             </div>
                         </div>
