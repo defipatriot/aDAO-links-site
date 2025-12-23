@@ -1359,6 +1359,50 @@
         </div>
     </div>
     
+    <!-- Stale Data Warning Modal -->
+    <div id="stale-data-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] hidden items-center justify-center overflow-y-auto py-8">
+        <div class="bg-gray-900 border-2 border-amber-500/50 rounded-2xl p-6 max-w-lg w-full mx-4 shadow-2xl my-auto" onclick="event.stopPropagation()">
+            <div class="flex items-center gap-4 mb-4">
+                <div class="w-14 h-14 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0">
+                    <i class="fas fa-exclamation-triangle text-amber-400 text-2xl"></i>
+                </div>
+                <div>
+                    <h3 class="text-xl font-bold text-amber-400">Snapshot Missed</h3>
+                    <p class="text-sm text-gray-400">Showing older epoch data</p>
+                </div>
+            </div>
+            
+            <div class="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 mb-4">
+                <p class="text-lg text-center mb-4">
+                    <strong id="stale-data-missed" class="text-amber-400">1 snapshot missed</strong>
+                </p>
+                <p class="text-sm text-gray-300 mb-3">
+                    Showing <strong id="stale-data-epoch" class="text-cyan-400">Epoch 163</strong> data
+                    <span class="text-gray-500">—</span>
+                    <strong id="stale-data-failed" class="text-red-400">Epoch 164</strong> snapshot failed
+                </p>
+                <p class="text-sm text-gray-400 mb-3">
+                    <i class="fas fa-clock text-gray-500 mr-1"></i>
+                    Current epoch is <strong id="stale-data-current" class="text-emerald-400">Epoch 165</strong>
+                </p>
+                <p class="text-sm text-gray-500">
+                    <i class="fas fa-info-circle text-amber-400/60 mr-1"></i>
+                    The snapshot process encountered a connection issue. All charts and statistics reflect the older data shown above.
+                </p>
+            </div>
+            
+            <div class="flex gap-3">
+                <button onclick="acknowledgeStaleData()" class="flex-1 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-400 font-semibold py-3 px-4 rounded-lg transition-colors">
+                    <i class="fas fa-check mr-2"></i>I Understand
+                </button>
+            </div>
+            
+            <div class="mt-4 text-center text-xs text-gray-600">
+                We hope to capture the next epoch successfully
+            </div>
+        </div>
+    </div>
+    
     <!-- History Modal -->
     <div id="history-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center overflow-y-auto py-8" onclick="closeHistoryModal(event)">
         <div class="bg-gray-900 border border-white/10 rounded-2xl p-6 max-w-2xl w-full mx-4 shadow-2xl my-auto" onclick="event.stopPropagation()">
@@ -1974,6 +2018,7 @@
         // History tracking
         previousEpochData: null,
         previousAdaoSnap: null,
+        previousEpochNumber: null, // Actual epoch number of loaded previous data (may not be epoch-1 if gaps exist)
         historyData: [] // Array of {epoch, metrics} for trend display
     };
     
@@ -2238,8 +2283,12 @@
         
         // Viewing historical data - show compact notice
         notice.classList.remove('hidden');
-        const epochsBehind = liveEpoch - dataEpoch;
-        noticeText.innerHTML = `<i class="fas fa-history mr-1"></i>${epochsBehind} epoch${epochsBehind > 1 ? 's' : ''} behind`;
+        const snapshotsMissed = liveEpoch - dataEpoch - 1; // -1 because current epoch hasn't ended yet
+        if (snapshotsMissed > 0) {
+            noticeText.innerHTML = `<i class="fas fa-exclamation-circle mr-1"></i>${snapshotsMissed} snapshot${snapshotsMissed > 1 ? 's' : ''} missed`;
+        } else {
+            noticeText.innerHTML = `<i class="fas fa-history mr-1"></i>Previous epoch data`;
+        }
     }
     
     // ============================================================
@@ -2310,28 +2359,40 @@
                 }
             }
             
-            // Try to load previous epoch for trend comparison
-            const prevEpoch = epoch - 1;
-            try {
-                const prevUrl = `${CONFIG.baseUrl}/tla-data-epoch-${prevEpoch}-end.json`;
-                const prevAdaoUrl = `${CONFIG.adaoUrl}/adao-snapshot_${prevEpoch}_end.json`;
-                console.log('Fetching previous epoch:', prevUrl);
+            // Try to load previous epoch for trend comparison (handles gaps)
+            // Will try up to 5 epochs back to find valid data
+            let prevLoaded = false;
+            for (let lookback = 1; lookback <= 5 && !prevLoaded; lookback++) {
+                const prevEpoch = epoch - lookback;
+                if (prevEpoch < 1) break;
                 
-                const [prevResponse, prevAdaoResponse] = await Promise.all([
-                    fetch(prevUrl).catch(() => null),
-                    fetch(prevAdaoUrl).catch(() => null)
-                ]);
-                
-                if (prevResponse?.ok) {
-                    store.previousEpochData = await prevResponse.json();
-                    console.log('Previous epoch data loaded:', prevEpoch);
+                try {
+                    const prevUrl = `${CONFIG.baseUrl}/tla-data-epoch-${prevEpoch}-end.json`;
+                    const prevAdaoUrl = `${CONFIG.adaoUrl}/adao-snapshot_${prevEpoch}_end.json`;
+                    console.log(`Trying previous epoch ${prevEpoch} (lookback ${lookback})...`);
+                    
+                    const [prevResponse, prevAdaoResponse] = await Promise.all([
+                        fetch(prevUrl).catch(() => null),
+                        fetch(prevAdaoUrl).catch(() => null)
+                    ]);
+                    
+                    if (prevResponse?.ok) {
+                        store.previousEpochData = await prevResponse.json();
+                        store.previousEpochNumber = prevEpoch;
+                        prevLoaded = true;
+                        console.log(`Previous epoch data loaded: E${prevEpoch}${lookback > 1 ? ` (gap detected - skipped ${lookback - 1} missing epoch(s))` : ''}`);
+                    }
+                    if (prevAdaoResponse?.ok) {
+                        store.previousAdaoSnap = await prevAdaoResponse.json();
+                        console.log('Previous aDAO snap loaded, price:', store.previousAdaoSnap.lunaPrice_USD);
+                    }
+                } catch (prevErr) {
+                    console.log(`Previous epoch ${prevEpoch} fetch error:`, prevErr.message);
                 }
-                if (prevAdaoResponse?.ok) {
-                    store.previousAdaoSnap = await prevAdaoResponse.json();
-                    console.log('Previous aDAO snap loaded, price:', store.previousAdaoSnap.lunaPrice_USD);
-                }
-            } catch (prevErr) {
-                console.log('Previous epoch fetch error (non-critical):', prevErr.message);
+            }
+            
+            if (!prevLoaded) {
+                console.log('No previous epoch data found (tried 5 epochs back)');
             }
             
             store.loaded = true;
@@ -2342,11 +2403,66 @@
             const snapshotTime = store.adaoSnap?.timestamp || store.data?.meta?.generated_at;
             updateStatus('Loaded', snapshotTime);
             
+            // Check for stale data (2+ epochs behind)
+            checkForStaleData();
+            
         } catch (error) {
             console.error('Error loading data:', error);
             updateStatus('Error');
             showError('Failed to load epoch data. Check console for details.');
         }
+    }
+    
+    // Check if data is stale (2+ epochs behind current)
+    function checkForStaleData() {
+        if (!store.currentRealEpoch || !store.epoch) return;
+        
+        const epochsBehind = store.currentRealEpoch - store.epoch;
+        console.log(`Stale check: Data is E${store.epoch}, Current should be E${store.currentRealEpoch}, ${epochsBehind} epoch(s) behind`);
+        
+        if (epochsBehind >= 2) {
+            // Check if user has already acknowledged this session
+            const acknowledged = sessionStorage.getItem('staleDataAcknowledged');
+            if (acknowledged === String(store.epoch)) {
+                console.log('Stale data already acknowledged this session');
+                return;
+            }
+            
+            showStaleDataWarning(store.epoch, store.currentRealEpoch);
+        }
+    }
+    
+    // Show stale data warning modal
+    function showStaleDataWarning(dataEpoch, currentEpoch) {
+        const snapshotsMissed = currentEpoch - dataEpoch - 1; // -1 because current epoch hasn't ended yet
+        const missedText = snapshotsMissed === 1 ? '1 snapshot missed' : `${snapshotsMissed} snapshots missed`;
+        
+        // Calculate which epochs failed (the ones between dataEpoch and currentEpoch)
+        const failedEpochs = [];
+        for (let e = dataEpoch + 1; e < currentEpoch; e++) {
+            failedEpochs.push(e);
+        }
+        const failedText = failedEpochs.length === 1 
+            ? `Epoch ${failedEpochs[0]}` 
+            : `Epochs ${failedEpochs.join(', ')}`;
+        
+        document.getElementById('stale-data-missed').textContent = missedText;
+        document.getElementById('stale-data-epoch').textContent = `Epoch ${dataEpoch}`;
+        document.getElementById('stale-data-failed').textContent = failedText;
+        document.getElementById('stale-data-current').textContent = `Epoch ${currentEpoch}`;
+        
+        const modal = document.getElementById('stale-data-modal');
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    }
+    
+    // Acknowledge stale data warning
+    function acknowledgeStaleData() {
+        sessionStorage.setItem('staleDataAcknowledged', String(store.epoch));
+        
+        const modal = document.getElementById('stale-data-modal');
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
     }
     
     function updateStatus(status, timestamp) {
@@ -4800,16 +4916,31 @@
         
         // Build history points
         const historyPoints = [];
+        const prevEpochNum = store.previousEpochNumber || (store.epoch - 1);
         
         // Previous epoch
         if (store.previousEpochData?.pools) {
             const prevPool = store.previousEpochData.pools.find(p => p.name === poolName);
             if (prevPool) {
                 historyPoints.push({
-                    epoch: store.epoch - 1,
+                    epoch: prevEpochNum,
                     value: config.getValue(prevPool),
                     lunaPrice: store.previousAdaoSnap?.lunaPrice_USD || null,
-                    date: store.previousEpochData?.meta?.generated_at
+                    date: store.previousEpochData?.meta?.generated_at,
+                    missed: false
+                });
+            }
+        }
+        
+        // Add missed epochs between previous and current
+        if (prevEpochNum && store.epoch) {
+            for (let e = prevEpochNum + 1; e < store.epoch; e++) {
+                historyPoints.push({
+                    epoch: e,
+                    value: null,
+                    lunaPrice: null,
+                    date: null,
+                    missed: true
                 });
             }
         }
@@ -4821,16 +4952,19 @@
                 epoch: store.epoch,
                 value: config.getValue(currentPool),
                 lunaPrice: store.adaoSnap?.lunaPrice_USD || null,
-                date: store.data?.meta?.generated_at
+                date: store.data?.meta?.generated_at,
+                missed: false
             });
         }
         
-        // Render chart
+        // Render chart (handling missed epochs)
         const ctx = document.getElementById('history-chart');
         if (ctx) {
             if (historyModalChart) {
                 historyModalChart.destroy();
             }
+            
+            const pointColors = historyPoints.map(p => p.missed ? '#ef4444' : config.color);
             
             historyModalChart = new Chart(ctx, {
                 type: 'line',
@@ -4838,15 +4972,16 @@
                     labels: historyPoints.map(p => `E${p.epoch}`),
                     datasets: [{
                         label: config.label,
-                        data: historyPoints.map(p => p.value),
+                        data: historyPoints.map(p => p.missed ? null : p.value),
                         borderColor: config.color,
                         backgroundColor: config.color + '20',
                         fill: true,
                         tension: 0.3,
-                        pointRadius: 6,
-                        pointBackgroundColor: config.color,
-                        pointBorderColor: '#fff',
-                        pointBorderWidth: 2
+                        pointRadius: historyPoints.map(p => p.missed ? 8 : 6),
+                        pointBackgroundColor: pointColors,
+                        pointBorderColor: historyPoints.map(p => p.missed ? '#ef4444' : '#fff'),
+                        pointBorderWidth: 2,
+                        spanGaps: false
                     }]
                 },
                 options: {
@@ -4856,14 +4991,23 @@
                         legend: { display: false },
                         tooltip: {
                             callbacks: {
-                                label: (ctx) => config.format(ctx.raw)
+                                label: (ctx) => {
+                                    const point = historyPoints[ctx.dataIndex];
+                                    if (point.missed) return 'Snapshot Missed';
+                                    return config.format(ctx.raw);
+                                }
                             }
                         }
                     },
                     scales: {
                         x: {
                             grid: { color: 'rgba(255,255,255,0.05)' },
-                            ticks: { color: '#9ca3af' }
+                            ticks: { 
+                                color: (ctx) => {
+                                    const point = historyPoints[ctx.index];
+                                    return point?.missed ? '#ef4444' : '#9ca3af';
+                                }
+                            }
                         },
                         y: {
                             grid: { color: 'rgba(255,255,255,0.05)' },
@@ -4877,34 +5021,58 @@
             });
         }
         
-        // Render table
+        // Render table (handling missed epochs)
         const tbody = document.getElementById('history-table-body');
         const sorted = [...historyPoints].sort((a, b) => b.epoch - a.epoch);
         
         let html = '';
         sorted.forEach((point, idx) => {
-            const prevPoint = sorted[idx + 1];
-            let changeHtml = '-';
-            
-            if (prevPoint) {
-                const change = point.value - prevPoint.value;
-                const isPositive = change > 0;
-                const color = isPositive ? 'text-emerald-400' : change < 0 ? 'text-red-400' : 'text-gray-400';
-                changeHtml = `<span class="${color}">${isPositive ? '+' : ''}${change.toFixed(1)}</span>`;
+            // For change calculation, find the next non-missed point
+            let prevPoint = null;
+            for (let i = idx + 1; i < sorted.length; i++) {
+                if (!sorted[i].missed) {
+                    prevPoint = sorted[i];
+                    break;
+                }
             }
             
-            const dateStr = point.date ? new Date(point.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-';
-            const priceStr = point.lunaPrice ? `$${point.lunaPrice.toFixed(4)}` : '-';
-            
-            html += `
-                <tr class="border-b border-white/5 hover:bg-white/5">
-                    <td class="py-2 px-3 font-medium">E${point.epoch}</td>
-                    <td class="py-2 px-3 text-gray-400">${dateStr}</td>
-                    <td class="py-2 px-3 text-right font-mono" style="color: ${config.color}">${config.format(point.value)}</td>
-                    <td class="py-2 px-3 text-right">${changeHtml}</td>
-                    <td class="py-2 px-3 text-right text-gray-400">${priceStr}</td>
-                </tr>
-            `;
+            if (point.missed) {
+                // Render missed epoch row
+                html += `
+                    <tr class="border-b border-red-500/20 bg-red-500/5">
+                        <td class="py-2 px-3 font-medium text-red-400">E${point.epoch}</td>
+                        <td class="py-2 px-3 text-red-400/60">—</td>
+                        <td class="py-2 px-3 text-center" colspan="3">
+                            <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-500/20 text-red-400 text-sm">
+                                <i class="fas fa-exclamation-circle"></i>
+                                Snapshot Missed
+                            </span>
+                        </td>
+                    </tr>
+                `;
+            } else {
+                let changeHtml = '-';
+                
+                if (prevPoint && !prevPoint.missed) {
+                    const change = point.value - prevPoint.value;
+                    const isPositive = change > 0;
+                    const color = isPositive ? 'text-emerald-400' : change < 0 ? 'text-red-400' : 'text-gray-400';
+                    changeHtml = `<span class="${color}">${isPositive ? '+' : ''}${change.toFixed(1)}</span>`;
+                }
+                
+                const dateStr = point.date ? new Date(point.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-';
+                const priceStr = point.lunaPrice ? `$${point.lunaPrice.toFixed(4)}` : '-';
+                
+                html += `
+                    <tr class="border-b border-white/5 hover:bg-white/5">
+                        <td class="py-2 px-3 font-medium">E${point.epoch}</td>
+                        <td class="py-2 px-3 text-gray-400">${dateStr}</td>
+                        <td class="py-2 px-3 text-right font-mono" style="color: ${config.color}">${config.format(point.value)}</td>
+                        <td class="py-2 px-3 text-right">${changeHtml}</td>
+                        <td class="py-2 px-3 text-right text-gray-400">${priceStr}</td>
+                    </tr>
+                `;
+            }
         });
         
         tbody.innerHTML = html;
@@ -5809,14 +5977,17 @@
                     break;
             }
             
+            // Use actual previous epoch number (handles gaps)
+            const prevEpochLabel = store.previousEpochNumber || (store.epoch - 1);
+            
             // Different format for stat-trend vs chart-trend
             if (el.classList.contains('chart-trend')) {
                 // Compact format for chart headers
                 el.innerHTML = `${arrow} ${changeText}`;
-                el.title = `${changeText} from Epoch ${store.epoch - 1}`;
+                el.title = `${changeText} from Epoch ${prevEpochLabel}`;
             } else {
                 // Full format for stat bar
-                el.innerHTML = `${arrow} ${changeText} from E${store.epoch - 1}`;
+                el.innerHTML = `${arrow} ${changeText} from E${prevEpochLabel}`;
             }
         });
     }
@@ -5832,23 +6003,41 @@
         document.getElementById('history-modal-title').textContent = `${metric.title} History`;
         document.getElementById('history-table-col5').textContent = 'LUNA Price';
         
-        // Build history array from current + previous
+        // Build history array from current + previous, including missed epochs
         const historyPoints = [];
+        const prevEpochNum = store.previousEpochNumber || (store.epoch - 1);
         
+        // Add previous epoch data point
         if (store.previousEpochData) {
             historyPoints.push({
-                epoch: store.epoch - 1,
+                epoch: prevEpochNum,
                 value: metric.getValue(store.previousEpochData, store.previousAdaoSnap),
                 lunaPrice: store.previousAdaoSnap?.lunaPrice_USD || null,
-                date: store.previousEpochData?.meta?.generated_at
+                date: store.previousEpochData?.meta?.generated_at,
+                missed: false
             });
         }
         
+        // Add missed epochs between previous and current
+        if (prevEpochNum && store.epoch) {
+            for (let e = prevEpochNum + 1; e < store.epoch; e++) {
+                historyPoints.push({
+                    epoch: e,
+                    value: null,
+                    lunaPrice: null,
+                    date: null,
+                    missed: true
+                });
+            }
+        }
+        
+        // Add current epoch data point
         historyPoints.push({
             epoch: store.epoch,
             value: metric.getValue(store.data, store.adaoSnap),
             lunaPrice: store.adaoSnap?.lunaPrice_USD || null,
-            date: store.data?.meta?.generated_at
+            date: store.data?.meta?.generated_at,
+            missed: false
         });
         
         // Render chart
@@ -5871,7 +6060,11 @@
         }
         
         const labels = points.map(p => `E${p.epoch}`);
-        const values = points.map(p => p.value);
+        const values = points.map(p => p.missed ? null : p.value);
+        
+        // Create point colors - red for missed epochs
+        const pointColors = points.map(p => p.missed ? '#ef4444' : '#06b6d4');
+        const pointBorderColors = points.map(p => p.missed ? '#ef4444' : '#fff');
         
         historyModalChart = new Chart(ctx, {
             type: 'line',
@@ -5884,10 +6077,11 @@
                     backgroundColor: 'rgba(6, 182, 212, 0.1)',
                     fill: true,
                     tension: 0.3,
-                    pointRadius: 6,
-                    pointBackgroundColor: '#06b6d4',
-                    pointBorderColor: '#fff',
-                    pointBorderWidth: 2
+                    pointRadius: points.map(p => p.missed ? 8 : 6),
+                    pointBackgroundColor: pointColors,
+                    pointBorderColor: pointBorderColors,
+                    pointBorderWidth: 2,
+                    spanGaps: false // Don't connect across null values
                 }]
             },
             options: {
@@ -5897,14 +6091,25 @@
                     legend: { display: false },
                     tooltip: {
                         callbacks: {
-                            label: (ctx) => metric.format(ctx.raw)
+                            label: (ctx) => {
+                                const point = points[ctx.dataIndex];
+                                if (point.missed) {
+                                    return 'Snapshot Missed';
+                                }
+                                return metric.format(ctx.raw);
+                            }
                         }
                     }
                 },
                 scales: {
                     x: {
                         grid: { color: 'rgba(255,255,255,0.05)' },
-                        ticks: { color: '#9ca3af' }
+                        ticks: { 
+                            color: (ctx) => {
+                                const point = points[ctx.index];
+                                return point?.missed ? '#ef4444' : '#9ca3af';
+                            }
+                        }
                     },
                     y: {
                         grid: { color: 'rgba(255,255,255,0.05)' },
@@ -5928,29 +6133,54 @@
         
         let html = '';
         sorted.forEach((point, idx) => {
-            const prevPoint = sorted[idx + 1];
-            let changeHtml = '-';
-            
-            if (prevPoint) {
-                const change = point.value - prevPoint.value;
-                const changePct = prevPoint.value !== 0 ? ((change) / prevPoint.value) * 100 : 0;
-                const isPositive = changePct > 0;
-                const color = isPositive ? 'text-emerald-400' : changePct < 0 ? 'text-red-400' : 'text-gray-400';
-                changeHtml = `<span class="${color}">${isPositive ? '+' : ''}${changePct.toFixed(1)}%</span>`;
+            // For change calculation, find the next non-missed point
+            let prevPoint = null;
+            for (let i = idx + 1; i < sorted.length; i++) {
+                if (!sorted[i].missed) {
+                    prevPoint = sorted[i];
+                    break;
+                }
             }
             
-            const dateStr = point.date ? new Date(point.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-';
-            const priceStr = point.lunaPrice ? `$${point.lunaPrice.toFixed(4)}` : '-';
-            
-            html += `
-                <tr class="border-b border-white/5 hover:bg-white/5">
-                    <td class="py-2 px-3 font-medium">E${point.epoch}</td>
-                    <td class="py-2 px-3 text-gray-400">${dateStr}</td>
-                    <td class="py-2 px-3 text-right font-mono text-cyan-400">${metric.format(point.value)}</td>
-                    <td class="py-2 px-3 text-right">${changeHtml}</td>
-                    <td class="py-2 px-3 text-right text-gray-400">${priceStr}</td>
-                </tr>
-            `;
+            if (point.missed) {
+                // Render missed epoch row
+                html += `
+                    <tr class="border-b border-red-500/20 bg-red-500/5">
+                        <td class="py-2 px-3 font-medium text-red-400">E${point.epoch}</td>
+                        <td class="py-2 px-3 text-red-400/60">—</td>
+                        <td class="py-2 px-3 text-center" colspan="3">
+                            <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-500/20 text-red-400 text-sm">
+                                <i class="fas fa-exclamation-circle"></i>
+                                Snapshot Missed
+                            </span>
+                        </td>
+                    </tr>
+                `;
+            } else {
+                // Render normal data row
+                let changeHtml = '-';
+                
+                if (prevPoint && !prevPoint.missed) {
+                    const change = point.value - prevPoint.value;
+                    const changePct = prevPoint.value !== 0 ? ((change) / prevPoint.value) * 100 : 0;
+                    const isPositive = changePct > 0;
+                    const color = isPositive ? 'text-emerald-400' : changePct < 0 ? 'text-red-400' : 'text-gray-400';
+                    changeHtml = `<span class="${color}">${isPositive ? '+' : ''}${changePct.toFixed(1)}%</span>`;
+                }
+                
+                const dateStr = point.date ? new Date(point.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-';
+                const priceStr = point.lunaPrice ? `$${point.lunaPrice.toFixed(4)}` : '-';
+                
+                html += `
+                    <tr class="border-b border-white/5 hover:bg-white/5">
+                        <td class="py-2 px-3 font-medium">E${point.epoch}</td>
+                        <td class="py-2 px-3 text-gray-400">${dateStr}</td>
+                        <td class="py-2 px-3 text-right font-mono text-cyan-400">${metric.format(point.value)}</td>
+                        <td class="py-2 px-3 text-right">${changeHtml}</td>
+                        <td class="py-2 px-3 text-right text-gray-400">${priceStr}</td>
+                    </tr>
+                `;
+            }
         });
         
         tbody.innerHTML = html;
@@ -5991,18 +6221,35 @@
         
         // Build history points
         const historyPoints = [];
+        const prevEpochNum = store.previousEpochNumber || (store.epoch - 1);
         
         // Previous epoch
         if (store.previousEpochData) {
             const prevData = getPoolBucketPct(store.previousEpochData, poolName, bucket);
             if (prevData) {
                 historyPoints.push({
-                    epoch: store.epoch - 1,
+                    epoch: prevEpochNum,
                     value: prevData.pct,
                     vp: prevData.vp,
                     isActive: prevData.isActive,
                     lunaPrice: store.previousAdaoSnap?.lunaPrice_USD || null,
-                    date: store.previousEpochData?.meta?.generated_at
+                    date: store.previousEpochData?.meta?.generated_at,
+                    missed: false
+                });
+            }
+        }
+        
+        // Add missed epochs between previous and current
+        if (prevEpochNum && store.epoch) {
+            for (let e = prevEpochNum + 1; e < store.epoch; e++) {
+                historyPoints.push({
+                    epoch: e,
+                    value: null,
+                    vp: null,
+                    isActive: null,
+                    lunaPrice: null,
+                    date: null,
+                    missed: true
                 });
             }
         }
@@ -6016,14 +6263,15 @@
                 vp: currentData.vp,
                 isActive: currentData.isActive,
                 lunaPrice: store.adaoSnap?.lunaPrice_USD || null,
-                date: store.data?.meta?.generated_at
+                date: store.data?.meta?.generated_at,
+                missed: false
             });
         }
         
         // Custom metric for pool bucket %
         const poolMetric = {
             title: `${poolName} Bucket %`,
-            format: (v) => v.toFixed(2) + '%',
+            format: (v) => v !== null ? v.toFixed(2) + '%' : 'N/A',
             unit: '%'
         };
         
@@ -6036,33 +6284,57 @@
         
         let html = '';
         sorted.forEach((point, idx) => {
-            const prevPoint = sorted[idx + 1];
-            let changeHtml = '-';
-            
-            if (prevPoint) {
-                const change = point.value - prevPoint.value;
-                const isPositive = change > 0;
-                const color = isPositive ? 'text-emerald-400' : change < 0 ? 'text-red-400' : 'text-gray-400';
-                changeHtml = `<span class="${color}">${isPositive ? '+' : ''}${change.toFixed(2)}%</span>`;
+            // For change calculation, find the next non-missed point
+            let prevPoint = null;
+            for (let i = idx + 1; i < sorted.length; i++) {
+                if (!sorted[i].missed) {
+                    prevPoint = sorted[i];
+                    break;
+                }
             }
             
-            const dateStr = point.date ? new Date(point.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-';
-            const statusBadge = point.isActive 
-                ? '<span class="text-[9px] px-1 py-0.5 rounded bg-emerald-500/20 text-emerald-400">Active</span>'
-                : '<span class="text-[9px] px-1 py-0.5 rounded bg-red-500/20 text-red-400">Inactive</span>';
-            
-            html += `
-                <tr class="border-b border-white/5 hover:bg-white/5">
-                    <td class="py-2 px-3 font-medium">E${point.epoch}</td>
-                    <td class="py-2 px-3 text-gray-400">${dateStr}</td>
-                    <td class="py-2 px-3 text-right">
-                        <span class="font-mono ${point.value >= 1 ? 'text-cyan-400' : 'text-red-400'}">${point.value.toFixed(2)}%</span>
-                        <span class="text-[10px] text-gray-500 ml-1">(${fmtNum(point.vp)} VP)</span>
-                    </td>
-                    <td class="py-2 px-3 text-right">${changeHtml}</td>
-                    <td class="py-2 px-3 text-right">${statusBadge}</td>
-                </tr>
-            `;
+            if (point.missed) {
+                // Render missed epoch row
+                html += `
+                    <tr class="border-b border-red-500/20 bg-red-500/5">
+                        <td class="py-2 px-3 font-medium text-red-400">E${point.epoch}</td>
+                        <td class="py-2 px-3 text-red-400/60">—</td>
+                        <td class="py-2 px-3 text-center" colspan="3">
+                            <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-500/20 text-red-400 text-sm">
+                                <i class="fas fa-exclamation-circle"></i>
+                                Snapshot Missed
+                            </span>
+                        </td>
+                    </tr>
+                `;
+            } else {
+                let changeHtml = '-';
+                
+                if (prevPoint && !prevPoint.missed && prevPoint.value !== null) {
+                    const change = point.value - prevPoint.value;
+                    const isPositive = change > 0;
+                    const color = isPositive ? 'text-emerald-400' : change < 0 ? 'text-red-400' : 'text-gray-400';
+                    changeHtml = `<span class="${color}">${isPositive ? '+' : ''}${change.toFixed(2)}%</span>`;
+                }
+                
+                const dateStr = point.date ? new Date(point.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-';
+                const statusBadge = point.isActive 
+                    ? '<span class="text-[9px] px-1 py-0.5 rounded bg-emerald-500/20 text-emerald-400">Active</span>'
+                    : '<span class="text-[9px] px-1 py-0.5 rounded bg-red-500/20 text-red-400">Inactive</span>';
+                
+                html += `
+                    <tr class="border-b border-white/5 hover:bg-white/5">
+                        <td class="py-2 px-3 font-medium">E${point.epoch}</td>
+                        <td class="py-2 px-3 text-gray-400">${dateStr}</td>
+                        <td class="py-2 px-3 text-right">
+                            <span class="font-mono ${point.value >= 1 ? 'text-cyan-400' : 'text-red-400'}">${point.value.toFixed(2)}%</span>
+                            <span class="text-[10px] text-gray-500 ml-1">(${fmtNum(point.vp)} VP)</span>
+                        </td>
+                        <td class="py-2 px-3 text-right">${changeHtml}</td>
+                        <td class="py-2 px-3 text-right">${statusBadge}</td>
+                    </tr>
+                `;
+            }
         });
         
         tbody.innerHTML = html;
@@ -6118,16 +6390,31 @@
         
         // Build history points
         const historyPoints = [];
+        const prevEpochNum = store.previousEpochNumber || (store.epoch - 1);
         
         // Previous epoch
         if (store.previousEpochData) {
             const prevPool = findPool(store.previousEpochData, poolName);
             if (prevPool) {
                 historyPoints.push({
-                    epoch: store.epoch - 1,
+                    epoch: prevEpochNum,
                     value: config.getValue(prevPool),
                     lunaPrice: store.previousAdaoSnap?.lunaPrice_USD || null,
-                    date: store.previousEpochData?.meta?.generated_at
+                    date: store.previousEpochData?.meta?.generated_at,
+                    missed: false
+                });
+            }
+        }
+        
+        // Add missed epochs between previous and current
+        if (prevEpochNum && store.epoch) {
+            for (let e = prevEpochNum + 1; e < store.epoch; e++) {
+                historyPoints.push({
+                    epoch: e,
+                    value: null,
+                    lunaPrice: null,
+                    date: null,
+                    missed: true
                 });
             }
         }
@@ -6139,16 +6426,19 @@
                 epoch: store.epoch,
                 value: config.getValue(currentPool),
                 lunaPrice: store.adaoSnap?.lunaPrice_USD || null,
-                date: store.data?.meta?.generated_at
+                date: store.data?.meta?.generated_at,
+                missed: false
             });
         }
         
-        // Render chart with custom color
+        // Render chart with custom color (handling missed epochs)
         const ctx = document.getElementById('history-chart');
         if (ctx) {
             if (historyModalChart) {
                 historyModalChart.destroy();
             }
+            
+            const pointColors = historyPoints.map(p => p.missed ? '#ef4444' : config.color);
             
             historyModalChart = new Chart(ctx, {
                 type: 'line',
@@ -6156,15 +6446,16 @@
                     labels: historyPoints.map(p => `E${p.epoch}`),
                     datasets: [{
                         label: config.label,
-                        data: historyPoints.map(p => p.value),
+                        data: historyPoints.map(p => p.missed ? null : p.value),
                         borderColor: config.color,
                         backgroundColor: config.color + '20',
                         fill: true,
                         tension: 0.3,
-                        pointRadius: 6,
-                        pointBackgroundColor: config.color,
-                        pointBorderColor: '#fff',
-                        pointBorderWidth: 2
+                        pointRadius: historyPoints.map(p => p.missed ? 8 : 6),
+                        pointBackgroundColor: pointColors,
+                        pointBorderColor: historyPoints.map(p => p.missed ? '#ef4444' : '#fff'),
+                        pointBorderWidth: 2,
+                        spanGaps: false
                     }]
                 },
                 options: {
@@ -6174,14 +6465,23 @@
                         legend: { display: false },
                         tooltip: {
                             callbacks: {
-                                label: (ctx) => config.format(ctx.raw)
+                                label: (ctx) => {
+                                    const point = historyPoints[ctx.dataIndex];
+                                    if (point.missed) return 'Snapshot Missed';
+                                    return config.format(ctx.raw);
+                                }
                             }
                         }
                     },
                     scales: {
                         x: {
                             grid: { color: 'rgba(255,255,255,0.05)' },
-                            ticks: { color: '#9ca3af' }
+                            ticks: { 
+                                color: (ctx) => {
+                                    const point = historyPoints[ctx.index];
+                                    return point?.missed ? '#ef4444' : '#9ca3af';
+                                }
+                            }
                         },
                         y: {
                             grid: { color: 'rgba(255,255,255,0.05)' },
@@ -6196,43 +6496,67 @@
             });
         }
         
-        // Render table
+        // Render table (handling missed epochs)
         const tbody = document.getElementById('history-table-body');
         const sorted = [...historyPoints].sort((a, b) => b.epoch - a.epoch);
         
         let html = '';
         sorted.forEach((point, idx) => {
-            const prevPoint = sorted[idx + 1];
-            let changeHtml = '-';
-            
-            if (prevPoint && prevPoint.value !== 0) {
-                const change = point.value - prevPoint.value;
-                const changePct = (change / prevPoint.value) * 100;
-                const isPositive = change > 0;
-                const color = isPositive ? 'text-emerald-400' : change < 0 ? 'text-red-400' : 'text-gray-400';
-                
-                // Format change based on metric type
-                if (metric === 'apr') {
-                    changeHtml = `<span class="${color}">${isPositive ? '+' : ''}${change.toFixed(1)}%</span>`;
-                } else if (metric === 'bribes') {
-                    changeHtml = `<span class="${color}">${isPositive ? '+' : ''}${fmt$(change)}</span>`;
-                } else {
-                    changeHtml = `<span class="${color}">${isPositive ? '+' : ''}${fmtNum(change)}</span>`;
+            // For change calculation, find the next non-missed point
+            let prevPoint = null;
+            for (let i = idx + 1; i < sorted.length; i++) {
+                if (!sorted[i].missed) {
+                    prevPoint = sorted[i];
+                    break;
                 }
             }
             
-            const dateStr = point.date ? new Date(point.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-';
-            const priceStr = point.lunaPrice ? `$${point.lunaPrice.toFixed(4)}` : '-';
-            
-            html += `
-                <tr class="border-b border-white/5 hover:bg-white/5">
-                    <td class="py-2 px-3 font-medium">E${point.epoch}</td>
-                    <td class="py-2 px-3 text-gray-400">${dateStr}</td>
-                    <td class="py-2 px-3 text-right font-mono" style="color: ${config.color}">${config.format(point.value)}</td>
-                    <td class="py-2 px-3 text-right">${changeHtml}</td>
-                    <td class="py-2 px-3 text-right text-gray-400">${priceStr}</td>
-                </tr>
-            `;
+            if (point.missed) {
+                // Render missed epoch row
+                html += `
+                    <tr class="border-b border-red-500/20 bg-red-500/5">
+                        <td class="py-2 px-3 font-medium text-red-400">E${point.epoch}</td>
+                        <td class="py-2 px-3 text-red-400/60">—</td>
+                        <td class="py-2 px-3 text-center" colspan="3">
+                            <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-500/20 text-red-400 text-sm">
+                                <i class="fas fa-exclamation-circle"></i>
+                                Snapshot Missed
+                            </span>
+                        </td>
+                    </tr>
+                `;
+            } else {
+                let changeHtml = '-';
+                
+                if (prevPoint && !prevPoint.missed && prevPoint.value !== 0) {
+                    const change = point.value - prevPoint.value;
+                    const changePct = (change / prevPoint.value) * 100;
+                    const isPositive = change > 0;
+                    const color = isPositive ? 'text-emerald-400' : change < 0 ? 'text-red-400' : 'text-gray-400';
+                    
+                    // Format change based on metric type
+                    if (metric === 'apr') {
+                        changeHtml = `<span class="${color}">${isPositive ? '+' : ''}${change.toFixed(1)}%</span>`;
+                    } else if (metric === 'bribes') {
+                        changeHtml = `<span class="${color}">${isPositive ? '+' : ''}${fmt$(change)}</span>`;
+                    } else {
+                        changeHtml = `<span class="${color}">${isPositive ? '+' : ''}${fmtNum(change)}</span>`;
+                    }
+                }
+                
+                const dateStr = point.date ? new Date(point.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-';
+                const priceStr = point.lunaPrice ? `$${point.lunaPrice.toFixed(4)}` : '-';
+                
+                html += `
+                    <tr class="border-b border-white/5 hover:bg-white/5">
+                        <td class="py-2 px-3 font-medium">E${point.epoch}</td>
+                        <td class="py-2 px-3 text-gray-400">${dateStr}</td>
+                        <td class="py-2 px-3 text-right font-mono" style="color: ${config.color}">${config.format(point.value)}</td>
+                        <td class="py-2 px-3 text-right">${changeHtml}</td>
+                        <td class="py-2 px-3 text-right text-gray-400">${priceStr}</td>
+                    </tr>
+                `;
+            }
         });
         
         tbody.innerHTML = html;
@@ -6295,16 +6619,31 @@
         
         // Build history points
         const historyPoints = [];
+        const prevEpochNum = store.previousEpochNumber || (store.epoch - 1);
         
         // Previous epoch
         if (store.previousEpochData) {
             const prevPool = findTlaPool(store.previousEpochData, poolName);
             if (prevPool) {
                 historyPoints.push({
-                    epoch: store.epoch - 1,
+                    epoch: prevEpochNum,
                     value: config.getValue(prevPool),
                     lunaPrice: store.previousAdaoSnap?.lunaPrice_USD || null,
-                    date: store.previousEpochData?.meta?.generated_at
+                    date: store.previousEpochData?.meta?.generated_at,
+                    missed: false
+                });
+            }
+        }
+        
+        // Add missed epochs between previous and current
+        if (prevEpochNum && store.epoch) {
+            for (let e = prevEpochNum + 1; e < store.epoch; e++) {
+                historyPoints.push({
+                    epoch: e,
+                    value: null,
+                    lunaPrice: null,
+                    date: null,
+                    missed: true
                 });
             }
         }
@@ -6316,16 +6655,19 @@
                 epoch: store.epoch,
                 value: config.getValue(currentPool),
                 lunaPrice: store.adaoSnap?.lunaPrice_USD || null,
-                date: store.data?.meta?.generated_at
+                date: store.data?.meta?.generated_at,
+                missed: false
             });
         }
         
-        // Render chart
+        // Render chart (handling missed epochs)
         const ctx = document.getElementById('history-chart');
         if (ctx) {
             if (historyModalChart) {
                 historyModalChart.destroy();
             }
+            
+            const pointColors = historyPoints.map(p => p.missed ? '#ef4444' : config.color);
             
             historyModalChart = new Chart(ctx, {
                 type: 'line',
@@ -6333,15 +6675,16 @@
                     labels: historyPoints.map(p => `E${p.epoch}`),
                     datasets: [{
                         label: config.label,
-                        data: historyPoints.map(p => p.value),
+                        data: historyPoints.map(p => p.missed ? null : p.value),
                         borderColor: config.color,
                         backgroundColor: config.color + '20',
                         fill: true,
                         tension: 0.3,
-                        pointRadius: 6,
-                        pointBackgroundColor: config.color,
-                        pointBorderColor: '#fff',
-                        pointBorderWidth: 2
+                        pointRadius: historyPoints.map(p => p.missed ? 8 : 6),
+                        pointBackgroundColor: pointColors,
+                        pointBorderColor: historyPoints.map(p => p.missed ? '#ef4444' : '#fff'),
+                        pointBorderWidth: 2,
+                        spanGaps: false
                     }]
                 },
                 options: {
@@ -6351,14 +6694,23 @@
                         legend: { display: false },
                         tooltip: {
                             callbacks: {
-                                label: (ctx) => config.format(ctx.raw)
+                                label: (ctx) => {
+                                    const point = historyPoints[ctx.dataIndex];
+                                    if (point.missed) return 'Snapshot Missed';
+                                    return config.format(ctx.raw);
+                                }
                             }
                         }
                     },
                     scales: {
                         x: {
                             grid: { color: 'rgba(255,255,255,0.05)' },
-                            ticks: { color: '#9ca3af' }
+                            ticks: { 
+                                color: (ctx) => {
+                                    const point = historyPoints[ctx.index];
+                                    return point?.missed ? '#ef4444' : '#9ca3af';
+                                }
+                            }
                         },
                         y: {
                             grid: { color: 'rgba(255,255,255,0.05)' },
@@ -6373,41 +6725,65 @@
             });
         }
         
-        // Render table
+        // Render table (handling missed epochs)
         const tbody = document.getElementById('history-table-body');
         const sorted = [...historyPoints].sort((a, b) => b.epoch - a.epoch);
         
         let html = '';
         sorted.forEach((point, idx) => {
-            const prevPoint = sorted[idx + 1];
-            let changeHtml = '-';
-            
-            if (prevPoint && prevPoint.value !== 0) {
-                const change = point.value - prevPoint.value;
-                const changePct = (change / prevPoint.value) * 100;
-                const isPositive = change > 0;
-                const color = isPositive ? 'text-emerald-400' : change < 0 ? 'text-red-400' : 'text-gray-400';
-                
-                // Format change based on metric type
-                if (metric === 'tla-apr') {
-                    changeHtml = `<span class="${color}">${isPositive ? '+' : ''}${change.toFixed(1)}%</span>`;
-                } else {
-                    changeHtml = `<span class="${color}">${isPositive ? '+' : ''}${fmt$(change)}</span>`;
+            // For change calculation, find the next non-missed point
+            let prevPoint = null;
+            for (let i = idx + 1; i < sorted.length; i++) {
+                if (!sorted[i].missed) {
+                    prevPoint = sorted[i];
+                    break;
                 }
             }
             
-            const dateStr = point.date ? new Date(point.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-';
-            const priceStr = point.lunaPrice ? `$${point.lunaPrice.toFixed(4)}` : '-';
-            
-            html += `
-                <tr class="border-b border-white/5 hover:bg-white/5">
-                    <td class="py-2 px-3 font-medium">E${point.epoch}</td>
-                    <td class="py-2 px-3 text-gray-400">${dateStr}</td>
-                    <td class="py-2 px-3 text-right font-mono" style="color: ${config.color}">${config.format(point.value)}</td>
-                    <td class="py-2 px-3 text-right">${changeHtml}</td>
-                    <td class="py-2 px-3 text-right text-gray-400">${priceStr}</td>
-                </tr>
-            `;
+            if (point.missed) {
+                // Render missed epoch row
+                html += `
+                    <tr class="border-b border-red-500/20 bg-red-500/5">
+                        <td class="py-2 px-3 font-medium text-red-400">E${point.epoch}</td>
+                        <td class="py-2 px-3 text-red-400/60">—</td>
+                        <td class="py-2 px-3 text-center" colspan="3">
+                            <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-500/20 text-red-400 text-sm">
+                                <i class="fas fa-exclamation-circle"></i>
+                                Snapshot Missed
+                            </span>
+                        </td>
+                    </tr>
+                `;
+            } else {
+                let changeHtml = '-';
+                
+                if (prevPoint && !prevPoint.missed && prevPoint.value !== 0) {
+                    const change = point.value - prevPoint.value;
+                    const changePct = (change / prevPoint.value) * 100;
+                    const isPositive = change > 0;
+                    const color = isPositive ? 'text-emerald-400' : change < 0 ? 'text-red-400' : 'text-gray-400';
+                    
+                    // Format change based on metric type
+                    if (metric === 'tla-apr') {
+                        changeHtml = `<span class="${color}">${isPositive ? '+' : ''}${change.toFixed(1)}%</span>`;
+                    } else {
+                        changeHtml = `<span class="${color}">${isPositive ? '+' : ''}${fmt$(change)}</span>`;
+                    }
+                }
+                
+                const dateStr = point.date ? new Date(point.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-';
+                const priceStr = point.lunaPrice ? `$${point.lunaPrice.toFixed(4)}` : '-';
+                
+                html += `
+                    <tr class="border-b border-white/5 hover:bg-white/5">
+                        <td class="py-2 px-3 font-medium">E${point.epoch}</td>
+                        <td class="py-2 px-3 text-gray-400">${dateStr}</td>
+                        <td class="py-2 px-3 text-right font-mono" style="color: ${config.color}">${config.format(point.value)}</td>
+                        <td class="py-2 px-3 text-right">${changeHtml}</td>
+                        <td class="py-2 px-3 text-right text-gray-400">${priceStr}</td>
+                    </tr>
+                `;
+            }
         });
         
         tbody.innerHTML = html;
