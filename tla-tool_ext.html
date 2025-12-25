@@ -6295,48 +6295,37 @@ async function fetchDashboardData() {
     
     let tilesComplete = 0;
     
+    // Use static JSON file (same as NFT Explorer) - this has CORS headers
+    const NFT_STATUS_URL = 'https://deving.zone/en/nfts/alliance_daos.json';
+    
     try {
-        // Tile 1: NFT stats from deving.zone - fetch BOTH stats and meta for NFT tab too
-        const [statsRes, metaRes, listingsRes] = await Promise.all([
-            fetch('https://deving.zone/api/nft/stats/terra1tpl03d6mvh2emu7lwl3062w8h3f7e7q5xd7zcx'),
-            fetch('https://deving.zone/api/nft/meta/terra1tpl03d6mvh2emu7lwl3062w8h3f7e7q5xd7zcx'),
-            fetch('https://deving.zone/api/nft/listings/terra1tpl03d6mvh2emu7lwl3062w8h3f7e7q5xd7zcx')
-        ]);
+        // Tile 1: NFT stats from static JSON file
+        const statusRes = await fetch(NFT_STATUS_URL);
         
-        if (statsRes.ok) {
-            const stats = await statsRes.json();
+        if (statusRes.ok) {
+            const nftData = await statusRes.json();
+            
+            // Count NFTs
+            let minted = 0, broken = 0;
+            if (Array.isArray(nftData)) {
+                minted = nftData.length;
+                broken = nftData.filter(n => n.special_trait === 'BROKEN').length;
+            }
+            
             dashboardStore.tiles.nft = {
-                total_minted: stats.collection_stats?.num_tokens || 0,
-                unminted: 10000 - (stats.collection_stats?.num_tokens || 0),
-                broken_count: stats.nfts?.filter(n => n.special_trait === 'BROKEN').length || 0
+                total_minted: minted,
+                unminted: 10000 - minted,
+                broken_count: broken
             };
             setTxt('dash-nft-minted', dashboardStore.tiles.nft.total_minted.toLocaleString());
             setTxt('dash-nft-unminted', dashboardStore.tiles.nft.unminted.toLocaleString());
             setTxt('dash-nft-broken', dashboardStore.tiles.nft.broken_count.toLocaleString());
             setTileStatus('nft', true);
             tilesComplete++;
-        }
-        
-        // Store NFT meta data for NFT Stats tab
-        if (metaRes.ok) {
-            const metaData = await metaRes.json();
-            nftStore.bbl.collection = metaData;
-            // Pre-fill the NFT tab JSON field
-            const jsonField = $('nft-bbl-collection-json');
-            if (jsonField) jsonField.value = JSON.stringify(metaData);
-            console.log('✅ NFT metadata pre-loaded for NFT Stats tab');
-        }
-        
-        // Store NFT listings for NFT Stats tab
-        if (listingsRes.ok) {
-            const listingsData = await listingsRes.json();
-            if (listingsData.nfts) {
-                nftStore.bbl.listings = listingsData.nfts;
-                // Pre-fill listings field
-                const listingsField = $('nft-bbl-listings-json');
-                if (listingsField) listingsField.value = JSON.stringify(listingsData);
-                console.log('✅ NFT listings pre-loaded for NFT Stats tab:', listingsData.nfts.length, 'listings');
-            }
+            
+            // Store for NFT Stats tab too
+            nftStore.bbl.collection = { nfts: nftData, count: minted };
+            console.log('✅ NFT data loaded:', minted, 'NFTs,', broken, 'broken');
         }
         
         // Tile 11: Epoch info (from store)
@@ -6360,22 +6349,12 @@ async function fetchDashboardData() {
             tilesComplete++;
         }
         
-        // Tile 2: Backing per NFT (calculated from treasury / minted)
-        // This needs treasury data which we'll add later
-        
         updateDashboardStatus(tilesComplete);
         updateDashboardSnapshotPreview();
         updateDashboardConfirmSection();
     } catch (e) {
         console.error('Dashboard fetch error:', e);
-        
-        // Check if it's a CORS error (running locally)
-        if (e.message.includes('Failed to fetch') || e.name === 'TypeError') {
-            statusEl.innerHTML = '⚠️ CORS - use paste';
-            console.log('ℹ️ CORS blocked - running locally? Use paste sections or host on web server.');
-        } else {
-            statusEl.innerHTML = '❌ Error';
-        }
+        statusEl.innerHTML = '❌ Fetch failed';
         
         // Still populate what we can from store (epoch, prices)
         if (store.liveEpoch) {
@@ -6749,40 +6728,29 @@ async function fetchNftData() {
     if (!statusEl) return;
     
     // Check if data already loaded from Dashboard tab
-    if (nftStore.bbl.collection) {
+    if (nftStore.bbl.collection?.nfts) {
         statusEl.innerHTML = '✅ Pre-loaded';
         parseNftBblCollection();
-        if (nftStore.bbl.listings.length > 0) {
-            parseNftBblListings();
-        }
         return;
     }
     
     statusEl.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Fetching...';
+    
+    // Use static JSON file (same as NFT Explorer) - this has CORS headers
+    const NFT_STATUS_URL = 'https://deving.zone/en/nfts/alliance_daos.json';
+    
     try {
-        // Fetch both meta and listings
-        const [metaRes, listingsRes] = await Promise.all([
-            fetch('https://deving.zone/api/nft/meta/terra1tpl03d6mvh2emu7lwl3062w8h3f7e7q5xd7zcx'),
-            fetch('https://deving.zone/api/nft/listings/terra1tpl03d6mvh2emu7lwl3062w8h3f7e7q5xd7zcx')
-        ]);
+        const res = await fetch(NFT_STATUS_URL);
         
-        if (metaRes.ok) {
-            const data = await metaRes.json();
-            nftStore.bbl.collection = data;
-            $('nft-bbl-collection-json').value = JSON.stringify(data);
+        if (res.ok) {
+            const nftData = await res.json();
+            nftStore.bbl.collection = { nfts: nftData, count: nftData.length };
+            $('nft-bbl-collection-json').value = JSON.stringify(nftData);
             parseNftBblCollection();
+            statusEl.innerHTML = '✅ Fetched';
+        } else {
+            statusEl.innerHTML = '❌ Failed';
         }
-        
-        if (listingsRes.ok) {
-            const data = await listingsRes.json();
-            if (data.nfts) {
-                nftStore.bbl.listings = data.nfts;
-                $('nft-bbl-listings-json').value = JSON.stringify(data);
-                parseNftBblListings();
-            }
-        }
-        
-        statusEl.innerHTML = '✅ Fetched';
     } catch (e) { 
         console.error('NFT fetch error:', e);
         statusEl.innerHTML = '❌ Error'; 
