@@ -6368,7 +6368,34 @@ async function fetchDashboardData() {
         updateDashboardConfirmSection();
     } catch (e) {
         console.error('Dashboard fetch error:', e);
-        statusEl.innerHTML = '❌ Error';
+        
+        // Check if it's a CORS error (running locally)
+        if (e.message.includes('Failed to fetch') || e.name === 'TypeError') {
+            statusEl.innerHTML = '⚠️ CORS - use paste';
+            console.log('ℹ️ CORS blocked - running locally? Use paste sections or host on web server.');
+        } else {
+            statusEl.innerHTML = '❌ Error';
+        }
+        
+        // Still populate what we can from store (epoch, prices)
+        if (store.liveEpoch) {
+            setTxt('dash-epoch-current', store.liveEpoch.epoch);
+            setTxt('dash-epoch-phase', store.liveEpoch.phase);
+            setTxt('dash-epoch-days', store.liveEpoch.daysRemaining + 'd');
+            setTileStatus('epoch', true);
+        }
+        
+        const priceCount = Object.keys(store.tokenPrices).length;
+        if (priceCount > 0) {
+            const lunaPrice = store.tokenPrices.LUNA?.price;
+            const ampPrice = store.tokenPrices.AMPLUNA?.price;
+            setTxt('dash-price-luna', lunaPrice ? '$' + lunaPrice.toFixed(4) : '--');
+            setTxt('dash-price-ampluna', ampPrice ? '$' + ampPrice.toFixed(4) : '--');
+            setTxt('dash-price-count', priceCount);
+            setTileStatus('prices', true);
+        }
+        
+        updateDashboardConfirmSection();
     }
 }
 
