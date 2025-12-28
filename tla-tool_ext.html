@@ -345,16 +345,21 @@
         
         <!-- Chain Staking APR -->
         <div class="grid grid-cols-3 gap-4 mb-4">
-            <div class="bg-[#0D0D0D] rounded-lg p-3 border border-yellow-900/50">
+            <div id="chain-apr-card" class="bg-[#0D0D0D] rounded-lg p-3 border border-yellow-900/50">
                 <div class="flex justify-between items-center mb-2">
-                    <span class="text-yellow-400 text-[10px] font-bold uppercase">Chain Staking APR</span>
-                    <button onclick="openPreviewModal('https://analytics.smartstake.io/terra/stats/staking', 'Smart Stake APR')" class="text-[9px] text-cyan-400 hover:text-cyan-300 bg-cyan-900/30 px-2 py-0.5 rounded cursor-pointer">
-                        <i class="fas fa-external-link-alt mr-1"></i> Smart Stake
-                    </button>
+                    <span id="chain-apr-title" class="text-yellow-400 text-[10px] font-bold uppercase">Chain Staking APR</span>
+                    <div class="flex items-center gap-1">
+                        <button onclick="fetchChainStakingApr()" class="text-[9px] text-yellow-400 hover:text-yellow-300 bg-yellow-900/30 px-2 py-0.5 rounded cursor-pointer" title="Refresh from GitHub">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                        <button onclick="openPreviewModal('https://analytics.smartstake.io/terra/stats/staking', 'Smart Stake APR')" class="text-[9px] text-cyan-400 hover:text-cyan-300 bg-cyan-900/30 px-2 py-0.5 rounded cursor-pointer">
+                            <i class="fas fa-external-link-alt mr-1"></i> Smart Stake
+                        </button>
+                    </div>
                 </div>
                 <div class="flex items-baseline gap-2">
                     <input type="number" id="lst-chain-apr" step="0.01" class="input-dark text-xl font-bold w-24 text-center text-yellow-400" placeholder="" onchange="updateLstRatio('chainStakingApr', this.value)">
-                    <span class="text-yellow-400 text-lg">%</span>
+                    <span id="chain-apr-pct" class="text-yellow-400 text-lg">%</span>
                 </div>
                 <div id="lst-chain-apr-date" class="text-[9px] text-gray-600 mt-1">Last: --</div>
             </div>
@@ -1390,9 +1395,13 @@ async function fetchAllTokenPrices() {
     const bridgedToBase = {};  // Map bridged tokens to their base for price lookup
     
     Object.values(store.lpRegistry).forEach(lpData => {
-        // Use the lp property which has clean pair name like "LUNA-USDC"
+        // Use the lp property which has clean pair name like "LUNA-USDC" or single "ampCAPA"
         const lpName = lpData.lp || '';
-        const parts = lpName.split('-');
+        
+        // For single-sided pools, lpName IS the token (no dash)
+        // For LP pairs, split by dash
+        const parts = lpName.includes('-') ? lpName.split('-') : [lpName];
+        
         parts.forEach(t => {
             if (!t) return;
             
@@ -1500,20 +1509,43 @@ async function fetchAllTokenPrices() {
     });
     
     // Calculate derived LST prices (ampLUNA, arbLUNA, etc.)
-    // Only add if the canonical version is in our token list
+    // These should ALWAYS be calculated if we have the ratio - they're essential tokens
     let calcCount = 0;
+    
+    // Special handling: bLUNA and boneLUNA are the same asset
+    // If either is in the token list, add both with same price
+    const hasBLuna = uniqueTokens.has('bLUNA');
+    const hasBoneLuna = uniqueTokens.has('boneLUNA');
+    
     Object.entries(CALCULATED_TOKENS).forEach(([upperToken, config]) => {
         const displayName = config.display;
         const basePrice = basePrices[config.base] || store.tokenPrices[config.base]?.price;
         const ratio = store.lstRatios[config.ratioKey]?.ratio;
         
-        // Only calculate if this token is actually in our LP registry
-        if (uniqueTokens.has(displayName) && basePrice && ratio) {
+        // Skip if we don't have base price or ratio
+        if (!basePrice || !ratio) return;
+        
+        // Special case: bLUNA/boneLUNA - add both if either exists in LP registry
+        if (displayName === 'bLUNA' || displayName === 'boneLUNA') {
+            if (hasBLuna || hasBoneLuna) {
+                store.tokenPrices[displayName] = {
+                    price: basePrice * ratio,
+                    source: 'calculated',
+                    formula: `${config.base} × ${ratio.toFixed(4)}`
+                };
+                if (!tokenList.includes(displayName)) tokenList.push(displayName);
+                calcCount++;
+            }
+        }
+        // For all other LSTs (ampLUNA, arbLUNA, ampCAPA, ampROAR, xASTRO):
+        // ALWAYS calculate if we have ratio - these are core tokens even for single-sided pools
+        else {
             store.tokenPrices[displayName] = {
                 price: basePrice * ratio,
                 source: 'calculated',
                 formula: `${config.base} × ${ratio.toFixed(4)}`
             };
+            if (!tokenList.includes(displayName)) tokenList.push(displayName);
             calcCount++;
         }
     });
@@ -2113,7 +2145,9 @@ function checkStaleAprData(dateStr) {
     
     const dateEl = $('lst-chain-apr-date');
     const aprInput = $('lst-chain-apr');
-    const aprContainer = aprInput?.parentElement?.parentElement;
+    const aprCard = $('chain-apr-card');
+    const aprTitle = $('chain-apr-title');
+    const aprPct = $('chain-apr-pct');
     
     // Color coding:
     // Green (0 days) = today
@@ -2129,8 +2163,14 @@ function checkStaleAprData(dateStr) {
         if (aprInput) {
             aprInput.className = 'input-dark text-xl font-bold w-24 text-center text-green-400';
         }
-        if (aprContainer) {
-            aprContainer.className = 'bg-[#0D0D0D] rounded-lg p-3 border-2 border-green-700';
+        if (aprTitle) {
+            aprTitle.className = 'text-green-400 text-[10px] font-bold uppercase';
+        }
+        if (aprPct) {
+            aprPct.className = 'text-green-400 text-lg';
+        }
+        if (aprCard) {
+            aprCard.className = 'bg-[#0D0D0D] rounded-lg p-3 border-2 border-green-700';
         }
     } else if (diffDays <= 6) {
         // This week/epoch - Yellow
@@ -2141,8 +2181,14 @@ function checkStaleAprData(dateStr) {
         if (aprInput) {
             aprInput.className = 'input-dark text-xl font-bold w-24 text-center text-yellow-400';
         }
-        if (aprContainer) {
-            aprContainer.className = 'bg-[#0D0D0D] rounded-lg p-3 border-2 border-yellow-700';
+        if (aprTitle) {
+            aprTitle.className = 'text-yellow-400 text-[10px] font-bold uppercase';
+        }
+        if (aprPct) {
+            aprPct.className = 'text-yellow-400 text-lg';
+        }
+        if (aprCard) {
+            aprCard.className = 'bg-[#0D0D0D] rounded-lg p-3 border-2 border-yellow-700';
         }
     } else {
         // More than a week old - Red
@@ -2153,8 +2199,14 @@ function checkStaleAprData(dateStr) {
         if (aprInput) {
             aprInput.className = 'input-dark text-xl font-bold w-24 text-center text-red-400';
         }
-        if (aprContainer) {
-            aprContainer.className = 'bg-[#0D0D0D] rounded-lg p-3 border-2 border-red-700';
+        if (aprTitle) {
+            aprTitle.className = 'text-red-400 text-[10px] font-bold uppercase';
+        }
+        if (aprPct) {
+            aprPct.className = 'text-red-400 text-lg';
+        }
+        if (aprCard) {
+            aprCard.className = 'bg-[#0D0D0D] rounded-lg p-3 border-2 border-red-700';
         }
     }
     
@@ -3083,6 +3135,9 @@ function parseVoteTab() {
     store.lpRegistry = {};
     
     const BUCKETS = ['stable', 'project', 'bluechip', 'single'];
+    // Known single-sided pool tokens (no LP pair)
+    const SINGLE_TOKENS = ['ampCAPA', 'xASTRO', 'AMPCAPA', 'XASTRO'];
+    
     let currentBucket = null;
     let i = 0;
     
@@ -3097,16 +3152,53 @@ function parseVoteTab() {
             continue;
         }
         
-        // Look for LP pattern: "LUNA-USDC LP" or similar, or single assets
-        if (line.includes(' LP') || line === 'ampCAPA' || line === 'xASTRO' || line.endsWith('Single')) {
-            let lpName = line.replace(' LP', '').replace(' Single', '').replace('Single', '').trim();
-            
+        // Look for LP pattern: "LUNA-USDC LP" or similar
+        // Or single-sided: check if next line is "Single" or if it's a known single token
+        let isSingle = false;
+        let lpName = null;
+        
+        // Skip common non-LP lines
+        if (line === 'icon' || line === 'Icon' || line === 'iconicon' || line === '') {
+            i++;
+            continue;
+        }
+        
+        if (line.includes(' LP')) {
+            lpName = line.replace(' LP', '').trim();
+        } else if (line.endsWith('Single')) {
+            // Line itself ends with Single (e.g., "ampCAPA Single")
+            lpName = line.replace('Single', '').trim();
+            isSingle = true;
+        } else if (SINGLE_TOKENS.map(s => s.toUpperCase()).includes(line.toUpperCase())) {
+            // Known single token (case insensitive)
+            lpName = getCanonicalName(line);
+            isSingle = true;
+        } else if (i + 1 < lines.length && lines[i + 1].toLowerCase() === 'single') {
+            // Next line is "Single" - this line is the token name (e.g., "ampCAPA" followed by "Single")
+            lpName = getCanonicalName(line);
+            isSingle = true;
+            console.log('Detected single pool pattern:', line, '-> Single');
+        }
+        
+        // Debug: log what we found
+        if (lpName && isSingle) {
+            console.log('Found single-sided pool:', lpName, 'from line:', line);
+        }
+        
+        if (lpName) {
             // Look ahead for dex and vote %
             let dex = null;
             let votePct = 0;
             
+            // For single-sided pools, default to Astroport if no DEX found
+            let defaultDex = isSingle ? 'Astroport' : null;
+            
             for (let k = 1; k <= 8 && i + k < lines.length; k++) {
                 let next = lines[i + k];
+                let nextLower = next.toLowerCase();
+                
+                // Skip "Single" marker line
+                if (nextLower === 'single') continue;
                 
                 // Detect DEX - both names used
                 if (next === 'Astroport') {
@@ -3122,18 +3214,31 @@ function parseVoteTab() {
                         votePct = parseFloat(pctMatch[1]);
                     }
                     
+                    // Use detected dex or default (for singles)
+                    let finalDex = dex || defaultDex;
+                    
                     // We found the VP for this dex, create the entry
-                    if (dex && lpName) {
-                        // Use composite key: "LUNA-USDC|Astroport"
-                        let key = `${lpName}|${dex}`;
+                    if (finalDex && lpName) {
+                        // Use composite key: "LUNA-USDC|Astroport" or "ampCAPA|Astroport"
+                        let key = `${lpName}|${finalDex}`;
                         
                         store.lpRegistry[key] = {
                             lp: lpName,
-                            dex: dex,
+                            dex: finalDex,
                             bucket: currentBucket || 'unknown',
                             vote_pct: votePct,
-                            active: votePct >= 1
+                            active: votePct >= 1,
+                            single: isSingle  // Mark as single-sided pool
                         };
+                        
+                        if (isSingle) {
+                            console.log('Created single pool entry:', key, votePct + '%');
+                        }
+                    }
+                    
+                    // For singles without explicit DEX, we're done after first VP
+                    if (isSingle && !dex) {
+                        break;
                     }
                     
                     // Reset for next potential dex entry for same LP
@@ -3141,8 +3246,12 @@ function parseVoteTab() {
                     votePct = 0;
                 }
                 
-                // Stop at next LP or bucket
-                if (k > 2 && (next.includes(' LP') || next === 'ampCAPA' || next === 'xASTRO' || next.endsWith('Single') || BUCKETS.includes(next.toLowerCase()))) {
+                // Stop at next LP or bucket or single token
+                let isNextLp = next.includes(' LP');
+                let isNextSingle = SINGLE_TOKENS.includes(next) || (i + k + 1 < lines.length && lines[i + k + 1].toLowerCase() === 'single');
+                let isNextBucket = BUCKETS.includes(nextLower);
+                
+                if (k > 2 && (isNextLp || isNextSingle || isNextBucket)) {
                     break;
                 }
             }
@@ -3190,9 +3299,11 @@ function renderLpRegistry() {
             let activeClass = lp.active ? 'text-white' : 'text-gray-500';
             let dexColor = lp.dex === 'Astroport' ? 'text-cyan-400' : 'text-blue-400';
             let dexLabel = lp.dex === 'Astroport' ? 'Astro' : 'SS';
+            // Show single indicator for single-sided pools
+            let singleBadge = lp.single ? '<span class="text-[8px] bg-green-900/50 text-green-400 px-1 rounded ml-1">single</span>' : '';
             
             html += `<div class="flex items-center justify-between py-1 px-2 bg-[#0D0D0D] rounded text-[10px]">
-                <span class="${activeClass} font-mono">${lp.lp}</span>
+                <span class="${activeClass} font-mono">${lp.lp}${singleBadge}</span>
                 <div class="flex items-center gap-3">
                     <span class="${dexColor}">${lp.vote_pct.toFixed(1)}% ${dexLabel}</span>
                 </div>
@@ -3210,11 +3321,13 @@ function updateLpSummary() {
     let active = Object.values(store.lpRegistry).filter(lp => lp.active).length;
     let astro = Object.values(store.lpRegistry).filter(lp => lp.dex === 'Astroport').length;
     let ww = Object.values(store.lpRegistry).filter(lp => lp.dex === 'Skeleton Swap' || lp.dex === 'Skeleton Swap').length;
+    let singles = Object.values(store.lpRegistry).filter(lp => lp.single).length;
     
     setTxt('lp-total', total);
     setTxt('lp-active', active);
     setTxt('lp-astro', astro);
     setTxt('lp-ww', ww);
+    if ($('lp-singles')) setTxt('lp-singles', singles);
 }
 
 function exportLpRegistry() {
