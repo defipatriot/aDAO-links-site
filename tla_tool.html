@@ -1452,22 +1452,24 @@
                     <div>
                         <span class="text-gray-500">Unbroken Floor:</span>
                         <div class="flex items-center gap-1 mt-0.5">
-                            <input type="number" id="nft-bbl-floor-unbroken-amt" class="input-dark w-16 text-right" placeholder="0" step="0.01">
-                            <select id="nft-bbl-floor-unbroken-token" class="input-dark w-16 text-[8px]">
+                            <input type="number" id="nft-bbl-floor-unbroken-amt" class="input-dark w-16 text-right" placeholder="0" step="0.01" onchange="updateBblFloorUsd()">
+                            <select id="nft-bbl-floor-unbroken-token" class="input-dark w-16 text-[8px]" onchange="updateBblFloorUsd()">
                                 <option value="bLUNA">bLUNA</option>
                                 <option value="LUNA">LUNA</option>
                             </select>
                         </div>
+                        <span id="nft-bbl-floor-unbroken-usd" class="text-gray-400 text-[8px]"></span>
                     </div>
                     <div>
                         <span class="text-gray-500">Broken Floor:</span>
                         <div class="flex items-center gap-1 mt-0.5">
-                            <input type="number" id="nft-bbl-floor-broken-amt" class="input-dark w-16 text-right" placeholder="null" step="0.01">
-                            <select id="nft-bbl-floor-broken-token" class="input-dark w-16 text-[8px]">
+                            <input type="number" id="nft-bbl-floor-broken-amt" class="input-dark w-16 text-right" placeholder="null" step="0.01" onchange="updateBblFloorUsd()">
+                            <select id="nft-bbl-floor-broken-token" class="input-dark w-16 text-[8px]" onchange="updateBblFloorUsd()">
                                 <option value="bLUNA">bLUNA</option>
                                 <option value="LUNA">LUNA</option>
                             </select>
                         </div>
+                        <span id="nft-bbl-floor-broken-usd" class="text-gray-400 text-[8px]"></span>
                     </div>
                 </div>
                 <!-- Volume -->
@@ -1538,16 +1540,18 @@
                     <div>
                         <span class="text-gray-500">Unbroken Floor:</span>
                         <div class="flex items-center gap-1 mt-0.5">
-                            <input type="number" id="nft-boost-floor-unbroken-amt" class="input-dark w-16 text-right" placeholder="0" step="0.01">
-                            <input type="text" id="nft-boost-floor-unbroken-token" class="input-dark w-16 text-[8px]" placeholder="Token" value="LUNA">
+                            <input type="number" id="nft-boost-floor-unbroken-amt" class="input-dark w-16 text-right" placeholder="0" step="0.01" onchange="updateBoostFloorUsd()">
+                            <input type="text" id="nft-boost-floor-unbroken-token" class="input-dark w-16 text-[8px]" placeholder="Token" value="LUNA" onchange="updateBoostFloorUsd()">
                         </div>
+                        <span id="nft-boost-floor-unbroken-usd" class="text-gray-400 text-[8px]"></span>
                     </div>
                     <div>
                         <span class="text-gray-500">Broken Floor:</span>
                         <div class="flex items-center gap-1 mt-0.5">
-                            <input type="number" id="nft-boost-floor-broken-amt" class="input-dark w-16 text-right" placeholder="null" step="0.01">
-                            <input type="text" id="nft-boost-floor-broken-token" class="input-dark w-16 text-[8px]" placeholder="Token" value="USDC">
+                            <input type="number" id="nft-boost-floor-broken-amt" class="input-dark w-16 text-right" placeholder="null" step="0.01" onchange="updateBoostFloorUsd()">
+                            <input type="text" id="nft-boost-floor-broken-token" class="input-dark w-16 text-[8px]" placeholder="Token" value="USDC" onchange="updateBoostFloorUsd()">
                         </div>
+                        <span id="nft-boost-floor-broken-usd" class="text-gray-400 text-[8px]"></span>
                     </div>
                 </div>
                 <!-- Volume - N/A for Boost -->
@@ -3812,6 +3816,12 @@ function calculateScoresForBucket(bucketName, filterSettings = null) {
 }
 
 function calculateAllScores(filterSettings = null) {
+    // Skip recalculation if scores were loaded from v3 file
+    if (store.scoresFromFile) {
+        console.log('Scores loaded from v3 file - skipping recalculation');
+        return;
+    }
+    
     BUCKET_ORDER.forEach(bucket => {
         calculateScoresForBucket(bucket, filterSettings);
     });
@@ -5849,6 +5859,9 @@ async function loadV3Snapshot(d, ep, ph, isTestFile) {
     store.ext.loaded = true;
     store.ext.source = 'v3_snapshot';
     
+    // Mark that scores are pre-calculated from file (don't recalculate)
+    store.scoresFromFile = true;
+    
     // Update UI
     updatePasteStatus('ps-vote', true, 'v3.0');
     updatePasteStatus('ps-liq-active', true, 'v3.0');
@@ -5867,6 +5880,9 @@ async function loadV3Snapshot(d, ep, ph, isTestFile) {
     
     // Populate NFT Stats tab
     populateNftStatsFromStore();
+    
+    // Reset flag after rendering
+    store.scoresFromFile = false;
     
     alert(`✅ Loaded Epoch ${ep} (${ph}) - v3.0 format${isTestFile ? ' (TEST FILE)' : ''}\n\n` +
           `📊 ${d.vote.pools?.length || 0} pools\n` +
@@ -5946,12 +5962,10 @@ function populateNftStatsFromStore() {
     // BBL Volume
     if (store.nftStats.bblVolume?.amount) {
         if ($('nft-bbl-volume')) $('nft-bbl-volume').value = store.nftStats.bblVolume.amount || '';
-        // Update USD display
-        if ($('nft-bbl-volume-usd')) {
-            let usd = store.nftStats.bblVolume.usd || (store.nftStats.bblVolume.amount * getTokenPrice('bLUNA'));
-            $('nft-bbl-volume-usd').textContent = '($' + usd.toLocaleString(undefined, {maximumFractionDigits: 2}) + ')';
-        }
     }
+    
+    // Update BBL floor/volume USD displays
+    updateBblFloorUsd();
     
     // Boost Floor
     if (store.nftStats.boostFloor?.unbroken) {
@@ -5962,6 +5976,9 @@ function populateNftStatsFromStore() {
         if ($('nft-boost-floor-broken-amt')) $('nft-boost-floor-broken-amt').value = store.nftStats.boostFloor.broken.amount || '';
         if ($('nft-boost-floor-broken-token')) $('nft-boost-floor-broken-token').value = store.nftStats.boostFloor.broken.token || 'USDC';
     }
+    
+    // Update Boost floor USD displays
+    updateBoostFloorUsd();
     
     // Render listings and sales
     renderBblListings();
@@ -8665,6 +8682,41 @@ function updateNftBacking() {
     store.nftStats.backingAmpLuna = ampLuna;
     store.nftStats.backingLuna = lunaEquiv;
     store.nftStats.backingUsd = usd;
+}
+
+// Update BBL floor USD displays
+function updateBblFloorUsd() {
+    // Unbroken
+    let ubAmt = parseFloat($('nft-bbl-floor-unbroken-amt')?.value) || 0;
+    let ubToken = $('nft-bbl-floor-unbroken-token')?.value || 'bLUNA';
+    let ubUsd = ubAmt * getTokenPrice(ubToken);
+    setTxt('nft-bbl-floor-unbroken-usd', ubAmt > 0 ? '($' + ubUsd.toFixed(2) + ')' : '');
+    
+    // Broken
+    let brAmt = parseFloat($('nft-bbl-floor-broken-amt')?.value) || 0;
+    let brToken = $('nft-bbl-floor-broken-token')?.value || 'bLUNA';
+    let brUsd = brAmt * getTokenPrice(brToken);
+    setTxt('nft-bbl-floor-broken-usd', brAmt > 0 ? '($' + brUsd.toFixed(2) + ')' : '');
+    
+    // Also update volume USD
+    let volAmt = parseFloat($('nft-bbl-volume')?.value) || 0;
+    let volUsd = volAmt * getTokenPrice('bLUNA');
+    setTxt('nft-bbl-volume-usd', '($' + volUsd.toLocaleString(undefined, {maximumFractionDigits: 2}) + ')');
+}
+
+// Update Boost floor USD displays
+function updateBoostFloorUsd() {
+    // Unbroken
+    let ubAmt = parseFloat($('nft-boost-floor-unbroken-amt')?.value) || 0;
+    let ubToken = $('nft-boost-floor-unbroken-token')?.value?.trim() || 'LUNA';
+    let ubUsd = ubAmt * getTokenPrice(ubToken);
+    setTxt('nft-boost-floor-unbroken-usd', ubAmt > 0 ? '($' + ubUsd.toFixed(2) + ')' : '');
+    
+    // Broken
+    let brAmt = parseFloat($('nft-boost-floor-broken-amt')?.value) || 0;
+    let brToken = $('nft-boost-floor-broken-token')?.value?.trim() || 'USDC';
+    let brUsd = brAmt * getTokenPrice(brToken);
+    setTxt('nft-boost-floor-broken-usd', brAmt > 0 ? '($' + brUsd.toFixed(2) + ')' : '');
 }
 
 // Convert local datetime to UTC ISO string
