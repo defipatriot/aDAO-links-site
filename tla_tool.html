@@ -5641,6 +5641,7 @@ async function loadV3Snapshot(d, ep, ph, isTestFile) {
         liq4Ep: p.historical?.liq_4ep_avg > 0 ? { avg: p.historical.liq_4ep_avg, count: p.historical.liq_4ep_count || 4 } : null,
         vol4Ep: p.historical?.vol_4ep_avg > 0 ? { avg: p.historical.vol_4ep_avg, count: p.historical.vol_4ep_count || 4 } : null,
         efficiency: p.historical?.efficiency || 0,
+        // Load scores directly from file
         accessScore: p.scores?.access || 0,
         performanceScore: p.scores?.performance || 0,
         supportScore: p.scores?.support || 0,
@@ -5651,7 +5652,8 @@ async function loadV3Snapshot(d, ep, ph, isTestFile) {
     // Liquidity data
     if (d.liquidity) {
         store.tla.tvl = d.liquidity.summary?.tvl || 0;
-        store.tla.rewYr = d.liquidity.summary?.rewards_yr || 0;
+        store.tla.rewYr = d.liquidity.summary?.rewards_per_year || 0;
+        store.tla.rewEp = d.liquidity.summary?.rewards_per_epoch || 0;
         
         if (d.liquidity.active_pools) {
             store.tla.pools = d.liquidity.active_pools.map(p => ({
@@ -5662,11 +5664,11 @@ async function loadV3Snapshot(d, ep, ph, isTestFile) {
                 bucket: p.bucket,
                 depth: p.depth || 0,
                 stk: p.tla_staked || 0,
-                aprNon: p.apr_non_amp || 0,
-                aprAmp: p.apr_amplified || 0,
+                aprNon: p.apr?.non_amp || p.apr_non_amp || 0,
+                aprAmp: p.apr?.amplified || p.apr_amplified || 0,
                 rYr: p.rewards_per_year || 0,
-                adaoNon: p.adao_deposit_non_amp || 0,
-                adaoAmp: p.adao_deposit_amplified || 0
+                adaoNon: p.adao_deposit?.non_amp || 0,
+                adaoAmp: p.adao_deposit?.amplified || 0
             }));
         }
         
@@ -5685,10 +5687,26 @@ async function loadV3Snapshot(d, ep, ph, isTestFile) {
         // aDAO deposits
         if (d.liquidity.adao_deposits) {
             store.dao.dep = d.liquidity.adao_deposits.total_usd || 0;
+            store.dao.apr = d.liquidity.adao_deposits.avg_apr || 0;
             store.dao.toks = (d.liquidity.adao_deposits.tokens || []).map(t => ({
                 s: t.symbol,
                 a: t.amount
             }));
+        }
+        
+        // Unclaimed rewards
+        if (d.liquidity.unclaimed_rewards) {
+            store.dao.rew = {
+                usd: d.liquidity.unclaimed_rewards.total_usd || 0,
+                z: d.liquidity.unclaimed_rewards.zAssets || 0,
+                amp: d.liquidity.unclaimed_rewards.ampLUNA || 0
+            };
+        }
+        
+        // Vote rewards - from liquidity section
+        if (d.liquidity.vote_rewards) {
+            store.dao.vRew = d.liquidity.vote_rewards.by_token || {};
+            store.dao.vRewPeriods = d.liquidity.vote_rewards.periods || [];
         }
     }
     
@@ -5725,28 +5743,29 @@ async function loadV3Snapshot(d, ep, ph, isTestFile) {
         }));
         store.dashboard.treasuryUsd = d.dashboard.treasury?.total_usd || 0;
         
-        // TLA position
+        // TLA position - override with dashboard data if present
         if (d.dashboard.tla_deposits) {
             store.dao.dep = d.dashboard.tla_deposits.total_usd || store.dao.dep;
             store.dao.lVp = d.dashboard.tla_deposits.vp || store.dao.lVp;
-            store.dao.apr = d.dashboard.tla_deposits.apr || 0;
+            store.dao.apr = d.dashboard.tla_deposits.apr || store.dao.apr;
         }
         
-        // Unclaimed rewards
+        // Unclaimed rewards - override if present
         if (d.dashboard.unclaimed_rewards) {
             store.dao.rew = {
-                usd: d.dashboard.unclaimed_rewards.deposit_rewards_usd || 0,
-                z: d.dashboard.unclaimed_rewards.zAssets || 0,
-                amp: d.dashboard.unclaimed_rewards.ampLUNA || 0
+                usd: d.dashboard.unclaimed_rewards.deposit_rewards_usd || store.dao.rew?.usd || 0,
+                z: d.dashboard.unclaimed_rewards.zAssets || store.dao.rew?.z || 0,
+                amp: d.dashboard.unclaimed_rewards.ampLUNA || store.dao.rew?.amp || 0
             };
         }
         
-        // Vote rewards
+        // Vote rewards - override if present
         if (d.dashboard.vote_rewards?.by_token) {
             store.dao.vRew = {};
             Object.entries(d.dashboard.vote_rewards.by_token).forEach(([token, data]) => {
-                store.dao.vRew[token] = data.amount || data;
+                store.dao.vRew[token] = typeof data === 'object' ? data.amount : data;
             });
+            store.dao.vRewPeriods = d.dashboard.vote_rewards.periods || store.dao.vRewPeriods || [];
         }
         
         // NFT backing
@@ -5838,6 +5857,11 @@ async function loadV3Snapshot(d, ep, ph, isTestFile) {
     renderLiquidityTable();
     updateDaoUIFromLoad();
     
+    // Update TLA Global display
+    setTxt('tla-tvl', '$' + (store.tla.tvl || 0).toLocaleString());
+    setTxt('tla-rew-yr', '$' + (store.tla.rewYr || 0).toLocaleString());
+    setTxt('tla-rew-ep', '$' + (store.tla.rewEp || 0).toLocaleString(undefined, {maximumFractionDigits: 0}));
+    
     // Populate Dashboard tab
     populateDashboardFromStore();
     
@@ -5864,14 +5888,17 @@ function populateDashboardFromStore() {
     
     // NFT Backing
     if (store.dashboard.backingAmpLuna) {
-        $('dash-back-amp').value = store.dashboard.backingAmpLuna;
+        if ($('dash-back-amp')) $('dash-back-amp').value = store.dashboard.backingAmpLuna;
         updateDashBacking();
     }
     
-    // Unminted
+    // Unminted - load from store values
     if (store.dashboard.unmintedCount) {
-        $('dash-unminted-count').value = store.dashboard.unmintedCount;
-        updateUnmintedBacking();
+        if ($('dash-unminted-count')) $('dash-unminted-count').value = store.dashboard.unmintedCount;
+        // Display the calculated values
+        setTxt('dash-unminted-amp', (store.dashboard.unmintedBackingAmp || 0).toLocaleString(undefined, {maximumFractionDigits: 4}));
+        setTxt('dash-unminted-luna', (store.dashboard.unmintedBackingLuna || 0).toLocaleString(undefined, {maximumFractionDigits: 4}));
+        setTxt('dash-unminted-usd', '$' + (store.dashboard.unmintedBackingUsd || 0).toLocaleString(undefined, {maximumFractionDigits: 2}));
     }
     
     // Update status
@@ -5919,6 +5946,11 @@ function populateNftStatsFromStore() {
     // BBL Volume
     if (store.nftStats.bblVolume?.amount) {
         if ($('nft-bbl-volume')) $('nft-bbl-volume').value = store.nftStats.bblVolume.amount || '';
+        // Update USD display
+        if ($('nft-bbl-volume-usd')) {
+            let usd = store.nftStats.bblVolume.usd || (store.nftStats.bblVolume.amount * getTokenPrice('bLUNA'));
+            $('nft-bbl-volume-usd').textContent = '($' + usd.toLocaleString(undefined, {maximumFractionDigits: 2}) + ')';
+        }
     }
     
     // Boost Floor
