@@ -3827,6 +3827,61 @@ function calculateAllScores(filterSettings = null) {
     });
 }
 
+// Load 4-epoch historical data from ext files when loading v3 snapshot
+// This fills in liq4Ep and vol4Ep for pools that don't have it in the snapshot
+async function load4EpDataForV3() {
+    const extBaseUrl = 'https://raw.githubusercontent.com/defipatriot/tla-ext_json_storage/main/';
+    
+    try {
+        // Load historical data
+        const res = await fetch(extBaseUrl + 'tla_ext_historical.json?t=' + Date.now());
+        if (!res.ok) {
+            console.log('Could not load ext historical for 4EP data');
+            return;
+        }
+        
+        const data = await res.json();
+        if (!data.lps) {
+            console.log('No LPs in ext historical');
+            return;
+        }
+        
+        // Store in ext.lps for get4EpochAverage to use
+        store.ext.lps = { ...store.ext.lps, ...data.lps };
+        console.log('Loaded ext historical:', Object.keys(data.lps).length, 'LPs');
+        
+        // Now fill in 4EP data for pools that don't have it
+        let filled = 0;
+        store.vote.pools.forEach(p => {
+            if (!p.liq4Ep || !p.vol4Ep) {
+                let lpKey = buildLpKey(p.n, p.d);
+                
+                if (!p.liq4Ep) {
+                    p.liq4Ep = get4EpochAverage(lpKey, 'liquidity');
+                    if (p.liq4Ep) filled++;
+                }
+                if (!p.vol4Ep) {
+                    p.vol4Ep = get4EpochAverage(lpKey, 'volume');
+                }
+                
+                // Recalculate efficiency if we now have data
+                if (p.liq4Ep || p.vol4Ep) {
+                    let liqAvg = p.liq4Ep?.avg || p.dp || 0;
+                    let volAvg = p.vol4Ep?.avg || 0;
+                    if (liqAvg > 0) {
+                        p.efficiency = volAvg / liqAvg;
+                    }
+                }
+            }
+        });
+        
+        console.log('Filled 4EP data for', filled, 'pools');
+        
+    } catch(e) {
+        console.log('Error loading ext historical:', e);
+    }
+}
+
 // Recalculate scores after loading historical data from file
 // Uses raw metrics already in pools but recalculates access/performance/adao scores using current metadata
 function recalculateScoresFromLoadedData() {
@@ -5862,9 +5917,21 @@ async function loadV3Snapshot(d, ep, ph, isTestFile) {
     // Mark that scores are pre-calculated from file (don't recalculate)
     store.scoresFromFile = true;
     
+    // Set paste status flags so score display works
+    pasteStatus.vote = true;
+    pasteStatus.liqActive = true;
+    pasteStatus.liqDep = true;
+    pasteStatus.locks = true;
+    pasteStatus.assetMetaVerified = Object.keys(assetMetadata).length > 0;
+    
+    // Load ext historical data to fill in 4EP data if missing
+    // This fetches tla_ext_historical.json which has monthly liq/vol averages
+    await load4EpDataForV3();
+    
     // Update UI
     updatePasteStatus('ps-vote', true, 'v3.0');
     updatePasteStatus('ps-liq-active', true, 'v3.0');
+    updatePasteStatus('ps-locks', true, 'v3.0');
     renderVoteTable();
     renderLocks();
     renderLiquidityTable();
@@ -6678,7 +6745,7 @@ function parseVote() {
 
             // DEX line = start of pool (pool name is previous line)
             // Match all DEX variants: Astroport, Skeleton Swap, White Whale, WhiteWhale, WW, Single
-            let dexMatch = l.match(/^(Astroport|Skeleton\s*Swap|White\s*Whale|WhiteWhale|WW|Single)/i);
+            let dexMatch = l.match(/^(Astroport|Skeleton\s*Swap|SkeletonSwap|White\s*Whale|WhiteWhale|WW|Single)/i);
             if (dexMatch && i > 0) {
                 let poolName = lines[i-1];
                 if (!poolName || /^icon/i.test(poolName)) continue;
@@ -6711,7 +6778,7 @@ function parseVote() {
                     if (x === 'Create locks') break;
                     
                     // CRITICAL: Stop if we hit another DEX line (start of next pool)
-                    if (/^(Astroport|Skeleton\s*Swap|White\s*Whale|WhiteWhale|WW|Single)$/i.test(x)) {
+                    if (/^(Astroport|Skeleton\s*Swap|SkeletonSwap|White\s*Whale|WhiteWhale|WW|Single)$/i.test(x)) {
                         console.log(`  Stopping scan for ${poolName}|${normalizedDex} - hit DEX line: ${x}`);
                         break;
                     }
@@ -7302,7 +7369,7 @@ function parseLiquidity() {
     lines.forEach((l, i) => {
         // Match DEX line format: "Astroport - pcl" or "WhiteWhale - stable" or "Skeleton Swap - xyk"
         // Include all variants of White Whale / Skeleton Swap
-        if (l.match(/^(Astroport|WhiteWhale|White\s*Whale|Skeleton\s*Swap|Single)/i)) {
+        if (l.match(/^(Astroport|WhiteWhale|White\s*Whale|Skeleton\s*Swap|SkeletonSwap|Single)/i)) {
             let dexParts = l.split('-').map(x => x.trim());
             let dexRaw = dexParts[0];
             let dex = normalizeDexName(dexRaw); // Normalize to "Skeleton Swap" if WhiteWhale
@@ -7361,7 +7428,7 @@ function parseLiquidity() {
             
             for (let k = 1; k < 20; k++) {
                 // Stop at next pool - include all DEX variants
-                if (lines[i+k+1]?.match(/^(Astroport|WhiteWhale|White\s*Whale|Skeleton\s*Swap|Single)/i)) break;
+                if (lines[i+k+1]?.match(/^(Astroport|WhiteWhale|White\s*Whale|Skeleton\s*Swap|SkeletonSwap|Single)/i)) break;
                 let nl = lines[i+k];
                 if (!nl) continue;
                 
