@@ -1090,7 +1090,7 @@ AMPLUNA-LUNA (55.44%): $ 150 = 1973.01 LUNA per epoch
                 <div class="text-green-400 text-lg">✓</div>
                 <div>
                     <h3 class="text-green-400 font-bold text-xs">Normal Mode - Weekly Updates</h3>
-                    <p class="text-green-200/70 text-[10px]">Merge 14d/30d data into current file. Old data auto-ages to historical.</p>
+                    <p class="text-green-200/70 text-[10px]">Select LP → Paste Liq & Vol → Merge Both → Repeat for next LP</p>
                 </div>
             </div>
         </div>
@@ -1099,73 +1099,75 @@ AMPLUNA-LUNA (55.44%): $ 150 = 1973.01 LUNA per epoch
         <div class="grid grid-cols-12 gap-4 mb-4">
             <div class="col-span-4 bg-[#161616] p-3 rounded border border-gray-800">
                 <div class="flex justify-between items-center mb-2">
-                    <div class="text-[9px] text-gray-500 uppercase font-bold">Historical File (180d)</div>
-                    <button onclick="fetchHistoricalFromGithub()" class="text-[9px] text-teal-400 hover:text-teal-300">⟳ Fetch</button>
+                    <div class="text-[9px] text-gray-500 uppercase font-bold">Historical File</div>
+                    <button onclick="loadHistoricalFile()" class="text-[9px] text-teal-400 hover:text-teal-300">📂 Load File</button>
                 </div>
                 <div class="space-y-1 text-[10px]">
                     <div class="flex justify-between"><span class="text-gray-500">Epochs:</span><span id="hist-epochs" class="text-white font-mono">-</span></div>
                     <div class="flex justify-between"><span class="text-gray-500">LPs:</span><span id="hist-lps" class="text-white font-mono">0</span></div>
                     <div class="flex justify-between"><span class="text-gray-500">Last Updated:</span><span id="hist-updated" class="text-gray-400 font-mono">-</span></div>
                 </div>
-                <!-- Status alerts -->
-                <div id="hist-need-epochs" class="hidden mt-2 p-2 bg-yellow-900/30 border border-yellow-700 rounded text-[9px]">
-                    <span class="text-yellow-400">⚠ Need:</span>
-                    <span id="hist-need-list" class="text-yellow-300 font-mono ml-1">-</span>
-                </div>
-                <div id="hist-archive-epochs" class="hidden mt-2 p-2 bg-orange-900/30 border border-orange-700 rounded text-[9px]">
-                    <span class="text-orange-400">📦 Archive:</span>
-                    <span id="hist-archive-list" class="text-orange-300 font-mono ml-1">-</span>
-                </div>
+                <input type="file" id="hist-file-input" class="hidden" accept=".json" onchange="handleHistoricalFileLoad(event)">
             </div>
             <div class="col-span-4 bg-[#161616] p-3 rounded border border-gray-800">
-                <div class="text-[9px] text-gray-500 uppercase font-bold mb-2">Current File (Rolling 90d)</div>
+                <div class="text-[9px] text-gray-500 uppercase font-bold mb-2">Session Progress</div>
                 <div class="space-y-1 text-[10px]">
-                    <div class="flex justify-between"><span class="text-gray-500">Epochs:</span><span id="curr-epochs" class="text-white font-mono">-</span></div>
-                    <div class="flex justify-between"><span class="text-gray-500">LPs:</span><span id="curr-lps" class="text-white font-mono">0</span></div>
-                    <div class="flex justify-between"><span class="text-gray-500">Last Updated:</span><span id="curr-updated" class="text-gray-400 font-mono">-</span></div>
+                    <div class="flex justify-between"><span class="text-gray-500">LPs Updated:</span><span id="session-lps-updated" class="text-green-400 font-mono">0</span></div>
+                    <div class="flex justify-between"><span class="text-gray-500">Epochs Added:</span><span id="session-epochs-added" class="text-cyan-400 font-mono">-</span></div>
+                    <div class="flex justify-between"><span class="text-gray-500">Pending Save:</span><span id="session-pending" class="text-yellow-400 font-mono">No</span></div>
                 </div>
             </div>
             <div class="col-span-4 bg-[#161616] p-3 rounded border border-gray-800">
-                <div class="text-[9px] text-gray-500 uppercase font-bold mb-2">Export Files</div>
+                <div class="text-[9px] text-gray-500 uppercase font-bold mb-2">Export</div>
                 <div class="space-y-1">
-                    <button onclick="exportHistorical()" class="btn-action w-full bg-orange-900/30 text-orange-300 border border-orange-900/50 text-[9px]">Download Historical</button>
-                    <button onclick="exportArchive()" class="btn-action w-full bg-purple-900/30 text-purple-300 border border-purple-900/50 text-[9px]">Download Archive</button>
-                    <button onclick="exportCombined()" class="btn-action w-full bg-green-900/30 text-green-300 border border-green-900/50 text-[9px]">Download Combined</button>
+                    <button onclick="exportUpdatedHistorical()" class="btn-action w-full bg-green-900/30 text-green-300 border border-green-900/50 text-[9px]">💾 Download Updated Historical</button>
                 </div>
             </div>
         </div>
         
         <!-- LP Selection & Data Input (Normal) -->
         <div class="grid grid-cols-12 gap-4 mb-4">
-            <!-- LP Dropdown -->
-            <div class="col-span-4 bg-[#161616] p-3 rounded border border-gray-800">
-                <div class="text-[9px] text-gray-500 uppercase font-bold mb-2">Select LP (Astroport)</div>
-                <select id="astro-lp-select-normal" class="input-dark w-full text-[11px] mb-2" onchange="updateSelectedLpNormal()">
+            <!-- LP Dropdown + Status -->
+            <div class="col-span-3 bg-[#161616] p-3 rounded border border-gray-800">
+                <div class="text-[9px] text-gray-500 uppercase font-bold mb-2">1. Select LP</div>
+                <select id="astro-lp-select-normal" class="input-dark w-full text-[11px] mb-2">
                     <option value="">-- Select LP --</option>
                 </select>
-                <div class="text-[9px] text-gray-500">
-                    <div class="flex justify-between"><span>Last Epoch:</span><span id="normal-lp-last-epoch" class="text-green-400 font-mono">-</span></div>
+                <div class="text-[9px] space-y-1 mt-2 border-t border-gray-800 pt-2">
+                    <div class="text-gray-500 font-bold mb-1">Current Status:</div>
+                    <div class="flex justify-between"><span class="text-gray-500">Liq Epochs:</span><span id="normal-lp-liq-epochs" class="text-cyan-400 font-mono text-[8px]">-</span></div>
+                    <div class="flex justify-between"><span class="text-gray-500">Vol Epochs:</span><span id="normal-lp-vol-epochs" class="text-purple-400 font-mono text-[8px]">-</span></div>
+                    <div class="flex justify-between"><span class="text-gray-500">Partial Data:</span><span id="normal-lp-partial" class="text-yellow-400 font-mono text-[8px]">-</span></div>
                 </div>
             </div>
             
             <!-- Liquidity Paste -->
-            <div class="col-span-4 bg-[#161616] p-3 rounded border border-gray-800 flex flex-col gap-2">
+            <div class="col-span-3 bg-[#161616] p-3 rounded border border-gray-800 flex flex-col gap-2">
                 <div class="flex justify-between items-center">
-                    <h3 class="text-cyan-400 font-bold text-[10px]">Paste 14d/30d Liquidity</h3>
-                    <button onclick="clearPaste('normalLiqPaste')" class="text-[9px] text-red-400 hover:text-red-300">Clear</button>
+                    <h3 class="text-cyan-400 font-bold text-[10px]">2. Paste Liquidity</h3>
+                    <span id="normal-liq-status" class="text-[8px] text-gray-600">Empty</span>
                 </div>
-                <textarea id="normalLiqPaste" class="input-dark h-24 font-mono text-[8px]" placeholder='{"result":{"data":{"json":[{"series":[...]}]}}}'></textarea>
-                <button onclick="parseNormalLiquidity()" class="btn-action bg-cyan-900/40 text-cyan-200 border border-cyan-900 text-[10px]">Merge Liquidity</button>
+                <textarea id="normalLiqPaste" class="input-dark h-20 font-mono text-[8px]" placeholder='Paste Astroport liquidity JSON...' onchange="validateNormalLiqPaste()"></textarea>
+                <div id="normal-liq-preview" class="text-[8px] text-gray-500">-</div>
             </div>
             
             <!-- Volume Paste -->
-            <div class="col-span-4 bg-[#161616] p-3 rounded border border-gray-800 flex flex-col gap-2">
+            <div class="col-span-3 bg-[#161616] p-3 rounded border border-gray-800 flex flex-col gap-2">
                 <div class="flex justify-between items-center">
-                    <h3 class="text-purple-400 font-bold text-[10px]">Paste 14d/30d Volume</h3>
-                    <button onclick="clearPaste('normalVolPaste')" class="text-[9px] text-red-400 hover:text-red-300">Clear</button>
+                    <h3 class="text-purple-400 font-bold text-[10px]">3. Paste Volume</h3>
+                    <span id="normal-vol-status" class="text-[8px] text-gray-600">Empty</span>
                 </div>
-                <textarea id="normalVolPaste" class="input-dark h-24 font-mono text-[8px]" placeholder='{"result":{"data":{"json":[{"series":[...]}]}}}'></textarea>
-                <button onclick="parseNormalVolume()" class="btn-action bg-purple-900/40 text-purple-200 border border-purple-900 text-[10px]">Merge Volume</button>
+                <textarea id="normalVolPaste" class="input-dark h-20 font-mono text-[8px]" placeholder='Paste Astroport volume JSON...' onchange="validateNormalVolPaste()"></textarea>
+                <div id="normal-vol-preview" class="text-[8px] text-gray-500">-</div>
+            </div>
+            
+            <!-- Merge Button -->
+            <div class="col-span-3 bg-[#161616] p-3 rounded border border-gray-800 flex flex-col justify-center items-center gap-2">
+                <div class="text-[9px] text-gray-500 uppercase font-bold">4. Merge</div>
+                <button onclick="mergeNormalLpData()" id="normal-merge-btn" class="btn-action w-full h-16 bg-green-900/40 text-green-200 border border-green-700 text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                    🔀 Merge LP Data
+                </button>
+                <div id="normal-merge-status" class="text-[8px] text-gray-500 text-center">Select LP and paste both Liq & Vol</div>
             </div>
         </div>
         
@@ -1173,6 +1175,11 @@ AMPLUNA-LUNA (55.44%): $ 150 = 1973.01 LUNA per epoch
         <div class="preview-card">
             <div class="flex justify-between items-center mb-2 border-b border-gray-800 pb-2">
                 <h3 class="text-xs font-bold text-white">LP Update Status</h3>
+                <div class="text-[9px] text-gray-500">
+                    <span class="text-green-400">●</span> Updated
+                    <span class="text-yellow-400 ml-2">●</span> Partial
+                    <span class="text-gray-600 ml-2">●</span> Pending
+                </div>
             </div>
             <div id="astro-normal-lp-grid" class="grid grid-cols-4 gap-2 max-h-[300px] overflow-y-auto custom-scroll"></div>
         </div>
@@ -5052,159 +5059,551 @@ function exportArchive() {
 
 function updateSelectedLpNormal() {
     let lpKey = $('astro-lp-select-normal').value;
+    
+    // Clear paste areas and status when LP changes
+    $('normalLiqPaste').value = '';
+    $('normalVolPaste').value = '';
+    setTxt('normal-liq-status', 'Empty');
+    setTxt('normal-vol-status', 'Empty');
+    setTxt('normal-liq-preview', '-');
+    setTxt('normal-vol-preview', '-');
+    $('normal-liq-status').className = 'text-[8px] text-gray-600';
+    $('normal-vol-status').className = 'text-[8px] text-gray-600';
+    
     if (!lpKey) {
-        setTxt('normal-lp-last-epoch', '-');
+        setTxt('normal-lp-liq-epochs', '-');
+        setTxt('normal-lp-vol-epochs', '-');
+        setTxt('normal-lp-partial', '-');
+        updateMergeButtonState();
         return;
     }
     
-    let lastEpoch = 0;
-    if (store.current.lps && store.current.lps[lpKey]) {
-        let liqEpochs = Object.keys(store.current.lps[lpKey].liquidity?.epochs || {}).map(Number);
-        let volEpochs = Object.keys(store.current.lps[lpKey].volume?.epochs || {}).map(Number);
-        lastEpoch = Math.max(...liqEpochs, ...volEpochs, 0);
-    }
-    
-    setTxt('normal-lp-last-epoch', lastEpoch || '-');
-}
-
-function renderNormalLpGrid() {
-    // Show ALL Astroport LPs, not just active
-    let astroLps = Object.entries(store.lpRegistry)
-        .filter(([key, lp]) => lp.dex === 'Astroport')
-        .sort((a, b) => {
-            // Active first, then by vote %
-            if (a[1].active !== b[1].active) return b[1].active - a[1].active;
-            return b[1].vote_pct - a[1].vote_pct;
+    // Get current status from historical file
+    let lp = store.historical?.lps?.[lpKey];
+    if (lp) {
+        // Liquidity epochs
+        let liqEpochs = Object.keys(lp.liquidity?.epochs || {}).map(Number).sort((a,b) => a-b);
+        let liqComplete = liqEpochs.filter(e => lp.liquidity.epochs[e]?.complete !== false);
+        let liqPartial = liqEpochs.filter(e => lp.liquidity.epochs[e]?.complete === false);
+        
+        // Volume epochs  
+        let volEpochs = Object.keys(lp.volume?.epochs || {}).map(Number).sort((a,b) => a-b);
+        let volComplete = volEpochs.filter(e => lp.volume.epochs[e]?.complete !== false);
+        let volPartial = volEpochs.filter(e => lp.volume.epochs[e]?.complete === false);
+        
+        // Display
+        let liqRange = liqComplete.length > 0 ? `${Math.min(...liqComplete)}-${Math.max(...liqComplete)}` : '-';
+        let volRange = volComplete.length > 0 ? `${Math.min(...volComplete)}-${Math.max(...volComplete)}` : '-';
+        
+        setTxt('normal-lp-liq-epochs', `${liqRange} (${liqComplete.length})`);
+        setTxt('normal-lp-vol-epochs', `${volRange} (${volComplete.length})`);
+        
+        // Partial data info
+        let partialInfo = [];
+        liqPartial.forEach(ep => {
+            let raw = lp.liquidity.epochs[ep]?.raw || [];
+            partialInfo.push(`Liq E${ep}: ${raw.length}d`);
         });
+        volPartial.forEach(ep => {
+            let raw = lp.volume.epochs[ep]?.raw || [];
+            partialInfo.push(`Vol E${ep}: ${raw.length}d`);
+        });
+        setTxt('normal-lp-partial', partialInfo.length > 0 ? partialInfo.join(', ') : 'None');
+    } else {
+        setTxt('normal-lp-liq-epochs', 'New LP');
+        setTxt('normal-lp-vol-epochs', 'New LP');
+        setTxt('normal-lp-partial', '-');
+    }
     
-    let html = '';
-    let currentEpoch = store.meta.ep || 161;
-    
-    astroLps.forEach(([key, lp]) => {
-        let lastEpoch = 0;
-        if (store.current.lps && store.current.lps[key]) {
-            let liqEpochs = Object.keys(store.current.lps[key].liquidity?.epochs || {}).map(Number);
-            let volEpochs = Object.keys(store.current.lps[key].volume?.epochs || {}).map(Number);
-            lastEpoch = Math.max(...liqEpochs, ...volEpochs, 0);
-        }
-        
-        let upToDate = lastEpoch >= currentEpoch - 1;
-        let bgClass = upToDate ? 'bg-green-900/30 border-green-700' : 
-                      lastEpoch > 0 ? 'bg-yellow-900/30 border-yellow-700' :
-                      'bg-[#0D0D0D] border-gray-800';
-        
-        let nameClass = lp.active ? 'text-white' : 'text-gray-500';
-        let pctClass = lp.active ? 'text-green-400' : 'text-gray-600';
-        
-        html += `<div class="p-2 rounded border ${bgClass} text-[9px]">
-            <div class="flex justify-between">
-                <span class="${nameClass} font-mono truncate" title="${lp.lp}">${lp.lp}</span>
-                <span class="${pctClass} text-[8px]">${lp.vote_pct.toFixed(1)}%</span>
-            </div>
-            <div class="text-gray-400 mt-1">Last: ${lastEpoch || '-'}</div>
-        </div>`;
-    });
-    
-    setHtml('astro-normal-lp-grid', html || '<div class="col-span-4 text-gray-600 italic text-center py-4">No LPs in registry.</div>');
+    updateMergeButtonState();
 }
 
-function parseNormalData(type) {
-    let pasteId = type === 'liquidity' ? 'normalLiqPaste' : 'normalVolPaste';
-    let txt = $(pasteId).value.trim();
-    let lpKey = $('astro-lp-select-normal').value;
-    
-    if (!lpKey) {
-        alert('Please select an LP first');
-        return;
-    }
-    
+// Validate liquidity paste
+function validateNormalLiqPaste() {
+    let txt = $('normalLiqPaste').value.trim();
     if (!txt) {
-        alert('Please paste data');
+        setTxt('normal-liq-status', 'Empty');
+        setTxt('normal-liq-preview', '-');
+        $('normal-liq-status').className = 'text-[8px] text-gray-600';
+        updateMergeButtonState();
         return;
     }
-    
-    // Get LP name from key for display
-    let lpName = store.lpRegistry[lpKey]?.lp || lpKey;
     
     try {
         let json = JSON.parse(txt);
         let series = json?.result?.data?.json?.[0]?.series;
-        
-        if (!series || !Array.isArray(series)) {
-            alert('Invalid data format');
-            return;
+        if (series && Array.isArray(series) && series.length > 0) {
+            let firstDate = new Date(series[0].time * 1000).toISOString().split('T')[0];
+            let lastDate = new Date(series[series.length-1].time * 1000).toISOString().split('T')[0];
+            setTxt('normal-liq-status', '✓ Valid');
+            setTxt('normal-liq-preview', `${series.length} points: ${firstDate} → ${lastDate}`);
+            $('normal-liq-status').className = 'text-[8px] text-green-400';
+        } else {
+            throw new Error('No series data');
         }
-        
-        // Initialize current if needed
-        if (!store.current.lps) store.current.lps = {};
-        if (!store.current.lps[lpKey]) {
-            store.current.lps[lpKey] = {
-                liquidity: { epochs: {}, raw: [] },
-                volume: { epochs: {}, raw: [] }
-            };
+    } catch(e) {
+        setTxt('normal-liq-status', '✗ Invalid');
+        setTxt('normal-liq-preview', e.message);
+        $('normal-liq-status').className = 'text-[8px] text-red-400';
+    }
+    updateMergeButtonState();
+}
+
+// Validate volume paste
+function validateNormalVolPaste() {
+    let txt = $('normalVolPaste').value.trim();
+    if (!txt) {
+        setTxt('normal-vol-status', 'Empty');
+        setTxt('normal-vol-preview', '-');
+        $('normal-vol-status').className = 'text-[8px] text-gray-600';
+        updateMergeButtonState();
+        return;
+    }
+    
+    try {
+        let json = JSON.parse(txt);
+        let series = json?.result?.data?.json?.[0]?.series;
+        if (series && Array.isArray(series) && series.length > 0) {
+            let firstDate = new Date(series[0].time * 1000).toISOString().split('T')[0];
+            let lastDate = new Date(series[series.length-1].time * 1000).toISOString().split('T')[0];
+            setTxt('normal-vol-status', '✓ Valid');
+            setTxt('normal-vol-preview', `${series.length} points: ${firstDate} → ${lastDate}`);
+            $('normal-vol-status').className = 'text-[8px] text-green-400';
+        } else {
+            throw new Error('No series data');
         }
-        
-        // Parse and merge raw points
-        let existing = new Set(store.current.lps[lpKey][type].raw.map(p => p.ts));
-        let newPoints = series
-            .filter(p => !existing.has(p.time))
-            .map(p => ({ ts: p.time, v: p.value, date: formatDate(p.time) }));
-        
-        store.current.lps[lpKey][type].raw.push(...newPoints);
-        
-        // Recalculate epoch averages
-        let epochData = {};
-        store.current.lps[lpKey][type].raw.forEach(p => {
-            let epoch = timestampToEpoch(p.ts);
-            if (!epochData[epoch]) epochData[epoch] = { sum: 0, count: 0 };
-            epochData[epoch].sum += p.v;
-            epochData[epoch].count++;
-        });
-        
-        let currentEpoch = store.meta.ep || timestampToEpoch(Date.now() / 1000);
-        Object.entries(epochData).forEach(([ep, data]) => {
-            let epochNum = parseInt(ep);
-            let epochRange = getEpochRange(epochNum);
-            let isComplete = (Date.now() / 1000) > epochRange.end;
-            
-            if (isComplete) {
-                store.current.lps[lpKey][type].epochs[epochNum] = {
-                    avg: Math.round((data.sum / data.count) * 100) / 100,
-                    dataPoints: data.count,
-                    startDate: formatDate(epochRange.start),
-                    endDate: formatDate(epochRange.end)
-                };
-            }
-        });
-        
-        // Update meta
-        if (!store.current.meta) store.current.meta = {};
-        store.current.meta.last_updated = new Date().toISOString().split('T')[0];
-        
-        $(pasteId).value = '';
-        updateNormalDisplay();
-        updateAstroLpDropdown();
-        
-        alert(`Merged ${newPoints.length} new ${type} points for ${lpName}`);
-        
-    } catch (e) {
-        alert('Failed to parse: ' + e.message);
+    } catch(e) {
+        setTxt('normal-vol-status', '✗ Invalid');
+        setTxt('normal-vol-preview', e.message);
+        $('normal-vol-status').className = 'text-[8px] text-red-400';
+    }
+    updateMergeButtonState();
+}
+
+// Update merge button state
+function updateMergeButtonState() {
+    let lpKey = $('astro-lp-select-normal').value;
+    let liqValid = $('normal-liq-status').textContent.includes('✓');
+    let volValid = $('normal-vol-status').textContent.includes('✓');
+    
+    let btn = $('normal-merge-btn');
+    let status = $('normal-merge-status');
+    
+    if (!lpKey) {
+        btn.disabled = true;
+        status.textContent = 'Select an LP first';
+    } else if (!liqValid && !volValid) {
+        btn.disabled = true;
+        status.textContent = 'Paste Liq and/or Vol data';
+    } else {
+        btn.disabled = false;
+        let parts = [];
+        if (liqValid) parts.push('Liq');
+        if (volValid) parts.push('Vol');
+        status.textContent = `Ready to merge ${parts.join(' + ')}`;
+        status.className = 'text-[8px] text-green-400 text-center';
     }
 }
 
+// Main merge function - merges both liq and vol at once
+function mergeNormalLpData() {
+    let lpKey = $('astro-lp-select-normal').value;
+    if (!lpKey) {
+        alert('Please select an LP');
+        return;
+    }
+    
+    if (!store.historical) {
+        alert('Please load a historical file first');
+        return;
+    }
+    
+    let liqTxt = $('normalLiqPaste').value.trim();
+    let volTxt = $('normalVolPaste').value.trim();
+    
+    if (!liqTxt && !volTxt) {
+        alert('Please paste at least liquidity or volume data');
+        return;
+    }
+    
+    // Initialize LP if needed
+    if (!store.historical.lps) store.historical.lps = {};
+    if (!store.historical.lps[lpKey]) {
+        store.historical.lps[lpKey] = {
+            liquidity: { epochs: {} },
+            volume: { epochs: {} }
+        };
+    }
+    
+    let results = { liq: null, vol: null };
+    
+    // Merge liquidity
+    if (liqTxt) {
+        try {
+            results.liq = mergeDataIntoHistorical(lpKey, 'liquidity', liqTxt);
+        } catch(e) {
+            alert('Liquidity merge failed: ' + e.message);
+            return;
+        }
+    }
+    
+    // Merge volume
+    if (volTxt) {
+        try {
+            results.vol = mergeDataIntoHistorical(lpKey, 'volume', volTxt);
+        } catch(e) {
+            alert('Volume merge failed: ' + e.message);
+            return;
+        }
+    }
+    
+    // Update meta
+    store.historical.meta.last_updated = new Date().toISOString().split('T')[0];
+    
+    // Track session progress
+    if (!store.sessionProgress) store.sessionProgress = { lpsUpdated: new Set(), epochsAdded: new Set() };
+    store.sessionProgress.lpsUpdated.add(lpKey);
+    if (results.liq?.newEpochs) results.liq.newEpochs.forEach(e => store.sessionProgress.epochsAdded.add(e));
+    if (results.vol?.newEpochs) results.vol.newEpochs.forEach(e => store.sessionProgress.epochsAdded.add(e));
+    
+    // Update UI
+    updateSessionProgress();
+    renderNormalLpGrid();
+    updateSelectedLpNormal();  // Refresh LP status
+    
+    // Clear paste areas
+    $('normalLiqPaste').value = '';
+    $('normalVolPaste').value = '';
+    validateNormalLiqPaste();
+    validateNormalVolPaste();
+    
+    // Show results
+    let msg = [`✅ Merged data for ${lpKey.split('|')[0]}`];
+    if (results.liq) {
+        msg.push(`Liq: ${results.liq.pointsAdded} pts, ${results.liq.epochsCompleted} epochs completed, ${results.liq.partialDays} partial days`);
+    }
+    if (results.vol) {
+        msg.push(`Vol: ${results.vol.pointsAdded} pts, ${results.vol.epochsCompleted} epochs completed, ${results.vol.partialDays} partial days`);
+    }
+    alert(msg.join('\n'));
+}
+
+// Merge data into historical file
+function mergeDataIntoHistorical(lpKey, type, jsonText) {
+    let json = JSON.parse(jsonText);
+    let series = json?.result?.data?.json?.[0]?.series;
+    
+    if (!series || !Array.isArray(series)) {
+        throw new Error('Invalid data format');
+    }
+    
+    let lp = store.historical.lps[lpKey];
+    if (!lp[type]) lp[type] = { epochs: {} };
+    
+    // Epoch boundaries (approximate - 7 days per epoch)
+    // E165 ends ~Dec 28, 2025
+    const E165_END = new Date('2025-12-28T12:00:00Z').getTime() / 1000;
+    const EPOCH_DURATION = 7 * 24 * 60 * 60;
+    
+    function getEpochForTimestamp(ts) {
+        let diff = E165_END - ts;
+        let epochsBack = Math.floor(diff / EPOCH_DURATION);
+        return 165 - epochsBack;
+    }
+    
+    function getEpochDateRange(epoch) {
+        let endTs = E165_END - (165 - epoch) * EPOCH_DURATION;
+        let startTs = endTs - EPOCH_DURATION;
+        return {
+            start: new Date(startTs * 1000).toISOString().split('T')[0],
+            end: new Date(endTs * 1000).toISOString().split('T')[0]
+        };
+    }
+    
+    // Group points by epoch
+    let epochPoints = {};
+    series.forEach(p => {
+        let epoch = getEpochForTimestamp(p.time);
+        let date = new Date(p.time * 1000).toISOString().split('T')[0];
+        if (!epochPoints[epoch]) epochPoints[epoch] = {};
+        epochPoints[epoch][date] = p.value;  // Use date as key to avoid duplicates
+    });
+    
+    let pointsAdded = 0;
+    let epochsCompleted = 0;
+    let partialDays = 0;
+    let newEpochs = [];
+    
+    // Merge into historical
+    Object.entries(epochPoints).forEach(([epochStr, dateValues]) => {
+        let epoch = parseInt(epochStr);
+        let existing = lp[type].epochs[epoch];
+        
+        // If epoch already complete, skip
+        if (existing?.complete === true) {
+            return;
+        }
+        
+        // Merge raw data
+        let rawMap = {};
+        if (existing?.raw) {
+            existing.raw.forEach(r => rawMap[r.date] = r.value);
+        }
+        Object.entries(dateValues).forEach(([date, value]) => {
+            if (!rawMap[date]) {
+                rawMap[date] = value;
+                pointsAdded++;
+            }
+        });
+        
+        let rawArray = Object.entries(rawMap)
+            .map(([date, value]) => ({ date, value }))
+            .sort((a, b) => a.date.localeCompare(b.date));
+        
+        // Check if epoch is complete (7 days or epoch is old enough)
+        let epochRange = getEpochDateRange(epoch);
+        let now = new Date().toISOString().split('T')[0];
+        let epochEnded = now > epochRange.end;
+        
+        if (rawArray.length >= 7 || (epochEnded && rawArray.length >= 4)) {
+            // Calculate average and mark complete
+            let avg = rawArray.reduce((s, r) => s + r.value, 0) / rawArray.length;
+            lp[type].epochs[epoch] = {
+                avg: Math.round(avg * 100) / 100,
+                days: rawArray.length,
+                complete: true
+            };
+            epochsCompleted++;
+            if (!existing) newEpochs.push(epoch);
+        } else {
+            // Keep as partial
+            lp[type].epochs[epoch] = {
+                avg: null,
+                days: rawArray.length,
+                complete: false,
+                raw: rawArray
+            };
+            partialDays += rawArray.length;
+        }
+    });
+    
+    return { pointsAdded, epochsCompleted, partialDays, newEpochs };
+}
+
+// Update session progress display
+function updateSessionProgress() {
+    if (!store.sessionProgress) {
+        setTxt('session-lps-updated', '0');
+        setTxt('session-epochs-added', '-');
+        setTxt('session-pending', 'No');
+        return;
+    }
+    
+    setTxt('session-lps-updated', store.sessionProgress.lpsUpdated.size);
+    let epochs = Array.from(store.sessionProgress.epochsAdded).sort((a,b) => a-b);
+    setTxt('session-epochs-added', epochs.length > 0 ? epochs.join(', ') : '-');
+    setTxt('session-pending', store.sessionProgress.lpsUpdated.size > 0 ? 'Yes' : 'No');
+    $('session-pending').className = store.sessionProgress.lpsUpdated.size > 0 ? 'text-yellow-400 font-mono' : 'text-gray-400 font-mono';
+}
+
+// Load historical file from disk
+function loadHistoricalFile() {
+    $('hist-file-input').click();
+}
+
+function handleHistoricalFileLoad(event) {
+    let file = event.target.files[0];
+    if (!file) return;
+    
+    let reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            store.historical = JSON.parse(e.target.result);
+            updateHistoricalDisplay();
+            updateAstroLpDropdownNormal();
+            renderNormalLpGrid();
+            alert('✅ Loaded historical file: ' + file.name);
+        } catch(err) {
+            alert('Failed to parse file: ' + err.message);
+        }
+    };
+    reader.readAsText(file);
+}
+
+// Update historical display
+function updateHistoricalDisplay() {
+    if (!store.historical?.meta) {
+        setTxt('hist-epochs', '-');
+        setTxt('hist-lps', '0');
+        setTxt('hist-updated', '-');
+        return;
+    }
+    
+    let meta = store.historical.meta;
+    let epochRange = meta.epoch_range || [meta.epoch_start, meta.epoch_end];
+    setTxt('hist-epochs', epochRange ? `${epochRange[0]} - ${epochRange[1]}` : '-');
+    setTxt('hist-lps', store.historical.lps ? Object.keys(store.historical.lps).length : 0);
+    setTxt('hist-updated', meta.last_updated || '-');
+}
+
+// Update LP dropdown for normal mode (from historical file)
+function updateAstroLpDropdownNormal() {
+    let select = $('astro-lp-select-normal');
+    if (!select) return;
+    
+    // Get LPs from historical file
+    let lps = [];
+    if (store.historical?.lps) {
+        lps = Object.keys(store.historical.lps)
+            .filter(k => k.includes('Astroport'))
+            .sort();
+    }
+    
+    // Also add any from LP registry that aren't in historical
+    if (store.lpRegistry) {
+        Object.entries(store.lpRegistry)
+            .filter(([k, v]) => v.dex === 'Astroport')
+            .forEach(([k, v]) => {
+                if (!lps.includes(k)) lps.push(k);
+            });
+    }
+    
+    let currentValue = select.value;
+    select.innerHTML = '<option value="">-- Select LP --</option>';
+    
+    lps.forEach(lpKey => {
+        let lpName = lpKey.split('|')[0];
+        let inHistorical = store.historical?.lps?.[lpKey];
+        let label = inHistorical ? lpName : `${lpName} (new)`;
+        select.innerHTML += `<option value="${lpKey}">${label}</option>`;
+    });
+    
+    // Restore selection if still valid
+    if (currentValue && lps.includes(currentValue)) {
+        select.value = currentValue;
+    }
+}
+
+function renderNormalLpGrid() {
+    // Get LPs from historical file
+    let lps = [];
+    if (store.historical?.lps) {
+        lps = Object.entries(store.historical.lps)
+            .filter(([k, v]) => k.includes('Astroport'))
+            .sort((a, b) => a[0].localeCompare(b[0]));
+    }
+    
+    let html = '';
+    
+    lps.forEach(([key, lp]) => {
+        let lpName = key.split('|')[0];
+        
+        // Get epoch info
+        let liqEpochs = Object.keys(lp.liquidity?.epochs || {}).map(Number);
+        let volEpochs = Object.keys(lp.volume?.epochs || {}).map(Number);
+        let liqComplete = liqEpochs.filter(e => lp.liquidity.epochs[e]?.complete !== false);
+        let volComplete = volEpochs.filter(e => lp.volume.epochs[e]?.complete !== false);
+        let liqPartial = liqEpochs.filter(e => lp.liquidity.epochs[e]?.complete === false);
+        let volPartial = volEpochs.filter(e => lp.volume.epochs[e]?.complete === false);
+        
+        let maxLiqEp = liqComplete.length > 0 ? Math.max(...liqComplete) : 0;
+        let maxVolEp = volComplete.length > 0 ? Math.max(...volComplete) : 0;
+        
+        // Status color
+        let updated = store.sessionProgress?.lpsUpdated?.has(key);
+        let hasPartial = liqPartial.length > 0 || volPartial.length > 0;
+        
+        let bgClass = updated ? 'bg-green-900/30 border-green-700' : 
+                      hasPartial ? 'bg-yellow-900/30 border-yellow-700' :
+                      'bg-[#0D0D0D] border-gray-800';
+        
+        // Partial info
+        let partialInfo = '';
+        if (liqPartial.length > 0) {
+            let days = lp.liquidity.epochs[liqPartial[0]]?.raw?.length || 0;
+            partialInfo += `L:${days}d `;
+        }
+        if (volPartial.length > 0) {
+            let days = lp.volume.epochs[volPartial[0]]?.raw?.length || 0;
+            partialInfo += `V:${days}d`;
+        }
+        
+        html += `<div class="p-2 rounded border ${bgClass} text-[9px]">
+            <div class="text-white font-mono truncate" title="${lpName}">${lpName}</div>
+            <div class="flex justify-between mt-1">
+                <span class="text-cyan-400">L: E${maxLiqEp || '-'}</span>
+                <span class="text-purple-400">V: E${maxVolEp || '-'}</span>
+            </div>
+            ${partialInfo ? `<div class="text-yellow-400 text-[8px] mt-1">${partialInfo}</div>` : ''}
+        </div>`;
+    });
+    
+    setHtml('astro-normal-lp-grid', html || '<div class="col-span-4 text-gray-600 italic text-center py-4">Load historical file first.</div>');
+}
+
+// Export updated historical
+function exportUpdatedHistorical() {
+    if (!store.historical) {
+        alert('No historical data to export');
+        return;
+    }
+    
+    // Update meta
+    store.historical.meta.last_updated = new Date().toISOString().split('T')[0];
+    
+    // Recalculate epoch range
+    let allEpochs = new Set();
+    Object.values(store.historical.lps || {}).forEach(lp => {
+        Object.keys(lp.liquidity?.epochs || {}).forEach(e => allEpochs.add(parseInt(e)));
+        Object.keys(lp.volume?.epochs || {}).forEach(e => allEpochs.add(parseInt(e)));
+    });
+    let epochArr = Array.from(allEpochs).sort((a,b) => a-b);
+    if (epochArr.length > 0) {
+        store.historical.meta.epoch_range = [epochArr[0], epochArr[epochArr.length - 1]];
+    }
+    
+    // Update complete/partial lists - check both 'complete' flag AND presence of 'avg'
+    let complete = new Set();
+    let partial = new Set();
+    Object.values(store.historical.lps || {}).forEach(lp => {
+        Object.entries(lp.liquidity?.epochs || {}).forEach(([e, d]) => {
+            let epNum = parseInt(e);
+            // Epoch is complete if: complete flag is true (or missing) AND has avg value AND no raw data
+            let isComplete = (d.complete !== false) && (d.avg !== null && d.avg !== undefined) && !d.raw;
+            if (isComplete) complete.add(epNum);
+            else partial.add(epNum);
+        });
+        Object.entries(lp.volume?.epochs || {}).forEach(([e, d]) => {
+            let epNum = parseInt(e);
+            let isComplete = (d.complete !== false) && (d.avg !== null && d.avg !== undefined) && !d.raw;
+            if (isComplete) complete.add(epNum);
+            else partial.add(epNum);
+        });
+    });
+    // An epoch is only fully complete if ALL LPs have it complete (not in partial)
+    store.historical.meta.complete_epochs = Array.from(complete).filter(e => !partial.has(e)).sort((a,b) => a-b);
+    store.historical.meta.partial_epochs = Array.from(partial).sort((a,b) => a-b);
+    store.historical.meta.lp_count = Object.keys(store.historical.lps || {}).length;
+    
+    let json = JSON.stringify(store.historical, null, 2);
+    downloadJson(json, 'tla_ext_historical.json');
+}
+
 function parseNormalLiquidity() {
-    parseNormalData('liquidity');
+    // Legacy - redirect to validation
+    validateNormalLiqPaste();
 }
 
 function parseNormalVolume() {
-    parseNormalData('volume');
+    // Legacy - redirect to validation
+    validateNormalVolPaste();
 }
 
 // ============ EXPORT FUNCTIONS ============
 
 function exportHistorical() {
-    let json = JSON.stringify(store.historical, null, 2);
-    downloadJson(json, 'tla_ext_historical.json');
+    // Use the updated export which recalculates meta
+    exportUpdatedHistorical();
 }
 
 function exportCurrent() {
