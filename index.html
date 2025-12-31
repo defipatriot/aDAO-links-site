@@ -783,11 +783,15 @@
             </div>
             
             <!-- Top 10 All Time Sales -->
-            <div class="text-center">
-                <button id="top10-sales-btn" class="top10-btn mx-auto">
+            <div class="text-center flex justify-center gap-4 flex-wrap">
+                <button id="top10-sales-btn" class="top10-btn">
                     <i class="fas fa-trophy"></i>
                     Top 10 All-Time Sales
                     <i class="fas fa-chevron-right text-sm"></i>
+                </button>
+                <button id="sales-chart-btn" class="text-xs px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors">
+                    <i class="fas fa-chart-line mr-1"></i>
+                    Sales History Chart
                 </button>
             </div>
         </div>
@@ -1838,6 +1842,60 @@ est. APR 58.53 %"></textarea>
         </div>
     </div>
 
+    <!-- Sales History Chart Modal -->
+    <div id="salesChartModal" class="modal fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50 hidden opacity-0">
+        <div class="modal-content bg-[#1a1a1a] border border-gray-700 rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] relative text-white opacity-0 scale-95 overflow-hidden">
+            <button class="modal-close absolute top-4 right-4 text-gray-400 hover:text-white text-3xl z-10">&times;</button>
+            
+            <div class="p-6">
+                <h3 class="text-2xl font-bold text-purple-400 mb-4">
+                    <i class="fas fa-chart-line mr-2"></i>All-Time NFT Sales History
+                </h3>
+                
+                <!-- Summary Stats -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                    <div class="bg-gray-800/50 rounded-lg p-3 text-center">
+                        <div class="text-xs text-gray-400">Total Sales</div>
+                        <div id="sales-chart-total" class="text-xl font-bold text-cyan-400">--</div>
+                    </div>
+                    <div class="bg-gray-800/50 rounded-lg p-3 text-center">
+                        <div class="text-xs text-gray-400">BBL Sales</div>
+                        <div id="sales-chart-bbl" class="text-xl font-bold text-orange-400">--</div>
+                    </div>
+                    <div class="bg-gray-800/50 rounded-lg p-3 text-center">
+                        <div class="text-xs text-gray-400">Boost Sales</div>
+                        <div id="sales-chart-boost" class="text-xl font-bold text-green-400">--</div>
+                    </div>
+                    <div class="bg-gray-800/50 rounded-lg p-3 text-center">
+                        <div class="text-xs text-gray-400">Date Range</div>
+                        <div id="sales-chart-range" class="text-sm font-bold text-gray-300">--</div>
+                    </div>
+                </div>
+                
+                <!-- Chart -->
+                <div class="bg-gray-800/30 rounded-lg p-4 mb-4" style="height: 350px;">
+                    <canvas id="salesHistoryChart"></canvas>
+                </div>
+                
+                <!-- Legend -->
+                <div class="flex justify-center gap-6 text-xs">
+                    <div class="flex items-center gap-2">
+                        <div class="w-3 h-3 rounded-full bg-cyan-400"></div>
+                        <span class="text-gray-400">Cumulative Total</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <div class="w-3 h-3 rounded-full bg-orange-400"></div>
+                        <span class="text-gray-400">BBL (bLUNA)</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <div class="w-3 h-3 rounded-full bg-green-400"></div>
+                        <span class="text-gray-400">Boost (USD)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
 
     <script>
         // --- Global variable to store snapshot data ---
@@ -2213,9 +2271,14 @@ est. APR 58.53 %"></textarea>
             };
             
             // --- Fetch all historical snapshots ---
-            async function fetchAllSnapshots() {
-                if (historicalSnapshots.length > 0) {
+            async function fetchAllSnapshots(forceRefresh = false) {
+                if (historicalSnapshots.length > 0 && !forceRefresh) {
                     return historicalSnapshots; // Return cached data
+                }
+                
+                // Clear cache if forcing refresh
+                if (forceRefresh) {
+                    historicalSnapshots = [];
                 }
                 
                 const baseUrl = 'https://raw.githubusercontent.com/defipatriot/adao_json_storage/main';
@@ -2227,9 +2290,11 @@ est. APR 58.53 %"></textarea>
                 const weeksDiff = Math.floor((now - epochReferenceDate) / msPerWeek);
                 const currentEpoch = epochReferenceNumber + weeksDiff;
                 
-                // Try to fetch epochs from 160 to current (adjust range as needed)
-                const startEpoch = 160;
-                const endEpoch = currentEpoch;
+                // Try to fetch epochs from 161 to previous completed epoch (not current in-progress)
+                const startEpoch = 161;
+                const endEpoch = currentEpoch - 1; // Only completed epochs (165 if current is 166)
+                
+                console.log(`DEBUG fetchAllSnapshots: currentEpoch=${currentEpoch}, fetching ${startEpoch} to ${endEpoch}`);
                 
                 const fetchPromises = [];
                 for (let epoch = startEpoch; epoch <= endEpoch; epoch++) {
@@ -2264,6 +2329,10 @@ est. APR 58.53 %"></textarea>
                                         ? tokenPrices.LUNA 
                                         : tokenPrices.LUNA?.price || null;
                                     
+                                    // Calculate VP in LUNA equivalent (VP / 10 = underlying LUNA)
+                                    const totalVp = locks.total_vp || 638890;
+                                    const vpInLuna = totalVp / 10;
+                                    
                                     return {
                                         epoch,
                                         timestamp: data.meta?.generated_at,
@@ -2275,7 +2344,8 @@ est. APR 58.53 %"></textarea>
                                         // TLA Deposits
                                         tlaDeposits: {
                                             totalDeposit: tlaDeposits.total_usd,
-                                            estApr: tlaDeposits.apr
+                                            estApr: tlaDeposits.apr,
+                                            lstRatios: data.ext_data?.votion?.ratios || {}
                                         },
                                         tlaDepositsTotal_USD: tlaDeposits.total_usd,
                                         // NFT Stats
@@ -2286,8 +2356,10 @@ est. APR 58.53 %"></textarea>
                                         circulatingSupply: nftStats.minted_count,
                                         // Treasury
                                         treasuryTotal_USD: treasury.total_usd,
-                                        // TLA VP
-                                        tlaVpTotal_VP: locks.total_vp,
+                                        // TLA VP - map to both field names for compatibility
+                                        tlaVpTotal_VP: totalVp,
+                                        tlaVpTotal_LUNA: vpInLuna,
+                                        tlaVpTotal_USD: vpInLuna * (lunaPrice || 0.09),
                                         // Unminted
                                         unmintedTotalBacking_LUNA: unminted.total_LUNA_equivalent,
                                         unmintedTotalBacking_USD: unminted.total_USD,
@@ -2368,8 +2440,9 @@ est. APR 58.53 %"></textarea>
                     return;
                 }
                 
-                // Build chart data
-                const chartData = snapshots.map(s => {
+                // Build chart data - filter out missing epochs first
+                const validSnapshots = snapshots.filter(s => !s.missing);
+                const chartData = validSnapshots.map(s => {
                     let value = null;
                     let secondaryValue = null;
                     
@@ -2513,8 +2586,9 @@ est. APR 58.53 %"></textarea>
                     return;
                 }
                 
-                // Build chart data
-                const chartData = snapshots.map(s => {
+                // Build chart data - filter out missing epochs first
+                const validSnapshots = snapshots.filter(s => !s.missing);
+                const chartData = validSnapshots.map(s => {
                     let value = null;
                     let secondaryValue = null;
                     
@@ -2922,9 +2996,20 @@ est. APR 58.53 %"></textarea>
             }
             
             // --- Build data table ---
+            // Track visible rows for pagination
+            let chartTableVisibleRows = 5;
+            
             async function buildDataTable(data, metric) {
                 const tbody = document.getElementById('chart-data-table');
                 const thead = tbody.closest('table').querySelector('thead tr');
+                
+                // Reverse data so newest is first
+                const reversedData = [...data].reverse();
+                
+                // Store full data for pagination
+                window.chartTableFullData = reversedData;
+                window.chartTableMetric = metric;
+                chartTableVisibleRows = 5; // Reset pagination
                 
                 // Determine table type based on metric
                 const isVpMetric = metric.isVpMetric;
@@ -2960,10 +3045,13 @@ est. APR 58.53 %"></textarea>
                     // Fetch snapshots to get historical ratios
                     const snapshots = await fetchAllSnapshots();
                     
-                    for (let i = 0; i < data.length; i++) {
-                        const d = data[i];
+                    // Show limited rows (newest first due to reversal)
+                    const visibleData = reversedData.slice(0, chartTableVisibleRows);
+                    
+                    for (let i = 0; i < visibleData.length; i++) {
+                        const d = visibleData[i];
                         const date = new Date(d.timestamp);
-                        const isLatest = (i === data.length - 1);
+                        const isLatest = (i === 0); // First row is now the latest
                         
                         // Find corresponding snapshot for this epoch
                         const snapshot = snapshots.find(s => s.epoch == d.epoch) || {};
@@ -2972,7 +3060,6 @@ est. APR 58.53 %"></textarea>
                         const currentVp = fixedTotalVp;
                         
                         // Check if we have REAL captured LST ratios in the NEW lst_ratios format
-                        // OLD format (ampLUNA_LUNA_Ratio in snapshot root) doesn't count - that was auto-captured differently
                         const snapshotLstRatios = snapshot.tlaDeposits?.lstRatios || snapshot.lstRatios || {};
                         const hasNewFormatRatios = snapshotLstRatios.ampLUNA && snapshotLstRatios.arbLUNA;
                         
@@ -2981,12 +3068,10 @@ est. APR 58.53 %"></textarea>
                         let hasValidRatios = false;
                         
                         if (isLatest && tlaVpData?.totalUnderlyingLuna) {
-                            // Most recent - use live data
                             underlyingLuna = tlaVpData.totalUnderlyingLuna;
                             potentialVp = Math.floor(underlyingLuna * 10);
                             hasValidRatios = true;
                         } else if (hasNewFormatRatios) {
-                            // Has properly captured LST ratios in new format
                             const ampRate = snapshotLstRatios.ampLUNA;
                             const arbRate = snapshotLstRatios.arbLUNA;
                             
@@ -3001,29 +3086,21 @@ est. APR 58.53 %"></textarea>
                                 hasValidRatios = true;
                             }
                         }
-                        // If no new format ratios, leave as null (will show red/blank)
                         
                         const boostPct = (hasValidRatios && potentialVp) ? (((potentialVp - fixedTotalVp) / fixedTotalVp) * 100).toFixed(1) : null;
                         
-                        // Get USD value from TLA data locks (this IS captured in the tla-data file!)
                         let usdValue = null;
                         if (isLatest && tlaVpData?.totalUsd) {
-                            // Live USD from current calculation
                             usdValue = tlaVpData.totalUsd;
                         } else {
-                            // Try to get captured USD from snapshot
-                            // Option 1: tlaVpLocks array with usd per lock
                             const tlaVpLocks = snapshot.tlaVpLocks || [];
                             if (tlaVpLocks.length > 0 && tlaVpLocks.some(l => l.usd)) {
                                 usdValue = tlaVpLocks.reduce((sum, lock) => sum + (lock.usd || 0), 0);
-                            }
-                            // Option 2: tlaVpTotal_USD field
-                            else if (snapshot.tlaVpTotal_USD && snapshot.tlaVpTotal_USD > 0) {
+                            } else if (snapshot.tlaVpTotal_USD && snapshot.tlaVpTotal_USD > 0) {
                                 usdValue = snapshot.tlaVpTotal_USD;
                             }
                         }
                         
-                        // Display for underlying LUNA
                         let underlyingDisplay, potentialDisplay, valueDisplay;
                         
                         if (hasValidRatios && underlyingLuna !== null) {
@@ -3037,28 +3114,26 @@ est. APR 58.53 %"></textarea>
                                 <span class="text-cyan-400">${(potentialVp / 1000).toFixed(1)}K</span>
                                 <span class="text-green-400 text-[9px] block">+${boostPct}%</span>`;
                         } else {
-                            // No valid ratios - show red/blank with tooltip
                             underlyingDisplay = `
-                                <span class="text-red-400" title="LST ratios not captured in lst_ratios format">--</span>
+                                <span class="text-red-400" title="LST ratios not captured">--</span>
                                 <span class="text-red-400 text-[9px] block">⚠ no ratio</span>`;
                             potentialDisplay = `
-                                <span class="text-red-400" title="Cannot calculate without LST ratios">--</span>
+                                <span class="text-red-400" title="Cannot calculate">--</span>
                                 <span class="text-red-400 text-[9px] block">⚠</span>`;
                         }
                         
-                        // Value display - use captured USD from locks
                         if (usdValue !== null && usdValue > 0) {
                             const liveIndicator = isLatest ? '<span class="pulse-dot ml-1"></span>' : '';
                             const label = isLatest ? '<span class="text-green-400 text-[9px]">LIVE</span>' : '<span class="text-gray-600 text-[9px]">@snap</span>';
                             valueDisplay = `<span class="text-green-400">$${usdValue.toLocaleString('en-US', {maximumFractionDigits: 0})}</span>${liveIndicator}
                                 <span class="block">${label}</span>`;
                         } else {
-                            valueDisplay = `<span class="text-red-400" title="USD value not captured">--</span>
+                            valueDisplay = `<span class="text-red-400" title="USD not captured">--</span>
                                 <span class="text-red-400 text-[9px] block">⚠</span>`;
                         }
                         
                         html += `
-                            <tr class="border-t border-gray-700 hover:bg-gray-800/50 cursor-pointer ${isLatest ? 'bg-gray-800/30' : ''}" data-index="${i}" onclick="handlePointClick(chartDataGlobal[${i}], ${i})">
+                            <tr class="border-t border-gray-700 hover:bg-gray-800/50 cursor-pointer ${isLatest ? 'bg-gray-800/30' : ''}" data-index="${reversedData.length - 1 - i}" onclick="handlePointClick(chartDataGlobal[${reversedData.length - 1 - i}], ${reversedData.length - 1 - i})">
                                 <td class="p-2 text-cyan-400 font-medium">E${d.epoch}</td>
                                 <td class="p-2 text-gray-300">${date.toLocaleDateString()}</td>
                                 <td class="p-2 text-right font-mono">
@@ -3070,12 +3145,27 @@ est. APR 58.53 %"></textarea>
                                 <td class="p-2 text-right font-mono">${valueDisplay}</td>
                             </tr>`;
                     }
+                    
+                    // Add Load More button if there are more rows
+                    if (reversedData.length > chartTableVisibleRows) {
+                        html += `
+                            <tr id="load-more-row" class="border-t border-gray-700">
+                                <td colspan="6" class="p-2 text-center">
+                                    <button onclick="loadMoreTableRows()" class="text-cyan-400 hover:text-cyan-300 text-sm">
+                                        <i class="fas fa-chevron-down mr-1"></i>Load More (${reversedData.length - chartTableVisibleRows} remaining)
+                                    </button>
+                                </td>
+                            </tr>`;
+                    }
                 }
                 // === TREASURY / TLA DEPOSITS TABLE (with Details button) ===
                 else if (isTreasuryOrDeposits) {
                     // Fetch snapshots to get APR data
                     const snapshots = await fetchAllSnapshots();
                     const isTlaDeposits = metric.label.includes('TLA Deposits');
+                    
+                    // Use reversed data (newest first)
+                    const visibleData = reversedData.slice(0, chartTableVisibleRows);
                     
                     if (thead) {
                         if (isTlaDeposits) {
@@ -3098,31 +3188,33 @@ est. APR 58.53 %"></textarea>
                         }
                     }
                     
-                    for (let i = 0; i < data.length; i++) {
-                        const d = data[i];
+                    for (let i = 0; i < visibleData.length; i++) {
+                        const d = visibleData[i];
                         const date = new Date(d.timestamp);
-                        const prevData = i > 0 ? data[i-1] : null;
+                        const isLatest = (i === 0);
+                        // For change calculation, compare to next item (which is older since reversed)
+                        const olderData = i < visibleData.length - 1 ? visibleData[i + 1] : null;
                         
                         // Find corresponding snapshot for APR
                         const snapshot = snapshots.find(s => s.epoch == d.epoch) || {};
-                        const prevSnapshot = i > 0 ? snapshots.find(s => s.epoch == data[i-1].epoch) : null;
+                        const olderSnapshot = olderData ? snapshots.find(s => s.epoch == olderData.epoch) : null;
                         
-                        // Value with change
-                        const valueChange = prevData ? d.value - prevData.value : 0;
+                        // Value with change (current vs older)
+                        const valueChange = olderData ? d.value - olderData.value : 0;
                         const valueChangeClass = valueChange > 0 ? 'text-green-400' : valueChange < 0 ? 'text-red-400' : 'text-gray-500';
                         const sign = valueChange >= 0 ? '+' : '-';
-                        const changeStr = prevData ? `<span class="${valueChangeClass} text-xs">${sign}$${Math.abs(valueChange).toLocaleString('en-US', {maximumFractionDigits: 0})}</span>` : '<span class="text-gray-600 text-xs">--</span>';
+                        const changeStr = olderData ? `<span class="${valueChangeClass} text-xs">${sign}$${Math.abs(valueChange).toLocaleString('en-US', {maximumFractionDigits: 0})}</span>` : '<span class="text-gray-600 text-xs">--</span>';
                         
                         // Est APR with % change (for TLA Deposits only)
                         let aprDisplay = '';
                         if (isTlaDeposits) {
                             const currentApr = snapshot.tlaDeposits?.estApr;
-                            const prevApr = prevSnapshot?.tlaDeposits?.estApr;
+                            const olderApr = olderSnapshot?.tlaDeposits?.estApr;
                             
                             if (currentApr !== undefined && currentApr !== null) {
                                 const aprStr = currentApr.toFixed(2) + '%';
-                                if (prevApr !== undefined && prevApr !== null) {
-                                    const aprDiff = currentApr - prevApr;
+                                if (olderApr !== undefined && olderApr !== null) {
+                                    const aprDiff = currentApr - olderApr;
                                     const aprDiffClass = aprDiff > 0 ? 'text-green-400' : aprDiff < 0 ? 'text-red-400' : 'text-gray-400';
                                     const aprDiffStr = (aprDiff >= 0 ? '+' : '') + aprDiff.toFixed(2) + '%';
                                     aprDisplay = `<span class="text-cyan-400">${aprStr}</span> <span class="${aprDiffClass} text-xs">${aprDiffStr}</span>`;
@@ -3138,8 +3230,8 @@ est. APR 58.53 %"></textarea>
                         let lunaPriceDisplay = '<span class="text-gray-600">--</span>';
                         if (d.lunaPrice) {
                             const priceStr = '$' + d.lunaPrice.toFixed(4);
-                            if (prevData && prevData.lunaPrice) {
-                                const pctChg = ((d.lunaPrice - prevData.lunaPrice) / prevData.lunaPrice) * 100;
+                            if (olderData && olderData.lunaPrice) {
+                                const pctChg = ((d.lunaPrice - olderData.lunaPrice) / olderData.lunaPrice) * 100;
                                 const pctClass = pctChg > 0 ? 'text-green-400' : pctChg < 0 ? 'text-red-400' : 'text-gray-400';
                                 const pctStr = (pctChg >= 0 ? '+' : '') + pctChg.toFixed(2) + '%';
                                 lunaPriceDisplay = `<span class="text-orange-400">${priceStr}</span> <span class="${pctClass} text-xs">${pctStr}</span>`;
@@ -3148,10 +3240,12 @@ est. APR 58.53 %"></textarea>
                             }
                         }
                         
+                        const originalIdx = reversedData.length - 1 - i;
+                        
                         if (isTlaDeposits) {
                             html += `
-                                <tr class="border-t border-gray-700 hover:bg-gray-800/50" data-index="${i}" data-epoch="${d.epoch}">
-                                    <td class="p-2 text-cyan-400 font-medium cursor-pointer" onclick="handlePointClick(chartDataGlobal[${i}], ${i})">E${d.epoch}</td>
+                                <tr class="border-t border-gray-700 hover:bg-gray-800/50 ${isLatest ? 'bg-gray-800/30' : ''}" data-index="${originalIdx}" data-epoch="${d.epoch}">
+                                    <td class="p-2 text-cyan-400 font-medium cursor-pointer" onclick="handlePointClick(chartDataGlobal[${originalIdx}], ${originalIdx})">E${d.epoch}</td>
                                     <td class="p-2 text-gray-300">${date.toLocaleDateString()}</td>
                                     <td class="p-2 text-right font-mono"><span class="text-white">${metric.format(d.value)}</span> ${changeStr}</td>
                                     <td class="p-2 text-right font-mono">${aprDisplay}</td>
@@ -3164,8 +3258,8 @@ est. APR 58.53 %"></textarea>
                                 </tr>`;
                         } else {
                             html += `
-                                <tr class="border-t border-gray-700 hover:bg-gray-800/50" data-index="${i}" data-epoch="${d.epoch}">
-                                    <td class="p-2 text-cyan-400 font-medium cursor-pointer" onclick="handlePointClick(chartDataGlobal[${i}], ${i})">E${d.epoch}</td>
+                                <tr class="border-t border-gray-700 hover:bg-gray-800/50 ${isLatest ? 'bg-gray-800/30' : ''}" data-index="${originalIdx}" data-epoch="${d.epoch}">
+                                    <td class="p-2 text-cyan-400 font-medium cursor-pointer" onclick="handlePointClick(chartDataGlobal[${originalIdx}], ${originalIdx})">E${d.epoch}</td>
                                     <td class="p-2 text-gray-300">${date.toLocaleDateString()}</td>
                                     <td class="p-2 text-right font-mono"><span class="text-white">${metric.format(d.value)}</span> ${changeStr}</td>
                                     <td class="p-2 text-right font-mono">${lunaPriceDisplay}</td>
@@ -3177,9 +3271,25 @@ est. APR 58.53 %"></textarea>
                                 </tr>`;
                         }
                     }
+                    
+                    // Add Load More button if there are more rows
+                    if (reversedData.length > chartTableVisibleRows) {
+                        const colSpan = isTlaDeposits ? 6 : 5;
+                        html += `
+                            <tr id="load-more-row" class="border-t border-gray-700">
+                                <td colspan="${colSpan}" class="p-2 text-center">
+                                    <button onclick="loadMoreTableRows()" class="text-cyan-400 hover:text-cyan-300 text-sm">
+                                        <i class="fas fa-chevron-down mr-1"></i>Load More (${reversedData.length - chartTableVisibleRows} remaining)
+                                    </button>
+                                </td>
+                            </tr>`;
+                    }
                 }
                 // === STANDARD TABLE (all other metrics) ===
                 else {
+                    // Use reversed data (newest first)
+                    const visibleData = reversedData.slice(0, chartTableVisibleRows);
+                    
                     // Build header based on what secondary data we have
                     let headerHtml = `
                         <th class="text-left p-2">Epoch</th>
@@ -3198,27 +3308,29 @@ est. APR 58.53 %"></textarea>
                         thead.innerHTML = headerHtml;
                     }
                     
-                    for (let i = 0; i < data.length; i++) {
-                        const d = data[i];
+                    for (let i = 0; i < visibleData.length; i++) {
+                        const d = visibleData[i];
                         const date = new Date(d.timestamp);
-                        const prevData = i > 0 ? data[i-1] : null;
+                        const isLatest = (i === 0);
+                        // For change calculation, compare to next item (which is older since reversed)
+                        const olderData = i < visibleData.length - 1 ? visibleData[i + 1] : null;
                         
-                        // Value change
-                        const valueChange = prevData ? d.value - prevData.value : 0;
+                        // Value change (current vs older)
+                        const valueChange = olderData ? d.value - olderData.value : 0;
                         const valueChangeClass = valueChange > 0 ? 'text-green-400' : valueChange < 0 ? 'text-red-400' : 'text-gray-500';
                         
                         // Percent change
                         let pctChangeDisplay = '--';
                         let pctChangeClass = 'text-gray-500';
-                        if (prevData && prevData.value !== 0) {
-                            const pctChg = ((d.value - prevData.value) / prevData.value) * 100;
+                        if (olderData && olderData.value !== 0) {
+                            const pctChg = ((d.value - olderData.value) / olderData.value) * 100;
                             pctChangeDisplay = (pctChg >= 0 ? '+' : '') + pctChg.toFixed(2) + '%';
                             pctChangeClass = pctChg > 0 ? 'text-green-400' : pctChg < 0 ? 'text-red-400' : 'text-gray-500';
                         }
                         
                         // Format change
                         let changeDisplay = '--';
-                        if (prevData) {
+                        if (olderData) {
                             const prefix = valueChange >= 0 ? '+' : '';
                             if (metric.label.includes('$') || metric.label.includes('USD')) {
                                 changeDisplay = valueChange >= 0 ? '+$' + Math.abs(valueChange).toLocaleString('en-US', {maximumFractionDigits: 2}) : '-$' + Math.abs(valueChange).toLocaleString('en-US', {maximumFractionDigits: 2});
@@ -3240,14 +3352,29 @@ est. APR 58.53 %"></textarea>
                                 : `<td class="p-2 text-right font-mono text-gray-600">--</td>`;
                         }
                         
+                        const originalIdx = reversedData.length - 1 - i;
+                        
                         html += `
-                            <tr class="border-t border-gray-700 hover:bg-gray-800/50 cursor-pointer" data-index="${i}" onclick="handlePointClick(chartDataGlobal[${i}], ${i})">
+                            <tr class="border-t border-gray-700 hover:bg-gray-800/50 cursor-pointer ${isLatest ? 'bg-gray-800/30' : ''}" data-index="${originalIdx}" onclick="handlePointClick(chartDataGlobal[${originalIdx}], ${originalIdx})">
                                 <td class="p-2 text-cyan-400 font-medium">E${d.epoch}</td>
                                 <td class="p-2 text-gray-300">${date.toLocaleDateString()}</td>
                                 <td class="p-2 text-right font-mono text-white">${metric.format(d.value)}</td>
                                 ${secondaryDisplay}
                                 <td class="p-2 text-right font-mono ${pctChangeClass}">${pctChangeDisplay}</td>
                                 <td class="p-2 text-right font-mono ${valueChangeClass}">${changeDisplay}</td>
+                            </tr>`;
+                    }
+                    
+                    // Add Load More button if there are more rows
+                    if (reversedData.length > chartTableVisibleRows) {
+                        const colSpan = hasSecondary ? 6 : 5;
+                        html += `
+                            <tr id="load-more-row" class="border-t border-gray-700">
+                                <td colspan="${colSpan}" class="p-2 text-center">
+                                    <button onclick="loadMoreTableRows()" class="text-cyan-400 hover:text-cyan-300 text-sm">
+                                        <i class="fas fa-chevron-down mr-1"></i>Load More (${reversedData.length - chartTableVisibleRows} remaining)
+                                    </button>
+                                </td>
                             </tr>`;
                     }
                 }
@@ -3268,6 +3395,18 @@ est. APR 58.53 %"></textarea>
                     });
                 }
             }
+            
+            // Load more rows in table
+            function loadMoreTableRows() {
+                chartTableVisibleRows += 5;
+                // Rebuild the table with more rows - data is already reversed, so reverse back for buildDataTable
+                if (window.chartTableFullData && window.chartTableMetric) {
+                    const data = window.chartTableFullData.slice().reverse(); // Un-reverse it since buildDataTable will reverse again
+                    const metric = window.chartTableMetric;
+                    buildDataTable(data, metric);
+                }
+            }
+            window.loadMoreTableRows = loadMoreTableRows;
             
             // Show epoch details popup with token breakdown
             async function showEpochDetailsPopup(epoch, anchorEl) {
@@ -6459,18 +6598,78 @@ est. APR 58.53 %"></textarea>
                     modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
                 }
                 
-                // Load sales history
+                // Store all-time sales for chart (combined from all years)
+                let allTimeSalesData = null;
+                
+                // Load sales history from all years
                 async function loadSalesHistory() {
                     const currentYear = new Date().getFullYear();
+                    const yearsToFetch = [2023, 2024, 2025]; // All available years
                     
                     try {
-                        const response = await fetch(`${SALES_BASE_URL}nft-sales-${currentYear}.json`);
-                        if (!response.ok) throw new Error('No sales file');
-                        salesData = await response.json();
+                        // Fetch all years in parallel
+                        const fetchPromises = yearsToFetch.map(year => 
+                            fetch(`${SALES_BASE_URL}nft-sales-${year}.json`)
+                                .then(r => r.ok ? r.json() : null)
+                                .catch(() => null)
+                        );
                         
-                        updateVolumeDisplays();
+                        const results = await Promise.all(fetchPromises);
+                        
+                        // Combine all sales data
+                        allTimeSalesData = {
+                            sales: { bbl: [], boost: [] },
+                            cumulative_totals: null // Will use most recent year's totals
+                        };
+                        
+                        // Find most recent year with data for cumulative totals
+                        // (cumulative_totals is already ALL-TIME through that year)
+                        let mostRecentCumulativeTotals = null;
+                        
+                        results.forEach((yearData, idx) => {
+                            if (!yearData) return;
+                            
+                            // Combine sales arrays (individual sale records)
+                            if (yearData.sales?.bbl) {
+                                allTimeSalesData.sales.bbl.push(...yearData.sales.bbl);
+                            }
+                            if (yearData.sales?.boost) {
+                                allTimeSalesData.sales.boost.push(...yearData.sales.boost);
+                            }
+                            
+                            // Use the most recent year's cumulative_totals (it's already all-time through that year)
+                            if (yearData.cumulative_totals) {
+                                mostRecentCumulativeTotals = yearData.cumulative_totals;
+                            }
+                            
+                            // Keep top_10 from most recent year that has it
+                            if (yearData.top_10_sales_all_time) {
+                                allTimeSalesData.top_10_sales_all_time = yearData.top_10_sales_all_time;
+                            }
+                        });
+                        
+                        // Use most recent year's cumulative totals (already contains all-time totals)
+                        allTimeSalesData.cumulative_totals = mostRecentCumulativeTotals || {
+                            bbl: { total_volume_bluna: 0, total_sales: 0 },
+                            boost: { total_volume_usd: 0, total_sales: 0 }
+                        };
+                        
+                        // Use current year data for the main display (recent sales)
+                        const currentYearData = results[yearsToFetch.indexOf(currentYear)];
+                        if (currentYearData) {
+                            salesData = currentYearData;
+                        } else {
+                            // Fallback to combined data
+                            salesData = allTimeSalesData;
+                        }
+                        
+                        // Update volume displays with ALL TIME totals (from most recent year's cumulative)
+                        updateVolumeDisplays(allTimeSalesData);
                         renderRecentSales();
                         setupTop10Modal();
+                        
+                        console.log(`Loaded sales: ${allTimeSalesData.sales.bbl.length} BBL + ${allTimeSalesData.sales.boost.length} Boost = ${allTimeSalesData.sales.bbl.length + allTimeSalesData.sales.boost.length} total records`);
+                        console.log(`All-time volume: ${allTimeSalesData.cumulative_totals.bbl?.total_volume_bluna?.toFixed(2)} bLUNA`);
                     } catch (err) {
                         console.error('Sales history fetch error:', err);
                         document.getElementById('recent-sales-container').innerHTML = 
@@ -6479,13 +6678,14 @@ est. APR 58.53 %"></textarea>
                 }
                 
                 // Update volume displays
-                function updateVolumeDisplays() {
-                    if (!salesData?.cumulative_totals) return;
+                function updateVolumeDisplays(data) {
+                    const useData = data || allTimeSalesData || salesData;
+                    if (!useData?.cumulative_totals) return;
                     
-                    const bblVolume = salesData.cumulative_totals.bbl?.total_volume_bluna || 0;
-                    const bblSales = salesData.cumulative_totals.bbl?.total_sales || 0;
-                    const boostVolume = salesData.cumulative_totals.boost?.total_volume_usd || 0;
-                    const boostSales = salesData.cumulative_totals.boost?.total_sales || 0;
+                    const bblVolume = useData.cumulative_totals.bbl?.total_volume_bluna || 0;
+                    const bblSales = useData.cumulative_totals.bbl?.total_sales || 0;
+                    const boostVolume = useData.cumulative_totals.boost?.total_volume_usd || 0;
+                    const boostSales = useData.cumulative_totals.boost?.total_sales || 0;
                     
                     const formatVolume = (v) => v >= 1000 ? (v/1000).toFixed(1) + 'K' : v.toFixed(1);
                     
@@ -6709,6 +6909,187 @@ est. APR 58.53 %"></textarea>
                 setupFilterButtons();
                 loadNftStatus();      // Load deving.zone for listing counts
                 loadSalesHistory();   // Load sales history for volume/sales
+                
+                // Sales Chart button handler
+                const salesChartBtn = document.getElementById('sales-chart-btn');
+                if (salesChartBtn) {
+                    salesChartBtn.addEventListener('click', () => openSalesChartModal());
+                }
+                
+                // Sales Chart modal close handler
+                const salesChartModal = document.getElementById('salesChartModal');
+                if (salesChartModal) {
+                    salesChartModal.querySelector('.modal-close').addEventListener('click', () => {
+                        salesChartModal.classList.add('opacity-0');
+                        salesChartModal.querySelector('.modal-content').classList.add('opacity-0', 'scale-95');
+                        setTimeout(() => salesChartModal.classList.add('hidden'), 300);
+                    });
+                    salesChartModal.addEventListener('click', (e) => {
+                        if (e.target === salesChartModal) {
+                            salesChartModal.classList.add('opacity-0');
+                            salesChartModal.querySelector('.modal-content').classList.add('opacity-0', 'scale-95');
+                            setTimeout(() => salesChartModal.classList.add('hidden'), 300);
+                        }
+                    });
+                }
+                
+                // Open sales chart modal and build chart
+                let salesChart = null;
+                async function openSalesChartModal() {
+                    const modal = document.getElementById('salesChartModal');
+                    if (!modal) return;
+                    
+                    modal.classList.remove('hidden');
+                    setTimeout(() => {
+                        modal.classList.remove('opacity-0');
+                        modal.querySelector('.modal-content').classList.remove('opacity-0', 'scale-95');
+                    }, 10);
+                    
+                    // Wait for sales data if not loaded
+                    if (!allTimeSalesData?.sales) {
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                    }
+                    
+                    if (!allTimeSalesData?.sales) {
+                        document.getElementById('sales-chart-total').textContent = 'No data';
+                        return;
+                    }
+                    
+                    // Use ALL TIME sales data for chart
+                    const chartSalesData = allTimeSalesData;
+                    
+                    // Combine all sales
+                    const allSales = [
+                        ...(chartSalesData.sales.bbl || []).map(s => ({ ...s, marketplace: 'bbl' })),
+                        ...(chartSalesData.sales.boost || []).map(s => ({ ...s, marketplace: 'boost' }))
+                    ];
+                    
+                    // Sort by date ascending
+                    allSales.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+                    
+                    // Update summary stats
+                    const bblCount = chartSalesData.sales.bbl?.length || 0;
+                    const boostCount = chartSalesData.sales.boost?.length || 0;
+                    document.getElementById('sales-chart-total').textContent = (bblCount + boostCount).toLocaleString();
+                    document.getElementById('sales-chart-bbl').textContent = bblCount.toLocaleString();
+                    document.getElementById('sales-chart-boost').textContent = boostCount.toLocaleString();
+                    
+                    if (allSales.length > 0) {
+                        const firstDate = new Date(allSales[0].timestamp).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+                        const lastDate = new Date(allSales[allSales.length - 1].timestamp).toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+                        document.getElementById('sales-chart-range').textContent = `${firstDate} - ${lastDate}`;
+                    }
+                    
+                    // Build cumulative data by week (for cleaner chart with multi-year data)
+                    const salesByWeek = {};
+                    let cumulativeTotal = 0;
+                    let cumulativeBbl = 0;
+                    let cumulativeBoost = 0;
+                    
+                    allSales.forEach(sale => {
+                        const saleDate = new Date(sale.timestamp);
+                        // Get start of week (Sunday)
+                        const weekStart = new Date(saleDate);
+                        weekStart.setDate(saleDate.getDate() - saleDate.getDay());
+                        const weekKey = weekStart.toISOString().split('T')[0];
+                        
+                        cumulativeTotal++;
+                        if (sale.marketplace === 'bbl') cumulativeBbl++;
+                        else cumulativeBoost++;
+                        
+                        // Always update to latest cumulative for this week
+                        salesByWeek[weekKey] = { date: weekKey, total: cumulativeTotal, bbl: cumulativeBbl, boost: cumulativeBoost };
+                    });
+                    
+                    const chartData = Object.values(salesByWeek);
+                    
+                    // Build chart
+                    const ctx = document.getElementById('salesHistoryChart').getContext('2d');
+                    
+                    if (salesChart) {
+                        salesChart.destroy();
+                    }
+                    
+                    salesChart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: chartData.map(d => {
+                                const date = new Date(d.date);
+                                // Use short format with year for multi-year data
+                                return date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+                            }),
+                            datasets: [
+                                {
+                                    label: 'Cumulative Total',
+                                    data: chartData.map(d => d.total),
+                                    borderColor: '#22d3ee',
+                                    backgroundColor: 'rgba(34, 211, 238, 0.1)',
+                                    fill: true,
+                                    tension: 0.3,
+                                    pointRadius: 1,
+                                    pointHoverRadius: 4
+                                },
+                                {
+                                    label: 'BBL Sales',
+                                    data: chartData.map(d => d.bbl),
+                                    borderColor: '#fb923c',
+                                    backgroundColor: 'transparent',
+                                    borderDash: [5, 5],
+                                    tension: 0.3,
+                                    pointRadius: 0
+                                },
+                                {
+                                    label: 'Boost Sales',
+                                    data: chartData.map(d => d.boost),
+                                    borderColor: '#4ade80',
+                                    backgroundColor: 'transparent',
+                                    borderDash: [5, 5],
+                                    tension: 0.3,
+                                    pointRadius: 0
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            interaction: {
+                                intersect: false,
+                                mode: 'index'
+                            },
+                            plugins: {
+                                legend: {
+                                    display: false
+                                },
+                                tooltip: {
+                                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                                    titleColor: '#fff',
+                                    bodyColor: '#ccc',
+                                    callbacks: {
+                                        title: (items) => {
+                                            const idx = items[0].dataIndex;
+                                            const date = new Date(chartData[idx].date);
+                                            return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+                                        },
+                                        label: (item) => {
+                                            return `${item.dataset.label}: ${item.raw} sales`;
+                                        }
+                                    }
+                                }
+                            },
+                            scales: {
+                                x: {
+                                    grid: { color: 'rgba(255,255,255,0.1)' },
+                                    ticks: { color: '#9ca3af', maxTicksLimit: 15, maxRotation: 45 }
+                                },
+                                y: {
+                                    grid: { color: 'rgba(255,255,255,0.1)' },
+                                    ticks: { color: '#9ca3af' },
+                                    beginAtZero: true
+                                }
+                            }
+                        }
+                    });
+                }
             }
 
 
