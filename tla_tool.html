@@ -1448,6 +1448,12 @@
                     </a>
                 </h3>
                 <!-- Floors -->
+                <div class="flex justify-between items-center mb-1">
+                    <span class="text-[9px] text-gray-400">Floor Prices</span>
+                    <button onclick="autoCalcBblFloors()" class="text-[8px] bg-orange-900/50 hover:bg-orange-800 px-2 py-0.5 rounded text-orange-300" title="Auto-calculate from listings">
+                        <i class="fas fa-calculator mr-1"></i>Auto-calc
+                    </button>
+                </div>
                 <div class="grid grid-cols-2 gap-2 text-[9px] mb-2">
                     <div>
                         <span class="text-gray-500">Unbroken Floor:</span>
@@ -1505,7 +1511,7 @@
                 <div class="border-t border-gray-800 pt-2 mt-2">
                     <h4 class="text-[9px] text-orange-300 mb-1 flex justify-between">
                         <span>Epoch Sales</span>
-                        <span class="text-gray-500">(<span id="bbl-sale-count">0</span> total)</span>
+                        <span class="text-gray-500">(<span id="bbl-sale-count">0</span> new + <span id="bbl-history-count">0</span> history)</span>
                     </h4>
                     <div class="flex gap-1 mb-1 flex-wrap">
                         <input type="number" id="nft-bbl-sale-id" class="input-dark w-14" placeholder="NFT #">
@@ -1514,6 +1520,7 @@
                             <option value="bLUNA">bLUNA</option>
                             <option value="LUNA">LUNA</option>
                         </select>
+                        <input type="number" id="nft-bbl-sale-usd" class="input-dark w-16" placeholder="USD $" step="0.01">
                         <label class="flex items-center text-[8px] text-gray-500 whitespace-nowrap"><input type="checkbox" id="nft-bbl-sale-broken" class="mr-1"> Brk</label>
                     </div>
                     <div class="flex gap-1 mb-1">
@@ -1536,6 +1543,12 @@
                     </a>
                 </h3>
                 <!-- Floors -->
+                <div class="flex justify-between items-center mb-1">
+                    <span class="text-[9px] text-gray-400">Floor Prices</span>
+                    <button onclick="autoCalcBoostFloors()" class="text-[8px] bg-blue-900/50 hover:bg-blue-800 px-2 py-0.5 rounded text-blue-300" title="Auto-calculate from listings">
+                        <i class="fas fa-calculator mr-1"></i>Auto-calc
+                    </button>
+                </div>
                 <div class="grid grid-cols-2 gap-2 text-[9px] mb-2">
                     <div>
                         <span class="text-gray-500">Unbroken Floor:</span>
@@ -1554,8 +1567,8 @@
                         <span id="nft-boost-floor-broken-usd" class="text-gray-400 text-[8px]"></span>
                     </div>
                 </div>
-                <!-- Volume - N/A for Boost -->
-                <div class="text-[9px] text-gray-500 mb-2">Volume: <span class="text-gray-600">N/A (not tracked)</span></div>
+                <!-- Volume - Now tracked from sales history -->
+                <div class="text-[9px] text-gray-500 mb-2">Volume: <span id="boost-volume-display" class="text-blue-400 font-mono">$0.00</span> <span id="boost-volume-note" class="text-gray-600">(load history)</span></div>
                 
                 <!-- Listings Entry - Any Token -->
                 <div class="border-t border-gray-800 pt-2 mt-2">
@@ -1579,12 +1592,13 @@
                 <div class="border-t border-gray-800 pt-2 mt-2">
                     <h4 class="text-[9px] text-blue-300 mb-1 flex justify-between">
                         <span>Epoch Sales</span>
-                        <span class="text-gray-500">(<span id="boost-sale-count">0</span> total)</span>
+                        <span class="text-gray-500">(<span id="boost-sale-count">0</span> new + <span id="boost-history-count">0</span> history)</span>
                     </h4>
                     <div class="flex gap-1 mb-1 flex-wrap">
                         <input type="number" id="nft-boost-sale-id" class="input-dark w-14" placeholder="NFT #">
                         <input type="number" id="nft-boost-sale-amt" class="input-dark w-14" placeholder="Amt" step="0.01">
                         <input type="text" id="nft-boost-sale-token" class="input-dark w-16 text-[8px]" placeholder="Token" value="LUNA">
+                        <input type="number" id="nft-boost-sale-usd" class="input-dark w-16" placeholder="USD $" step="0.01">
                         <label class="flex items-center text-[8px] text-gray-500 whitespace-nowrap"><input type="checkbox" id="nft-boost-sale-broken" class="mr-1"> Brk</label>
                     </div>
                     <div class="flex gap-1 mb-1">
@@ -1600,10 +1614,21 @@
         </div>
         
         <!-- Save Button -->
-        <div class="mt-4 pt-4 border-t border-gray-800 flex justify-end">
-            <button onclick="saveNftStats()" class="text-[10px] bg-purple-800 hover:bg-purple-700 px-4 py-2 rounded font-bold">
-                <i class="fas fa-save mr-1"></i> Save NFT Stats
-            </button>
+        <div class="mt-4 pt-4 border-t border-gray-800 flex justify-between items-center">
+            <div class="flex items-center gap-2">
+                <button onclick="loadSalesHistory()" class="text-[10px] bg-green-800 hover:bg-green-700 px-3 py-2 rounded font-bold">
+                    <i class="fas fa-download mr-1"></i> Load Sales History
+                </button>
+                <span id="sales-history-status" class="text-[9px] text-gray-500"></span>
+            </div>
+            <div class="flex items-center gap-2">
+                <button onclick="downloadSalesFile()" class="text-[10px] bg-cyan-800 hover:bg-cyan-700 px-3 py-2 rounded font-bold">
+                    <i class="fas fa-file-export mr-1"></i> Download Sales File
+                </button>
+                <button onclick="saveNftStats()" class="text-[10px] bg-purple-800 hover:bg-purple-700 px-4 py-2 rounded font-bold">
+                    <i class="fas fa-save mr-1"></i> Save NFT Stats
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -8862,11 +8887,100 @@ function removeBblListing(index) {
     renderBblListings();
 }
 
+// Auto-calculate BBL floor prices from listings
+function autoCalcBblFloors() {
+    const items = store.nftStats.bblListingItems || [];
+    
+    if (items.length === 0) {
+        alert('No listings to calculate from. Add listings first.');
+        return;
+    }
+    
+    // Separate broken and unbroken, sort by USD (cheapest first)
+    const unbroken = items.filter(l => !l.broken).sort((a, b) => a.usd - b.usd);
+    const broken = items.filter(l => l.broken).sort((a, b) => a.usd - b.usd);
+    
+    // Set unbroken floor (cheapest unbroken listing)
+    if (unbroken.length > 0) {
+        const floor = unbroken[0];
+        $('nft-bbl-floor-unbroken-amt').value = floor.amount;
+        $('nft-bbl-floor-unbroken-token').value = floor.token;
+    } else {
+        $('nft-bbl-floor-unbroken-amt').value = '';
+    }
+    
+    // Set broken floor (cheapest broken listing)
+    if (broken.length > 0) {
+        const floor = broken[0];
+        $('nft-bbl-floor-broken-amt').value = floor.amount;
+        $('nft-bbl-floor-broken-token').value = floor.token;
+    } else {
+        $('nft-bbl-floor-broken-amt').value = '';
+    }
+    
+    // Update USD displays
+    updateBblFloorUsd();
+    
+    // Show what was set
+    const msg = [];
+    if (unbroken.length > 0) msg.push(`Unbroken: ${unbroken[0].amount} ${unbroken[0].token} ($${unbroken[0].usd.toFixed(2)})`);
+    else msg.push('Unbroken: None found');
+    if (broken.length > 0) msg.push(`Broken: ${broken[0].amount} ${broken[0].token} ($${broken[0].usd.toFixed(2)})`);
+    else msg.push('Broken: None found');
+    
+    alert('BBL Floors Updated:\n' + msg.join('\n'));
+}
+
+// Auto-calculate Boost floor prices from listings
+function autoCalcBoostFloors() {
+    const items = store.nftStats.boostListingItems || [];
+    
+    if (items.length === 0) {
+        alert('No listings to calculate from. Add listings first.');
+        return;
+    }
+    
+    // Separate broken and unbroken, sort by USD (cheapest first)
+    const unbroken = items.filter(l => !l.broken).sort((a, b) => a.usd - b.usd);
+    const broken = items.filter(l => l.broken).sort((a, b) => a.usd - b.usd);
+    
+    // Set unbroken floor (cheapest unbroken listing)
+    if (unbroken.length > 0) {
+        const floor = unbroken[0];
+        $('nft-boost-floor-unbroken-amt').value = floor.amount;
+        $('nft-boost-floor-unbroken-token').value = floor.token;
+    } else {
+        $('nft-boost-floor-unbroken-amt').value = '';
+    }
+    
+    // Set broken floor (cheapest broken listing)
+    if (broken.length > 0) {
+        const floor = broken[0];
+        $('nft-boost-floor-broken-amt').value = floor.amount;
+        $('nft-boost-floor-broken-token').value = floor.token;
+    } else {
+        $('nft-boost-floor-broken-amt').value = '';
+    }
+    
+    // Update USD displays
+    updateBoostFloorUsd();
+    
+    // Show what was set
+    const msg = [];
+    if (unbroken.length > 0) msg.push(`Unbroken: ${unbroken[0].amount} ${unbroken[0].token} ($${unbroken[0].usd.toFixed(2)})`);
+    else msg.push('Unbroken: None found');
+    if (broken.length > 0) msg.push(`Broken: ${broken[0].amount} ${broken[0].token} ($${broken[0].usd.toFixed(2)})`);
+    else msg.push('Broken: None found');
+    
+    alert('Boost Floors Updated:\n' + msg.join('\n'));
+}
+
 // Add BBL Sale
 function addBblSale() {
     let id = parseInt($('nft-bbl-sale-id')?.value);
     let amt = parseFloat($('nft-bbl-sale-amt')?.value);
-    let token = $('nft-bbl-sale-token')?.value || 'LUNA';
+    let token = $('nft-bbl-sale-token')?.value || 'bLUNA';
+    let manualUsd = parseFloat($('nft-bbl-sale-usd')?.value);
     let broken = $('nft-bbl-sale-broken')?.checked || false;
     let dateStr = $('nft-bbl-sale-date')?.value;
     let timeStr = $('nft-bbl-sale-time')?.value;
@@ -8876,8 +8990,8 @@ function addBblSale() {
         return;
     }
     
-    let price = getTokenPrice(token);
-    let usd = amt * price;
+    // Use manual USD if provided, otherwise calculate from token price
+    let usd = manualUsd > 0 ? manualUsd : amt * getTokenPrice(token);
     let timestamp = localToUtc(dateStr, timeStr);
     
     if (!store.nftStats.bblSales) store.nftStats.bblSales = [];
@@ -8895,6 +9009,7 @@ function addBblSale() {
     // Clear inputs
     $('nft-bbl-sale-id').value = '';
     $('nft-bbl-sale-amt').value = '';
+    $('nft-bbl-sale-usd').value = '';
     $('nft-bbl-sale-broken').checked = false;
 }
 
@@ -8993,6 +9108,7 @@ function addBoostSale() {
     let id = parseInt($('nft-boost-sale-id')?.value);
     let amt = parseFloat($('nft-boost-sale-amt')?.value);
     let token = $('nft-boost-sale-token')?.value?.trim() || 'LUNA';
+    let manualUsd = parseFloat($('nft-boost-sale-usd')?.value);
     let broken = $('nft-boost-sale-broken')?.checked || false;
     let dateStr = $('nft-boost-sale-date')?.value;
     let timeStr = $('nft-boost-sale-time')?.value;
@@ -9002,8 +9118,8 @@ function addBoostSale() {
         return;
     }
     
-    let price = getTokenPrice(token);
-    let usd = amt * price;
+    // Use manual USD if provided, otherwise calculate from token price
+    let usd = manualUsd > 0 ? manualUsd : amt * getTokenPrice(token);
     let timestamp = localToUtc(dateStr, timeStr);
     
     if (!store.nftStats.boostSales) store.nftStats.boostSales = [];
@@ -9020,6 +9136,7 @@ function addBoostSale() {
     
     $('nft-boost-sale-id').value = '';
     $('nft-boost-sale-amt').value = '';
+    $('nft-boost-sale-usd').value = '';
     $('nft-boost-sale-broken').checked = false;
 }
 
@@ -9033,6 +9150,7 @@ function renderBoostSales() {
     
     if (sales.length === 0) {
         el.innerHTML = '<div class="text-gray-600 italic">No sales</div>';
+        updateBoostVolumeDisplay();
         return;
     }
     
@@ -9047,11 +9165,387 @@ function renderBoostSales() {
             <button onclick="removeBoostSale(${i})" class="text-red-400 hover:text-red-300">×</button>
         </div>
     `}).join('');
+    
+    // Update volume display
+    updateBoostVolumeDisplay();
 }
 
 function removeBoostSale(index) {
     store.nftStats.boostSales.splice(index, 1);
     renderBoostSales();
+}
+
+// Update Boost volume display from history + new sales
+function updateBoostVolumeDisplay() {
+    const displayEl = $('boost-volume-display');
+    const noteEl = $('boost-volume-note');
+    if (!displayEl) return;
+    
+    // Get cumulative volume from history
+    let cumulativeVolume = window.salesHistory.cumulative?.boost?.total_volume_usd || 0;
+    
+    // If we have yearTotals, we need to add this year's volume from history
+    // (cumulative already includes it, so this is just for display breakdown)
+    let historyYearVolume = window.salesHistory.yearTotals?.boost?.volume_usd || 0;
+    
+    // Get new epoch sales volume
+    let newEpochVolume = (store.nftStats.boostSales || []).reduce((sum, s) => sum + (s.usd || 0), 0);
+    
+    // Total = cumulative + new epoch sales
+    let totalVolume = cumulativeVolume + newEpochVolume;
+    
+    displayEl.textContent = `$${totalVolume.toFixed(2)}`;
+    
+    if (!window.salesHistory.loaded) {
+        noteEl.textContent = '(load history)';
+        noteEl.className = 'text-gray-600';
+    } else if (newEpochVolume > 0) {
+        noteEl.textContent = `(+$${newEpochVolume.toFixed(2)} new)`;
+        noteEl.className = 'text-green-500';
+    } else {
+        noteEl.textContent = `(${window.salesHistory.cumulative?.boost?.total_sales || 0} sales)`;
+        noteEl.className = 'text-gray-500';
+    }
+}
+
+// Sales History Management
+// Store for loaded history
+window.salesHistory = {
+    loaded: false,
+    year: null,
+    bbl: [],
+    boost: [],
+    cumulative: null,
+    top10: null
+};
+
+// Load sales history from GitHub
+async function loadSalesHistory() {
+    const statusEl = $('sales-history-status');
+    const bblHistoryCountEl = $('bbl-history-count');
+    const boostHistoryCountEl = $('boost-history-count');
+    
+    // Determine year from epoch end_time or use current year
+    let targetYear = new Date().getFullYear();
+    if (currentEpochInfo?.end_time) {
+        targetYear = new Date(currentEpochInfo.end_time).getFullYear();
+    } else if (store.vote?.end && store.vote.end !== 'Loaded from file') {
+        targetYear = new Date(store.vote.end).getFullYear();
+    }
+    
+    if (statusEl) statusEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
+    
+    try {
+        // Try to load the current year's file first
+        const baseUrl = 'https://raw.githubusercontent.com/defipatriot/adao_json_storage/main/';
+        let response = await fetch(`${baseUrl}nft-sales-${targetYear}.json`);
+        
+        // If current year doesn't exist, try previous year to get cumulative totals
+        if (!response.ok && targetYear > 2023) {
+            response = await fetch(`${baseUrl}nft-sales-${targetYear - 1}.json`);
+            if (response.ok) {
+                // We loaded previous year - we'll create new year file
+                const prevData = await response.json();
+                window.salesHistory = {
+                    loaded: true,
+                    year: targetYear,
+                    previousYear: targetYear - 1,
+                    bbl: [], // No sales yet for new year
+                    boost: [],
+                    cumulative: prevData.cumulative_totals,
+                    top10: prevData.top_10_sales_all_time || null
+                };
+                
+                if (statusEl) statusEl.innerHTML = `<span class="text-yellow-400">✓ New year ${targetYear} (prev: ${prevData.cumulative_totals.bbl.total_sales} BBL / ${prevData.cumulative_totals.boost.total_sales} Boost)</span>`;
+                if (bblHistoryCountEl) bblHistoryCountEl.textContent = '0';
+                if (boostHistoryCountEl) boostHistoryCountEl.textContent = '0';
+                updateBoostVolumeDisplay();
+                return;
+            }
+        }
+        
+        if (!response.ok) {
+            throw new Error(`No sales file found for ${targetYear}`);
+        }
+        
+        const data = await response.json();
+        
+        window.salesHistory = {
+            loaded: true,
+            year: targetYear,
+            bbl: data.sales?.bbl || [],
+            boost: data.sales?.boost || [],
+            cumulative: data.cumulative_totals,
+            yearTotals: data.year_totals,
+            top10: data.top_10_sales_all_time || null
+        };
+        
+        const bblCount = window.salesHistory.bbl.length;
+        const boostCount = window.salesHistory.boost.length;
+        
+        if (statusEl) statusEl.innerHTML = `<span class="text-green-400">✓ Loaded ${targetYear}: ${bblCount} BBL / ${boostCount} Boost sales</span>`;
+        if (bblHistoryCountEl) bblHistoryCountEl.textContent = bblCount;
+        if (boostHistoryCountEl) boostHistoryCountEl.textContent = boostCount;
+        updateBoostVolumeDisplay();
+        
+    } catch (err) {
+        console.error('Failed to load sales history:', err);
+        if (statusEl) statusEl.innerHTML = `<span class="text-red-400">✗ ${err.message}</span>`;
+        
+        // Initialize empty history for new file
+        window.salesHistory = {
+            loaded: true,
+            year: targetYear,
+            bbl: [],
+            boost: [],
+            cumulative: null,
+            top10: null
+        };
+        updateBoostVolumeDisplay();
+    }
+}
+
+// Download merged sales file
+function downloadSalesFile() {
+    if (!window.salesHistory.loaded) {
+        alert('Please load sales history first!');
+        return;
+    }
+    
+    // Determine year from epoch end_time
+    let targetYear = new Date().getFullYear();
+    if (currentEpochInfo?.end_time) {
+        targetYear = new Date(currentEpochInfo.end_time).getFullYear();
+    } else if (store.vote?.end && store.vote.end !== 'Loaded from file') {
+        targetYear = new Date(store.vote.end).getFullYear();
+    }
+    
+    // Get new sales from current session (epoch sales)
+    const newBblSales = (store.nftStats.bblSales || []).map(s => ({
+        nft_id: s.nft_id,
+        amount: s.amount,
+        token: s.token,
+        usd: s.usd,
+        timestamp: s.timestamp_utc,
+        marketplace: 'bbl'
+    }));
+    
+    const newBoostSales = (store.nftStats.boostSales || []).map(s => ({
+        nft_id: s.nft_id,
+        amount: s.amount,
+        token: s.token,
+        usd_at_time: s.usd,
+        price_at_time: s.usd / s.amount, // Calculate price per token
+        timestamp: s.timestamp_utc,
+        marketplace: 'boost'
+    }));
+    
+    // Merge with existing history
+    const allBblSales = [...window.salesHistory.bbl, ...newBblSales];
+    const allBoostSales = [...window.salesHistory.boost, ...newBoostSales];
+    
+    // Sort by timestamp (newest first)
+    allBblSales.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    allBoostSales.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    
+    // Calculate year totals
+    const yearBblVolume = allBblSales.reduce((sum, s) => sum + s.amount, 0);
+    const yearBblVolumeUsd = allBblSales.reduce((sum, s) => sum + (s.usd || 0), 0);
+    const yearBoostVolume = allBoostSales.reduce((sum, s) => sum + (s.usd_at_time || 0), 0);
+    
+    // Get date ranges
+    const bblDates = allBblSales.map(s => s.timestamp?.substring(0, 10)).filter(Boolean);
+    const boostDates = allBoostSales.map(s => s.timestamp?.substring(0, 10)).filter(Boolean);
+    
+    // Calculate cumulative totals
+    let prevCumulative = window.salesHistory.cumulative;
+    
+    // If this is a new year, use previous year's cumulative as base
+    let baseBblSales = 0;
+    let baseBblVolume = 0;
+    let baseBoostSales = 0;
+    let baseBoostVolume = 0;
+    
+    if (prevCumulative && window.salesHistory.year === targetYear) {
+        // Same year - subtract this year's previous totals to get base from prior years
+        baseBblSales = prevCumulative.bbl.total_sales - (window.salesHistory.yearTotals?.bbl?.sales_count || 0);
+        baseBblVolume = prevCumulative.bbl.total_volume_bluna - (window.salesHistory.yearTotals?.bbl?.volume_bluna || 0);
+        baseBoostSales = prevCumulative.boost.total_sales - (window.salesHistory.yearTotals?.boost?.sales_count || 0);
+        baseBoostVolume = prevCumulative.boost.total_volume_usd - (window.salesHistory.yearTotals?.boost?.volume_usd || 0);
+    } else if (prevCumulative) {
+        // New year - use all of previous cumulative
+        baseBblSales = prevCumulative.bbl.total_sales;
+        baseBblVolume = prevCumulative.bbl.total_volume_bluna;
+        baseBoostSales = prevCumulative.boost.total_sales;
+        baseBoostVolume = prevCumulative.boost.total_volume_usd;
+    }
+    
+    // Build monthly breakdown
+    const bblMonthly = {};
+    const boostMonthly = {};
+    
+    allBblSales.forEach(s => {
+        const month = s.timestamp?.substring(0, 7);
+        if (!month) return;
+        if (!bblMonthly[month]) bblMonthly[month] = { count: 0, volume_bluna: 0, volume_usd: 0 };
+        bblMonthly[month].count++;
+        bblMonthly[month].volume_bluna += s.amount;
+        bblMonthly[month].volume_usd += s.usd || 0;
+    });
+    
+    allBoostSales.forEach(s => {
+        const month = s.timestamp?.substring(0, 7);
+        if (!month) return;
+        if (!boostMonthly[month]) boostMonthly[month] = { count: 0, volume_usd: 0 };
+        boostMonthly[month].count++;
+        boostMonthly[month].volume_usd += s.usd_at_time || 0;
+    });
+    
+    // Sort monthly keys descending
+    const sortedBblMonthly = Object.fromEntries(
+        Object.entries(bblMonthly).sort((a, b) => b[0].localeCompare(a[0]))
+            .map(([k, v]) => [k, { count: v.count, volume_bluna: Math.round(v.volume_bluna * 100) / 100, volume_usd: Math.round(v.volume_usd * 100) / 100 }])
+    );
+    const sortedBoostMonthly = Object.fromEntries(
+        Object.entries(boostMonthly).sort((a, b) => b[0].localeCompare(a[0]))
+            .map(([k, v]) => [k, { count: v.count, volume_usd: Math.round(v.volume_usd * 100) / 100 }])
+    );
+    
+    // Build output JSON
+    const output = {
+        meta: {
+            version: "1.1",
+            year: targetYear,
+            generated_at: new Date().toISOString(),
+            description: `AllianceDAO NFT sales data for ${targetYear}`,
+            note: "BBL and Boost volumes include USD values. Historical data merged with new epoch sales."
+        },
+        year_totals: {
+            bbl: {
+                sales_count: allBblSales.length,
+                volume_bluna: Math.round(yearBblVolume * 100) / 100,
+                volume_usd: Math.round(yearBblVolumeUsd * 100) / 100,
+                date_range: {
+                    first: bblDates.length ? bblDates.reduce((a, b) => a < b ? a : b) : null,
+                    last: bblDates.length ? bblDates.reduce((a, b) => a > b ? a : b) : null
+                }
+            },
+            boost: {
+                sales_count: allBoostSales.length,
+                volume_usd: Math.round(yearBoostVolume * 100) / 100,
+                date_range: {
+                    first: boostDates.length ? boostDates.reduce((a, b) => a < b ? a : b) : null,
+                    last: boostDates.length ? boostDates.reduce((a, b) => a > b ? a : b) : null
+                }
+            }
+        },
+        cumulative_totals: {
+            through_year: targetYear,
+            bbl: {
+                total_sales: baseBblSales + allBblSales.length,
+                total_volume_bluna: Math.round((baseBblVolume + yearBblVolume) * 100) / 100
+            },
+            boost: {
+                total_sales: baseBoostSales + allBoostSales.length,
+                total_volume_usd: Math.round((baseBoostVolume + yearBoostVolume) * 100) / 100
+            },
+            combined_sales: baseBblSales + allBblSales.length + baseBoostSales + allBoostSales.length
+        },
+        monthly_breakdown: {
+            bbl: sortedBblMonthly,
+            boost: sortedBoostMonthly
+        },
+        sales: {
+            bbl: allBblSales,
+            boost: allBoostSales
+        }
+    };
+    
+    // Build top 10 sales section
+    // Start with existing top 10 or empty array
+    let top10Sales = window.salesHistory.top10?.sales?.filter(s => s !== null) || [];
+    
+    // Check new sales against top 10
+    const allNewSales = [...newBblSales, ...newBoostSales];
+    let newTop10Count = 0;
+    
+    allNewSales.forEach(sale => {
+        const saleUsd = sale.usd || sale.usd_at_time || 0;
+        if (saleUsd <= 0) return;
+        
+        // Get token price for the sale
+        const tokenPrice = sale.usd ? (sale.usd / sale.amount) : (sale.price_at_time || 0);
+        
+        const newEntry = {
+            nft_id: sale.nft_id,
+            amount: sale.amount,
+            token: sale.token,
+            usd_value: Math.round(saleUsd * 100) / 100,
+            luna_price: Math.round(tokenPrice * 10000) / 10000,
+            date: sale.timestamp?.substring(0, 10) || new Date().toISOString().substring(0, 10),
+            marketplace: sale.marketplace || 'bbl'
+        };
+        
+        // Check if this sale qualifies for top 10
+        if (top10Sales.length < 10) {
+            // Not full yet, just add
+            top10Sales.push(newEntry);
+            newTop10Count++;
+        } else {
+            // Find lowest USD value in current top 10
+            const minUsd = Math.min(...top10Sales.map(s => s.usd_value));
+            if (saleUsd > minUsd) {
+                // Remove the lowest and add new one
+                const minIdx = top10Sales.findIndex(s => s.usd_value === minUsd);
+                top10Sales.splice(minIdx, 1);
+                top10Sales.push(newEntry);
+                newTop10Count++;
+            }
+        }
+    });
+    
+    // Sort by USD value descending and re-rank
+    top10Sales.sort((a, b) => b.usd_value - a.usd_value);
+    top10Sales = top10Sales.slice(0, 10); // Keep only top 10
+    top10Sales.forEach((s, i) => s.rank = i + 1);
+    
+    // Pad with nulls if less than 10
+    while (top10Sales.length < 10) {
+        top10Sales.push(null);
+    }
+    
+    const minToQualify = top10Sales.filter(s => s !== null).length > 0 
+        ? Math.min(...top10Sales.filter(s => s !== null).map(s => s.usd_value))
+        : null;
+    
+    output.top_10_sales_all_time = {
+        note: "Top 10 NFT sales by USD value through end of this year",
+        last_updated: new Date().toISOString().substring(0, 10),
+        minimum_usd_to_qualify: minToQualify,
+        sales: top10Sales
+    };
+    
+    // Create and download file
+    const blob = new Blob([JSON.stringify(output, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `nft-sales-${targetYear}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    // Show summary
+    const newBblCount = newBblSales.length;
+    const newBoostCount = newBoostSales.length;
+    let summaryMsg = `Downloaded nft-sales-${targetYear}.json\n\nNew sales added: ${newBblCount} BBL, ${newBoostCount} Boost\nTotal in file: ${allBblSales.length} BBL, ${allBoostSales.length} Boost\nCumulative all-time: ${output.cumulative_totals.combined_sales} sales`;
+    
+    if (newTop10Count > 0) {
+        summaryMsg += `\n\n🏆 ${newTop10Count} new sale(s) made it into the TOP 10 ALL-TIME!`;
+    }
+    
+    alert(summaryMsg);
 }
 
 // Save all NFT stats
