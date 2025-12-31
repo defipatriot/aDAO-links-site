@@ -2252,39 +2252,76 @@ est. APR 58.53 %"></textarea>
                                     // Convert v3 format to chart-compatible format
                                     const backing = data.dashboard?.nft_backing_per_nft || data.nft_stats?.backing_per_nft || {};
                                     const tlaDeposits = data.dashboard?.tla_deposits || {};
+                                    const nftStats = data.nft_stats?.collection || {};
+                                    const staking = data.nft_stats?.staking || {};
+                                    const treasury = data.dashboard?.treasury || {};
+                                    const unminted = data.dashboard?.unminted_backing || {};
+                                    const locks = data.locks?.summary || {};
+                                    const tokenPrices = data.token_prices || {};
+                                    
+                                    // Get LUNA price from token_prices
+                                    const lunaPrice = typeof tokenPrices.LUNA === 'number' 
+                                        ? tokenPrices.LUNA 
+                                        : tokenPrices.LUNA?.price || null;
+                                    
                                     return {
                                         epoch,
                                         timestamp: data.meta?.generated_at,
+                                        source: 'tla_v3',
+                                        // Backing
                                         backingPerNft_LUNA: backing.LUNA_equivalent,
                                         backingPerNft_USD: backing.USD,
                                         backingPerNft_ampLUNA: backing.ampLUNA,
+                                        // TLA Deposits
                                         tlaDeposits: {
                                             totalDeposit: tlaDeposits.total_usd,
                                             estApr: tlaDeposits.apr
                                         },
                                         tlaDepositsTotal_USD: tlaDeposits.total_usd,
-                                        source: 'tla_v3'
+                                        // NFT Stats
+                                        daodaoStaked: staking.daodao_staked,
+                                        enterpriseStaked: staking.enterprise_staked,
+                                        daoMembers: staking.dao_members,
+                                        daoHeldNfts: staking.dao_broken_held || 1000,
+                                        circulatingSupply: nftStats.minted_count,
+                                        // Treasury
+                                        treasuryTotal_USD: treasury.total_usd,
+                                        // TLA VP
+                                        tlaVpTotal_VP: locks.total_vp,
+                                        // Unminted
+                                        unmintedTotalBacking_LUNA: unminted.total_LUNA_equivalent,
+                                        unmintedTotalBacking_USD: unminted.total_USD,
+                                        // LUNA price
+                                        lunaPrice_USD: lunaPrice,
+                                        // LST ratios from ext_data if available
+                                        lstRatios: data.ext_data?.votion?.ratios || {}
                                     };
                                 }
                             } catch (e) {}
                             
-                            // Return placeholder for missing epochs
-                            return { epoch, missing: true };
+                            // Return placeholder for missing epochs (include in results with missing flag)
+                            // Calculate expected date for missing epoch
+                            const epochStartDate = new Date(epochReferenceDate.getTime() + (epoch - epochReferenceNumber) * msPerWeek);
+                            return { 
+                                epoch, 
+                                missing: true,
+                                timestamp: epochStartDate.toISOString()
+                            };
                         })()
                     );
                 }
                 
                 const results = await Promise.all(fetchPromises);
-                // Filter out missing epochs but keep track of them
-                const validResults = results.filter(r => r !== null && !r.missing).sort((a, b) => a.epoch - b.epoch);
-                const missingEpochs = results.filter(r => r?.missing).map(r => r.epoch);
+                // Keep all results including missing epochs, sorted by epoch
+                const allResults = results.filter(r => r !== null).sort((a, b) => a.epoch - b.epoch);
+                const missingEpochs = allResults.filter(r => r.missing).map(r => r.epoch);
                 
                 if (missingEpochs.length > 0) {
                     console.log(`DEBUG: Missing epochs: ${missingEpochs.join(', ')}`);
                 }
                 
-                historicalSnapshots = validResults;
-                console.log(`DEBUG: Loaded ${historicalSnapshots.length} historical snapshots (missing: ${missingEpochs.join(', ') || 'none'})`);
+                historicalSnapshots = allResults;
+                console.log(`DEBUG: Loaded ${allResults.filter(r => !r.missing).length} historical snapshots (missing: ${missingEpochs.join(', ') || 'none'})`);
                 return historicalSnapshots;
             }
             
@@ -5098,11 +5135,24 @@ est. APR 58.53 %"></textarea>
                      let livePriceDisplay = '<span class="text-gray-600">?</span>';
                      let snapPriceDisplay = '<span class="text-gray-600">?</span>';
                      
-                     // Get snap price
+                     // Get snap price - handle both old format (number) and v3 format ({price, source})
                      const snapKey = tokenToSnapKey[token.name];
                      if (snapKey && snapPrices[snapKey]) {
-                         snapPrice = snapPrices[snapKey];
+                         const priceData = snapPrices[snapKey];
+                         snapPrice = typeof priceData === 'number' ? priceData : (priceData?.price || null);
+                         if (snapPrice) {
+                             snapValue = token.amount * snapPrice;
+                         }
+                     }
+                     // Also try token.price directly (from v3 normalized data)
+                     if (!snapPrice && token.price && typeof token.price === 'number') {
+                         snapPrice = token.price;
                          snapValue = token.amount * snapPrice;
+                     }
+                     // Or use token.value directly if available
+                     if (!snapValue && token.value && typeof token.value === 'number') {
+                         snapValue = token.value;
+                         if (token.amount > 0) snapPrice = token.value / token.amount;
                      }
                      
                      // Get live price
@@ -5120,11 +5170,14 @@ est. APR 58.53 %"></textarea>
                                  liveValue = baseTokenAmount * baseTokenPrice;
                                  livePrice = baseTokenPrice * ratioInfo.ratio;
                              }
-                             // Also calc snap value for LST tokens
-                             const baseSnapPrice = snapPrices[ratioInfo.baseName];
-                             if (baseSnapPrice) {
-                                 snapPrice = baseSnapPrice * ratioInfo.ratio;
-                                 snapValue = token.amount * snapPrice;
+                             // Also calc snap value for LST tokens if not already set
+                             if (!snapPrice) {
+                                 const baseSnapData = snapPrices[ratioInfo.baseName];
+                                 const baseSnapPrice = typeof baseSnapData === 'number' ? baseSnapData : (baseSnapData?.price || null);
+                                 if (baseSnapPrice) {
+                                     snapPrice = baseSnapPrice * ratioInfo.ratio;
+                                     snapValue = token.amount * snapPrice;
+                                 }
                              }
                          }
                          if (typeof liveValue === 'number') { totalLiveEstValue += liveValue; }
@@ -5132,7 +5185,8 @@ est. APR 58.53 %"></textarea>
                      
                      // Format prices
                      const formatPrice = (p) => {
-                         if (p === null) return '?';
+                         if (p === null || p === undefined) return '?';
+                         if (typeof p !== 'number') return '?';
                          if (p < 0.0000001) return '$' + p.toFixed(10);
                          if (p < 0.000001) return '$' + p.toFixed(9);
                          if (p < 0.00001) return '$' + p.toFixed(8);
@@ -5791,6 +5845,9 @@ est. APR 58.53 %"></textarea>
             
             async function updateUnclaimedRewardsTile() {
                 const tlaData = await fetchTlaData();
+                console.log('DEBUG Tile: TLA data received:', tlaData);
+                console.log('DEBUG Tile: dashboard:', tlaData?.dashboard);
+                console.log('DEBUG Tile: unclaimed_rewards:', tlaData?.dashboard?.unclaimed_rewards);
                 if (!tlaData) return;
                 
                 // Check for stale data and update UI
@@ -5831,10 +5888,15 @@ est. APR 58.53 %"></textarea>
                 const ampLunaRatio = window.cachedAmpLunaRate || 1.9008;
                 
                 // Deposit Rewards - support both old (dao.rewards) and new (dashboard.unclaimed_rewards) format
+                console.log('DEBUG Tile deposit paths:', {
+                    'dashboard.unclaimed_rewards': tlaData.dashboard?.unclaimed_rewards,
+                    'dao.rewards': tlaData.dao?.rewards
+                });
                 const depositRewards = tlaData.dashboard?.unclaimed_rewards || tlaData.dao?.rewards || {};
                 const depositAmpLuna = depositRewards.ampLUNA || 0;
                 const depositUsd = depositRewards.deposit_rewards_usd || depositRewards.usd || 0;
                 const depositZAssets = depositRewards.zAssets || 0;
+                console.log('DEBUG Tile deposit values:', { depositAmpLuna, depositUsd, depositZAssets });
                 
                 document.getElementById('deposit-usd-value').textContent = `$${depositUsd.toLocaleString('en-US', {maximumFractionDigits: 0})}`;
                 document.getElementById('deposit-ampluna-value').textContent = `${depositAmpLuna.toLocaleString('en-US', {maximumFractionDigits: 0})} ampLUNA`;
@@ -5851,6 +5913,10 @@ est. APR 58.53 %"></textarea>
                 document.getElementById('vote-epochs-count').textContent = `${unclaimedPeriods.length} epochs (${unclaimedPeriods[0] || '?'}-${unclaimedPeriods[unclaimedPeriods.length-1] || '?'})`;
                 
                 // Rebase - support both old (vote.rebase) and new (dashboard.rebase.ampLUNA) format
+                console.log('DEBUG Tile rebase paths:', {
+                    'dashboard.rebase': tlaData.dashboard?.rebase,
+                    'vote.rebase': tlaData.vote?.rebase
+                });
                 const rebase = tlaData.dashboard?.rebase?.ampLUNA || tlaData.vote?.rebase || 0;
                 const rebaseUsd = tlaData.dashboard?.rebase?.usd || (rebase * ampLunaRatio * lunaPriceUSD);
                 
@@ -5928,6 +5994,11 @@ est. APR 58.53 %"></textarea>
                 }, 10);
                 
                 const tlaData = await fetchTlaData();
+                console.log('DEBUG Modal: TLA data received:', tlaData);
+                console.log('DEBUG Modal: dashboard:', tlaData?.dashboard);
+                console.log('DEBUG Modal: unclaimed_rewards:', tlaData?.dashboard?.unclaimed_rewards);
+                console.log('DEBUG Modal: vote_rewards:', tlaData?.dashboard?.vote_rewards);
+                console.log('DEBUG Modal: rebase:', tlaData?.dashboard?.rebase);
                 if (!tlaData) return;
                 
                 // Get metadata for staleness check
@@ -5954,21 +6025,40 @@ est. APR 58.53 %"></textarea>
                     modalStaleBanner.classList.add('hidden');
                 }
                 
-                // Rebase
-                const rebase = tlaData.vote?.rebase || 0;
+                // Rebase - support both old (vote.rebase) and new (dashboard.rebase.ampLUNA) format
+                console.log('DEBUG Modal rebase paths:', {
+                    'dashboard.rebase': tlaData.dashboard?.rebase,
+                    'dashboard.rebase.ampLUNA': tlaData.dashboard?.rebase?.ampLUNA,
+                    'vote.rebase': tlaData.vote?.rebase
+                });
+                const rebase = tlaData.dashboard?.rebase?.ampLUNA || tlaData.vote?.rebase || 0;
                 document.getElementById('modal-unclaimed-rebase').textContent = `${rebase.toFixed(2)}`;
                 
-                // Deposit rewards
-                const depositRewards = tlaData.dao?.rewards || {};
-                document.getElementById('modal-deposit-ampluna').textContent = `${(depositRewards.ampLUNA || 0).toLocaleString('en-US', {maximumFractionDigits: 2})}`;
-                document.getElementById('modal-deposit-usd').textContent = `$${(depositRewards.usd || 0).toLocaleString('en-US', {maximumFractionDigits: 2})}`;
-                document.getElementById('modal-deposit-zassets').textContent = `${(depositRewards.zAssets || 0).toLocaleString('en-US', {maximumFractionDigits: 2})}`;
+                // Deposit rewards - support both old (dao.rewards) and new (dashboard.unclaimed_rewards) format
+                console.log('DEBUG Modal deposit paths:', {
+                    'dashboard.unclaimed_rewards': tlaData.dashboard?.unclaimed_rewards,
+                    'dao.rewards': tlaData.dao?.rewards
+                });
+                const depositRewards = tlaData.dashboard?.unclaimed_rewards || tlaData.dao?.rewards || {};
+                const depositAmpLuna = depositRewards.ampLUNA || 0;
+                const depositUsd = depositRewards.deposit_rewards_usd || depositRewards.usd || 0;
+                const depositZAssets = depositRewards.zAssets || 0;
+                console.log('DEBUG Modal deposit values:', { depositAmpLuna, depositUsd, depositZAssets });
+                document.getElementById('modal-deposit-ampluna').textContent = `${depositAmpLuna.toLocaleString('en-US', {maximumFractionDigits: 2})}`;
+                document.getElementById('modal-deposit-usd').textContent = `$${depositUsd.toLocaleString('en-US', {maximumFractionDigits: 2})}`;
+                document.getElementById('modal-deposit-zassets').textContent = `${depositZAssets.toLocaleString('en-US', {maximumFractionDigits: 2})}`;
                 
-                // Vote rewards
-                const voteRewards = tlaData.dao?.vote_rewards || {};
-                const unclaimedPeriods = tlaData.dao?.vote_reward_periods || [];
+                // Vote rewards - support both old (dao.vote_rewards) and new (dashboard.vote_rewards.by_token) format
+                console.log('DEBUG Modal vote paths:', {
+                    'dashboard.vote_rewards': tlaData.dashboard?.vote_rewards,
+                    'dao.vote_rewards': tlaData.dao?.vote_rewards
+                });
+                const voteRewards = tlaData.dashboard?.vote_rewards?.by_token || tlaData.dao?.vote_rewards || {};
+                const unclaimedPeriods = tlaData.dashboard?.vote_rewards?.periods || tlaData.dao?.vote_reward_periods || [];
                 let voteRewardsHtml = '';
-                Object.entries(voteRewards).forEach(([token, amount]) => {
+                Object.entries(voteRewards).forEach(([token, data]) => {
+                    // Support both old format (data is number) and new format (data is {amount, price, usd})
+                    const amount = typeof data === 'number' ? data : (data?.amount || 0);
                     if (amount > 0) {
                         const formattedAmount = amount >= 1000000 
                             ? (amount / 1000000).toFixed(2) + 'M' 
