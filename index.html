@@ -536,7 +536,7 @@
                      <p id="deposit-usd-value" class="text-xl font-bold text-white">--</p>
                      <p id="deposit-ampluna-value" class="text-sm text-gray-400">-- ampLUNA</p>
                      <div class="mt-2 pt-2 border-t border-gray-700">
-                         <p class="text-xs text-gray-500">Last: <span id="deposit-last-claim" class="text-gray-400">A-26 (Sep 7)</span></p>
+                         <p class="text-xs text-gray-500">Last: <span id="deposit-last-claim" class="text-gray-400">A-28 (Dec 17)</span></p>
                      </div>
                  </div>
                  
@@ -549,7 +549,7 @@
                      <p id="vote-token-count" class="text-xl font-bold text-white">-- tokens</p>
                      <p id="vote-epochs-count" class="text-sm text-orange-400">-- epochs unclaimed</p>
                      <div class="mt-2 pt-2 border-t border-gray-700">
-                         <p class="text-xs text-gray-500">Last: <span id="vote-last-claim" class="text-gray-400">A-26 (Sep 7)</span></p>
+                         <p class="text-xs text-gray-500">Last: <span id="vote-last-claim" class="text-gray-400">A-29 (Dec 17)</span></p>
                      </div>
                  </div>
                  
@@ -1252,7 +1252,7 @@
                 <div class="bg-gray-800/50 p-4 rounded-lg">
                     <div class="flex justify-between items-center mb-2">
                         <h4 class="text-lg font-bold text-green-400"><i class="fas fa-piggy-bank mr-2"></i>Deposit Rewards</h4>
-                        <span class="text-xs text-gray-500">Last claimed: Sep 7, 2025 (A-26)</span>
+                        <span class="text-xs text-gray-500">Last claimed: Dec 17, 2025 (A-28)</span>
                     </div>
                     <div class="grid grid-cols-3 gap-4 text-center">
                         <div>
@@ -1884,48 +1884,73 @@ est. APR 58.53 %"></textarea>
                 
                 try {
                     // Calculate current epoch number
-                    // Epoch 162 started Monday Dec 1, 2025. Epochs change every Monday at 00:00 UTC.
-                    const epochReferenceDate = new Date('2025-12-01T00:00:00Z'); // Start of epoch 162
+                    const epochReferenceDate = new Date('2025-12-01T00:00:00Z');
                     const epochReferenceNumber = 162;
                     const now = new Date();
                     const msPerWeek = 7 * 24 * 60 * 60 * 1000;
                     const weeksDiff = Math.floor((now - epochReferenceDate) / msPerWeek);
                     const currentEpoch = epochReferenceNumber + weeksDiff;
                     
-                    // We need the two most recent COMPLETED epochs
-                    // If we're in epoch N, the most recent completed is N-1, and before that is N-2
-                    // The _end.json files only exist for completed epochs
-                    const newestCompletedEpoch = currentEpoch - 1;
-                    const olderCompletedEpoch = currentEpoch - 2;
+                    console.log(`DEBUG: Current epoch: ${currentEpoch}, fetching backing data`);
                     
-                    console.log(`DEBUG: Current epoch: ${currentEpoch}, fetching completed epoch snapshots ${olderCompletedEpoch} and ${newestCompletedEpoch}`);
+                    // Try to get the latest backing from TLA v3 data
+                    const tlaData = await fetchTlaData();
+                    let newestBacking = null;
+                    let newestTime = null;
+                    let newestEpoch = null;
                     
-                    const baseUrl = 'https://raw.githubusercontent.com/defipatriot/adao_json_storage/main';
-                    const newestUrl = `${baseUrl}/adao-snapshot_${newestCompletedEpoch}_end.json`;
-                    const olderUrl = `${baseUrl}/adao-snapshot_${olderCompletedEpoch}_end.json`;
-                    
-                    const [newestResponse, olderResponse] = await Promise.all([
-                        fetch(newestUrl).catch(e => { console.error("Newest epoch fetch error:", e); return null; }),
-                        fetch(olderUrl).catch(e => { console.error("Older epoch fetch error:", e); return null; })
-                    ]);
-                    
-                    if (!newestResponse?.ok || !olderResponse?.ok) {
-                        console.warn("DEBUG: Could not fetch one or both epoch snapshots, falling back to static value");
-                        throw new Error("Epoch snapshot fetch failed");
+                    if (tlaData?.dashboard?.nft_backing_per_nft || tlaData?.nft_stats?.backing_per_nft) {
+                        const backing = tlaData.dashboard?.nft_backing_per_nft || tlaData.nft_stats?.backing_per_nft;
+                        newestBacking = backing.LUNA_equivalent;
+                        newestTime = new Date(tlaData.meta?.generated_at);
+                        newestEpoch = tlaData.meta?.epoch;
+                        console.log(`DEBUG: Got TLA v3 backing: ${newestBacking} LUNA from epoch ${newestEpoch}`);
                     }
                     
-                    const newestData = await newestResponse.json();
-                    const olderData = await olderResponse.json();
+                    // Also try adao_json_storage for newest completed epoch
+                    if (!newestBacking) {
+                        const newestCompletedEpoch = currentEpoch - 1;
+                        const baseUrl = 'https://raw.githubusercontent.com/defipatriot/adao_json_storage/main';
+                        const newestUrl = `${baseUrl}/adao-snapshot_${newestCompletedEpoch}_end.json`;
+                        const newestResponse = await fetch(newestUrl).catch(() => null);
+                        if (newestResponse?.ok) {
+                            const newestData = await newestResponse.json();
+                            newestBacking = newestData.backingPerNft_LUNA;
+                            newestTime = new Date(newestData.timestamp);
+                            newestEpoch = newestCompletedEpoch;
+                        }
+                    }
                     
-                    console.log("DEBUG: Newest snapshot:", newestData.timestamp, "Backing:", newestData.backingPerNft_LUNA);
-                    console.log("DEBUG: Older snapshot:", olderData.timestamp, "Backing:", olderData.backingPerNft_LUNA);
+                    // Get last known good epoch (try 163, as 164 might be missing)
+                    let olderBacking = null;
+                    let olderTime = null;
+                    let olderEpoch = null;
+                    
+                    const baseUrl = 'https://raw.githubusercontent.com/defipatriot/adao_json_storage/main';
+                    // Try epochs in order: 163, 162, 161
+                    for (const tryEpoch of [163, 162, 161]) {
+                        if (tryEpoch >= newestEpoch) continue; // Skip if same or newer than our newest
+                        const olderUrl = `${baseUrl}/adao-snapshot_${tryEpoch}_end.json`;
+                        const olderResponse = await fetch(olderUrl).catch(() => null);
+                        if (olderResponse?.ok) {
+                            const olderData = await olderResponse.json();
+                            olderBacking = olderData.backingPerNft_LUNA;
+                            olderTime = new Date(olderData.timestamp);
+                            olderEpoch = tryEpoch;
+                            console.log(`DEBUG: Got older backing: ${olderBacking} LUNA from epoch ${tryEpoch}`);
+                            break;
+                        }
+                    }
+                    
+                    if (!newestBacking || !olderBacking) {
+                        console.warn("DEBUG: Could not get backing data from both epochs");
+                        throw new Error("Backing data fetch failed");
+                    }
                     
                     // Calculate backing difference
-                    const backingDiff = newestData.backingPerNft_LUNA - olderData.backingPerNft_LUNA;
+                    const backingDiff = newestBacking - olderBacking;
                     
                     // Calculate time difference in days
-                    const newestTime = new Date(newestData.timestamp);
-                    const olderTime = new Date(olderData.timestamp);
                     const timeDiffMs = newestTime - olderTime;
                     const timeDiffDays = timeDiffMs / (1000 * 60 * 60 * 24);
                     
@@ -1935,7 +1960,7 @@ est. APR 58.53 %"></textarea>
                     // Store in global variable for snapshot export
                     calculatedAvgDailyGain = avgDailyGain;
                     
-                    console.log(`DEBUG: Backing diff: ${backingDiff.toFixed(6)}, Days: ${timeDiffDays.toFixed(2)}, Avg Daily: ${avgDailyGain.toFixed(4)}`);
+                    console.log(`DEBUG: E${olderEpoch}→E${newestEpoch} Backing diff: ${backingDiff.toFixed(6)}, Days: ${timeDiffDays.toFixed(2)}, Avg Daily: ${avgDailyGain.toFixed(4)}`);
                     
                     // Update the tile with live data
                     if (avgDailyGainEl) {
@@ -1944,7 +1969,8 @@ est. APR 58.53 %"></textarea>
                     }
                     
                     if (avgDailyGainSubEl) {
-                        avgDailyGainSubEl.textContent = '7d Avg';
+                        const dayLabel = Math.round(timeDiffDays);
+                        avgDailyGainSubEl.textContent = `${dayLabel}d Avg (E${olderEpoch}→E${newestEpoch})`;
                     }
                     
                     // Update the title with green pulse dot (live indicator)
@@ -2193,6 +2219,7 @@ est. APR 58.53 %"></textarea>
                 }
                 
                 const baseUrl = 'https://raw.githubusercontent.com/defipatriot/adao_json_storage/main';
+                const tlaBaseUrl = 'https://raw.githubusercontent.com/defipatriot/tla_json_storage/main';
                 const epochReferenceDate = new Date('2025-12-01T00:00:00Z');
                 const epochReferenceNumber = 162;
                 const now = new Date();
@@ -2207,15 +2234,57 @@ est. APR 58.53 %"></textarea>
                 const fetchPromises = [];
                 for (let epoch = startEpoch; epoch <= endEpoch; epoch++) {
                     fetchPromises.push(
-                        fetch(`${baseUrl}/adao-snapshot_${epoch}_end.json`)
-                            .then(res => res.ok ? res.json().then(data => ({ epoch, ...data })) : null)
-                            .catch(() => null)
+                        (async () => {
+                            // First try adao_json_storage (old format)
+                            try {
+                                const res = await fetch(`${baseUrl}/adao-snapshot_${epoch}_end.json`);
+                                if (res.ok) {
+                                    const data = await res.json();
+                                    return { epoch, ...data, source: 'adao' };
+                                }
+                            } catch (e) {}
+                            
+                            // Then try tla_json_storage (v3 format)
+                            try {
+                                const res = await fetch(`${tlaBaseUrl}/tla-data-epoch-${epoch}-end.json`);
+                                if (res.ok) {
+                                    const data = await res.json();
+                                    // Convert v3 format to chart-compatible format
+                                    const backing = data.dashboard?.nft_backing_per_nft || data.nft_stats?.backing_per_nft || {};
+                                    const tlaDeposits = data.dashboard?.tla_deposits || {};
+                                    return {
+                                        epoch,
+                                        timestamp: data.meta?.generated_at,
+                                        backingPerNft_LUNA: backing.LUNA_equivalent,
+                                        backingPerNft_USD: backing.USD,
+                                        backingPerNft_ampLUNA: backing.ampLUNA,
+                                        tlaDeposits: {
+                                            totalDeposit: tlaDeposits.total_usd,
+                                            estApr: tlaDeposits.apr
+                                        },
+                                        tlaDepositsTotal_USD: tlaDeposits.total_usd,
+                                        source: 'tla_v3'
+                                    };
+                                }
+                            } catch (e) {}
+                            
+                            // Return placeholder for missing epochs
+                            return { epoch, missing: true };
+                        })()
                     );
                 }
                 
                 const results = await Promise.all(fetchPromises);
-                historicalSnapshots = results.filter(r => r !== null).sort((a, b) => a.epoch - b.epoch);
-                console.log(`DEBUG: Loaded ${historicalSnapshots.length} historical snapshots`);
+                // Filter out missing epochs but keep track of them
+                const validResults = results.filter(r => r !== null && !r.missing).sort((a, b) => a.epoch - b.epoch);
+                const missingEpochs = results.filter(r => r?.missing).map(r => r.epoch);
+                
+                if (missingEpochs.length > 0) {
+                    console.log(`DEBUG: Missing epochs: ${missingEpochs.join(', ')}`);
+                }
+                
+                historicalSnapshots = validResults;
+                console.log(`DEBUG: Loaded ${historicalSnapshots.length} historical snapshots (missing: ${missingEpochs.join(', ') || 'none'})`);
                 return historicalSnapshots;
             }
             
@@ -4043,6 +4112,11 @@ est. APR 58.53 %"></textarea>
                     cachedPriceData = priceData; // Cache for later use
                     window.cachedPriceData = priceData; // Also store globally for unclaimed rewards
                     
+                    // Update volume displays now that we have prices (in case sales loaded first)
+                    if (typeof updateVolumeDisplays === 'function') {
+                        try { updateVolumeDisplays(); } catch(e) {}
+                    }
+                    
                     // Load ALL LST ratios from TLA ext file (for snapshot tool and price calculations)
                     await loadLstRatiosFromExt();
                     console.log("DEBUG: LST ratios loaded:", window.lstRatios);
@@ -4238,7 +4312,7 @@ est. APR 58.53 %"></textarea>
                     console.log("DEBUG: Calling build/update UI functions..."); 
                     buildTreasuryTable(priceData, liveTreasuryAssets);
                     buildTlaVp(priceData, ampLunaToLunaRate);
-                    buildTlaDeposits(priceData);
+                    await buildTlaDeposits(priceData);
                     // ... (rest of the UI updates: staker tables, tiles, modals) ...
                     const enterpriseStakerCounts = enterpriseStakers.reduce((acc, nft) => { if(nft.owner) acc[nft.owner] = (acc[nft.owner] || 0) + 1; return acc; }, {});
                     buildStakerTable('enterprise-stakers-table', enterpriseStakerCounts);
@@ -4919,17 +4993,38 @@ est. APR 58.53 %"></textarea>
                 calculateChartUnmintedValue();
             }
             
-            function buildTlaDeposits(priceData) {
-                 const tlaData = dashboardData.tlaDeposits;
+            async function buildTlaDeposits(priceData) {
+                 // First try dashboardData.tlaDeposits, then fallback to fetchTlaData for v3 format
+                 let tlaData = dashboardData.tlaDeposits;
+                 let hasValidTlaData = tlaData && tlaData.tokenBalances && tlaData.tokenBalances.length > 0 && tlaData.totalDeposit > 0;
+                 
+                 // If no data from adao_json_storage, try the new tla_json_storage v3 format
+                 if (!hasValidTlaData) {
+                     const v3Data = await fetchTlaData();
+                     if (v3Data?.dashboard?.tla_deposits) {
+                         const deposits = v3Data.dashboard.tla_deposits;
+                         tlaData = {
+                             totalDeposit: deposits.total_usd || 0,
+                             estApr: deposits.apr || 0,
+                             tokenBalances: (deposits.tokens || []).map(t => ({
+                                 name: t.symbol || t.name,
+                                 amount: t.amount,
+                                 value: t.usd || t.value,
+                                 price: t.price
+                             })),
+                             snapshotDate: v3Data.meta?.generated_at,
+                             tokenPricesAtSnapshot: v3Data.token_prices || {}
+                         };
+                         hasValidTlaData = tlaData.tokenBalances.length > 0 && tlaData.totalDeposit > 0;
+                     }
+                 }
+                 
                  const totalValueTileEl = document.getElementById('dao-tla-total');
                  const aprTileEl = document.getElementById('dao-tla-apr');
                  const modalTotalUsdEl = document.getElementById('tla-deposit-total-usd');
                  const modalTotalAprEl = document.getElementById('tla-deposit-total-apr');
                  const snapshotDateEl = document.getElementById('tla-snapshot-date');
                  const tokensContainer = document.getElementById('tla-tokens-container');
-                 
-                 // Check if we have valid TLA data from GitHub snapshot
-                 const hasValidTlaData = tlaData && tlaData.tokenBalances && tlaData.tokenBalances.length > 0 && tlaData.totalDeposit > 0;
                  
                  if (!hasValidTlaData) {
                      // No TLA data yet - show waiting message
@@ -4938,7 +5033,7 @@ est. APR 58.53 %"></textarea>
                      if (modalTotalUsdEl) modalTotalUsdEl.textContent = 'Awaiting Snapshot Data';
                      if (modalTotalAprEl) modalTotalAprEl.textContent = '';
                      if (snapshotDateEl) snapshotDateEl.textContent = '--';
-                     if (tokensContainer) tokensContainer.innerHTML = '<p class="text-center text-gray-500 p-4">No TLA data available yet. Use the Snapshot tool to add data.</p>';
+                     if (tokensContainer) tokensContainer.innerHTML = '<p class="text-center text-gray-500 p-4">No TLA data available yet.</p>';
                      updateTile('dao-tla-total', null, false, { titleId: 'dao-tla-title' }); 
                      return;
                  }
@@ -5688,8 +5783,8 @@ est. APR 58.53 %"></textarea>
             // Note: Different rewards may be claimed at different times
             // Track last claim info for each type
             const lastClaimInfo = {
-                deposit: { prop: 'A-26', date: 'Sep 7, 2025' },
-                vote: { prop: 'A-26', date: 'Sep 7, 2025' },
+                deposit: { prop: 'A-28', date: 'Dec 17, 2025' },
+                vote: { prop: 'A-29', date: 'Dec 17, 2025' },
                 rebase: { prop: 'A-26', date: 'Sep 7, 2025' },
                 locks: { prop: 'A-26', date: 'Sep 7, 2025' }
             };
@@ -6314,8 +6409,18 @@ est. APR 58.53 %"></textarea>
                     
                     const formatVolume = (v) => v >= 1000 ? (v/1000).toFixed(1) + 'K' : v.toFixed(1);
                     
-                    // Get bLUNA price for USD conversion
-                    const bLunaPrice = window.cachedPriceData?.['backbone-labs-staked-luna']?.usd || 0;
+                    // Get bLUNA price for USD conversion - try multiple sources
+                    let bLunaPrice = window.cachedPriceData?.['backbone-labs-staked-luna']?.usd || 0;
+                    
+                    // If not available from main price fetch, try to calculate from LUNA price and ratio
+                    if (bLunaPrice === 0) {
+                        const lunaPrice = window.cachedPriceData?.['terra-luna-2']?.usd || 0;
+                        const bLunaRatio = window.lstRatios?.bLUNA || 1.6048; // bLUNA to LUNA ratio
+                        if (lunaPrice > 0) {
+                            bLunaPrice = lunaPrice * bLunaRatio;
+                        }
+                    }
+                    
                     const bblVolumeUsd = bblVolume * bLunaPrice;
                     
                     // Format USD volume
@@ -6326,8 +6431,14 @@ est. APR 58.53 %"></textarea>
                     
                     // Add USD value next to bLUNA
                     const usdSpan = document.getElementById('bbl-volume-usd');
-                    if (usdSpan && bLunaPrice > 0) {
-                        usdSpan.textContent = formatUsd(bblVolumeUsd);
+                    if (usdSpan) {
+                        if (bLunaPrice > 0) {
+                            usdSpan.textContent = formatUsd(bblVolumeUsd);
+                        } else {
+                            // Price not available yet - will be updated when prices load
+                            usdSpan.textContent = '--';
+                        }
+                    }
                     }
                     
                     document.getElementById('bbl-total-sales').textContent = `${bblSales} sales`;
