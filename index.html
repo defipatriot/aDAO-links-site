@@ -4150,8 +4150,8 @@ est. APR 58.53 %"></textarea>
                     window.cachedPriceData = priceData; // Also store globally for unclaimed rewards
                     
                     // Update volume displays now that we have prices (in case sales loaded first)
-                    if (typeof updateVolumeDisplays === 'function') {
-                        try { updateVolumeDisplays(); } catch(e) {}
+                    if (typeof window.updateVolumeDisplays === 'function') {
+                        try { window.updateVolumeDisplays(); } catch(e) { console.log('updateVolumeDisplays error:', e); }
                     }
                     
                     // Load ALL LST ratios from TLA ext file (for snapshot tool and price calculations)
@@ -5031,6 +5031,23 @@ est. APR 58.53 %"></textarea>
             }
             
             async function buildTlaDeposits(priceData) {
+                 // Token name to CoinGecko ID mapping
+                 const tokenToGeckoId = {
+                     'LUNA': 'terra-luna-2',
+                     'ampLUNA': 'eris-amplified-luna',
+                     'arbLUNA': 'eris-arbitrage-luna',
+                     'bLUNA': 'backbone-labs-staked-luna',
+                     'CAPA': 'capapult',
+                     'ampCAPA': 'capapult', // Uses CAPA price * ratio
+                     'ROAR': 'lion-dao',
+                     'ampROAR': 'lion-dao', // Uses ROAR price * ratio
+                     'ASTRO': 'astroport-fi',
+                     'xASTRO': 'astroport-fi', // Uses ASTRO price * ratio
+                     'SOLID': 'solid-2',
+                     'wBTC': 'eureka-bridged-wbtc-terra',
+                     'USDC': 'usd-coin'
+                 };
+                 
                  // First try dashboardData.tlaDeposits, then fallback to fetchTlaData for v3 format
                  let tlaData = dashboardData.tlaDeposits;
                  let hasValidTlaData = tlaData && tlaData.tokenBalances && tlaData.tokenBalances.length > 0 && tlaData.totalDeposit > 0;
@@ -5043,12 +5060,16 @@ est. APR 58.53 %"></textarea>
                          tlaData = {
                              totalDeposit: deposits.total_usd || 0,
                              estApr: deposits.apr || 0,
-                             tokenBalances: (deposits.tokens || []).map(t => ({
-                                 name: t.symbol || t.name,
-                                 amount: t.amount,
-                                 value: t.usd || t.value,
-                                 price: t.price
-                             })),
+                             tokenBalances: (deposits.tokens || []).map(t => {
+                                 const name = t.symbol || t.name;
+                                 return {
+                                     name: name,
+                                     amount: t.amount,
+                                     value: t.usd || t.value,
+                                     price: t.price,
+                                     geckoId: tokenToGeckoId[name] || null
+                                 };
+                             }),
                              snapshotDate: v3Data.meta?.generated_at,
                              tokenPricesAtSnapshot: v3Data.token_prices || {}
                          };
@@ -5845,9 +5866,6 @@ est. APR 58.53 %"></textarea>
             
             async function updateUnclaimedRewardsTile() {
                 const tlaData = await fetchTlaData();
-                console.log('DEBUG Tile: TLA data received:', tlaData);
-                console.log('DEBUG Tile: dashboard:', tlaData?.dashboard);
-                console.log('DEBUG Tile: unclaimed_rewards:', tlaData?.dashboard?.unclaimed_rewards);
                 if (!tlaData) return;
                 
                 // Check for stale data and update UI
@@ -5888,15 +5906,10 @@ est. APR 58.53 %"></textarea>
                 const ampLunaRatio = window.cachedAmpLunaRate || 1.9008;
                 
                 // Deposit Rewards - support both old (dao.rewards) and new (dashboard.unclaimed_rewards) format
-                console.log('DEBUG Tile deposit paths:', {
-                    'dashboard.unclaimed_rewards': tlaData.dashboard?.unclaimed_rewards,
-                    'dao.rewards': tlaData.dao?.rewards
-                });
                 const depositRewards = tlaData.dashboard?.unclaimed_rewards || tlaData.dao?.rewards || {};
                 const depositAmpLuna = depositRewards.ampLUNA || 0;
                 const depositUsd = depositRewards.deposit_rewards_usd || depositRewards.usd || 0;
                 const depositZAssets = depositRewards.zAssets || 0;
-                console.log('DEBUG Tile deposit values:', { depositAmpLuna, depositUsd, depositZAssets });
                 
                 document.getElementById('deposit-usd-value').textContent = `$${depositUsd.toLocaleString('en-US', {maximumFractionDigits: 0})}`;
                 document.getElementById('deposit-ampluna-value').textContent = `${depositAmpLuna.toLocaleString('en-US', {maximumFractionDigits: 0})} ampLUNA`;
@@ -5913,10 +5926,6 @@ est. APR 58.53 %"></textarea>
                 document.getElementById('vote-epochs-count').textContent = `${unclaimedPeriods.length} epochs (${unclaimedPeriods[0] || '?'}-${unclaimedPeriods[unclaimedPeriods.length-1] || '?'})`;
                 
                 // Rebase - support both old (vote.rebase) and new (dashboard.rebase.ampLUNA) format
-                console.log('DEBUG Tile rebase paths:', {
-                    'dashboard.rebase': tlaData.dashboard?.rebase,
-                    'vote.rebase': tlaData.vote?.rebase
-                });
                 const rebase = tlaData.dashboard?.rebase?.ampLUNA || tlaData.vote?.rebase || 0;
                 const rebaseUsd = tlaData.dashboard?.rebase?.usd || (rebase * ampLunaRatio * lunaPriceUSD);
                 
@@ -5994,11 +6003,6 @@ est. APR 58.53 %"></textarea>
                 }, 10);
                 
                 const tlaData = await fetchTlaData();
-                console.log('DEBUG Modal: TLA data received:', tlaData);
-                console.log('DEBUG Modal: dashboard:', tlaData?.dashboard);
-                console.log('DEBUG Modal: unclaimed_rewards:', tlaData?.dashboard?.unclaimed_rewards);
-                console.log('DEBUG Modal: vote_rewards:', tlaData?.dashboard?.vote_rewards);
-                console.log('DEBUG Modal: rebase:', tlaData?.dashboard?.rebase);
                 if (!tlaData) return;
                 
                 // Get metadata for staleness check
@@ -6026,33 +6030,19 @@ est. APR 58.53 %"></textarea>
                 }
                 
                 // Rebase - support both old (vote.rebase) and new (dashboard.rebase.ampLUNA) format
-                console.log('DEBUG Modal rebase paths:', {
-                    'dashboard.rebase': tlaData.dashboard?.rebase,
-                    'dashboard.rebase.ampLUNA': tlaData.dashboard?.rebase?.ampLUNA,
-                    'vote.rebase': tlaData.vote?.rebase
-                });
                 const rebase = tlaData.dashboard?.rebase?.ampLUNA || tlaData.vote?.rebase || 0;
                 document.getElementById('modal-unclaimed-rebase').textContent = `${rebase.toFixed(2)}`;
                 
                 // Deposit rewards - support both old (dao.rewards) and new (dashboard.unclaimed_rewards) format
-                console.log('DEBUG Modal deposit paths:', {
-                    'dashboard.unclaimed_rewards': tlaData.dashboard?.unclaimed_rewards,
-                    'dao.rewards': tlaData.dao?.rewards
-                });
                 const depositRewards = tlaData.dashboard?.unclaimed_rewards || tlaData.dao?.rewards || {};
                 const depositAmpLuna = depositRewards.ampLUNA || 0;
                 const depositUsd = depositRewards.deposit_rewards_usd || depositRewards.usd || 0;
                 const depositZAssets = depositRewards.zAssets || 0;
-                console.log('DEBUG Modal deposit values:', { depositAmpLuna, depositUsd, depositZAssets });
                 document.getElementById('modal-deposit-ampluna').textContent = `${depositAmpLuna.toLocaleString('en-US', {maximumFractionDigits: 2})}`;
                 document.getElementById('modal-deposit-usd').textContent = `$${depositUsd.toLocaleString('en-US', {maximumFractionDigits: 2})}`;
                 document.getElementById('modal-deposit-zassets').textContent = `${depositZAssets.toLocaleString('en-US', {maximumFractionDigits: 2})}`;
                 
                 // Vote rewards - support both old (dao.vote_rewards) and new (dashboard.vote_rewards.by_token) format
-                console.log('DEBUG Modal vote paths:', {
-                    'dashboard.vote_rewards': tlaData.dashboard?.vote_rewards,
-                    'dao.vote_rewards': tlaData.dao?.vote_rewards
-                });
                 const voteRewards = tlaData.dashboard?.vote_rewards?.by_token || tlaData.dao?.vote_rewards || {};
                 const unclaimedPeriods = tlaData.dashboard?.vote_rewards?.periods || tlaData.dao?.vote_reward_periods || [];
                 let voteRewardsHtml = '';
@@ -6534,6 +6524,9 @@ est. APR 58.53 %"></textarea>
                     document.getElementById('boost-volume-usd').textContent = `$${boostVolume.toFixed(2)}`;
                     document.getElementById('boost-total-sales').textContent = `${boostSales} sales`;
                 }
+                
+                // Make globally accessible for price update callback
+                window.updateVolumeDisplays = updateVolumeDisplays;
                 
                 // Create sale row - shows current broken status (may differ from time of sale)
                 function createSaleRow(sale, marketplace) {
