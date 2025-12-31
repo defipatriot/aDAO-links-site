@@ -4614,31 +4614,46 @@ function getStagingLpStatusAllDays(lpKey) {
     let daysCaptured = [];
     let totalLiqPoints = 0;
     let totalVolPoints = 0;
-    let notAvailable = false;
+    let liqUnavailable = false;
+    let volUnavailable = false;
     
     ['day1', 'day2', 'day3', 'day4'].forEach((day, idx) => {
         let dayData = store.staging[day];
         if (dayData?.lps?.[lpKey]) {
             let lpData = dayData.lps[lpKey];
-            if (lpData.notAvailable) {
-                notAvailable = true;
-            } else {
-                if (lpData.liquidity?.length > 0 || lpData.volume?.length > 0) {
-                    daysCaptured.push(idx + 1);
-                }
-                totalLiqPoints += lpData.liquidity?.length || 0;
-                totalVolPoints += lpData.volume?.length || 0;
+            
+            // Check for new separate flags first, fall back to old notAvailable
+            let dayLiqUnavail = lpData.liqUnavailable ?? lpData.notAvailable ?? false;
+            let dayVolUnavail = lpData.volUnavailable ?? lpData.notAvailable ?? false;
+            
+            if (dayLiqUnavail) liqUnavailable = true;
+            if (dayVolUnavail) volUnavailable = true;
+            
+            // Count as captured if has data OR is marked unavailable
+            let hasData = lpData.liquidity?.length > 0 || lpData.volume?.length > 0;
+            let isUnavailable = dayLiqUnavail && dayVolUnavail;
+            
+            if (hasData || isUnavailable) {
+                daysCaptured.push(idx + 1);
             }
+            
+            totalLiqPoints += lpData.liquidity?.length || 0;
+            totalVolPoints += lpData.volume?.length || 0;
         }
     });
+    
+    // Complete if all 4 days captured OR if both liq and vol are marked unavailable
+    let bothUnavailable = liqUnavailable && volUnavailable;
     
     return {
         daysCaptured,
         daysNeeded: 4,
-        isComplete: daysCaptured.length >= 4 || notAvailable,
+        isComplete: daysCaptured.length >= 4 || bothUnavailable,
         totalLiqPoints,
         totalVolPoints,
-        notAvailable
+        liqUnavailable,
+        volUnavailable,
+        notAvailable: bothUnavailable  // Keep for backward compatibility
     };
 }
 
@@ -4650,13 +4665,17 @@ function getStagingLpStatusNew(lpKey) {
     
     let allDaysStatus = getStagingLpStatusAllDays(lpKey);
     
+    // Check for new separate flags first, fall back to old notAvailable
+    let liqUnavail = lpData?.liqUnavailable ?? lpData?.notAvailable ?? false;
+    let volUnavail = lpData?.volUnavailable ?? lpData?.notAvailable ?? false;
+    
     return {
-        captured: lpData && (lpData.liquidity?.length > 0 || lpData.volume?.length > 0 || lpData.notAvailable),
+        captured: lpData && (lpData.liquidity?.length > 0 || lpData.volume?.length > 0 || liqUnavail || volUnavail),
         verified: allDaysStatus.isComplete,
         hasLiq: lpData?.liquidity?.length > 0,
         hasVol: lpData?.volume?.length > 0,
-        liqUnavail: lpData?.notAvailable || false,
-        volUnavail: lpData?.notAvailable || false,
+        liqUnavail: liqUnavail,
+        volUnavail: volUnavail,
         liqPoints: lpData?.liquidity?.length || 0,
         volPoints: lpData?.volume?.length || 0,
         ...allDaysStatus
@@ -4675,16 +4694,33 @@ function initStagingLpDropdown() {
     let astroLps = Object.entries(store.lpRegistry)
         .filter(([k, v]) => v.dex === 'Astroport');
     
-    // Sort: not captured today first, then captured - within each by vote_pct
+    // Group by bucket, then sort by vote_pct within bucket
+    const BUCKET_ORDER = ['stable', 'project', 'bluechip', 'single'];
+    const BUCKET_LABELS = {
+        'stable': '🔵 STABLE',
+        'project': '🟣 PROJECT', 
+        'bluechip': '🟡 BLUECHIP',
+        'single': '🟢 SINGLE'
+    };
+    
+    // Sort by bucket order first, then by not-captured, then by vote_pct
     astroLps.sort((a, b) => {
+        let bucketA = BUCKET_ORDER.indexOf(a[1].bucket || 'single');
+        let bucketB = BUCKET_ORDER.indexOf(b[1].bucket || 'single');
+        if (bucketA === -1) bucketA = 999;
+        if (bucketB === -1) bucketB = 999;
+        
+        if (bucketA !== bucketB) return bucketA - bucketB;
+        
+        // Within same bucket: not captured first
         let statusA = getStagingLpStatusNew(a[0]);
         let statusB = getStagingLpStatusNew(b[0]);
-        
-        // Priority: not captured today (0) > captured today (1)
         let priorityA = statusA.captured ? 1 : 0;
         let priorityB = statusB.captured ? 1 : 0;
         
         if (priorityA !== priorityB) return priorityA - priorityB;
+        
+        // Then by vote_pct descending
         return b[1].vote_pct - a[1].vote_pct;
     });
     
@@ -4700,30 +4736,40 @@ function initStagingLpDropdown() {
     
     select.innerHTML = `<option value="">-- ${currentDay.replace('day', 'Day ')}: ${pendingToday} pending, ${capturedToday} done --</option>`;
     
-    // Add optgroups
-    let currentGroup = null;
+    // Add optgroups by bucket
+    let currentBucket = null;
     
     astroLps.forEach(([key, lp]) => {
+        let bucket = lp.bucket || 'single';
         let status = getStagingLpStatusNew(key);
-        let groupName = status.captured ? 'captured' : 'pending';
         
-        if (groupName !== currentGroup) {
-            if (currentGroup !== null) select.innerHTML += '</optgroup>';
+        if (bucket !== currentBucket) {
+            if (currentBucket !== null) select.innerHTML += '</optgroup>';
             
-            let groupLabel = groupName === 'pending' ? `⏳ Need Capture Today (${pendingToday})` :
-                            `✅ Captured Today (${capturedToday})`;
+            // Count pending in this bucket
+            let bucketLps = astroLps.filter(([k, v]) => (v.bucket || 'single') === bucket);
+            let bucketPending = bucketLps.filter(([k]) => !getStagingLpStatusNew(k).captured).length;
+            let bucketTotal = bucketLps.length;
+            
+            let groupLabel = `${BUCKET_LABELS[bucket] || bucket.toUpperCase()} (${bucketPending}/${bucketTotal} pending)`;
             select.innerHTML += `<optgroup label="${groupLabel}">`;
-            currentGroup = groupName;
+            currentBucket = bucket;
         }
         
         // Status indicators
         let todayIcon = status.captured ? '✅' : '⏳';
-        let allDaysIcon = status.isComplete ? '🟢' : `${status.daysCaptured.length}/4`;
+        let allDaysStatus = status.isComplete ? '🟢' : `${status.daysCaptured.length}/4`;
         
-        select.innerHTML += `<option value="${key}">${todayIcon} ${lp.lp} [${allDaysIcon}]</option>`;
+        // Show unavailable indicator
+        let unavailIcon = '';
+        if (status.liqUnavail && status.volUnavail) unavailIcon = ' ⛔';
+        else if (status.volUnavail) unavailIcon = ' 📊⛔';
+        else if (status.liqUnavail) unavailIcon = ' 💧⛔';
+        
+        select.innerHTML += `<option value="${key}">${todayIcon} ${lp.lp} [${allDaysStatus}]${unavailIcon}</option>`;
     });
     
-    if (currentGroup !== null) select.innerHTML += '</optgroup>';
+    if (currentBucket !== null) select.innerHTML += '</optgroup>';
     
     if (currentValue) select.value = currentValue;
     
@@ -4956,7 +5002,9 @@ function captureStagingData() {
     store.staging[currentDay].lps[lpKey] = {
         liquidity: liqPoints,
         volume: volPoints,
-        notAvailable: liqUnavail && volUnavail,
+        liqUnavailable: liqUnavail,
+        volUnavailable: volUnavail,
+        notAvailable: liqUnavail && volUnavail,  // Keep for backward compatibility
         capturedAt: new Date().toISOString()
     };
     
