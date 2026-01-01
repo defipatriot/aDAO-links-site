@@ -678,7 +678,7 @@
         </div>
 
         <!-- NFT Marketplace Section -->
-        <div class="mt-8">
+        <div id="nft-marketplace-section" class="mt-8">
             <h2 class="text-xl font-bold text-white mb-6 flex items-center gap-3">
                 <i class="fas fa-store text-cyan-400"></i>
                 NFT Marketplace Activity
@@ -770,7 +770,10 @@
                     </div>
                 </div>
                 <div id="recent-sales-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                    <div class="text-gray-500 text-sm text-center py-8 col-span-full"><i class="fas fa-spinner fa-spin"></i> Loading sales history...</div>
+                    <div class="text-gray-500 text-sm text-center py-8 col-span-full">
+                        <i class="fas fa-clock text-gray-600"></i> 
+                        <span class="text-gray-600">Sales data loads when you scroll here</span>
+                    </div>
                 </div>
                 <div class="text-center mt-4">
                     <button id="load-more-sales" class="text-xs text-cyan-400 hover:text-cyan-300 hidden">
@@ -1069,12 +1072,50 @@
     </div>
     
     <div id="treasuryModal" class="modal fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50 hidden opacity-0">
-        <div class="modal-content bg-[#1a1a1a] border border-gray-700 rounded-xl shadow-xl w-full max-w-2xl relative text-white opacity-0 scale-95 p-8">
+        <div class="modal-content bg-[#1a1a1a] border border-gray-700 rounded-xl shadow-xl w-full max-w-3xl relative text-white opacity-0 scale-95 p-8 max-h-[90vh] overflow-y-auto">
             <button class="modal-close absolute top-4 right-4 text-gray-400 hover:text-white text-3xl">&times;</button>
             <h3 class="text-2xl font-bold text-cyan-400 mb-4">DAO Treasury Details</h3>
-            <div id="treasury-table-container" class="max-h-96 overflow-y-auto">
-                 <div class="text-center p-4"><i class="fas fa-spinner fa-spin text-cyan-400 text-2xl"></i></div> </div>
-            <a href="https://daodao.zone/dao/terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm/treasury?url=https%3A%2F%2Fwww.erisprotocol.com" target="_blank" rel="noopener noreferrer" class="inline-block mt-6 bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-4 rounded-lg transition-colors w-full text-center">
+            
+            <!-- Summary Total -->
+            <div class="bg-gray-800/50 p-4 rounded-lg mb-4 text-center">
+                <p class="text-sm text-gray-400">Combined Treasury Value</p>
+                <p id="treasury-combined-total" class="text-3xl font-bold text-cyan-400">--</p>
+            </div>
+            
+            <!-- Token Holdings (existing) -->
+            <div class="mb-6">
+                <h4 class="text-lg font-bold text-white mb-2 flex items-center gap-2">
+                    <i class="fas fa-coins text-yellow-400"></i> Token Holdings
+                    <span class="text-xs text-gray-500 font-normal">(Live)</span>
+                </h4>
+                <div id="treasury-table-container" class="max-h-64 overflow-y-auto">
+                    <div class="text-center p-4"><i class="fas fa-spinner fa-spin text-cyan-400 text-2xl"></i></div>
+                </div>
+            </div>
+            
+            <!-- Lion DAO Alliance Section -->
+            <div class="mb-6">
+                <h4 class="text-lg font-bold text-white mb-2 flex items-center gap-2">
+                    <i class="fas fa-handshake text-orange-400"></i> Lion DAO Alliance
+                    <span class="text-xs text-gray-500 font-normal">(Snapshot)</span>
+                </h4>
+                <div id="lion-dao-alliance-container" class="space-y-3">
+                    <div class="text-center p-4"><i class="fas fa-spinner fa-spin text-orange-400 text-2xl"></i></div>
+                </div>
+            </div>
+            
+            <!-- Council Treasury Section -->
+            <div class="mb-6">
+                <h4 class="text-lg font-bold text-white mb-2 flex items-center gap-2">
+                    <i class="fas fa-landmark text-purple-400"></i> Council Treasury
+                    <span class="text-xs text-gray-500 font-normal">(Live)</span>
+                </h4>
+                <div id="council-treasury-container" class="space-y-3">
+                    <div class="text-center p-4"><i class="fas fa-spinner fa-spin text-purple-400 text-2xl"></i></div>
+                </div>
+            </div>
+            
+            <a href="https://daodao.zone/dao/terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm/treasury?url=https%3A%2F%2Fwww.erisprotocol.com" target="_blank" rel="noopener noreferrer" class="inline-block mt-2 bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-4 rounded-lg transition-colors w-full text-center">
                 View Treasury on DAODAO &rarr;
             </a>
         </div>
@@ -1911,6 +1952,8 @@ est. APR 58.53 %"></textarea>
         let calculatedAvgDailyGain = null; // Store the calculated avg daily gain
 
         document.addEventListener('DOMContentLoaded', () => {
+            const pageLoadStart = performance.now();
+            console.log('DEBUG: DOMContentLoaded - starting page initialization...');
 
             // --- CENTRAL DATA OBJECT ---
             const dashboardData = {
@@ -4234,6 +4277,7 @@ est. APR 58.53 %"></textarea>
             async function fetchLiveOnChainData() {
                  if (isFetching) return; 
                  isFetching = true;
+                 const startTime = performance.now();
                  console.log("DEBUG: Starting fetchLiveOnChainData..."); 
 
 
@@ -4267,6 +4311,10 @@ est. APR 58.53 %"></textarea>
 
                 try {
                     console.log("DEBUG: Starting primary API fetches..."); 
+                    
+                    // Start LST ratios fetch early (runs in parallel with primary APIs)
+                    const lstRatiosPromise = loadLstRatiosFromExt();
+                    
                     const [statsResponse, contractResponse, ampLunaRateResponse, priceResponse] = await Promise.all([ /* ... fetches ... */ 
                         fetch(onChainStatsUrl).catch(e => { console.error("Stats Fetch Error:", e); return null; }),
                         fetch(contractUrl).catch(e => { console.error("Contract Fetch Error:", e); return null; }),
@@ -4293,8 +4341,8 @@ est. APR 58.53 %"></textarea>
                         try { window.updateVolumeDisplays(); } catch(e) { console.log('updateVolumeDisplays error:', e); }
                     }
                     
-                    // Load ALL LST ratios from TLA ext file (for snapshot tool and price calculations)
-                    await loadLstRatiosFromExt();
+                    // Wait for LST ratios (should be done by now since it started in parallel)
+                    await lstRatiosPromise;
                     console.log("DEBUG: LST ratios loaded:", window.lstRatios);
 
                     console.log("DEBUG: Starting treasury balance fetches..."); 
@@ -4581,7 +4629,8 @@ est. APR 58.53 %"></textarea>
 
                 } finally {
                      isFetching = false; // Allow fetching again
-                     console.log("DEBUG: Finished fetchLiveOnChainData attempt."); // DEBUG LOG
+                     const endTime = performance.now();
+                     console.log(`DEBUG: Finished fetchLiveOnChainData in ${((endTime - startTime) / 1000).toFixed(2)}s`);
                       // Update static tiles regardless of success/failure, if needed
                        console.log("DEBUG: Updating static tiles (final check)..."); 
                        
@@ -4809,7 +4858,410 @@ est. APR 58.53 %"></textarea>
                  
                  // Store live treasury value globally for calculator
                  window.liveTreasuryUsd = totalLiveUsd;
+                 
+                 // Trigger loading of additional treasury sections
+                 loadLionDaoAlliance();
+                 loadCouncilTreasury();
             }
+            
+            // --- Lion DAO Alliance Positions ---
+            // Data comes from TLA epoch file: dashboard.alliances.lion_dao
+            let lionDaoAllianceData = null;
+            let chainStakingApr = null;
+            
+            async function loadLionDaoAlliance() {
+                const container = document.getElementById('lion-dao-alliance-container');
+                if (!container) return;
+                
+                try {
+                    // Try to get from cached TLA data first
+                    const tlaData = await fetchTlaData();
+                    
+                    if (tlaData?.dashboard?.alliances?.lion_dao) {
+                        lionDaoAllianceData = tlaData.dashboard.alliances.lion_dao;
+                        
+                        // Use APR from the file if available
+                        if (lionDaoAllianceData.chain_staking?.staking_apr_pct) {
+                            chainStakingApr = {
+                                apr: lionDaoAllianceData.chain_staking.staking_apr_pct,
+                                date: lionDaoAllianceData.chain_staking.staking_apr_date || 'snapshot'
+                            };
+                        }
+                    } else {
+                        // Fallback to defaults if not in TLA data
+                        lionDaoAllianceData = lionDaoAllianceDefaults;
+                        // Fetch staking APR from CSV as fallback
+                        await loadStakingApr();
+                    }
+                    
+                    // Render the section
+                    renderLionDaoAlliance();
+                    
+                } catch (err) {
+                    console.error('Failed to load Lion DAO Alliance data:', err);
+                    lionDaoAllianceData = lionDaoAllianceDefaults;
+                    await loadStakingApr();
+                    renderLionDaoAlliance();
+                }
+            }
+            
+            // Fallback defaults if TLA data doesn't have alliance section
+            const lionDaoAllianceDefaults = {
+                chain_staking: {
+                    validators: [{
+                        name: "Lion DAO",
+                        staked_luna: 10000,
+                        unclaimed_rewards_luna: 0,
+                        staked_date: "2025-08-05T07:49:00Z",
+                        prop_id: "A23"
+                    }],
+                    total_staked_luna: 10000,
+                    total_unclaimed_luna: 0
+                },
+                roar_dao_stake: {
+                    staked_roar: 1000000000,
+                    voting_power_pct: 0.4506,
+                    unclaimed_rewards: { ROAR: 31194275.725527, LUNA: 0 },
+                    staked_date: "2025-08-05T07:43:00Z",
+                    prop_id: "A22",
+                    dao_address: "terra10cux5xr5tj5xvlttmgmzxrh8xhqf86lkq47465fhtqrmmev2p5kq63dykf"
+                },
+                pixelions_dao_stake: {
+                    staked_nfts: 20,
+                    voting_power_pct: 0.7205,
+                    staked_date: "2025-08-01T04:21:00Z",
+                    prop_id: "A21",
+                    dao_address: "terra1xrp5qcy2gdal9c2d2vl6xnk2gq3uqk4upnhdnd3wlnlwp20r2nhqrkpzjh"
+                }
+            };
+            
+            async function loadStakingApr() {
+                try {
+                    const csvUrl = 'https://raw.githubusercontent.com/defipatriot/tla-ext_json_storage/main/Staking%20APR.csv';
+                    const response = await fetch(csvUrl);
+                    if (!response.ok) throw new Error('Failed to fetch');
+                    
+                    const text = await response.text();
+                    const lines = text.trim().split('\n');
+                    
+                    // Get last line (most recent data point)
+                    const lastLine = lines[lines.length - 1];
+                    const match = lastLine.match(/"([^"]+)","([^"]+)"/);
+                    
+                    if (match) {
+                        chainStakingApr = {
+                            date: match[1],
+                            apr: parseFloat(match[2])
+                        };
+                        console.log('Loaded staking APR:', chainStakingApr);
+                    }
+                } catch (err) {
+                    console.error('Failed to load staking APR:', err);
+                    chainStakingApr = null;
+                }
+            }
+            
+            function renderLionDaoAlliance() {
+                const container = document.getElementById('lion-dao-alliance-container');
+                if (!container || !lionDaoAllianceData) return;
+                
+                const prices = window.cachedPriceData || {};
+                const lunaPrice = prices['terra-luna-2']?.usd || 0;
+                const roarPrice = prices['lion-dao']?.usd || 0.0000003; // ROAR price
+                
+                let totalAllianceUsd = 0;
+                let html = '';
+                
+                // 1. Chain Staking (LUNA staked to validator)
+                const staking = lionDaoAllianceData.chain_staking;
+                if (staking?.validators?.length > 0) {
+                    staking.validators.forEach(v => {
+                        const stakedUsd = v.staked_luna * lunaPrice;
+                        const rewardsUsd = (v.unclaimed_rewards_luna || 0) * lunaPrice;
+                        totalAllianceUsd += stakedUsd + rewardsUsd;
+                        
+                        const aprDisplay = chainStakingApr 
+                            ? `<span class="text-green-400">${chainStakingApr.apr.toFixed(2)}% APR</span> <span class="text-gray-500 text-xs">(${chainStakingApr.date})</span>`
+                            : '<span class="text-gray-500">APR N/A</span>';
+                        
+                        html += `
+                            <div class="bg-gray-800/50 p-3 rounded-lg">
+                                <div class="flex items-center justify-between mb-2">
+                                    <div class="flex items-center gap-2">
+                                        <img src="https://raw.githubusercontent.com/cosmos/chain-registry/master/terra2/images/luna.svg" class="w-6 h-6" onerror="this.style.display='none'">
+                                        <span class="font-bold">LUNA Staked</span>
+                                        <span class="text-xs text-gray-500">→ ${v.name}</span>
+                                    </div>
+                                    <span class="text-xs text-gray-500">Prop ${v.prop_id}</span>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2 text-sm">
+                                    <div>
+                                        <span class="text-gray-400">Staked:</span>
+                                        <span class="text-white font-mono ml-1">${v.staked_luna.toLocaleString()} LUNA</span>
+                                        <span class="text-green-400 text-xs ml-1">($${stakedUsd.toLocaleString(undefined, {maximumFractionDigits: 0})})</span>
+                                    </div>
+                                    <div>
+                                        <span class="text-gray-400">Rewards:</span>
+                                        <span class="text-yellow-400 font-mono ml-1">${(v.unclaimed_rewards_luna || 0).toFixed(4)} LUNA</span>
+                                    </div>
+                                </div>
+                                <div class="mt-2 text-xs">
+                                    ${aprDisplay}
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+                
+                // 2. ROAR Staked in Lion DAO
+                const roarStake = lionDaoAllianceData.roar_dao_stake;
+                if (roarStake) {
+                    const roarStakedUsd = roarStake.staked_roar * roarPrice;
+                    // Handle both old format (unclaimed_rewards_roar) and new format (unclaimed_rewards.ROAR)
+                    const unclaimedRoar = roarStake.unclaimed_rewards?.ROAR || roarStake.unclaimed_rewards_roar || 0;
+                    const roarRewardsUsd = unclaimedRoar * roarPrice;
+                    totalAllianceUsd += roarStakedUsd + roarRewardsUsd;
+                    
+                    const roarStakedFormatted = roarStake.staked_roar >= 1e9 
+                        ? (roarStake.staked_roar / 1e9).toFixed(1) + 'B'
+                        : roarStake.staked_roar >= 1e6 
+                            ? (roarStake.staked_roar / 1e6).toFixed(1) + 'M'
+                            : roarStake.staked_roar.toLocaleString();
+                    
+                    const rewardsFormatted = unclaimedRoar >= 1e6
+                        ? (unclaimedRoar / 1e6).toFixed(2) + 'M'
+                        : unclaimedRoar.toLocaleString(undefined, {maximumFractionDigits: 0});
+                    
+                    const daoUrl = roarStake.dao_url || `https://daodao.zone/dao/${roarStake.dao_address}/home`;
+                    
+                    html += `
+                        <div class="bg-gray-800/50 p-3 rounded-lg">
+                            <div class="flex items-center justify-between mb-2">
+                                <div class="flex items-center gap-2">
+                                    <img src="https://raw.githubusercontent.com/cosmos/chain-registry/master/terra2/images/roar.png" class="w-6 h-6 rounded-full" onerror="this.style.display='none'">
+                                    <span class="font-bold">ROAR Staked</span>
+                                    <span class="text-xs text-gray-500">→ ${roarStake.dao_name || 'Lion DAO'}</span>
+                                </div>
+                                <a href="${daoUrl}" target="_blank" class="text-xs text-cyan-400 hover:underline">
+                                    <i class="fas fa-external-link-alt"></i> View
+                                </a>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2 text-sm">
+                                <div>
+                                    <span class="text-gray-400">Staked:</span>
+                                    <span class="text-white font-mono ml-1">${roarStakedFormatted} ROAR</span>
+                                </div>
+                                <div>
+                                    <span class="text-gray-400">VP:</span>
+                                    <span class="text-purple-400 font-mono ml-1">${roarStake.voting_power_pct}%</span>
+                                </div>
+                            </div>
+                            <div class="mt-2 text-sm">
+                                <span class="text-gray-400">Unclaimed:</span>
+                                <span class="text-yellow-400 font-mono ml-1">${rewardsFormatted} ROAR</span>
+                                <span class="text-green-400 text-xs ml-1">($${roarRewardsUsd.toFixed(2)})</span>
+                            </div>
+                            <div class="mt-1 text-xs text-gray-500">Prop ${roarStake.prop_id} • Staked ${new Date(roarStake.staked_date).toLocaleDateString()}</div>
+                        </div>
+                    `;
+                }
+                
+                // 3. pixeLions DAO NFT Stake
+                const pixelStake = lionDaoAllianceData.pixelions_dao_stake;
+                if (pixelStake) {
+                    const daoUrl = pixelStake.dao_url || `https://daodao.zone/dao/${pixelStake.dao_address}/home`;
+                    
+                    html += `
+                        <div class="bg-gray-800/50 p-3 rounded-lg">
+                            <div class="flex items-center justify-between mb-2">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-2xl">🦁</span>
+                                    <span class="font-bold">pixeLions NFTs</span>
+                                    <span class="text-xs text-gray-500">→ ${pixelStake.dao_name || 'pixeLions DAO'}</span>
+                                </div>
+                                <a href="${daoUrl}" target="_blank" class="text-xs text-cyan-400 hover:underline">
+                                    <i class="fas fa-external-link-alt"></i> View
+                                </a>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2 text-sm">
+                                <div>
+                                    <span class="text-gray-400">Staked:</span>
+                                    <span class="text-white font-mono ml-1">${pixelStake.staked_nfts} NFTs</span>
+                                    ${pixelStake.total_supply ? `<span class="text-gray-500 text-xs">/ ${pixelStake.total_supply.toLocaleString()}</span>` : ''}
+                                </div>
+                                <div>
+                                    <span class="text-gray-400">VP:</span>
+                                    <span class="text-purple-400 font-mono ml-1">${pixelStake.voting_power_pct}%</span>
+                                </div>
+                            </div>
+                            <div class="mt-1 text-xs text-gray-500">Prop ${pixelStake.prop_id} • Staked ${new Date(pixelStake.staked_date).toLocaleDateString()}</div>
+                        </div>
+                    `;
+                }
+                
+                // Alliance Total
+                html += `
+                    <div class="border-t border-gray-700 pt-2 mt-2 flex justify-between items-center">
+                        <span class="text-gray-400 font-medium">Alliance Total</span>
+                        <span class="text-orange-400 font-bold">$${totalAllianceUsd.toLocaleString(undefined, {maximumFractionDigits: 2})}</span>
+                    </div>
+                `;
+                
+                container.innerHTML = html;
+                
+                // Store for combined total
+                window.lionDaoAllianceUsd = totalAllianceUsd;
+                updateCombinedTreasuryTotal();
+            }
+            
+            // --- Council Treasury ---
+            const COUNCIL_WALLET = 'terra1yqv0af22675wlcmgflxk4ve07vt8qlm999gk0cuw5l64r5xxgadsyg8ywv';
+            
+            async function loadCouncilTreasury() {
+                const container = document.getElementById('council-treasury-container');
+                if (!container) return;
+                
+                try {
+                    // Fetch native balances
+                    const balancesUrl = `https://terra.publicnode.com/cosmos/bank/v1beta1/balances/${COUNCIL_WALLET}`;
+                    const response = await fetch(balancesUrl);
+                    
+                    if (!response.ok) throw new Error('Failed to fetch balances');
+                    
+                    const data = await response.json();
+                    const balances = data.balances || [];
+                    
+                    // Also fetch CW20 token balances (if any)
+                    const councilAssets = [];
+                    
+                    for (const bal of balances) {
+                        const denom = bal.denom;
+                        const amount = parseInt(bal.amount);
+                        
+                        // Map denom to readable name
+                        const tokenInfo = denomMap[denom] || { name: denom.substring(0, 10) + '...', decimals: 6 };
+                        const adjustedAmount = amount / Math.pow(10, tokenInfo.decimals || 6);
+                        
+                        if (adjustedAmount > 0.0001) {
+                            councilAssets.push({
+                                name: tokenInfo.name || denom,
+                                amount: adjustedAmount,
+                                geckoId: tokenInfo.geckoId
+                            });
+                        }
+                    }
+                    
+                    renderCouncilTreasury(councilAssets);
+                    
+                } catch (err) {
+                    console.error('Failed to load Council Treasury:', err);
+                    container.innerHTML = `
+                        <div class="text-center p-4 text-gray-500">
+                            <i class="fas fa-exclamation-triangle text-yellow-500 mr-2"></i>
+                            Failed to load Council Treasury
+                        </div>
+                    `;
+                }
+            }
+            
+            function renderCouncilTreasury(assets) {
+                const container = document.getElementById('council-treasury-container');
+                if (!container) return;
+                
+                const prices = window.cachedPriceData || {};
+                let totalCouncilUsd = 0;
+                
+                let html = '';
+                
+                if (assets.length === 0) {
+                    html = '<div class="text-center p-4 text-gray-500">No assets found in Council wallet</div>';
+                } else {
+                    html = '<div class="space-y-2">';
+                    
+                    // Sort by value
+                    const valuedAssets = assets.map(a => {
+                        const price = prices[a.geckoId]?.usd || 0;
+                        const usdValue = a.amount * price;
+                        totalCouncilUsd += usdValue;
+                        return { ...a, usdValue, price };
+                    }).sort((a, b) => b.usdValue - a.usdValue);
+                    
+                    for (const asset of valuedAssets) {
+                        const logoUrl = tokenLogos[asset.name];
+                        const amountStr = asset.amount < 1 ? asset.amount.toFixed(6) : asset.amount.toLocaleString(undefined, {maximumFractionDigits: 2});
+                        const valueStr = asset.usdValue > 0 ? `$${asset.usdValue.toLocaleString(undefined, {maximumFractionDigits: 2})}` : 'N/A';
+                        
+                        html += `
+                            <div class="flex items-center justify-between bg-gray-800/30 p-2 rounded">
+                                <div class="flex items-center gap-2">
+                                    ${logoUrl ? `<img src="${logoUrl}" class="w-5 h-5 rounded-full" onerror="this.style.display='none'">` : '<div class="w-5 h-5"></div>'}
+                                    <span class="font-medium">${asset.name}</span>
+                                </div>
+                                <div class="text-right">
+                                    <span class="font-mono">${amountStr}</span>
+                                    <span class="text-green-400 text-xs ml-2">${valueStr}</span>
+                                </div>
+                            </div>
+                        `;
+                    }
+                    
+                    html += '</div>';
+                    
+                    // Total
+                    html += `
+                        <div class="border-t border-gray-700 pt-2 mt-2 flex justify-between items-center">
+                            <span class="text-gray-400 font-medium">Council Total</span>
+                            <span class="text-purple-400 font-bold">$${totalCouncilUsd.toLocaleString(undefined, {maximumFractionDigits: 2})}</span>
+                        </div>
+                    `;
+                }
+                
+                // Add link to council wallet
+                html += `
+                    <a href="https://chainsco.pe/terra2/address/${COUNCIL_WALLET}" target="_blank" class="block text-center text-xs text-cyan-400 hover:underline mt-2">
+                        <i class="fas fa-external-link-alt mr-1"></i>View Council Wallet on Chainscope
+                    </a>
+                `;
+                
+                container.innerHTML = html;
+                
+                // Store for combined total
+                window.councilTreasuryUsd = totalCouncilUsd;
+                updateCombinedTreasuryTotal();
+            }
+            
+            // Update combined treasury total in modal and tile
+            function updateCombinedTreasuryTotal() {
+                const totalEl = document.getElementById('treasury-combined-total');
+                const tileEl = document.getElementById('dao-treasury-total');
+                
+                const tokenHoldings = window.liveTreasuryUsd || 0;
+                const allianceValue = window.lionDaoAllianceUsd || 0;
+                const councilValue = window.councilTreasuryUsd || 0;
+                
+                const combined = tokenHoldings + allianceValue + councilValue;
+                
+                // Update modal total
+                if (totalEl) {
+                    totalEl.innerHTML = `
+                        $${combined.toLocaleString(undefined, {maximumFractionDigits: 0})}
+                        <span class="block text-sm text-gray-400 font-normal mt-1">
+                            Tokens: $${tokenHoldings.toLocaleString(undefined, {maximumFractionDigits: 0})} |
+                            Alliance: $${allianceValue.toLocaleString(undefined, {maximumFractionDigits: 0})} |
+                            Council: $${councilValue.toLocaleString(undefined, {maximumFractionDigits: 0})}
+                        </span>
+                    `;
+                }
+                
+                // Update tile with combined total (only if we have alliance or council data)
+                if (tileEl && (allianceValue > 0 || councilValue > 0)) {
+                    tileEl.textContent = '$' + combined.toLocaleString(undefined, {maximumFractionDigits: 0});
+                }
+                
+                // Store combined total globally
+                window.combinedTreasuryUsd = combined;
+            }
+            
             
             // --- Unminted NFT Market Value Calculator ---
             window.calculateUnmintedMarketValue = function() {
@@ -6464,6 +6916,9 @@ est. APR 58.53 %"></textarea>
 
             // --- NFT Marketplace Section ---
             function setupNftMarketplace() {
+                const marketplaceStartTime = performance.now();
+                console.log('DEBUG: Starting NFT Marketplace setup...');
+                
                 const CLOUDFLARE_CDN = 'https://imagedelivery.net/v_zOWVQCPb7Xpcbu-gQC1A/alliance_dao';
                 const STATUS_URL = 'https://deving.zone/en/nfts/alliance_daos.json';
                 const SALES_BASE_URL = 'https://raw.githubusercontent.com/defipatriot/adao_json_storage/main/';
@@ -6474,6 +6929,12 @@ est. APR 58.53 %"></textarea>
                 let displayedSalesCount = 12;
                 let salesFilter = 'all';
                 let bblListedNfts = [];     // BBL listed NFTs from deving.zone
+                
+                // Show loading state
+                const salesContainer = document.getElementById('recent-sales-container');
+                if (salesContainer) {
+                    salesContainer.innerHTML = '<div class="text-gray-500 text-sm text-center py-8 col-span-full"><i class="fas fa-spinner fa-spin"></i> Loading sales history...</div>';
+                }
                 
                 // Get NFT image URL
                 function getNftImageUrl(nftId) {
@@ -6603,6 +7064,7 @@ est. APR 58.53 %"></textarea>
                 
                 // Load sales history from all years
                 async function loadSalesHistory() {
+                    const salesStartTime = performance.now();
                     const currentYear = new Date().getFullYear();
                     const yearsToFetch = [2023, 2024, 2025]; // All available years
                     
@@ -6670,6 +7132,7 @@ est. APR 58.53 %"></textarea>
                         
                         console.log(`Loaded sales: ${allTimeSalesData.sales.bbl.length} BBL + ${allTimeSalesData.sales.boost.length} Boost = ${allTimeSalesData.sales.bbl.length + allTimeSalesData.sales.boost.length} total records`);
                         console.log(`All-time volume: ${allTimeSalesData.cumulative_totals.bbl?.total_volume_bluna?.toFixed(2)} bLUNA`);
+                        console.log(`DEBUG: Sales history loaded in ${((performance.now() - salesStartTime) / 1000).toFixed(2)}s`);
                     } catch (err) {
                         console.error('Sales history fetch error:', err);
                         document.getElementById('recent-sales-container').innerHTML = 
@@ -7093,14 +7556,52 @@ est. APR 58.53 %"></textarea>
             }
 
 
-            // --- Main Execution ---
-            updateUI(); // Initial UI setup with static data & trigger live fetch
-            setupInfoModals(); // Setup general info modals
-            buildLogoModal(); // Build the logo modal content
-            setupSnapshotModal(); // Setup snapshot modal functionality
-            setupChartIcons(); // Setup historical chart icons on tiles
-            setupUnclaimedRewards(); // Setup unclaimed rewards tile and modal
-            setupNftMarketplace(); // Setup NFT marketplace section
+            // --- Main Execution (Progressive Loading) ---
+            // Phase 1: Immediate - UI setup, no network
+            setupInfoModals();
+            buildLogoModal();
+            setupSnapshotModal();
+            setupChartIcons();
+            setupUnclaimedRewards();
+            
+            // Phase 2: Critical data (above the fold) - prices & basic stats
+            updateUI(); // This fetches prices and core data
+            
+            console.log(`DEBUG: Initial setup completed in ${((performance.now() - pageLoadStart) / 1000).toFixed(2)}s (data still loading async)`);
+            
+            // Phase 3: Deferred - Marketplace section (below the fold)
+            // Only load when user scrolls near it
+            const marketplaceSection = document.getElementById('nft-marketplace-section');
+            if (marketplaceSection) {
+                let marketplaceLoaded = false;
+                
+                const marketplaceObserver = new IntersectionObserver((entries) => {
+                    entries.forEach(entry => {
+                        if (entry.isIntersecting && !marketplaceLoaded) {
+                            marketplaceLoaded = true;
+                            console.log('Loading marketplace data (scrolled into view)...');
+                            setupNftMarketplace();
+                            marketplaceObserver.disconnect();
+                        }
+                    });
+                }, {
+                    rootMargin: '200px' // Start loading 200px before visible
+                });
+                
+                marketplaceObserver.observe(marketplaceSection);
+                
+                // Fallback: Load after 5 seconds if user hasn't scrolled
+                setTimeout(() => {
+                    if (!marketplaceLoaded) {
+                        marketplaceLoaded = true;
+                        console.log('Loading marketplace data (timeout fallback)...');
+                        setupNftMarketplace();
+                        marketplaceObserver.disconnect();
+                    }
+                }, 5000);
+            } else {
+                setupNftMarketplace();
+            }
 
             // --- Disclaimer Banner Logic ---
             const banner = document.getElementById('disclaimer-banner');
