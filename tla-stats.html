@@ -2096,6 +2096,12 @@
                 const config = await response.json();
                 store.siteConfig = config;
                 
+                // Check site_status first - show maintenance if not live
+                if (config.site_status?.live === false) {
+                    showMaintenanceMode(config.site_status.message);
+                    return; // Don't load the rest if in maintenance
+                }
+                
                 // Update siteConfig with loaded values
                 if (config.scoring) {
                     if (config.scoring.weights) siteConfig.scoring.weights = config.scoring.weights;
@@ -2124,6 +2130,28 @@
         } catch (err) {
             console.log('Site config fetch error (using defaults):', err.message);
         }
+    }
+    
+    function showMaintenanceMode(message) {
+        // Create and show maintenance overlay
+        const overlay = document.createElement('div');
+        overlay.id = 'maintenance-overlay';
+        overlay.className = 'fixed inset-0 bg-[#0a0b0f]/95 z-50 flex items-center justify-center';
+        overlay.innerHTML = `
+            <div class="max-w-lg mx-4 text-center">
+                <div class="w-20 h-20 mx-auto mb-6 rounded-full bg-amber-500/20 flex items-center justify-center">
+                    <i class="fas fa-tools text-4xl text-amber-400"></i>
+                </div>
+                <h1 class="text-2xl font-bold text-white mb-4">Under Construction</h1>
+                <p class="text-gray-400 mb-6">${message || 'TLA Stats is currently under maintenance. Please check back soon.'}</p>
+                <a href="index.html" class="inline-flex items-center gap-2 px-6 py-3 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/30 rounded-lg text-cyan-400 transition-colors">
+                    <i class="fas fa-arrow-left"></i>
+                    Return to Alliance DAO
+                </a>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+        console.log('Maintenance mode enabled');
     }
     
     function updateSecondaryDexLink() {
@@ -2292,6 +2320,91 @@
     }
     
     // ============================================================
+    // DATA NORMALIZATION (v3 format compatibility)
+    // ============================================================
+    // Converts v3 nested structure to flat pool objects for UI compatibility
+    function normalizePoolData(data) {
+        // Check if this is v3 format (has vote.pools)
+        if (data.vote?.pools) {
+            console.log('Detected v3 data format, normalizing...');
+            return data.vote.pools.map(p => ({
+                // Core identifiers (unchanged)
+                name: p.name,
+                dex: p.dex,
+                dex_raw: p.dex_raw || p.dex,
+                bucket: p.bucket,
+                is_active: p.is_active,
+                
+                // Vote data (unchanged)
+                vp: p.vp,
+                vote_pct: p.vote_pct,
+                depth: p.depth,
+                
+                // aDAO data (unchanged)
+                adao_vp: p.adao_vp,
+                adao_pct: p.adao_pct,
+                
+                // APR - flatten (v3 uses apr_non, apr_amp)
+                apr_non_amp: p.apr_non,
+                apr_non: p.apr_non,
+                apr_amplified: p.apr_amp,
+                apr_amp: p.apr_amp,
+                apr_factor: p.apr_factor,
+                
+                // Bribes - flatten nested object
+                bribes_total: p.bribes?.total || 0,
+                bribes_pd: p.bribes?.pd || 0,
+                bribes_other: p.bribes?.other || 0,
+                bribes: p.bribes, // Keep original too
+                
+                // Votion - flatten nested object
+                votion_now_vp: p.votion?.current_vp || 0,
+                votion_now_pct: p.votion?.current_pct || 0,
+                votion_next_vp: p.votion?.next_vp || 0,
+                votion_next_pct: p.votion?.next_pct || 0,
+                votion_change_vp: p.votion?.change_vp || 0,
+                votion_change_pct: p.votion?.change_pct || 0,
+                votion: p.votion, // Keep original too
+                
+                // Historical - flatten nested object
+                efficiency: p.historical?.efficiency || 0,
+                liq_4ep_avg: p.historical?.liq_4ep_avg || 0,
+                liq_4ep_count: p.historical?.liq_4ep_count || 0,
+                vol_4ep_avg: p.historical?.vol_4ep_avg || 0,
+                vol_4ep_count: p.historical?.vol_4ep_count || 0,
+                historical: p.historical, // Keep original too
+                
+                // Scores - flatten nested object
+                calc_score: p.scores?.adao_opportunity || 0,
+                calc_access: p.scores?.access || 0,
+                calc_perf: p.scores?.performance || 0,
+                calc_support: p.scores?.support || 0,
+                scores: p.scores, // Keep original too
+                
+                // Grade inclusion
+                included_in_grade: p.included_in_grade
+            }));
+        }
+        
+        // Legacy format - return as-is
+        console.log('Using legacy data format');
+        return data.pools || [];
+    }
+    
+    // Normalize previous epoch data for trend comparison
+    function normalizePreviousEpochData(data) {
+        if (!data) return null;
+        if (data.vote?.pools) {
+            // v3 format
+            return {
+                ...data,
+                pools: normalizePoolData(data)
+            };
+        }
+        return data;
+    }
+    
+    // ============================================================
     // DATA LOADING
     // ============================================================
     async function loadEpochData(epoch, phase) {
@@ -2312,11 +2425,20 @@
             store.epoch = epoch;
             store.phase = phase;
             
-            // Extract pools
-            store.pools = data.pools || [];
-            store.tlaPools = data.tla?.pools || [];
-            store.tlaInactivePools = data.tla?.inactive_pools || [];
-            store.dao = data.dao || null;
+            // Normalize data structure (handle both v3 and legacy formats)
+            const normalizedPools = normalizePoolData(data);
+            store.pools = normalizedPools;
+            
+            // Extract TLA liquidity pools
+            store.tlaPools = data.liquidity?.tla_pools || data.tla?.pools || [];
+            store.tlaInactivePools = data.liquidity?.inactive_pools || data.tla?.inactive_pools || [];
+            store.dao = data.liquidity?.dao_deposits || data.dao || null;
+            
+            // Check site status (v3 format)
+            if (data.meta?.site_status?.live === false) {
+                console.log('Site is in maintenance mode:', data.meta.site_status.message);
+                // Could show maintenance banner here if needed
+            }
             
             // Try to fetch matching aDAO snap (with fallback to previous epoch)
             store.adaoSnapSource = null; // Track where we got the price from
@@ -2377,7 +2499,8 @@
                     ]);
                     
                     if (prevResponse?.ok) {
-                        store.previousEpochData = await prevResponse.json();
+                        const prevData = await prevResponse.json();
+                        store.previousEpochData = normalizePreviousEpochData(prevData);
                         store.previousEpochNumber = prevEpoch;
                         prevLoaded = true;
                         console.log(`Previous epoch data loaded: E${prevEpoch}${lookback > 1 ? ` (gap detected - skipped ${lookback - 1} missing epoch(s))` : ''}`);

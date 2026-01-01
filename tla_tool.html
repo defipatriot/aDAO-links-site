@@ -426,11 +426,14 @@
     <div id="tab-nft" class="tab-btn tab-incomplete" onclick="switchTab('nft')">
         <span class="tab-status">●</span> 6. NFT Stats
     </div>
+    <div id="tab-alliances" class="tab-btn tab-incomplete" onclick="switchTab('alliances')">
+        <span class="tab-status">●</span> 7. Alliances
+    </div>
     <div id="tab-dao-gov" class="tab-btn tab-incomplete" onclick="switchTab('dao-gov')">
-        <span class="tab-status">●</span> 7. DAO Gov
+        <span class="tab-status">●</span> 8. DAO Gov
     </div>
     <div id="tab-news" class="tab-btn tab-incomplete" onclick="switchTab('news')">
-        <span class="tab-status">●</span> 8. News
+        <span class="tab-status">●</span> 9. News
     </div>
     <div id="tab-config" class="tab-btn" onclick="switchTab('config')">
         ⚙️ Config
@@ -866,6 +869,34 @@
         
         <!-- Config Sections -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            
+            <!-- Site Status - NEW -->
+            <div class="bg-[#161616] p-4 rounded border border-red-900/50 lg:col-span-2">
+                <h3 class="text-red-400 font-bold text-sm mb-3 border-b border-red-700/50 pb-2">🚦 TLA Stats Page Status</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="text-[10px] text-gray-500 uppercase mb-1 block">Site Status</label>
+                        <div class="flex items-center gap-3">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="radio" name="site-status" id="cfg-site-live" value="live" class="accent-green-500">
+                                <span class="text-[11px] text-green-400">🟢 Live</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="radio" name="site-status" id="cfg-site-maintenance" value="maintenance" checked class="accent-red-500">
+                                <span class="text-[11px] text-red-400">🔴 Under Construction</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="text-[10px] text-gray-500 uppercase mb-1 block">Maintenance Message</label>
+                        <textarea id="cfg-site-message" class="input-dark w-full text-[11px] h-16" placeholder="Message to show when site is under construction...">Unfortunately, TLA Stats is currently under construction. We are working on getting this fixed and hope to have stats available in the near future.</textarea>
+                    </div>
+                </div>
+                <div class="mt-3 p-2 bg-gray-900/50 rounded text-[10px]">
+                    <span class="text-gray-500">Preview:</span>
+                    <span id="site-status-preview" class="ml-2 text-red-400">🔴 Under Construction</span>
+                </div>
+            </div>
             
             <!-- General Settings -->
             <div class="bg-[#161616] p-4 rounded border border-gray-800">
@@ -1633,7 +1664,283 @@
     </div>
 </div>
 
-<!-- WS 7: DAO GOVERNANCE -->
+<!-- WS 7: ALLIANCES -->
+<div id="ws-alliances" class="workspace">
+    <div class="bg-[#161616] border border-amber-900/50 rounded-lg p-4 mb-4">
+        <div class="flex justify-between items-center mb-3">
+            <div class="flex items-center gap-3">
+                <i class="fas fa-handshake text-amber-400 text-xl"></i>
+                <div>
+                    <h2 class="text-amber-400 font-bold text-sm">Alliances</h2>
+                    <p class="text-gray-500 text-[10px]">Track Alliance DAO partnerships and staked positions</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <span id="alliance-apr-status" class="text-[9px] text-gray-500"></span>
+                <span id="alliances-status" class="px-3 py-1 rounded text-[10px] font-bold bg-gray-800 text-gray-400">Not Started</span>
+            </div>
+        </div>
+        
+        <!-- Lion DAO Alliance -->
+        <div class="border border-amber-800/50 rounded-lg p-4 mb-4 bg-amber-900/10">
+            <div class="flex justify-between items-center mb-4">
+                <div class="flex items-center gap-2">
+                    <span class="text-2xl">🦁</span>
+                    <div>
+                        <h3 class="text-amber-300 font-bold">Lion DAO Alliance</h3>
+                        <p class="text-[10px] text-gray-500">Established: August 2025</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Chain Staking Section -->
+            <div class="mb-4 bg-[#0D0D0D] rounded-lg p-3 border border-gray-800">
+                <div class="flex items-center gap-2 mb-3 cursor-pointer" onclick="toggleAllianceSection('chain-staking')">
+                    <i class="fas fa-chevron-down text-gray-500 text-[10px]" id="chain-staking-chevron"></i>
+                    <i class="fas fa-layer-group text-blue-400"></i>
+                    <span class="text-blue-300 font-bold text-sm">Chain Staking</span>
+                    <span class="text-[9px] text-gray-500 ml-2">LUNA staked to validators</span>
+                </div>
+                <div id="chain-staking-content">
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                        <div>
+                            <label class="text-[9px] text-gray-500 block mb-1">Validator</label>
+                            <input type="text" id="alliance-validator-name" value="Lion DAO" class="input-dark w-full text-[11px]" placeholder="Validator name">
+                        </div>
+                        <div>
+                            <label class="text-[9px] text-gray-500 block mb-1">Staked LUNA</label>
+                            <input type="number" id="alliance-staked-luna" value="10000" class="input-dark w-full text-[11px]" placeholder="Amount">
+                        </div>
+                        <div>
+                            <label class="text-[9px] text-gray-500 block mb-1">Pending Rewards</label>
+                            <input type="number" id="alliance-pending-luna" value="0" step="0.000001" class="input-dark w-full text-[11px]" placeholder="LUNA">
+                        </div>
+                        <div>
+                            <label class="text-[9px] text-gray-500 block mb-1">Staking APR %</label>
+                            <div class="flex gap-1">
+                                <input type="number" id="alliance-staking-apr" value="0" step="0.01" class="input-dark flex-1 text-[11px]" placeholder="APR %" readonly>
+                                <span id="alliance-apr-date" class="text-[8px] text-gray-600 self-center">--</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-3 gap-3 mb-3">
+                        <div>
+                            <label class="text-[9px] text-gray-500 block mb-1">Validator Address</label>
+                            <input type="text" id="alliance-validator-address" value="terravaloper1dcegyrekltswvyy0xy69ydgxn9x8x32zdtapd8" class="input-dark w-full text-[10px] font-mono" placeholder="terravaloper...">
+                        </div>
+                        <div>
+                            <label class="text-[9px] text-gray-500 block mb-1">Prop ID</label>
+                            <input type="text" id="alliance-staking-prop" value="A23" class="input-dark w-full text-[11px]" placeholder="e.g. A23">
+                        </div>
+                        <div>
+                            <label class="text-[9px] text-gray-500 block mb-1">Last Claim</label>
+                            <div class="flex gap-1">
+                                <select id="alliance-staking-claim-status" class="input-dark text-[11px] w-20" onchange="toggleClaimDate('staking')">
+                                    <option value="never">Never</option>
+                                    <option value="date">Date:</option>
+                                </select>
+                                <input type="date" id="alliance-staking-last-claim" class="input-dark flex-1 text-[11px] hidden">
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Paste Parser for Chain Staking -->
+                    <div class="mt-3 pt-3 border-t border-gray-800">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-[10px] text-gray-400"><i class="fas fa-paste mr-1"></i> Paste from DAO Treasury LUNA popup</span>
+                            <button onclick="parseChainStakingPaste()" class="text-[9px] bg-blue-800 hover:bg-blue-700 px-2 py-1 rounded">Parse</button>
+                        </div>
+                        <textarea id="chain-staking-paste" class="input-dark w-full h-20 text-[10px] font-mono" placeholder="Paste LUNA staking info from DAO Treasury popup..."></textarea>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- ROAR DAO Stake Section -->
+            <div class="mb-4 bg-[#0D0D0D] rounded-lg p-3 border border-gray-800">
+                <div class="flex items-center gap-2 mb-3 cursor-pointer" onclick="toggleAllianceSection('roar-stake')">
+                    <i class="fas fa-chevron-down text-gray-500 text-[10px]" id="roar-stake-chevron"></i>
+                    <i class="fas fa-coins text-yellow-400"></i>
+                    <span class="text-yellow-300 font-bold text-sm">ROAR DAO Stake</span>
+                    <span class="text-[9px] text-gray-500 ml-2">1B ROAR staked in Lion DAO</span>
+                </div>
+                <div id="roar-stake-content">
+                    <div class="grid grid-cols-3 gap-3 mb-3">
+                        <div>
+                            <label class="text-[9px] text-gray-500 block mb-1">Staked ROAR</label>
+                            <input type="number" id="alliance-staked-roar" value="1000000000" class="input-dark w-full text-[11px]" placeholder="Amount">
+                        </div>
+                        <div>
+                            <label class="text-[9px] text-gray-500 block mb-1">Voting Power %</label>
+                            <input type="number" id="alliance-roar-vp" value="0" step="0.0001" class="input-dark w-full text-[11px]" placeholder="VP %">
+                        </div>
+                        <div>
+                            <label class="text-[9px] text-gray-500 block mb-1">Last Claim</label>
+                            <div class="flex gap-1">
+                                <select id="alliance-roar-claim-status" class="input-dark text-[11px] w-20" onchange="toggleClaimDate('roar')">
+                                    <option value="never">Never</option>
+                                    <option value="date">Date:</option>
+                                </select>
+                                <input type="date" id="alliance-roar-last-claim" class="input-dark flex-1 text-[11px] hidden">
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Unclaimed Rewards - Dynamic List -->
+                    <div class="mb-3">
+                        <label class="text-[9px] text-gray-500 block mb-2">Unclaimed Rewards</label>
+                        <div id="roar-rewards-list" class="flex flex-wrap gap-2">
+                            <!-- Populated dynamically -->
+                            <span class="text-[10px] text-gray-600 italic">No unclaimed rewards</span>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3 mb-3">
+                        <div>
+                            <label class="text-[9px] text-gray-500 block mb-1">DAO Address</label>
+                            <input type="text" id="alliance-roar-dao-address" value="terra10cux5xr5tj5xvlttmgmzxrh8xhqf86lkq47465fhtqrmmev2p5kq63dykf" class="input-dark w-full text-[10px] font-mono" readonly>
+                        </div>
+                        <div>
+                            <label class="text-[9px] text-gray-500 block mb-1">Prop ID</label>
+                            <input type="text" id="alliance-roar-prop" value="A22" class="input-dark w-full text-[11px]" placeholder="e.g. A22">
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <a href="https://daodao.zone/dao/terra10cux5xr5tj5xvlttmgmzxrh8xhqf86lkq47465fhtqrmmev2p5kq63dykf/home" target="_blank" class="text-[9px] text-yellow-400 hover:text-yellow-300 bg-yellow-900/30 px-2 py-1 rounded border border-yellow-900/50">
+                            <i class="fas fa-external-link-alt mr-1"></i> View on DAODAO
+                        </a>
+                    </div>
+                    <!-- Paste Parser for Lion DAO -->
+                    <div class="mt-3 pt-3 border-t border-gray-800">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-[10px] text-gray-400"><i class="fas fa-paste mr-1"></i> Paste from DAODAO Lion DAO page</span>
+                            <button onclick="parseLionDaoPaste()" class="text-[9px] bg-yellow-800 hover:bg-yellow-700 px-2 py-1 rounded">Parse</button>
+                        </div>
+                        <textarea id="lion-dao-paste" class="input-dark w-full h-20 text-[10px] font-mono" placeholder="Paste full page from Lion DAO on DAODAO..."></textarea>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- pixeLions DAO Stake Section -->
+            <div class="mb-4 bg-[#0D0D0D] rounded-lg p-3 border border-gray-800">
+                <div class="flex items-center gap-2 mb-3 cursor-pointer" onclick="toggleAllianceSection('pixelions-stake')">
+                    <i class="fas fa-chevron-down text-gray-500 text-[10px]" id="pixelions-stake-chevron"></i>
+                    <i class="fas fa-image text-purple-400"></i>
+                    <span class="text-purple-300 font-bold text-sm">pixeLions DAO Stake</span>
+                    <span class="text-[9px] text-gray-500 ml-2">20 NFTs staked</span>
+                </div>
+                <div id="pixelions-stake-content">
+                    <div class="grid grid-cols-3 gap-3 mb-3">
+                        <div>
+                            <label class="text-[9px] text-gray-500 block mb-1">Staked NFTs</label>
+                            <div class="flex gap-1 items-center">
+                                <input type="number" id="alliance-staked-nfts" value="20" class="input-dark w-16 text-[11px]" placeholder="#">
+                                <span class="text-[10px] text-gray-500">/ 5000</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-[9px] text-gray-500 block mb-1">Voting Power %</label>
+                            <input type="number" id="alliance-pixelions-vp" value="0" step="0.0001" class="input-dark w-full text-[11px]" placeholder="VP %">
+                        </div>
+                        <div>
+                            <label class="text-[9px] text-gray-500 block mb-1">Last Claim</label>
+                            <div class="flex gap-1">
+                                <select id="alliance-pixelions-claim-status" class="input-dark text-[11px] w-20" onchange="toggleClaimDate('pixelions')">
+                                    <option value="never">Never</option>
+                                    <option value="date">Date:</option>
+                                </select>
+                                <input type="date" id="alliance-pixelions-last-claim" class="input-dark flex-1 text-[11px] hidden">
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Unclaimed Rewards - Dynamic List -->
+                    <div class="mb-3">
+                        <label class="text-[9px] text-gray-500 block mb-2">Unclaimed Rewards</label>
+                        <div id="pixelions-rewards-list" class="flex flex-wrap gap-2">
+                            <!-- Populated dynamically -->
+                            <span class="text-[10px] text-gray-600 italic">No unclaimed rewards</span>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3 mb-3">
+                        <div>
+                            <label class="text-[9px] text-gray-500 block mb-1">DAO Address</label>
+                            <input type="text" id="alliance-pixelions-dao-address" value="terra1xrp5qcy2gdal9c2d2vl6xnk2gq3uqk4upnhdnd3wlnlwp20r2nhqrkpzjh" class="input-dark w-full text-[10px] font-mono" readonly>
+                        </div>
+                        <div>
+                            <label class="text-[9px] text-gray-500 block mb-1">Prop ID</label>
+                            <input type="text" id="alliance-pixelions-prop" value="A21" class="input-dark w-full text-[11px]" placeholder="e.g. A21">
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <a href="https://daodao.zone/dao/terra1xrp5qcy2gdal9c2d2vl6xnk2gq3uqk4upnhdnd3wlnlwp20r2nhqrkpzjh/home" target="_blank" class="text-[9px] text-purple-400 hover:text-purple-300 bg-purple-900/30 px-2 py-1 rounded border border-purple-900/50">
+                            <i class="fas fa-external-link-alt mr-1"></i> View on DAODAO
+                        </a>
+                    </div>
+                    <!-- Paste Parser for pixeLions -->
+                    <div class="mt-3 pt-3 border-t border-gray-800">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-[10px] text-gray-400"><i class="fas fa-paste mr-1"></i> Paste from DAODAO pixeLions page</span>
+                            <button onclick="parsePixelionsPaste()" class="text-[9px] bg-purple-800 hover:bg-purple-700 px-2 py-1 rounded">Parse</button>
+                        </div>
+                        <textarea id="pixelions-paste" class="input-dark w-full h-20 text-[10px] font-mono" placeholder="Paste full page from pixeLions DAO on DAODAO..."></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Council Treasury -->
+        <div class="border border-gray-700 rounded-lg p-4 mb-4 bg-gray-900/30">
+            <div class="flex justify-between items-center mb-3">
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-vault text-gray-400"></i>
+                    <span class="text-gray-300 font-bold text-sm">Council Treasury</span>
+                </div>
+                <a href="https://chainsco.pe/terra2/address/terra1yqv0af22675wlcmgflxk4ve07vt8qlm999gk0cuw5l64r5xxgadsyg8ywv" target="_blank" class="text-[9px] text-cyan-400 hover:text-cyan-300 bg-cyan-900/30 px-2 py-1 rounded border border-cyan-900/50">
+                    <i class="fas fa-external-link-alt mr-1"></i> View on Chainscope
+                </a>
+            </div>
+            <div class="text-[10px] font-mono text-gray-500 bg-[#0D0D0D] p-2 rounded">
+                terra1yqv0af22675wlcmgflxk4ve07vt8qlm999gk0cuw5l64r5xxgadsyg8ywv
+            </div>
+            <p class="text-[9px] text-gray-600 mt-2">Balances queried live by dashboard</p>
+        </div>
+        
+        <!-- Summary Preview -->
+        <div class="bg-[#0D0D0D] border border-gray-800 rounded-lg p-4">
+            <h4 class="text-gray-400 font-bold text-sm mb-3"><i class="fas fa-chart-pie mr-2"></i>Alliance Summary</h4>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="text-center">
+                    <div class="text-[10px] text-gray-500">Staked LUNA</div>
+                    <div id="alliance-summary-luna" class="text-lg font-bold text-blue-400">10,000</div>
+                    <div id="alliance-summary-luna-rewards" class="text-[10px] text-green-400">+0 pending</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-[10px] text-gray-500">Staked ROAR</div>
+                    <div id="alliance-summary-roar" class="text-lg font-bold text-yellow-400">1.0B</div>
+                    <div id="alliance-summary-roar-rewards" class="text-[10px] text-gray-500">--</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-[10px] text-gray-500">pixeLions NFTs</div>
+                    <div id="alliance-summary-nfts" class="text-lg font-bold text-purple-400">20</div>
+                    <div id="alliance-summary-nft-vp" class="text-[10px] text-gray-500">0% VP</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-[10px] text-gray-500">Staking APR</div>
+                    <div id="alliance-summary-apr" class="text-lg font-bold text-cyan-400">--%</div>
+                    <div id="alliance-summary-apr-date" class="text-[10px] text-gray-500">--</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Save Button -->
+        <div class="flex justify-end mt-4 gap-2">
+            <button onclick="refreshAllianceSummary()" class="text-[10px] bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded font-bold">
+                <i class="fas fa-sync-alt mr-1"></i> Refresh Summary
+            </button>
+            <button onclick="saveAlliancesData()" class="text-[10px] bg-amber-800 hover:bg-amber-700 px-4 py-2 rounded font-bold">
+                <i class="fas fa-save mr-1"></i> Save Alliances
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- WS 8: DAO GOVERNANCE -->
 <div id="ws-dao-gov" class="workspace">
     <div class="bg-[#161616] border border-blue-900/50 rounded-lg p-4 mb-4">
         <div class="flex justify-between items-center mb-3">
@@ -2672,6 +2979,53 @@ let store = {
         boostListingsTotal: 0,
         boostListingItems: [],
         manual: null
+    },
+    // Alliances data (Lion DAO partnership, etc.)
+    alliances: {
+        lion_dao: {
+            description: "Alliance with Lion DAO ecosystem",
+            established: "2025-08-01",
+            chain_staking: {
+                validators: [{
+                    name: "Lion DAO",
+                    address: "terravaloper1dcegyrekltswvyy0xy69ydgxn9x8x32zdtapd8",
+                    staked_luna: 10000,
+                    unclaimed_rewards_luna: 0,
+                    staked_date: "2025-08-05T07:49:00Z",
+                    prop_id: "A23"
+                }],
+                total_staked_luna: 10000,
+                total_unclaimed_luna: 0,
+                staking_apr_pct: 0,
+                staking_apr_date: null,
+                last_claim_date: null
+            },
+            roar_dao_stake: {
+                dao_name: "Lion DAO",
+                dao_address: "terra10cux5xr5tj5xvlttmgmzxrh8xhqf86lkq47465fhtqrmmev2p5kq63dykf",
+                staked_roar: 1000000000,
+                voting_power_pct: 0,
+                unclaimed_rewards: { ROAR: 0, LUNA: 0 },
+                staked_date: "2025-08-05T07:43:00Z",
+                prop_id: "A22",
+                last_claim_date: null
+            },
+            pixelions_dao_stake: {
+                dao_name: "pixeLions DAO",
+                dao_address: "terra1xrp5qcy2gdal9c2d2vl6xnk2gq3uqk4upnhdnd3wlnlwp20r2nhqrkpzjh",
+                staked_nfts: 20,
+                total_supply: 5000,
+                voting_power_pct: 0,
+                unclaimed_rewards: { ROAR: 0, DROGO: 0 },
+                staked_date: "2025-08-01T04:21:00Z",
+                prop_id: "A21",
+                last_claim_date: null
+            }
+        },
+        council_treasury: {
+            address: "terra1yqv0af22675wlcmgflxk4ve07vt8qlm999gk0cuw5l64r5xxgadsyg8ywv",
+            description: "Council multisig wallet"
+        }
     }
 };
 
@@ -2686,7 +3040,8 @@ let pasteStatus = {
     locks: false,
     ext: false,
     assetMetaVerified: false,  // Asset metadata reviewed/updated
-    assetMetaNewAssets: []     // New assets found that need review
+    assetMetaNewAssets: [],    // New assets found that need review
+    alliances: false           // Alliances data verified
 };
 
 // Fallback status - tracks which sections used fallback
@@ -6378,6 +6733,11 @@ function switchTab(t) {
     if (t === 'asset-meta' && Object.keys(assetMetadata).length === 0) {
         loadMetadataFromGitHub();
     }
+    
+    // Auto-initialize alliances tab (loads APR, etc.)
+    if (t === 'alliances') {
+        initAlliancesTab();
+    }
 }
 
 // Update tab step indicator status
@@ -6443,6 +6803,15 @@ function updateAllTabStatuses() {
     
     // NFT Stats tab - placeholder
     updateTabStatus('nft', 'incomplete');
+    
+    // Alliances tab - complete if alliances data saved
+    if (pasteStatus.alliances) {
+        updateTabStatus('alliances', 'complete');
+    } else if (store.alliances?.lion_dao?.chain_staking?.staking_apr_pct > 0) {
+        updateTabStatus('alliances', 'partial');
+    } else {
+        updateTabStatus('alliances', 'incomplete');
+    }
     
     // DAO Gov tab - placeholder
     updateTabStatus('dao-gov', 'incomplete');
@@ -6560,9 +6929,15 @@ function calculateAndRenderScores() {
 
 // === CONFIG EDITOR ===
 function generateConfigJSON() {
+    const siteIsLive = $('cfg-site-live')?.checked || false;
     const config = {
         version: 1,
         updated: new Date().toISOString().split('T')[0],
+        site_status: {
+            live: siteIsLive,
+            message: siteIsLive ? null : ($('cfg-site-message')?.value || 'TLA Stats is currently under construction.'),
+            last_updated: new Date().toISOString().split('T')[0]
+        },
         general: {
             currentEpoch: parseInt($('cfg-epoch')?.value) || 161,
             defaultPhase: $('cfg-phase')?.value || 'end'
@@ -6625,6 +7000,11 @@ function copyConfigJSON() {
 }
 
 function resetConfigDefaults() {
+    // Site status
+    $('cfg-site-maintenance').checked = true;
+    $('cfg-site-message').value = 'Unfortunately, TLA Stats is currently under construction. We are working on getting this fixed and hope to have stats available in the near future.';
+    updateSiteStatusPreview();
+    
     // General
     $('cfg-epoch').value = 161;
     $('cfg-phase').value = 'end';
@@ -6681,7 +7061,25 @@ document.addEventListener('DOMContentLoaded', () => {
     ['cfg-accessWeight', 'cfg-perfWeight', 'cfg-supportWeight'].forEach(id => {
         $(id)?.addEventListener('input', updateWeightTotal);
     });
+    
+    // Site status preview updates
+    $('cfg-site-live')?.addEventListener('change', updateSiteStatusPreview);
+    $('cfg-site-maintenance')?.addEventListener('change', updateSiteStatusPreview);
 });
+
+function updateSiteStatusPreview() {
+    const preview = $('site-status-preview');
+    if (!preview) return;
+    
+    const isLive = $('cfg-site-live')?.checked;
+    if (isLive) {
+        preview.textContent = '🟢 Live - Stats page is active';
+        preview.className = 'ml-2 text-green-400';
+    } else {
+        preview.textContent = '🔴 Under Construction - Maintenance message will be shown';
+        preview.className = 'ml-2 text-red-400';
+    }
+}
 
 // === VOTE PARSING ===
 function normalizeName(name) {
@@ -8107,6 +8505,11 @@ function buildExportData() {
             phase: exportPhase,
             generated_at: exportTimestamp,
             source: 'TLA Admin Core v3',
+            site_status: {
+                live: $('cfg-site-live')?.checked || false,
+                message: $('cfg-site-live')?.checked ? null : ($('cfg-site-message')?.value || 'TLA Stats is currently under construction.'),
+                last_updated: new Date().toISOString().split('T')[0]
+            },
             export_filters: {
                 astroport: exportAstro,
                 skeleton_swap: exportWW,
@@ -8414,6 +8817,11 @@ function buildDashboardData() {
             total_ampLUNA: store.dashboard.unmintedBackingAmp || 0,
             total_LUNA_equivalent: store.dashboard.unmintedBackingLuna || 0,
             total_USD: store.dashboard.unmintedBackingUsd || 0
+        },
+        alliances: store.alliances || {},
+        council_treasury: store.alliances?.council_treasury || {
+            address: "terra1yqv0af22675wlcmgflxk4ve07vt8qlm999gk0cuw5l64r5xxgadsyg8ywv",
+            description: "Council multisig wallet"
         }
     };
 }
@@ -9640,6 +10048,363 @@ function saveNftStats() {
     
     updateTabStatus('nft', 'complete');
 }
+
+// ========== SECTION 7: ALLIANCES ==========
+
+// Auto-load APR flag to prevent multiple loads
+let alliancesAprLoaded = false;
+
+function toggleAllianceSection(sectionId) {
+    const content = $(`${sectionId}-content`);
+    const chevron = $(`${sectionId}-chevron`);
+    if (content && chevron) {
+        content.classList.toggle('hidden');
+        chevron.classList.toggle('fa-chevron-down');
+        chevron.classList.toggle('fa-chevron-right');
+    }
+}
+
+function toggleClaimDate(section) {
+    const status = $(`alliance-${section}-claim-status`);
+    const dateInput = $(`alliance-${section}-last-claim`);
+    if (status && dateInput) {
+        if (status.value === 'date') {
+            dateInput.classList.remove('hidden');
+        } else {
+            dateInput.classList.add('hidden');
+            dateInput.value = '';
+        }
+    }
+}
+
+async function loadStakingAprFromCsv(showAlert = true) {
+    try {
+        const statusEl = $('alliance-apr-status');
+        if (statusEl) statusEl.textContent = 'Loading APR...';
+        
+        const url = 'https://raw.githubusercontent.com/defipatriot/tla-ext_json_storage/main/Staking%20APR.csv';
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error('Failed to fetch CSV');
+        
+        const text = await resp.text();
+        const lines = text.trim().split('\n');
+        if (lines.length < 2) throw new Error('CSV has no data rows');
+        
+        // Parse last row (most recent)
+        const lastLine = lines[lines.length - 1];
+        // Format: "2025-12-27","22.2959"
+        const match = lastLine.match(/"([^"]+)","([^"]+)"/);
+        if (!match) throw new Error('Could not parse CSV row');
+        
+        const date = match[1];
+        const apr = parseFloat(match[2]);
+        
+        // Update inputs
+        const aprInput = $('alliance-staking-apr');
+        const aprDate = $('alliance-apr-date');
+        if (aprInput) aprInput.value = apr.toFixed(2);
+        if (aprDate) aprDate.textContent = date;
+        
+        // Update store
+        store.alliances.lion_dao.chain_staking.staking_apr_pct = apr;
+        store.alliances.lion_dao.chain_staking.staking_apr_date = date;
+        
+        if (statusEl) statusEl.textContent = `APR: ${apr.toFixed(2)}% (${date})`;
+        
+        alliancesAprLoaded = true;
+        refreshAllianceSummary();
+        
+        if (showAlert) alert(`✅ Loaded staking APR: ${apr.toFixed(2)}% (${date})`);
+    } catch (e) {
+        const statusEl = $('alliance-apr-status');
+        if (statusEl) statusEl.textContent = 'APR load failed';
+        if (showAlert) alert('❌ Failed to load staking APR: ' + e.message);
+    }
+}
+
+function parseChainStakingPaste() {
+    const text = $('chain-staking-paste')?.value || '';
+    if (!text.trim()) {
+        alert('Please paste DAO Treasury LUNA info first');
+        return;
+    }
+    
+    try {
+        // Parse staked amount: "10,000 $LUNA" after "Staked" on its own line
+        const stakedMatch = text.match(/Staked\s*\n([\d,]+(?:\.\d+)?)\s*\$?LUNA/i);
+        if (stakedMatch) {
+            const staked = parseFloat(stakedMatch[1].replace(/,/g, ''));
+            $('alliance-staked-luna').value = staked;
+            store.alliances.lion_dao.chain_staking.total_staked_luna = staked;
+            store.alliances.lion_dao.chain_staking.validators[0].staked_luna = staked;
+        }
+        
+        // Parse pending rewards: "889.02109 $LUNA" after "Pending rewards"
+        const rewardsMatch = text.match(/Pending rewards\s*\n?([\d,]+(?:\.\d+)?)\s*\$?LUNA/i);
+        if (rewardsMatch) {
+            const rewards = parseFloat(rewardsMatch[1].replace(/,/g, ''));
+            $('alliance-pending-luna').value = rewards;
+            store.alliances.lion_dao.chain_staking.total_unclaimed_luna = rewards;
+            store.alliances.lion_dao.chain_staking.validators[0].unclaimed_rewards_luna = rewards;
+        }
+        
+        // Parse validator name: "Staked to...\n🦁 The Lion DAO" or just the name
+        const validatorMatch = text.match(/Staked to[.\s]*\n?🦁?\s*(?:The\s+)?(.+?)(?:\n|Unstaking|$)/i);
+        if (validatorMatch) {
+            const name = validatorMatch[1].trim();
+            $('alliance-validator-name').value = name;
+            store.alliances.lion_dao.chain_staking.validators[0].name = name;
+        }
+        
+        refreshAllianceSummary();
+        $('chain-staking-paste').value = '';
+        alert('✅ Parsed chain staking data');
+    } catch (e) {
+        alert('❌ Parse error: ' + e.message);
+    }
+}
+
+function parseLionDaoPaste() {
+    const text = $('lion-dao-paste')?.value || '';
+    if (!text.trim()) {
+        alert('Please paste Lion DAO page content first');
+        return;
+    }
+    
+    try {
+        // Parse staked ROAR: "1.00B $ROAR staked" or similar
+        const stakedMatch = text.match(/([\d,.]+)([BMK])?\s*\$?ROAR\s+staked/i);
+        if (stakedMatch) {
+            let staked = parseFloat(stakedMatch[1].replace(/,/g, ''));
+            const suffix = stakedMatch[2]?.toUpperCase();
+            if (suffix === 'B') staked *= 1e9;
+            else if (suffix === 'M') staked *= 1e6;
+            else if (suffix === 'K') staked *= 1e3;
+            $('alliance-staked-roar').value = staked;
+            store.alliances.lion_dao.roar_dao_stake.staked_roar = staked;
+        }
+        
+        // Parse voting power: "0.4506%" on line after "Voting power"
+        const vpMatch = text.match(/Voting power\s*\n?([\d.]+)%/i);
+        if (vpMatch) {
+            const vp = parseFloat(vpMatch[1]);
+            $('alliance-roar-vp').value = vp;
+            store.alliances.lion_dao.roar_dao_stake.voting_power_pct = vp;
+        }
+        
+        // Parse rewards from Breakdown section - look for token amounts with $
+        // Pattern: "0.000000  $ROAR\n$0.00" or "31,194,275.725527  $ROAR"
+        const rewards = {};
+        const rewardPattern = /([\d,]+(?:\.\d+)?)\s+\$(\w+)\s*\n?\$[\d.]+/g;
+        let match;
+        while ((match = rewardPattern.exec(text)) !== null) {
+            const amount = parseFloat(match[1].replace(/,/g, ''));
+            const token = match[2];
+            if (amount > 0) {
+                rewards[token] = amount;
+            }
+        }
+        
+        // Update store and display
+        store.alliances.lion_dao.roar_dao_stake.unclaimed_rewards = rewards;
+        renderRewardsList('roar-rewards-list', rewards);
+        
+        refreshAllianceSummary();
+        $('lion-dao-paste').value = '';
+        alert('✅ Parsed Lion DAO data');
+    } catch (e) {
+        alert('❌ Parse error: ' + e.message);
+    }
+}
+
+function parsePixelionsPaste() {
+    const text = $('pixelions-paste')?.value || '';
+    if (!text.trim()) {
+        alert('Please paste pixeLions DAO page content first');
+        return;
+    }
+    
+    try {
+        // Parse staked NFTs: "20 $LION staked"
+        const stakedMatch = text.match(/([\d,]+)\s*\$?LION\s+staked/i);
+        if (stakedMatch) {
+            const staked = parseInt(stakedMatch[1].replace(/,/g, ''));
+            $('alliance-staked-nfts').value = staked;
+            store.alliances.lion_dao.pixelions_dao_stake.staked_nfts = staked;
+        }
+        
+        // Parse voting power: "0.7205%"
+        const vpMatch = text.match(/Voting power\s*\n?([\d.]+)%/i);
+        if (vpMatch) {
+            const vp = parseFloat(vpMatch[1]);
+            $('alliance-pixelions-vp').value = vp;
+            store.alliances.lion_dao.pixelions_dao_stake.voting_power_pct = vp;
+        }
+        
+        // Parse rewards from Breakdown section
+        const rewards = {};
+        const rewardPattern = /([\d,]+(?:\.\d+)?)\s+\$(\w+)\s*\n?\$[\d.]+/g;
+        let match;
+        while ((match = rewardPattern.exec(text)) !== null) {
+            const amount = parseFloat(match[1].replace(/,/g, ''));
+            const token = match[2];
+            if (amount > 0) {
+                rewards[token] = amount;
+            }
+        }
+        
+        // Update store and display
+        store.alliances.lion_dao.pixelions_dao_stake.unclaimed_rewards = rewards;
+        renderRewardsList('pixelions-rewards-list', rewards);
+        
+        refreshAllianceSummary();
+        $('pixelions-paste').value = '';
+        alert('✅ Parsed pixeLions DAO data');
+    } catch (e) {
+        alert('❌ Parse error: ' + e.message);
+    }
+}
+
+function renderRewardsList(containerId, rewards) {
+    const container = $(containerId);
+    if (!container) return;
+    
+    const tokens = Object.entries(rewards).filter(([_, amt]) => amt > 0);
+    
+    if (tokens.length === 0) {
+        container.innerHTML = '<span class="text-[10px] text-gray-600 italic">No unclaimed rewards</span>';
+        return;
+    }
+    
+    const formatNum = (n) => {
+        if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B';
+        if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+        if (n >= 1e3) return (n / 1e3).toFixed(2) + 'K';
+        return n.toLocaleString(undefined, {maximumFractionDigits: 2});
+    };
+    
+    container.innerHTML = tokens.map(([token, amount]) => 
+        `<span class="bg-gray-800 text-gray-300 px-2 py-1 rounded text-[10px]">
+            <span class="text-green-400">${formatNum(amount)}</span> ${token}
+        </span>`
+    ).join('');
+}
+
+function refreshAllianceSummary() {
+    // Read from inputs and update summary display
+    const stakedLuna = parseFloat($('alliance-staked-luna')?.value) || 0;
+    const pendingLuna = parseFloat($('alliance-pending-luna')?.value) || 0;
+    const stakedRoar = parseFloat($('alliance-staked-roar')?.value) || 0;
+    const stakedNfts = parseInt($('alliance-staked-nfts')?.value) || 0;
+    const nftVp = parseFloat($('alliance-pixelions-vp')?.value) || 0;
+    const stakingApr = parseFloat($('alliance-staking-apr')?.value) || 0;
+    const aprDate = $('alliance-apr-date')?.textContent || '--';
+    
+    // Get ROAR rewards summary
+    const roarRewards = store.alliances?.lion_dao?.roar_dao_stake?.unclaimed_rewards || {};
+    const roarRewardTokens = Object.entries(roarRewards).filter(([_, amt]) => amt > 0);
+    
+    // Format numbers
+    const formatNum = (n) => {
+        if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B';
+        if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+        if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+        return n.toLocaleString();
+    };
+    
+    // Update summary cards
+    if ($('alliance-summary-luna')) $('alliance-summary-luna').textContent = formatNum(stakedLuna);
+    if ($('alliance-summary-luna-rewards')) {
+        const pendingText = pendingLuna > 0 ? `+${pendingLuna.toFixed(2)} pending` : 'No pending';
+        $('alliance-summary-luna-rewards').textContent = pendingText;
+        $('alliance-summary-luna-rewards').className = pendingLuna > 0 ? 'text-[10px] text-green-400' : 'text-[10px] text-gray-500';
+    }
+    if ($('alliance-summary-roar')) $('alliance-summary-roar').textContent = formatNum(stakedRoar);
+    if ($('alliance-summary-roar-rewards')) {
+        if (roarRewardTokens.length > 0) {
+            $('alliance-summary-roar-rewards').textContent = roarRewardTokens.map(([t, a]) => `${formatNum(a)} ${t}`).join(', ');
+            $('alliance-summary-roar-rewards').className = 'text-[10px] text-green-400';
+        } else {
+            $('alliance-summary-roar-rewards').textContent = 'No unclaimed';
+            $('alliance-summary-roar-rewards').className = 'text-[10px] text-gray-500';
+        }
+    }
+    if ($('alliance-summary-nfts')) $('alliance-summary-nfts').textContent = stakedNfts;
+    if ($('alliance-summary-nft-vp')) $('alliance-summary-nft-vp').textContent = `${nftVp}% VP`;
+    if ($('alliance-summary-apr')) $('alliance-summary-apr').textContent = stakingApr > 0 ? `${stakingApr.toFixed(2)}%` : '--%';
+    if ($('alliance-summary-apr-date')) $('alliance-summary-apr-date').textContent = aprDate;
+}
+
+function saveAlliancesData() {
+    // Read all inputs and update store
+    const lion = store.alliances.lion_dao;
+    
+    // Chain staking
+    lion.chain_staking.validators[0].name = $('alliance-validator-name')?.value || 'Lion DAO';
+    lion.chain_staking.validators[0].address = $('alliance-validator-address')?.value || '';
+    lion.chain_staking.validators[0].staked_luna = parseFloat($('alliance-staked-luna')?.value) || 0;
+    lion.chain_staking.validators[0].unclaimed_rewards_luna = parseFloat($('alliance-pending-luna')?.value) || 0;
+    lion.chain_staking.validators[0].prop_id = $('alliance-staking-prop')?.value || '';
+    lion.chain_staking.total_staked_luna = lion.chain_staking.validators[0].staked_luna;
+    lion.chain_staking.total_unclaimed_luna = lion.chain_staking.validators[0].unclaimed_rewards_luna;
+    lion.chain_staking.staking_apr_pct = parseFloat($('alliance-staking-apr')?.value) || 0;
+    lion.chain_staking.staking_apr_date = $('alliance-apr-date')?.textContent || null;
+    
+    // Last claim - chain staking
+    const stakingClaimStatus = $('alliance-staking-claim-status')?.value;
+    lion.chain_staking.last_claim_date = stakingClaimStatus === 'never' ? null : ($('alliance-staking-last-claim')?.value || null);
+    
+    // ROAR DAO stake
+    lion.roar_dao_stake.staked_roar = parseFloat($('alliance-staked-roar')?.value) || 0;
+    lion.roar_dao_stake.voting_power_pct = parseFloat($('alliance-roar-vp')?.value) || 0;
+    lion.roar_dao_stake.prop_id = $('alliance-roar-prop')?.value || '';
+    
+    // Last claim - ROAR
+    const roarClaimStatus = $('alliance-roar-claim-status')?.value;
+    lion.roar_dao_stake.last_claim_date = roarClaimStatus === 'never' ? null : ($('alliance-roar-last-claim')?.value || null);
+    
+    // pixeLions DAO stake
+    lion.pixelions_dao_stake.staked_nfts = parseInt($('alliance-staked-nfts')?.value) || 0;
+    lion.pixelions_dao_stake.voting_power_pct = parseFloat($('alliance-pixelions-vp')?.value) || 0;
+    lion.pixelions_dao_stake.prop_id = $('alliance-pixelions-prop')?.value || '';
+    
+    // Last claim - pixeLions
+    const pixelionsClaimStatus = $('alliance-pixelions-claim-status')?.value;
+    lion.pixelions_dao_stake.last_claim_date = pixelionsClaimStatus === 'never' ? null : ($('alliance-pixelions-last-claim')?.value || null);
+    
+    refreshAllianceSummary();
+    pasteStatus.alliances = true;
+    
+    // Update status
+    const status = $('alliances-status');
+    if (status) {
+        status.textContent = 'Saved';
+        status.className = 'px-3 py-1 rounded text-[10px] font-bold bg-green-900/50 text-green-400';
+    }
+    
+    updateTabStatus('alliances', 'complete');
+    alert('✅ Alliances data saved');
+}
+
+// Initialize alliances tab when opened
+function initAlliancesTab() {
+    // Auto-load staking APR if not already loaded
+    if (!alliancesAprLoaded) {
+        loadStakingAprFromCsv(false); // false = don't show alert
+    }
+    
+    // Render any existing rewards
+    if (store.alliances?.lion_dao?.roar_dao_stake?.unclaimed_rewards) {
+        renderRewardsList('roar-rewards-list', store.alliances.lion_dao.roar_dao_stake.unclaimed_rewards);
+    }
+    if (store.alliances?.lion_dao?.pixelions_dao_stake?.unclaimed_rewards) {
+        renderRewardsList('pixelions-rewards-list', store.alliances.lion_dao.pixelions_dao_stake.unclaimed_rewards);
+    }
+    
+    refreshAllianceSummary();
+}
+
+// ========== END ALLIANCES ==========
 
 function validateExportData() {
     let issues = [];
