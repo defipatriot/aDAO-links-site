@@ -1,4 +1,4 @@
-// BUILD: Dec21-v22 - Snapshot with BBL collection stats, improved price extraction, USD everywhere
+// BUILD: Jan02-v1 - DAO Member name search, member names displayed with addresses
 // --- Global Elements ---
 const gallery = document.getElementById('nft-gallery');
 const paginationControls = document.getElementById('pagination-controls');
@@ -83,6 +83,9 @@ const mobileCopyBtn = document.getElementById('mobile-copy-btn');
 // NEW: Paste buttons
 const pasteAddressBtn = document.getElementById('paste-address-btn');
 const mobilePasteBtn = document.getElementById('mobile-paste-btn');
+// NEW: DAO Member buttons
+const daoMemberBtn = document.getElementById('dao-member-btn');
+const mobileDaoMemberBtn = document.getElementById('mobile-dao-member-btn');
 // NEW: Wallet page search elements
 const walletSearchLast4 = document.getElementById('wallet-search-last4');
 const walletLast4Suggestions = document.getElementById('wallet-last4-suggestions');
@@ -110,12 +113,17 @@ let walletMobileSearchMode = 'full';
 // --- Config ---
 const METADATA_URL = "https://cdn.jsdelivr.net/gh/defipatriot/nft-metadata/all_nfts_metadata.json";
 const STATUS_DATA_URL = "https://deving.zone/en/nfts/alliance_daos.json";
+const MEMBERS_CSV_URL = "https://raw.githubusercontent.com/defipatriot/adao_json_storage/main/members.csv";
 const DAO_WALLET_ADDRESS = "terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm";
 const DAO_LOCKED_WALLET_SUFFIXES = ["8ywv", "417v", "6ugw"]; // Added from previous logic
 const itemsPerPage = 20;
 const traitOrder = ["Rarity", "Planet", "Inhabitant", "Object", "Weather", "Light"];
 const filterLayoutOrder = ["Rarity", "Object", "Weather", "Light"];
 const defaultTraitsOn = ["Rarity", "Planet", "Inhabitant", "Object"];
+
+// --- DAO Members Lookup ---
+let addressToMember = {}; // address -> { name, staked, votingPower }
+let memberNames = []; // Array of member names for search
 
 // Planet to Inhabitant mapping (for "Matching Traits" filter)
 // Each planet has its native inhabitant race
@@ -198,7 +206,8 @@ let mapObjects = [];
 let isInitialLoad = true;
 // NEW: Search mode state
 let last4SearchMode = 'ltr'; // 'ltr' = left to right (type 7ulw), 'rtl' = right to left (type wlu7)
-let mobileSearchMode = 'full'; // 'full', 'last4-ltr', 'last4-rtl'
+let mobileSearchMode = 'full'; // 'full', 'last4-ltr', 'last4-rtl', 'member'
+let desktopSearchMode = 'last4-ltr'; // 'last4-ltr', 'last4-rtl', 'member'
 
 
 // --- Utility Functions ---
@@ -229,6 +238,92 @@ function getIpfsFallbackUrl(nftId, ipfsUrl) {
 }
 
 // --- Data Fetching and Processing ---
+
+// Parse members CSV and populate lookup maps
+const fetchAndParseMembers = async () => {
+    try {
+        const response = await fetch(MEMBERS_CSV_URL);
+        if (!response.ok) {
+            console.warn('Could not fetch members CSV:', response.status);
+            return;
+        }
+        const csvText = await response.text();
+        parseMembers(csvText);
+    } catch (error) {
+        console.warn('Error fetching members CSV:', error);
+    }
+};
+
+const parseMembers = (csvText) => {
+    const lines = csvText.split('\n');
+    if (lines.length < 2) return;
+    
+    // Skip header row, parse data rows
+    for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        
+        // Parse CSV with quoted fields
+        const fields = parseCSVLine(line);
+        if (fields.length < 5) continue;
+        
+        const address = fields[0].replace(/"/g, '').trim();
+        const name = fields[1].replace(/"/g, '').trim();
+        const staked = parseInt(fields[3].replace(/"/g, '')) || 0;
+        const votingPower = parseFloat(fields[4].replace(/"/g, '')) || 0;
+        
+        if (address && address.startsWith('terra')) {
+            addressToMember[address] = { name, staked, votingPower };
+            if (name) {
+                memberNames.push({ name, address, staked, votingPower });
+            }
+        }
+    }
+    
+    // Sort member names alphabetically
+    memberNames.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+    console.log(`Loaded ${Object.keys(addressToMember).length} DAO members, ${memberNames.length} with names`);
+};
+
+// Helper to parse CSV line with quoted fields
+const parseCSVLine = (line) => {
+    const fields = [];
+    let current = '';
+    let inQuotes = false;
+    
+    for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"') {
+            inQuotes = !inQuotes;
+        } else if (char === ',' && !inQuotes) {
+            fields.push(current);
+            current = '';
+        } else {
+            current += char;
+        }
+    }
+    fields.push(current);
+    return fields;
+};
+
+// Helper function to get member name for an address
+const getMemberName = (address) => {
+    if (!address) return null;
+    const member = addressToMember[address];
+    return member?.name || null;
+};
+
+// Helper function to format address with member name
+const formatAddressWithMember = (address, shortFormat = true) => {
+    if (!address) return 'N/A';
+    const memberName = getMemberName(address);
+    const shortAddr = shortFormat ? `terra...${address.slice(-4)}` : address;
+    if (memberName) {
+        return `${memberName} (${shortAddr})`;
+    }
+    return shortAddr;
+};
+
 const mergeNftData = (metadata, statusData) => {
     const statusMap = new Map(statusData.nfts.map(nft => [String(nft.id), nft]));
     return metadata.map(nft => {
@@ -272,9 +367,11 @@ const initializeExplorer = async () => {
     showLoading(leaderboardTable, 'Loading holder data...');
     showLoading(walletGallery, 'Search for or select a wallet to see owned NFTs.');
     try {
+        // Fetch all data in parallel (members CSV is non-critical, won't block on error)
         const [metaResponse, statusResponse] = await Promise.all([
             fetch(METADATA_URL),
-            fetch(STATUS_DATA_URL) 
+            fetch(STATUS_DATA_URL),
+            fetchAndParseMembers() // Load DAO members (non-blocking)
         ]);
 
         if (!metaResponse.ok) throw new Error(`Metadata network response was not ok: ${metaResponse.status}`);
@@ -882,22 +979,47 @@ const addAllEventListeners = () => {
     
     // NEW: Last 4 search (Desktop)
     if (searchLast4Input) {
-        searchLast4Input.addEventListener('input', () => handleLast4Input());
+        searchLast4Input.addEventListener('input', () => {
+            if (desktopSearchMode === 'member') {
+                handleMemberInput();
+            } else {
+                handleLast4Input();
+            }
+        });
     }
     if (last4LtrBtn) {
         last4LtrBtn.addEventListener('click', () => {
             last4SearchMode = 'ltr';
+            desktopSearchMode = 'last4-ltr';
             last4LtrBtn.classList.add('bg-cyan-600', 'border-cyan-500');
             last4RtlBtn?.classList.remove('bg-cyan-600', 'border-cyan-500');
-            if (searchLast4Input) { searchLast4Input.placeholder = 'As you read it'; searchLast4Input.value = ''; searchLast4Input.focus(); }
+            daoMemberBtn?.classList.remove('bg-cyan-600', 'border-cyan-500');
+            if (searchLast4Input) { searchLast4Input.placeholder = 'As you read it'; searchLast4Input.value = ''; searchLast4Input.maxLength = 4; searchLast4Input.focus(); }
         });
     }
     if (last4RtlBtn) {
         last4RtlBtn.addEventListener('click', () => {
             last4SearchMode = 'rtl';
+            desktopSearchMode = 'last4-rtl';
             last4RtlBtn.classList.add('bg-cyan-600', 'border-cyan-500');
             last4LtrBtn?.classList.remove('bg-cyan-600', 'border-cyan-500');
-            if (searchLast4Input) { searchLast4Input.placeholder = 'Last char first'; searchLast4Input.value = ''; searchLast4Input.focus(); }
+            daoMemberBtn?.classList.remove('bg-cyan-600', 'border-cyan-500');
+            if (searchLast4Input) { searchLast4Input.placeholder = 'Last char first'; searchLast4Input.value = ''; searchLast4Input.maxLength = 4; searchLast4Input.focus(); }
+        });
+    }
+    // NEW: DAO Member button (Desktop)
+    if (daoMemberBtn) {
+        daoMemberBtn.addEventListener('click', () => {
+            desktopSearchMode = 'member';
+            daoMemberBtn.classList.add('bg-cyan-600', 'border-cyan-500');
+            last4LtrBtn?.classList.remove('bg-cyan-600', 'border-cyan-500');
+            last4RtlBtn?.classList.remove('bg-cyan-600', 'border-cyan-500');
+            if (searchLast4Input) { 
+                searchLast4Input.placeholder = 'Type member name'; 
+                searchLast4Input.value = ''; 
+                searchLast4Input.maxLength = 50; 
+                searchLast4Input.focus(); 
+            }
         });
     }
     if (copyLast4Btn) copyLast4Btn.addEventListener('click', () => copyWithVerification(searchAddressInput?.value));
@@ -913,6 +1035,8 @@ const addAllEventListeners = () => {
     if (mobileAsReadBtn) mobileAsReadBtn.addEventListener('click', () => { mobileSearchMode = 'full'; updateMobileSearchUI(); });
     if (mobileLast4LtrBtn) mobileLast4LtrBtn.addEventListener('click', () => { mobileSearchMode = 'last4-ltr'; updateMobileSearchUI(); });
     if (mobileLast4RtlBtn) mobileLast4RtlBtn.addEventListener('click', () => { mobileSearchMode = 'last4-rtl'; updateMobileSearchUI(); });
+    // NEW: Mobile DAO Member button
+    if (mobileDaoMemberBtn) mobileDaoMemberBtn.addEventListener('click', () => { mobileSearchMode = 'member'; updateMobileSearchUI(); });
     if (mobileSearchAddress) mobileSearchAddress.addEventListener('input', handleMobileAddressInput);
     if (mobileCopyBtn) mobileCopyBtn.addEventListener('click', () => copyWithVerification(mobileSearchAddress?.value || searchAddressInput?.value));
     if (mobileAddressDropdown) mobileAddressDropdown.addEventListener('change', () => {
@@ -1010,7 +1134,13 @@ const updateAddressDropdown = (nftList) => {
             if (!dropdown) return;
             const option = document.createElement('option');
             option.value = address;
-            option.textContent = `(${count}) ${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
+            const memberName = getMemberName(address);
+            const shortAddr = `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
+            if (memberName) {
+                option.textContent = `(${count}) ${memberName} - ${shortAddr}`;
+            } else {
+                option.textContent = `(${count}) ${shortAddr}`;
+            }
             dropdown.appendChild(option);
         });
         // Check if the previously selected address is in the new list
@@ -1742,7 +1872,12 @@ const handleLast4Input = () => {
         matches.forEach(addr => {
             const item = document.createElement('div');
             item.className = 'address-suggestion-item';
-            item.innerHTML = `<span class="text-gray-400">${addr.slice(0, -4)}</span><strong class="text-cyan-400">${addr.slice(-4)}</strong>`;
+            const memberName = getMemberName(addr);
+            if (memberName) {
+                item.innerHTML = `<span class="text-yellow-400">${memberName}</span><br><span class="text-xs text-gray-400">${addr.slice(0, -4)}</span><strong class="text-xs text-cyan-400">${addr.slice(-4)}</strong>`;
+            } else {
+                item.innerHTML = `<span class="text-gray-400">${addr.slice(0, -4)}</span><strong class="text-cyan-400">${addr.slice(-4)}</strong>`;
+            }
             item.onclick = () => {
                 searchLast4Input.value = addr.slice(-4);
                 if (searchAddressInput) searchAddressInput.value = addr;
@@ -1755,10 +1890,49 @@ const handleLast4Input = () => {
     } else { last4Suggestions.classList.add('hidden'); }
 };
 
+// Handle Member name search input (Desktop)
+const handleMemberInput = () => {
+    if (!searchLast4Input || !last4Suggestions) return;
+    const input = searchLast4Input.value.toLowerCase().trim();
+    last4Suggestions.innerHTML = '';
+    if (!input) { last4Suggestions.classList.add('hidden'); return; }
+    
+    // Find matching member names
+    const matches = memberNames.filter(m => 
+        m.name.toLowerCase().includes(input)
+    ).slice(0, 10);
+    
+    // Auto-select if exact match
+    if (matches.length === 1 && matches[0].name.toLowerCase() === input) {
+        searchLast4Input.value = matches[0].name;
+        if (searchAddressInput) searchAddressInput.value = matches[0].address;
+        last4Suggestions.classList.add('hidden');
+        handleFilterChange();
+        return;
+    }
+    
+    if (matches.length > 0) {
+        matches.forEach(member => {
+            const item = document.createElement('div');
+            item.className = 'address-suggestion-item';
+            const shortAddr = `${member.address.slice(0, 8)}...${member.address.slice(-4)}`;
+            item.innerHTML = `<strong class="text-yellow-400">${member.name}</strong> <span class="text-gray-400 text-xs">${shortAddr}</span>`;
+            item.onclick = () => {
+                searchLast4Input.value = member.name;
+                if (searchAddressInput) searchAddressInput.value = member.address;
+                last4Suggestions.classList.add('hidden');
+                handleFilterChange();
+            };
+            last4Suggestions.appendChild(item);
+        });
+        last4Suggestions.classList.remove('hidden');
+    } else { last4Suggestions.classList.add('hidden'); }
+};
+
 // Update mobile search UI
 const updateMobileSearchUI = () => {
     if (!mobileSearchAddress) return;
-    [mobileAsReadBtn, mobileLast4LtrBtn, mobileLast4RtlBtn].forEach(btn => btn?.classList.remove('bg-cyan-600', 'border-cyan-500'));
+    [mobileAsReadBtn, mobileLast4LtrBtn, mobileLast4RtlBtn, mobileDaoMemberBtn].forEach(btn => btn?.classList.remove('bg-cyan-600', 'border-cyan-500'));
     if (mobileSearchMode === 'full' && mobileAsReadBtn) {
         mobileAsReadBtn.classList.add('bg-cyan-600', 'border-cyan-500');
         mobileSearchAddress.placeholder = 'Paste or type address';
@@ -1771,6 +1945,10 @@ const updateMobileSearchUI = () => {
         mobileLast4RtlBtn.classList.add('bg-cyan-600', 'border-cyan-500');
         mobileSearchAddress.placeholder = 'Last char first';
         mobileSearchAddress.maxLength = 4;
+    } else if (mobileSearchMode === 'member' && mobileDaoMemberBtn) {
+        mobileDaoMemberBtn.classList.add('bg-cyan-600', 'border-cyan-500');
+        mobileSearchAddress.placeholder = 'Type member name';
+        mobileSearchAddress.maxLength = 50;
     }
     mobileSearchAddress.value = '';
     mobileSearchAddress.focus();
@@ -1791,6 +1969,35 @@ const handleMobileAddressInput = () => {
     } else if (mobileSearchMode === 'last4-rtl') {
         const reversed = input.split('').reverse().join('');
         matches = ownerAddresses.filter(addr => addr.slice(-4).toLowerCase().startsWith(reversed));
+    } else if (mobileSearchMode === 'member') {
+        // Search member names instead
+        const memberMatches = memberNames.filter(m => m.name.toLowerCase().includes(input)).slice(0, 10);
+        
+        if (memberMatches.length === 1 && memberMatches[0].name.toLowerCase() === input) {
+            mobileSearchAddress.value = memberMatches[0].name;
+            if (searchAddressInput) searchAddressInput.value = memberMatches[0].address;
+            mobileAddressSuggestions.classList.add('hidden');
+            handleFilterChange();
+            return;
+        }
+        
+        if (memberMatches.length > 0) {
+            memberMatches.forEach(member => {
+                const item = document.createElement('div');
+                item.className = 'address-suggestion-item';
+                const shortAddr = `${member.address.slice(0, 8)}...${member.address.slice(-4)}`;
+                item.innerHTML = `<strong class="text-yellow-400">${member.name}</strong> <span class="text-gray-400 text-xs">${shortAddr}</span>`;
+                item.onclick = () => {
+                    mobileSearchAddress.value = member.name;
+                    if (searchAddressInput) searchAddressInput.value = member.address;
+                    mobileAddressSuggestions.classList.add('hidden');
+                    handleFilterChange();
+                };
+                mobileAddressSuggestions.appendChild(item);
+            });
+            mobileAddressSuggestions.classList.remove('hidden');
+        } else { mobileAddressSuggestions.classList.add('hidden'); }
+        return; // Exit early for member search
     }
     matches = matches.slice(0, 10);
     
@@ -1806,7 +2013,12 @@ const handleMobileAddressInput = () => {
         matches.forEach(addr => {
             const item = document.createElement('div');
             item.className = 'address-suggestion-item';
-            item.textContent = addr;
+            const memberName = getMemberName(addr);
+            if (memberName) {
+                item.innerHTML = `<span class="text-yellow-400">${memberName}</span><br><span class="text-xs text-gray-500">${addr}</span>`;
+            } else {
+                item.textContent = addr;
+            }
             item.onclick = () => {
                 mobileSearchAddress.value = addr;
                 if (searchAddressInput) searchAddressInput.value = addr;
@@ -1845,7 +2057,12 @@ const handleWalletLast4Input = () => {
         matches.forEach(addr => {
             const item = document.createElement('div');
             item.className = 'address-suggestion-item';
-            item.innerHTML = `<span class="text-gray-400">${addr.slice(0, -4)}</span><strong class="text-cyan-400">${addr.slice(-4)}</strong>`;
+            const memberName = getMemberName(addr);
+            if (memberName) {
+                item.innerHTML = `<span class="text-yellow-400">${memberName}</span><br><span class="text-xs text-gray-400">${addr.slice(0, -4)}</span><strong class="text-xs text-cyan-400">${addr.slice(-4)}</strong>`;
+            } else {
+                item.innerHTML = `<span class="text-gray-400">${addr.slice(0, -4)}</span><strong class="text-cyan-400">${addr.slice(-4)}</strong>`;
+            }
             item.onclick = () => {
                 walletSearchLast4.value = addr.slice(-4);
                 if (walletSearchAddressInput) walletSearchAddressInput.value = addr;
@@ -2348,10 +2565,13 @@ const displayHolderPage = (page) => {
         item.style.gridTemplateColumns = 'minmax(60px, 1fr) 2.5fr repeat(8, 1fr)';
         item.dataset.address = address;
         const shortAddress = address ? `terra...${address.substring(address.length - 4)}` : 'N/A';
+        const memberName = getMemberName(address);
+        const displayName = memberName ? `<span class="text-yellow-400">${memberName}</span> <span class="text-gray-500">(${shortAddress})</span>` : shortAddress;
         
         // Stats summary for mobile view
         const statsSummary = `Liq: ${stats.liquid || 0} | DAO: ${stats.daodaoStaked || 0} | Brk: ${stats.broken || 0}`;
         item.dataset.stats = statsSummary;
+        item.dataset.memberName = memberName || '';
         // Store full stats for mobile detail view
         item.dataset.liquid = stats.liquid || 0;
         item.dataset.daodao = stats.daodaoStaked || 0;
@@ -2364,7 +2584,7 @@ const displayHolderPage = (page) => {
 
         item.innerHTML = `
             <span class="text-center font-bold">#${rank}</span>
-            <span class="font-mono text-sm truncate leaderboard-address" title="${address || ''}">${shortAddress}</span>
+            <span class="text-sm truncate leaderboard-address" title="${address || ''}">${displayName}</span>
             <span class="text-center">${stats.liquid || 0}</span>
             <span class="text-center ${stats.daodaoStaked > 0 ? 'text-cyan-400' : ''}">${stats.daodaoStaked || 0}</span>
             <span class="text-center ${stats.enterpriseStaked > 0 ? 'text-gray-400' : ''}">${stats.enterpriseStaked || 0}</span>
@@ -2448,9 +2668,14 @@ const showSelectedWalletDetails = (address, datasetOrStats) => {
     // Show the container
     detailsContainer.classList.remove('hidden');
     
-    // Set address
+    // Set address with member name if available
     const shortAddr = address ? `terra...${address.substring(address.length - 4)}` : '';
-    addressEl.textContent = shortAddr;
+    const memberName = getMemberName(address);
+    if (memberName) {
+        addressEl.innerHTML = `<span class="text-yellow-400">${memberName}</span> <span class="text-gray-400">(${shortAddr})</span>`;
+    } else {
+        addressEl.textContent = shortAddr;
+    }
     addressEl.title = address;
     
     // Get values from dataset (all are strings)
@@ -3401,13 +3626,22 @@ const handleAddressInput = (inputEl, suggestionsEl, onSelectCallback, isWallet) 
         matches.slice(0, 10).forEach(match => {
             const item = document.createElement('div');
             item.className = 'address-suggestion-item';
+            const memberName = getMemberName(match);
             
             // Highlight the matching portion
+            let addressHtml;
             if (isPrefix) {
-                item.innerHTML = `<strong class="text-cyan-400">${match.substring(0, input.length)}</strong>${match.substring(input.length)}`;
+                addressHtml = `<strong class="text-cyan-400">${match.substring(0, input.length)}</strong>${match.substring(input.length)}`;
             } else {
                 const startIndex = match.length - input.length;
-                item.innerHTML = `${match.substring(0, startIndex)}<strong class="text-cyan-400">${match.substring(startIndex)}</strong>`;
+                addressHtml = `${match.substring(0, startIndex)}<strong class="text-cyan-400">${match.substring(startIndex)}</strong>`;
+            }
+            
+            // Add member name if available
+            if (memberName) {
+                item.innerHTML = `<span class="text-yellow-400 font-medium">${memberName}</span><br><span class="text-xs">${addressHtml}</span>`;
+            } else {
+                item.innerHTML = addressHtml;
             }
             
             item.style.direction = 'ltr';
@@ -3698,9 +3932,14 @@ const searchWallet = () => {
         }
         
         if (anyFilterActive) {
-            walletGalleryTitle.textContent = `Showing ${walletNfts.length} of ${totalForWallet} NFTs for wallet:`;
+            const memberName = getMemberName(address);
+            const shortAddr = `terra...${address.slice(-4)}`;
+            const displayName = memberName ? `${memberName} (${shortAddr})` : shortAddr;
+            walletGalleryTitle.innerHTML = `Showing ${walletNfts.length} of ${totalForWallet} NFTs for: ${memberName ? `<span class="text-yellow-400">${memberName}</span> <span class="text-gray-400">(${shortAddr})</span>` : shortAddr}`;
         } else {
-            walletGalleryTitle.textContent = `Found ${walletNfts.length} NFTs for wallet:`;
+            const memberName = getMemberName(address);
+            const shortAddr = `terra...${address.slice(-4)}`;
+            walletGalleryTitle.innerHTML = `Found ${walletNfts.length} NFTs for: ${memberName ? `<span class="text-yellow-400">${memberName}</span> <span class="text-gray-400">(${shortAddr})</span>` : shortAddr}`;
         }
         
         walletGallery.innerHTML = '';
