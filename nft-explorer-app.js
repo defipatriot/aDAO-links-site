@@ -1,4 +1,4 @@
-// BUILD: Jan02-v1 - DAO Member name search, member names displayed with addresses
+// BUILD: Jan02-v2 - DAO Member name search, member names displayed with addresses, NFT modal member display
 // --- Global Elements ---
 const gallery = document.getElementById('nft-gallery');
 const paginationControls = document.getElementById('pagination-controls');
@@ -2239,7 +2239,11 @@ const showNftDetails = (nft) => {
     traitsHtml += `<div class="pt-2 mt-2 border-t border-gray-600"></div>`;
     
     // Owner Info
+    const ownerMemberName = getMemberName(nft.owner);
     traitsHtml += `<div class="flex justify-between text-sm items-center"><span class="text-gray-400">Owner:</span><span class="owner-address font-mono text-sm font-semibold text-white truncate cursor-pointer" title="Click to copy">${nft.owner || 'N/A'}</span></div>`;
+    if (ownerMemberName) {
+        traitsHtml += `<div class="flex justify-between text-sm items-center"><span class="text-gray-400">Member:</span><span class="font-semibold text-yellow-400">${ownerMemberName}</span></div>`;
+    }
 
     // Update the DOM
     traitsEl.innerHTML = traitsHtml;
