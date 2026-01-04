@@ -110,7 +110,7 @@
                     <span class="text-gray-600">|</span>
                     <div class="flex gap-3">
                         <div class="flex flex-col items-center">
-                            <span id="status-historical" class="text-gray-500 cursor-pointer font-semibold" title="tla_ext_historical.json - Click to acknowledge if yellow" onclick="acknowledgeStatus('historical')">Historical</span>
+                            <span id="status-historical" class="text-gray-500 cursor-pointer font-semibold" title="tla_ext_historical_2026.json - Click to acknowledge if yellow" onclick="acknowledgeStatus('historical')">Historical</span>
                             <span id="status-historical-date" class="text-[8px] text-gray-600">-</span>
                         </div>
                         <div class="flex flex-col items-center">
@@ -369,7 +369,7 @@
             <button onclick="toggleExtPaste()" class="text-[9px] text-teal-400 hover:text-teal-200 underline">or paste JSON</button>
         </div>
         <div id="ext-paste-area" class="hidden mt-2">
-            <textarea id="ext-paste" class="input-dark h-20 text-[10px]" placeholder="Paste tla_ext_historical.json or tla_ext_combined.json content here..."></textarea>
+            <textarea id="ext-paste" class="input-dark h-20 text-[10px]" placeholder="Paste tla_ext_historical_2026.json or tla_ext_combined.json content here..."></textarea>
             <button onclick="loadExtFromPaste()" class="btn-action bg-teal-900/40 text-teal-200 border border-teal-900 mt-1">Load Ext JSON</button>
         </div>
     </div>
@@ -3127,7 +3127,7 @@ async function loadExtData() {
     
     // ============ CHECK HISTORICAL ============
     try {
-        const res = await fetch(extBaseUrl + 'tla_ext_historical.json?t=' + Date.now());
+        const res = await fetch(extBaseUrl + 'tla_ext_historical_2026.json?t=' + Date.now());
         if (res.ok) {
             const data = await res.json();
             fileStatus.historical.data = data;
@@ -4214,7 +4214,7 @@ async function load4EpDataForV3() {
     
     try {
         // Load historical data
-        const res = await fetch(extBaseUrl + 'tla_ext_historical.json?t=' + Date.now());
+        const res = await fetch(extBaseUrl + 'tla_ext_historical_2026.json?t=' + Date.now());
         if (!res.ok) {
             console.log('Could not load ext historical for 4EP data');
             return;
@@ -6305,7 +6305,7 @@ async function loadV3Snapshot(d, ep, ph, isTestFile) {
     pasteStatus.assetMetaVerified = Object.keys(assetMetadata).length > 0;
     
     // Load ext historical data to fill in 4EP data if missing
-    // This fetches tla_ext_historical.json which has monthly liq/vol averages
+    // This fetches tla_ext_historical_2026.json which has monthly liq/vol averages
     await load4EpDataForV3();
     
     // Update UI
@@ -6895,9 +6895,56 @@ function updateScoreButtonVisibility() {
 
 // Calculate all scores and re-render the vote table
 function calculateAndRenderScores() {
-    if (!isScoreDataReady()) {
-        alert('Please complete tabs 1-4 first (Vote, Liquidity, Locks, Asset Meta)');
+    // Build detailed status of what's ready and what's missing
+    let missing = [];
+    let warnings = [];
+    
+    // Check REQUIRED data
+    let voteReady = pasteStatus.vote && store.vote.pools.length > 0;
+    let liqReady = pasteStatus.liqDep || pasteStatus.liqActive;
+    let locksReady = pasteStatus.locks;
+    let metaReady = pasteStatus.assetMetaVerified || Object.keys(assetMetadata).length > 0;
+    
+    // Check OPTIONAL but recommended data
+    let extReady = store.ext?.loaded && Object.keys(store.ext?.lps || {}).length > 0;
+    let bribesReady = store.pdBribes && store.pdBribes.length > 0;
+    
+    // Build missing list
+    if (!voteReady) missing.push('❌ Vote data (Tab 1)');
+    if (!liqReady) missing.push('❌ Liquidity data (Tab 2)');
+    if (!locksReady) missing.push('❌ Locks data (Tab 3)');
+    if (!metaReady) missing.push('❌ Asset Meta (Tab 4)');
+    
+    // Build warnings list
+    if (!extReady) warnings.push('⚠️ 4EP Historical - 4EP LIQ/VOL columns will be empty');
+    if (!bribesReady) warnings.push('⚠️ PD Bribes data - BRIBES column will be empty');
+    
+    // Build status message
+    let msg = '📊 SCORE CALCULATION STATUS\n\n';
+    
+    if (missing.length > 0) {
+        msg += 'REQUIRED (must complete first):\n' + missing.join('\n') + '\n\n';
+    }
+    
+    if (warnings.length > 0) {
+        msg += 'OPTIONAL (scores will be incomplete):\n' + warnings.join('\n') + '\n\n';
+    }
+    
+    if (missing.length === 0 && warnings.length === 0) {
+        msg += '✅ All data ready!\n\n';
+    }
+    
+    // If required data missing, block and show what's needed
+    if (missing.length > 0) {
+        alert(msg + 'Please complete the required items first.');
         return;
+    }
+    
+    // If only warnings (optional data missing), ask user if they want to proceed
+    if (warnings.length > 0) {
+        if (!confirm(msg + 'Proceed anyway with incomplete data?\n\nClick OK to continue, Cancel to go back.')) {
+            return;
+        }
     }
     
     // Get current filter settings
@@ -6924,7 +6971,14 @@ function calculateAndRenderScores() {
         }, 2000);
     }
     
-    console.log('Scores calculated for', store.vote.pools.length, 'pools');
+    console.log('✅ Scores calculated for', store.vote.pools.length, 'pools');
+    
+    // Show success with summary
+    let summary = '✅ Scores calculated for ' + store.vote.pools.length + ' pools';
+    if (warnings.length > 0) {
+        summary += '\n\nNote: Some columns may be empty due to missing optional data.';
+    }
+    alert(summary);
 }
 
 // === CONFIG EDITOR ===
