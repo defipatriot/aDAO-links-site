@@ -1,0 +1,2301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Governance | Alliance DAO</title>
+    
+    <!-- Favicons -->
+    <link rel="icon" type="image/x-icon" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/apple-touch-icon.png">
+    
+    <!-- SEO -->
+    <meta name="description" content="Alliance DAO governance analytics - proposals and member participation.">
+    <meta property="og:title" content="Governance | Alliance DAO">
+    <meta property="og:image" content="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/android-chrome-512x512.png">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        * { font-family: 'Outfit', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        
+        :root {
+            --bg-deep: #0a0b0f;
+            --glass: rgba(255, 255, 255, 0.03);
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --accent-cyan: #06b6d4;
+            --accent-purple: #a855f7;
+            --accent-green: #10b981;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #475569;
+        }
+        
+        body { background: var(--bg-deep); min-height: 100vh; color: var(--text-primary); }
+        
+        @media (min-width: 1400px) { html { font-size: 19px; } }
+        @media (min-width: 1800px) { html { font-size: 21px; } }
+        
+        .max-w-7xl { max-width: 1400px !important; }
+        @media (min-width: 1600px) { .max-w-7xl { max-width: 1550px !important; } }
+        @media (min-width: 1920px) { .max-w-7xl { max-width: 1750px !important; } }
+        
+        .bg-mesh {
+            position: fixed; inset: 0; z-index: -1;
+            background: 
+                radial-gradient(ellipse 80% 50% at 20% 40%, rgba(6, 182, 212, 0.12), transparent),
+                radial-gradient(ellipse 60% 40% at 80% 60%, rgba(168, 85, 247, 0.08), transparent),
+                radial-gradient(ellipse 50% 30% at 50% 80%, rgba(16, 185, 129, 0.06), transparent);
+            animation: meshMove 25s ease-in-out infinite;
+        }
+        @keyframes meshMove { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+        
+        .glass-card {
+            background: var(--glass);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            border-radius: 16px;
+        }
+        
+        .card {
+            background: rgba(15, 17, 23, 0.6);
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            transition: all 0.3s;
+        }
+        .card:hover {
+            background: rgba(20, 24, 32, 0.8);
+            border-color: rgba(6, 182, 212, 0.3);
+        }
+        
+        .stat-box { text-align: center; padding: 20px 16px; }
+        .stat-value {
+            font-size: 1.75rem; font-weight: 700;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .stat-label { font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px; }
+        
+        /* Status Colors */
+        .status-executed { background: linear-gradient(135deg, #065f46, #047857); }
+        .status-passed { background: linear-gradient(135deg, #1e40af, #1d4ed8); }
+        .status-rejected { background: linear-gradient(135deg, #7f1d1d, #991b1b); }
+        .status-vetoed { background: linear-gradient(135deg, #78350f, #92400e); }
+        .status-open { background: linear-gradient(135deg, #6b21a8, #9333ea); }
+        .status-closed { background: linear-gradient(135deg, #374151, #4b5563); }
+        
+        /* Risk Score */
+        .risk-high { background: rgba(239, 68, 68, 0.15); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.3); }
+        .risk-medium { background: rgba(234, 179, 8, 0.15); color: #fde047; border: 1px solid rgba(234, 179, 8, 0.3); }
+        .risk-low { background: rgba(34, 197, 94, 0.15); color: #86efac; border: 1px solid rgba(34, 197, 94, 0.3); }
+        
+        /* Audit Status */
+        .audit-clean { background: rgba(34, 197, 94, 0.1); color: #4ade80; }
+        .audit-warning { background: rgba(234, 179, 8, 0.1); color: #facc15; }
+        .audit-error { background: rgba(239, 68, 68, 0.1); color: #f87171; }
+        
+        /* Vote Bar */
+        .vote-track { height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: visible; position: relative; }
+        .vote-track > .flex { height: 100%; border-radius: 4px; overflow: hidden; }
+        .vote-fill { height: 100%; transition: width 0.4s ease; }
+        
+        /* Expand Animation */
+        .expand-section { 
+            max-height: 0; 
+            overflow: hidden; 
+            transition: max-height 0.4s ease, opacity 0.3s ease;
+            opacity: 0;
+        }
+        .expand-section.open { 
+            max-height: 3000px; 
+            opacity: 1;
+        }
+        
+        /* Treasury Pills */
+        .pill-in { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.2); }
+        .pill-out { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.2); }
+        
+        /* Tabs - Distinct button style */
+        .tab-btn {
+            padding: 12px 24px; 
+            color: var(--text-secondary);
+            font-weight: 500; 
+            cursor: pointer; 
+            border-radius: 10px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.08);
+            transition: all 0.3s;
+        }
+        .tab-btn:hover { 
+            color: var(--text-primary); 
+            background: rgba(255,255,255,0.06);
+            border-color: rgba(255,255,255,0.15);
+        }
+        .tab-btn.active { 
+            color: var(--accent-cyan); 
+            background: rgba(6, 182, 212, 0.15);
+            border-color: rgba(6, 182, 212, 0.4);
+            box-shadow: 0 0 20px rgba(6, 182, 212, 0.15);
+        }
+        
+        /* Action Cards */
+        .action-card { background: rgba(168, 85, 247, 0.05); border-left: 3px solid var(--accent-purple); }
+        
+        /* Animations */
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-in { animation: fadeIn 0.4s ease forwards; }
+        
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: var(--bg-deep); }
+        ::-webkit-scrollbar-thumb { background: var(--text-muted); border-radius: 3px; }
+        
+        /* Grade badges */
+        .grade-S { background: linear-gradient(135deg, #fbbf24, #f59e0b); color: #0a0b0f; }
+        .grade-A { background: linear-gradient(135deg, #065f46, #047857); }
+        .grade-B { background: linear-gradient(135deg, #1e40af, #1d4ed8); }
+        .grade-C { background: linear-gradient(135deg, #78350f, #92400e); }
+        .grade-D { background: linear-gradient(135deg, #7f1d1d, #991b1b); }
+        .grade-F { background: linear-gradient(135deg, #4a044e, #701a75); }
+        
+        /* Clickable stat cards */
+        .stat-clickable { cursor: pointer; transition: all 0.3s; }
+        .stat-clickable:hover { background: rgba(255,255,255,0.05); border-color: rgba(6, 182, 212, 0.4); }
+    </style>
+</head>
+<body>
+    <div class="bg-mesh"></div>
+    
+    <!-- Header -->
+    <header class="sticky top-0 z-50 backdrop-blur-xl bg-[#0a0b0f]/80 border-b border-white/5">
+        <div class="max-w-7xl mx-auto px-4 py-4">
+            <div class="flex items-center justify-between flex-wrap gap-4">
+                <div class="flex items-center gap-3">
+                    <a href="https://thealliancedao.com" class="hover:opacity-80 transition-opacity flex flex-col items-center">
+                        <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/aDAO%20Logo%20No%20Background.png" alt="Alliance DAO" class="h-10 object-contain">
+                        <span class="text-[9px] text-gray-500 hover:text-cyan-400 mt-0.5"><i class="fas fa-arrow-left mr-1"></i>Dashboard</span>
+                    </a>
+                    <div>
+                        <h1 class="text-xl font-bold">Governance</h1>
+                        <p class="text-xs text-gray-500">
+                            by <span class="text-cyan-400">The Alliance DAO</span>
+                        </p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-4">
+                    <div id="load-status" class="text-xs text-gray-500"><i class="fas fa-circle-notch fa-spin mr-1"></i> Loading...</div>
+                    <a href="https://daodao.zone/dao/terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm" 
+                       target="_blank"
+                       class="text-xs bg-white/5 hover:bg-white/10 border border-white/10 px-4 py-2 rounded-lg transition">
+                        <i class="fas fa-external-link-alt mr-1"></i> Open DAODAO
+                    </a>
+                </div>
+            </div>
+        </div>
+    </header>
+    
+    <main class="max-w-7xl mx-auto px-4 py-6">
+        <!-- Stats Grid -->
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+            <div class="card p-4">
+                <div class="text-xs text-zinc-500 uppercase tracking-wide mb-1">Proposals</div>
+                <div class="text-2xl font-bold" id="stat-total">-</div>
+            </div>
+            <div class="card p-4">
+                <div class="text-xs text-zinc-500 uppercase tracking-wide mb-1">Pass Rate</div>
+                <div class="text-2xl font-bold text-green-400" id="stat-pass">-</div>
+            </div>
+            <div class="card p-4 cursor-pointer hover:border-violet-500/50 transition-colors" onclick="showChartPopup()">
+                <div class="text-xs text-zinc-500 uppercase tracking-wide mb-1">📊 Avg Turnout</div>
+                <div class="text-2xl font-bold text-violet-400" id="stat-turnout">-</div>
+                <div class="text-xs text-zinc-600 mt-1">Click for trend</div>
+            </div>
+            <div class="card p-4">
+                <div class="text-xs text-zinc-500 uppercase tracking-wide mb-1">Active Voters</div>
+                <div class="text-2xl font-bold text-cyan-400"><span id="stat-voters">-</span><span class="text-zinc-600 text-lg"> / <span id="stat-total-members">-</span></span></div>
+            </div>
+            <div class="card p-4 cursor-pointer hover:border-green-500/50 transition-colors" onclick="showRewardsPopup()">
+                <div class="text-xs text-zinc-500 uppercase tracking-wide mb-1">💰 Rewards Claimed</div>
+                <div class="text-2xl font-bold text-green-400" id="stat-rewards">-</div>
+                <div class="text-xs text-zinc-600 mt-1">Click for details</div>
+            </div>
+            <div class="card p-4 cursor-pointer hover:border-red-500/50 transition-colors" onclick="showPaymentsPopup()">
+                <div class="text-xs text-zinc-500 uppercase tracking-wide mb-1">💸 Payments</div>
+                <div class="text-2xl font-bold text-red-400" id="stat-payments">-</div>
+                <div class="text-xs text-zinc-600 mt-1">Click for details</div>
+            </div>
+        </div>
+        
+        <!-- Popup Modal -->
+        <div id="popup-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4" onclick="if(event.target === this) closePopup()">
+            <div class="bg-zinc-900 border border-zinc-700 rounded-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden shadow-2xl">
+                <div class="flex items-center justify-between p-4 border-b border-zinc-800">
+                    <h3 class="text-lg font-bold" id="popup-title">Details</h3>
+                    <button onclick="closePopup()" class="text-zinc-400 hover:text-white text-2xl">&times;</button>
+                </div>
+                <div class="p-4 overflow-y-auto max-h-[60vh]" id="popup-content">
+                </div>
+            </div>
+        </div>
+        
+        <!-- Chart Popup Modal -->
+        <div id="chart-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4" onclick="if(event.target === this) closeChartPopup()">
+            <div class="bg-zinc-900 border border-zinc-700 rounded-2xl max-w-4xl w-full max-h-[85vh] overflow-hidden shadow-2xl">
+                <div class="flex items-center justify-between p-4 border-b border-zinc-800">
+                    <h3 class="text-lg font-bold">📊 Participation Over Time</h3>
+                    <div class="flex items-center gap-4">
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs text-zinc-500">Exclude:</span>
+                            <select id="chart-exclude" onchange="renderParticipationChart()" class="bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-1.5 text-sm min-w-[150px]">
+                                <option value="">Show All Members</option>
+                            </select>
+                        </div>
+                        <button onclick="closeChartPopup()" class="text-zinc-400 hover:text-white text-2xl">&times;</button>
+                    </div>
+                </div>
+                <div class="p-6">
+                    <div id="participation-chart" class="h-64 flex items-end gap-0.5 relative overflow-visible">
+                        <!-- Filled by JS -->
+                    </div>
+                    <div class="flex justify-between text-xs text-zinc-500 mt-3">
+                        <span>← Older</span>
+                        <div class="flex gap-4">
+                            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-green-500"></span> Yes</span>
+                            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-red-500"></span> No</span>
+                            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-zinc-500"></span> Abstain</span>
+                        </div>
+                        <span>Recent →</span>
+                    </div>
+                    <p class="text-xs text-zinc-600 mt-4 text-center">
+                        Each bar shows vote distribution per proposal. Use the dropdown to see impact if a member is excluded.
+                    </p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- DAO Selector - Three equal buttons, Allies stands out -->
+        <div class="flex justify-center gap-3 mb-4">
+            <button class="dao-btn px-6 py-3 rounded-xl border border-violet-500/50 bg-violet-500/10 text-violet-300 font-medium transition-all hover:bg-violet-500/20" data-dao="adao" onclick="switchMemberView('adao')">
+                🏛️ aDAO
+            </button>
+            <button class="dao-btn px-6 py-3 rounded-xl border border-zinc-700 bg-zinc-800/50 text-zinc-400 font-medium transition-all hover:bg-amber-500/10 hover:text-amber-300 hover:border-amber-500/50" data-dao="lion" onclick="switchMemberView('partner')">
+                🦁 Lions
+            </button>
+            <button class="dao-btn dao-allies px-6 py-3 rounded-xl border-2 border-cyan-500/50 bg-gradient-to-r from-cyan-500/10 to-purple-500/10 text-cyan-300 font-medium transition-all hover:from-cyan-500/20 hover:to-purple-500/20 shadow-lg shadow-cyan-500/20" data-dao="alliance" onclick="switchMemberView('alliance')">
+                🚀 Allies
+            </button>
+        </div>
+        
+        <!-- Secondary Nav: Proposals / Members -->
+        <div class="flex justify-center gap-2 mb-6">
+            <button class="tab-btn-sm px-4 py-1.5 text-sm rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50 transition-all" onclick="switchTab('proposals', this)">
+                📜 Proposals
+            </button>
+            <button class="tab-btn-sm px-4 py-1.5 text-sm rounded-lg bg-zinc-800/50 text-zinc-300 transition-all active" onclick="switchTab('members', this)">
+                👥 Members
+            </button>
+        </div>
+        
+        <!-- PROPOSALS TAB -->
+        <div id="tab-proposals" class="tab-content hidden">
+            <!-- PENDING PROPOSALS (unverified from DAODAO) -->
+            <div id="pending-section" class="hidden mb-6">
+                <div class="glass-card border-l-4 border-yellow-500 p-4">
+                    <div class="flex items-center gap-3 mb-3">
+                        <span class="text-yellow-400 text-lg"><i class="fas fa-clock"></i></span>
+                        <h3 class="font-semibold text-yellow-400">Pending Verification</h3>
+                        <span class="text-xs text-zinc-500">Not yet in governance repo</span>
+                    </div>
+                    <div id="pending-list" class="space-y-2">
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Filters -->
+            <div class="flex flex-wrap gap-3 mb-5">
+                <input type="text" id="search" onkeyup="renderProposals()" placeholder="Search proposals..." 
+                       class="flex-1 min-w-[200px] bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-violet-500">
+                <select id="filter-status" onchange="renderProposals()" class="bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2.5 text-sm">
+                    <option value="">All Status</option>
+                    <option value="executed">✓ Executed</option>
+                    <option value="passed">◐ Passed</option>
+                    <option value="rejected">✕ Rejected</option>
+                    <option value="vetoed">⊘ Vetoed</option>
+                    <option value="open">● Open</option>
+                </select>
+                <select id="filter-audit" onchange="renderProposals()" class="bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2.5 text-sm">
+                    <option value="">All Audit</option>
+                    <option value="clean">✓ Clean</option>
+                    <option value="issues">⚠ Has Issues</option>
+                </select>
+            </div>
+            
+            <!-- Proposals List -->
+            <div id="proposals-list" class="space-y-3">
+                <div class="text-zinc-500 text-center py-12">Loading proposals...</div>
+            </div>
+        </div>
+        
+        <!-- MEMBERS TAB -->
+        <div id="tab-members" class="tab-content">
+            
+            <!-- Alliance DAO View (default) -->
+            <div id="view-adao">
+                <!-- Top 3 Podium -->
+                <div class="mb-12">
+                    <h2 class="text-xl font-bold text-center mb-6 flex items-center justify-center gap-2">
+                        <span class="text-yellow-400">🏆</span> Governance Champions <span class="text-yellow-400">🏆</span>
+                    </h2>
+                    <div id="podium" class="flex justify-center items-end gap-4 pb-8">
+                        <!-- Filled by JS -->
+                    </div>
+                </div>
+                
+                <!-- Stats Overview -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                    <div class="card p-4 text-center">
+                        <div class="text-3xl mb-1">🔥</div>
+                        <div class="text-xl font-bold text-orange-400" id="streak-leader">-</div>
+                        <div class="text-xs text-zinc-500">Best Streak</div>
+                    </div>
+                    <div class="card p-4 text-center">
+                        <div class="text-3xl mb-1">⚡</div>
+                        <div class="text-xl font-bold text-yellow-400" id="active-streaks">-</div>
+                        <div class="text-xs text-zinc-500">On Active Streak</div>
+                    </div>
+                    <div class="card p-4 text-center">
+                        <div class="text-3xl mb-1">🎯</div>
+                        <div class="text-xl font-bold text-green-400" id="avg-participation">-</div>
+                        <div class="text-xs text-zinc-500">Avg Participation</div>
+                    </div>
+                    <div class="card p-4 text-center">
+                        <div class="text-3xl mb-1">👥</div>
+                        <div class="text-xl font-bold text-cyan-400" id="total-members">-</div>
+                        <div class="text-xs text-zinc-500">Total Members</div>
+                    </div>
+                </div>
+                
+                <!-- Filters & Search -->
+                <div class="flex flex-wrap gap-3 mb-5">
+                    <input type="text" id="member-search" onkeyup="renderMembers()" placeholder="🔍 Search members..." 
+                           class="flex-1 min-w-[200px] bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-violet-500">
+                    <div class="flex rounded-lg overflow-hidden border border-zinc-800">
+                        <button class="sort-btn px-4 py-2 text-sm bg-violet-600" data-sort="rank" onclick="sortMembers('rank')">🏆 Rank</button>
+                        <button class="sort-btn px-4 py-2 text-sm bg-zinc-900 hover:bg-zinc-800" data-sort="vp" onclick="sortMembers('vp')">⚡ VP</button>
+                        <button class="sort-btn px-4 py-2 text-sm bg-zinc-900 hover:bg-zinc-800" data-sort="streak" onclick="sortMembers('streak')">🔥 Streak</button>
+                        <button class="sort-btn px-4 py-2 text-sm bg-zinc-900 hover:bg-zinc-800" data-sort="name" onclick="sortMembers('name')">A-Z</button>
+                    </div>
+                </div>
+                
+                <!-- Leaderboard -->
+                <div id="members-list" class="space-y-2">Loading...</div>
+                
+                <!-- Legend -->
+                <div class="mt-6 p-4 bg-zinc-900/50 rounded-xl border border-zinc-800">
+                    <div class="text-xs font-semibold text-zinc-400 mb-3">RANK TIERS</div>
+                    <div class="flex flex-wrap gap-4 text-sm">
+                        <span><span class="text-yellow-400">👑</span> Legendary (100%)</span>
+                        <span><span class="text-purple-400">💎</span> Diamond (90%+)</span>
+                        <span><span class="text-cyan-400">🥇</span> Gold (75%+)</span>
+                        <span><span class="text-zinc-300">🥈</span> Silver (50%+)</span>
+                        <span><span class="text-amber-600">🥉</span> Bronze (25%+)</span>
+                        <span><span class="text-zinc-500">👤</span> Inactive (&lt;25%)</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Partner DAOs View (Lion DAO + PixelLions combined) -->
+            <div id="view-partner" class="hidden">
+                <div class="text-center mb-6">
+                    <h2 class="text-xl font-bold mb-2">🦁🎨 Partner DAO Participants</h2>
+                    <p class="text-sm text-zinc-500">Combined governance activity from Lion DAO & PixelLions</p>
+                </div>
+                
+                <!-- Partner Stats -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                    <div class="card p-4 text-center">
+                        <div class="text-2xl mb-1">🦁</div>
+                        <div class="text-xl font-bold text-amber-400" id="partner-lion-voters">-</div>
+                        <div class="text-xs text-zinc-500">Lion DAO Voters</div>
+                    </div>
+                    <div class="card p-4 text-center">
+                        <div class="text-2xl mb-1">🎨</div>
+                        <div class="text-xl font-bold text-pink-400" id="partner-pixel-voters">-</div>
+                        <div class="text-xs text-zinc-500">PixelLion Voters</div>
+                    </div>
+                    <div class="card p-4 text-center">
+                        <div class="text-2xl mb-1">🤝</div>
+                        <div class="text-xl font-bold text-purple-400" id="partner-both-voters">-</div>
+                        <div class="text-xs text-zinc-500">Active in Both</div>
+                    </div>
+                    <div class="card p-4 text-center">
+                        <div class="text-2xl mb-1">📊</div>
+                        <div class="text-xl font-bold text-cyan-400" id="partner-total-voters">-</div>
+                        <div class="text-xs text-zinc-500">Total Unique</div>
+                    </div>
+                </div>
+                
+                <!-- Partner Search -->
+                <div class="flex flex-wrap gap-3 mb-5">
+                    <input type="text" id="partner-search" onkeyup="renderPartnerMembers()" placeholder="🔍 Search address or name..." 
+                           class="flex-1 min-w-[200px] bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-violet-500">
+                    <select id="partner-filter" onchange="renderPartnerMembers()" class="bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2 text-sm">
+                        <option value="all">All Voters</option>
+                        <option value="both">🤝 Active in Both</option>
+                        <option value="lion">🦁 Lion DAO Only</option>
+                        <option value="pixel">🎨 PixelLions Only</option>
+                    </select>
+                </div>
+                
+                <!-- Partner Leaderboard -->
+                <div id="partner-members-list" class="space-y-2">Loading partner data...</div>
+            </div>
+            
+            <!-- Alliance Boost View (all 3 DAOs) -->
+            <div id="view-alliance" class="hidden">
+                <div class="text-center mb-6">
+                    <h2 class="text-xl font-bold mb-2">🚀 Alliance Boosted Members</h2>
+                    <p class="text-sm text-zinc-500">Members active across Alliance DAO + Partner DAOs</p>
+                </div>
+                
+                <!-- Alliance Stats -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                    <div class="card p-4 text-center border-violet-500/30">
+                        <div class="text-2xl mb-1">🏛️</div>
+                        <div class="text-xl font-bold text-violet-400" id="alliance-adao-voters">-</div>
+                        <div class="text-xs text-zinc-500">aDAO Voters</div>
+                    </div>
+                    <div class="card p-4 text-center">
+                        <div class="text-2xl mb-1">🦁🎨</div>
+                        <div class="text-xl font-bold text-amber-400" id="alliance-partner-voters">-</div>
+                        <div class="text-xs text-zinc-500">Partner Voters</div>
+                    </div>
+                    <div class="card p-4 text-center border-green-500/30">
+                        <div class="text-2xl mb-1">🚀</div>
+                        <div class="text-xl font-bold text-green-400" id="alliance-boosted">-</div>
+                        <div class="text-xs text-zinc-500">Alliance Boosted</div>
+                    </div>
+                    <div class="card p-4 text-center border-yellow-500/30">
+                        <div class="text-2xl mb-1">⭐</div>
+                        <div class="text-xl font-bold text-yellow-400" id="alliance-all-three">-</div>
+                        <div class="text-xs text-zinc-500">All 3 DAOs</div>
+                    </div>
+                </div>
+                
+                <!-- Alliance Search -->
+                <div class="flex flex-wrap gap-3 mb-5">
+                    <input type="text" id="alliance-search" onkeyup="renderAllianceMembers()" placeholder="🔍 Search address or name..." 
+                           class="flex-1 min-w-[200px] bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-violet-500">
+                    <select id="alliance-filter" onchange="renderAllianceMembers()" class="bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2 text-sm">
+                        <option value="boosted">🚀 Alliance Boosted (aDAO + Partner)</option>
+                        <option value="all3">⭐ All 3 DAOs</option>
+                        <option value="all">📊 All Participants</option>
+                    </select>
+                </div>
+                
+                <!-- Alliance Leaderboard -->
+                <div id="alliance-members-list" class="space-y-2">Loading alliance data...</div>
+                
+                <!-- Alliance Legend -->
+                <div class="mt-6 p-4 bg-zinc-900/50 rounded-xl border border-zinc-800">
+                    <div class="text-xs font-semibold text-zinc-400 mb-3">ALLIANCE STATUS</div>
+                    <div class="flex flex-wrap gap-4 text-sm">
+                        <span><span class="text-yellow-400">⭐</span> All 3 DAOs (aDAO + Lion + Pixel)</span>
+                        <span><span class="text-green-400">🚀</span> Alliance Boosted (aDAO + any Partner)</span>
+                        <span><span class="text-purple-400">🤝</span> Partner Only (Lion + Pixel)</span>
+                        <span><span class="text-violet-400">🏛️</span> aDAO Only</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+    
+    <!-- Disclaimers -->
+    <section class="max-w-7xl mx-auto px-4 mt-12 pt-8 border-t border-zinc-800">
+        <div class="text-xs text-zinc-600 space-y-3">
+            <h4 class="text-zinc-500 font-semibold uppercase tracking-wider mb-2">⚠️ Disclaimers</h4>
+            <p><strong class="text-zinc-500">Data Accuracy:</strong> All governance data displayed on this page is sourced from publicly available blockchain data and GitHub repositories. While we strive for accuracy, this data is provided "as-is" without warranty. Always verify important information on-chain or through official DAO interfaces.</p>
+            <p><strong class="text-zinc-500">Audit Tool:</strong> The governance audit features analyze proposal actions and identify potential issues based on known contract registries. This is for informational purposes only and does not constitute professional auditing, security assessment, or financial advice. The tool may produce false positives or miss issues not covered by its detection rules.</p>
+            <p><strong class="text-zinc-500">Not Financial Advice:</strong> Nothing on this page constitutes investment, financial, legal, or tax advice. Participation in DAO governance involves risk. Always conduct your own research and consult with qualified professionals before making decisions.</p>
+            <p><strong class="text-zinc-500">Third-Party Data:</strong> Participation data from partner DAOs (Lion DAO, PixelLions) is sourced from their respective governance systems and may be subject to different update schedules or data formats.</p>
+            <p><strong class="text-zinc-500">No Liability:</strong> The maintainer of this page accepts no liability for any losses, damages, or decisions made based on information displayed here. Use at your own risk.</p>
+        </div>
+    </section>
+    
+    <footer class="border-t border-zinc-800 mt-8 py-6">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="flex flex-wrap justify-center items-center gap-4 text-xs text-zinc-600">
+                <span>Data from <a href="https://github.com/defipatriot/adao_json_storage" class="text-violet-400 hover:underline">GitHub</a></span>
+                <span class="text-zinc-700">•</span>
+                <span>Updated: <span id="last-update">-</span></span>
+                <span class="text-zinc-700">•</span>
+                <a href="https://defipatriot.github.io/aDAO-links-site/dao_governance_tool.html" class="text-cyan-400 hover:underline">🛠️ Governance Audit Tool</a>
+                <span class="text-zinc-700">•</span>
+                <a href="https://daodao.zone/dao/terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm" target="_blank" class="text-violet-400 hover:underline">DAODAO ↗</a>
+            </div>
+            <p class="text-center text-xs text-zinc-700 mt-3">Built with 💜 for the Alliance DAO community</p>
+        </div>
+    </footer>
+
+<script>
+// ========================================
+// DATA
+// ========================================
+let proposals = {};
+let members = {};
+let memberStats = [];
+
+const PROPS_URL = 'https://raw.githubusercontent.com/defipatriot/adao_json_storage/main/adao_props.json';
+const MEMBERS_URL = 'https://raw.githubusercontent.com/defipatriot/adao_json_storage/main/members.csv';
+const DAO_ADDR = 'terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm';
+
+// Partner DAO data URLs
+const LION_PROPS_URL = 'https://raw.githubusercontent.com/defipatriot/adao_json_storage/main/liondao_proposals.json';
+const PIXEL_PROPS_URL = 'https://raw.githubusercontent.com/defipatriot/adao_json_storage/main/pixelions_proposals.json';
+const LION_MEMBERS_URL = 'https://raw.githubusercontent.com/defipatriot/adao_json_storage/main/lion_dao_members.csv';
+const PIXEL_MEMBERS_URL = 'https://raw.githubusercontent.com/defipatriot/adao_json_storage/main/pixellion_members.csv';
+
+// Partner DAO data
+let lionProposals = {};
+let pixelProposals = {};
+let partnerMembers = {};  // Combined member names from all sources
+let partnerVoters = [];   // Processed voter participation across partner DAOs
+let allianceVoters = [];  // Processed voter participation across all 3 DAOs
+
+let currentMemberView = 'adao';
+
+// Receipt tokens to filter out (intermediate tokens)
+function isReceiptToken(token) {
+    const t = (token || '').toLowerCase();
+    return t.includes('zluna') || t.includes('zlun');
+}
+
+// Known token names
+const TOKEN_NAMES = {
+    'uluna': 'LUNA',
+    'uusd': 'UST',
+    'factory/terra1nsuqsk6kh58ulczatwev87ttq2z6r3pusulg9r24mfj2fvtzd4uq3exn26/ampluna': 'ampLUNA',
+    'factory/terra1ecgazyd0waaj3g7l9cmy5gulhxkps2gmxu9ghducvuypjq68mq2s5lvsct/ampwhale': 'ampWHALE',
+    'factory/terra1vklefn7n6cchn0u962w3gaszr4vf52wjvd4y95t2sydwpmpdtszsqvk9wy/ampROAR': 'ampROAR',
+};
+
+// Format address as terra1abc...wxyz
+function shortAddr(addr) {
+    if (!addr) return '';
+    if (addr.length <= 20) return addr;
+    return addr.slice(0, 10) + '...' + addr.slice(-6);
+}
+
+// ========================================
+// INIT
+// ========================================
+document.addEventListener('DOMContentLoaded', async () => {
+    await loadMembers();
+    await loadProposals();
+    calculateStats();
+    renderProposals();
+    renderMembers();
+    document.getElementById('load-status').innerHTML = '<i class="fas fa-check text-green-400 mr-1"></i>Live';
+    
+    // Load pending proposals from DAODAO (after main data)
+    loadPendingProposals();
+    
+    // Load partner DAO data in background
+    loadPartnerData();
+});
+
+let totalRegisteredMembers = 0;
+
+async function loadMembers() {
+    try {
+        const res = await fetch(MEMBERS_URL);
+        if (!res.ok) return;
+        const csv = await res.text();
+        const lines = csv.split('\n').slice(1).filter(line => line.trim()); // Skip header, filter empty
+        
+        // Total stakers = all rows in CSV
+        totalRegisteredMembers = lines.length;
+        
+        // Only store named members for display lookup
+        lines.forEach(line => {
+            const m = line.match(/"([^"]+)","([^"]*)"/);
+            if (m && m[2]) members[m[1]] = m[2]; // Only if has name
+        });
+        
+        console.log('Loaded members:', totalRegisteredMembers, 'total stakers');
+    } catch(e) { console.error(e); }
+}
+
+async function loadPendingProposals() {
+    try {
+        // Get our highest prop ID from loaded data
+        const loadedIds = Object.keys(proposals).map(id => parseInt(id.replace(/\D/g, '') || 0));
+        const maxLoadedId = Math.max(...loadedIds, 0);
+        
+        console.log('Checking for proposals newer than A' + maxLoadedId);
+        
+        // Query Terra LCD directly (same as admin tool)
+        // The proposal contract address
+        const PROP_CONTRACT = 'terra1va3tny5252fca04wqzf7gqh5naa8599nzxqq2vptycgv077zhmjqetanj2';
+        const LCD_BASE = 'https://terra-lcd.publicnode.com';
+        
+        const pending = [];
+        
+        // Check next few proposal IDs
+        for (let i = maxLoadedId + 1; i <= maxLoadedId + 5; i++) {
+            try {
+                const query = btoa(JSON.stringify({ proposal: { proposal_id: i } }));
+                const url = `${LCD_BASE}/cosmwasm/wasm/v1/contract/${PROP_CONTRACT}/smart/${query}`;
+                
+                const res = await fetch(url);
+                if (!res.ok) continue;
+                
+                const data = await res.json();
+                const prop = data.data;
+                
+                if (prop && prop.proposal) {
+                    const status = prop.proposal.status?.toLowerCase() || 'open';
+                    pending.push({
+                        id: i,
+                        title: prop.proposal.title || `Proposal ${i}`,
+                        status: status,
+                        description: prop.proposal.description
+                    });
+                    console.log(`Found A${i}: ${status}`);
+                }
+            } catch (e) {
+                // Proposal doesn't exist or error
+                console.log(`A${i} not found or error`);
+                break; // Stop checking if we hit a gap
+            }
+        }
+        
+        console.log('Pending proposals:', pending.length);
+        
+        if (pending.length > 0) {
+            renderPendingProposals(pending);
+        }
+    } catch(e) { 
+        console.log('Could not load pending proposals:', e.message); 
+    }
+}
+
+function renderPendingProposals(pending) {
+    const section = document.getElementById('pending-section');
+    const list = document.getElementById('pending-list');
+    
+    if (!pending.length) {
+        section.classList.add('hidden');
+        return;
+    }
+    
+    section.classList.remove('hidden');
+    
+    list.innerHTML = pending.map(p => {
+        const status = p.status || 'open';
+        const isExecuted = status === 'executed';
+        const isPassed = status === 'passed';
+        const isOpen = status === 'open';
+        
+        let statusBadge = '';
+        if (isExecuted) {
+            statusBadge = '<span class="px-2 py-0.5 rounded text-xs bg-green-500/20 text-green-400">Executed (unverified)</span>';
+        } else if (isPassed) {
+            statusBadge = '<span class="px-2 py-0.5 rounded text-xs bg-blue-500/20 text-blue-400">Passed (unverified)</span>';
+        } else if (isOpen) {
+            statusBadge = '<span class="px-2 py-0.5 rounded text-xs bg-purple-500/20 text-purple-400">Open</span>';
+        } else {
+            statusBadge = `<span class="px-2 py-0.5 rounded text-xs bg-zinc-500/20 text-zinc-400">${status}</span>`;
+        }
+        
+        return `
+        <div class="flex items-center justify-between p-3 bg-zinc-900/50 rounded-lg border border-zinc-800">
+            <div class="flex items-center gap-3">
+                <span class="px-2 py-1 rounded bg-yellow-500/20 text-yellow-400 font-mono text-sm font-bold">A${p.id}</span>
+                <span class="text-sm">${p.title || 'Untitled Proposal'}</span>
+            </div>
+            <div class="flex items-center gap-2">
+                ${statusBadge}
+                <a href="https://daodao.zone/dao/${DAO_ADDR}/proposals/A${p.id}" target="_blank" 
+                   class="text-xs text-cyan-400 hover:text-cyan-300">
+                    <i class="fas fa-external-link-alt"></i>
+                </a>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+async function loadProposals() {
+    try {
+        const res = await fetch(PROPS_URL);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        proposals = data.proposals || {};
+        document.getElementById('last-update').textContent = new Date(data.exported_at).toLocaleDateString();
+    } catch(e) {
+        console.error(e);
+        document.getElementById('load-status').innerHTML = '<i class="fas fa-exclamation-triangle text-red-400 mr-1"></i>Error';
+    }
+}
+
+// ========================================
+// STATS
+// ========================================
+let rewardsData = [];
+let paymentsData = [];
+
+function calculateStats() {
+    const props = Object.values(proposals);
+    const total = props.length;
+    const passed = props.filter(p => p.outcome === 'passed').length;
+    const turnout = props.reduce((s, p) => s + (p.voting?.turnout || 0), 0) / total;
+    
+    // Yield actions that indicate reward claims
+    const YIELD_ACTIONS = ['Claim Rewards', 'Claim Bribes', 'Claim Rebase', 'Withdraw'];
+    
+    // Reset tracking arrays
+    rewardsData = [];
+    paymentsData = [];
+    let totalRewards = 0;
+    let totalPayments = 0;
+    
+    // Sort proposals by ID for streak calculation
+    const sortedProps = [...props].sort((a, b) => {
+        const aNum = parseInt(a.id?.replace(/\D/g, '') || 0);
+        const bNum = parseInt(b.id?.replace(/\D/g, '') || 0);
+        return aNum - bNum;
+    });
+    
+    props.forEach(p => {
+        const actions = (p.decodedActions || []).map(a => a.actionName || a.action || '');
+        const isYieldProp = actions.some(a => YIELD_ACTIONS.includes(a));
+        
+        // Track rewards from yield proposals
+        if (isYieldProp && p.executionTx) {
+            const tokens = [];
+            (p.executionTx.received || []).forEach(t => {
+                const tk = formatToken(t.token);
+                if (!isReceiptToken(t.token) && !tk.includes('amplp')) {
+                    tokens.push({ token: tk, amount: t.amount });
+                    if (tk === 'LUNA' || tk.includes('ampLUNA') || tk.includes('arbLUNA')) {
+                        totalRewards += t.amount;
+                    }
+                }
+            });
+            if (tokens.length) {
+                rewardsData.push({
+                    id: p.id,
+                    title: p.title,
+                    date: p.executedAt || p.closedAt,
+                    tokens: tokens
+                });
+            }
+        }
+        
+        // Track Bank Send payments
+        (p.decodedActions || []).forEach(a => {
+            if (a.actionName === 'Bank Send' || a.action === 'Bank Send') {
+                (a.funds || []).forEach(f => {
+                    const amt = parseFloat(f.amount) || 0;
+                    if (amt > 0) {
+                        let token = f.denom || '';
+                        if (token.includes('luna') || token === 'LUNA') token = 'LUNA';
+                        else if (token.includes('astro') || token === 'ASTRO') token = 'ASTRO';
+                        
+                        totalPayments += amt;
+                        paymentsData.push({
+                            id: p.id,
+                            title: p.title,
+                            recipient: a.contractName || 'External',
+                            amount: amt,
+                            token: token
+                        });
+                    }
+                });
+            }
+        });
+    });
+    
+    // Enhanced member tracking with streaks and achievements
+    const voterMap = {};
+    const propIds = sortedProps.map(p => p.id);
+    
+    sortedProps.forEach((p, propIndex) => {
+        (p.voters || []).forEach(v => {
+            if (!voterMap[v.address]) {
+                voterMap[v.address] = { 
+                    address: v.address, 
+                    name: members[v.address] || v.name, 
+                    votes: 0, 
+                    yes: 0, 
+                    no: 0, 
+                    abstain: 0, 
+                    vp: 0,
+                    votedProps: [],
+                    voteByProp: {},  // Store vote type per proposal: { propId: 'yes'|'no'|'abstain' }
+                    currentStreak: 0,
+                    bestStreak: 0,
+                    firstVotes: 0,
+                    lastVotes: 0
+                };
+            }
+            voterMap[v.address].votes++;
+            voterMap[v.address].vp = Math.max(voterMap[v.address].vp, v.power || 0);
+            voterMap[v.address].votedProps.push(propIndex);
+            voterMap[v.address].voteByProp[p.id] = v.vote;  // Store the actual vote
+            if (v.vote === 'yes') voterMap[v.address].yes++;
+            else if (v.vote === 'no') voterMap[v.address].no++;
+            else voterMap[v.address].abstain++;
+        });
+    });
+    
+    // Calculate streaks for each member
+    Object.values(voterMap).forEach(m => {
+        let streak = 0;
+        let maxStreak = 0;
+        
+        // Check from most recent backwards for current streak
+        for (let i = total - 1; i >= 0; i--) {
+            if (m.votedProps.includes(i)) {
+                streak++;
+            } else {
+                break;
+            }
+        }
+        m.currentStreak = streak;
+        
+        // Calculate best streak ever
+        streak = 0;
+        for (let i = 0; i < total; i++) {
+            if (m.votedProps.includes(i)) {
+                streak++;
+                maxStreak = Math.max(maxStreak, streak);
+            } else {
+                streak = 0;
+            }
+        }
+        m.bestStreak = maxStreak;
+        
+        // Count votes in first 5 proposals (early adopter)
+        m.firstVotes = m.votedProps.filter(i => i < 5).length;
+        // Count votes in last 5 proposals (recently active)
+        m.lastVotes = m.votedProps.filter(i => i >= total - 5).length;
+    });
+    
+    memberStats = Object.values(voterMap).map(m => ({
+        ...m,
+        rate: (m.votes / total * 100),
+        grade: getGrade(m.votes / total * 100),
+        tier: getTier(m.votes / total * 100),
+        title: getTitle(m)
+    })).sort((a, b) => b.rate - a.rate);
+    
+    // Update UI
+    document.getElementById('stat-total').textContent = total;
+    document.getElementById('stat-pass').textContent = Math.round(passed / total * 100) + '%';
+    document.getElementById('stat-turnout').textContent = turnout.toFixed(1) + '%';
+    document.getElementById('stat-voters').textContent = memberStats.length;
+    document.getElementById('stat-total-members').textContent = totalRegisteredMembers || memberStats.length;
+    document.getElementById('stat-rewards').textContent = formatNum(totalRewards) + ' LUNA';
+    document.getElementById('stat-payments').textContent = formatNum(totalPayments) + ' LUNA';
+}
+
+function getTier(pct) {
+    if (pct >= 100) return { icon: '👑', name: 'Legendary', color: 'text-yellow-400', bg: 'bg-yellow-500/20' };
+    if (pct >= 90) return { icon: '💎', name: 'Diamond', color: 'text-purple-400', bg: 'bg-purple-500/20' };
+    if (pct >= 75) return { icon: '🥇', name: 'Gold', color: 'text-cyan-400', bg: 'bg-cyan-500/20' };
+    if (pct >= 50) return { icon: '🥈', name: 'Silver', color: 'text-zinc-300', bg: 'bg-zinc-500/20' };
+    if (pct >= 25) return { icon: '🥉', name: 'Bronze', color: 'text-amber-600', bg: 'bg-amber-500/20' };
+    return { icon: '👤', name: 'Inactive', color: 'text-zinc-500', bg: 'bg-zinc-800' };
+}
+
+function getTitle(m) {
+    const total = Object.keys(proposals).length;
+    const rate = m.votes / total * 100;
+    
+    if (rate >= 100) return '🌟 Perfect Record';
+    if (m.currentStreak >= 10) return '🔥 On Fire';
+    if (m.bestStreak >= 15) return '⚡ Streak Master';
+    if (m.no > m.yes && m.votes >= 10) return '🛡️ The Skeptic';
+    if (m.yes > m.no * 3 && m.votes >= 10) return '✨ The Optimist';
+    if (m.firstVotes >= 4) return '🚀 OG Member';
+    if (m.lastVotes >= 4 && rate < 50) return '📈 Rising Star';
+    if (rate >= 90) return '💪 Dedicated';
+    if (rate >= 75) return '🎯 Consistent';
+    if (rate >= 50) return '👍 Active';
+    return '';
+}
+
+function getGrade(pct) {
+    if (pct >= 90) return 'S';
+    if (pct >= 75) return 'A';
+    if (pct >= 50) return 'B';
+    if (pct >= 30) return 'C';
+    if (pct >= 15) return 'D';
+    return 'F';
+}
+
+// ========================================
+// PROPOSALS
+// ========================================
+function renderProposals() {
+    const search = document.getElementById('search').value.toLowerCase();
+    const statusFilter = document.getElementById('filter-status').value;
+    const auditFilter = document.getElementById('filter-audit').value;
+    
+    let list = Object.values(proposals)
+        .sort((a, b) => parseInt(b.id?.replace(/\D/g,'') || 0) - parseInt(a.id?.replace(/\D/g,'') || 0));
+    
+    if (search) list = list.filter(p => p.title?.toLowerCase().includes(search) || p.id?.includes(search));
+    if (statusFilter) list = list.filter(p => p.status?.toLowerCase() === statusFilter);
+    if (auditFilter === 'clean') list = list.filter(p => auditProposal(p).length === 0);
+    if (auditFilter === 'issues') list = list.filter(p => auditProposal(p).length > 0);
+    
+    const el = document.getElementById('proposals-list');
+    if (!list.length) {
+        el.innerHTML = '<div class="text-zinc-500 text-center py-12">No proposals match filters</div>';
+        return;
+    }
+    
+    el.innerHTML = list.map((p, i) => renderPropCard(p, i)).join('');
+}
+
+function renderPropCard(p, idx) {
+    const status = p.status?.toLowerCase() || 'unknown';
+    const votes = p.votes || { yes: 0, no: 0, abstain: 0 };
+    const total = votes.yes + votes.no + votes.abstain;
+    const yesP = total ? (votes.yes / total * 100) : 0;
+    const noP = total ? (votes.no / total * 100) : 0;
+    const turnout = p.voting?.turnout || 0;
+    
+    // Risk score (simplified from tool)
+    const risk = calculateRisk(p);
+    const riskClass = risk.score >= 80 ? 'risk-low' : risk.score >= 50 ? 'risk-medium' : 'risk-high';
+    
+    // Audit
+    const issues = auditProposal(p);
+    const auditClass = issues.length === 0 ? 'audit-clean' : issues.some(i => i.sev === 'error') ? 'audit-error' : 'audit-warning';
+    const auditText = issues.length === 0 ? '✓ Clean' : `⚠ ${issues.length} issue${issues.length > 1 ? 's' : ''}`;
+    
+    // Treasury impact
+    let treasuryHtml = '';
+    if (p.executionTx) {
+        const parts = [];
+        (p.executionTx.received || []).filter(t => !isReceiptToken(t.token)).slice(0, 4).forEach(t => {
+            parts.push(`<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs pill-in">+${formatNum(t.amount)} ${formatToken(t.token)}</span>`);
+        });
+        (p.executionTx.sent || []).filter(t => !isReceiptToken(t.token)).slice(0, 4).forEach(t => {
+            parts.push(`<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs pill-out">-${formatNum(t.amount)} ${formatToken(t.token)}</span>`);
+        });
+        if (parts.length) treasuryHtml = `<div class="flex flex-wrap gap-1.5 mt-2">${parts.join('')}</div>`;
+    }
+    
+    // Actions preview
+    const actionCount = p.decodedActions?.length || 0;
+    
+    return `
+    <div class="card card-hover animate-in" style="animation-delay:${idx * 0.02}s">
+        <!-- PREVIEW TILE -->
+        <div class="p-4 cursor-pointer" onclick="toggleProp('${p.id}')">
+            <div class="flex gap-4">
+                <!-- Status Badge -->
+                <div class="w-16 h-16 rounded-xl status-${status} flex flex-col items-center justify-center flex-shrink-0">
+                    <span class="text-lg font-bold">${p.id?.toUpperCase() || '?'}</span>
+                    <span class="text-[10px] uppercase opacity-80">${status.slice(0,4)}</span>
+                </div>
+                
+                <!-- Main Content -->
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-start justify-between gap-3">
+                        <h3 class="font-semibold text-white leading-tight">${p.title || 'Untitled'}</h3>
+                        <div class="flex items-center gap-2 flex-shrink-0">
+                            <span class="px-2 py-1 rounded text-xs font-medium ${riskClass}">${risk.score}/100</span>
+                            <span class="px-2 py-1 rounded text-xs ${auditClass}">${auditText}</span>
+                            <i class="fas fa-chevron-down text-zinc-500 transition-transform" id="chev-${p.id}"></i>
+                        </div>
+                    </div>
+                    
+                    <!-- Vote Bar - Shows turnout with vote breakdown -->
+                    <div class="mt-3">
+                        <div class="vote-track relative">
+                            <!-- Quorum marker at 10% -->
+                            <div class="absolute w-0.5 bg-yellow-400 z-10" style="left:10%; top:-2px; bottom:-2px;" title="Quorum (10%)"></div>
+                            <!-- Vote fills - width based on turnout, colored by vote type -->
+                            <div class="flex h-full">
+                                <div class="vote-fill bg-green-500" style="width:${(turnout * yesP / 100).toFixed(2)}%" title="${yesP.toFixed(1)}% Yes"></div>
+                                <div class="vote-fill bg-red-500" style="width:${(turnout * noP / 100).toFixed(2)}%" title="${noP.toFixed(1)}% No"></div>
+                                <div class="vote-fill bg-zinc-500" style="width:${(turnout * (100 - yesP - noP) / 100).toFixed(2)}%" title="Abstain"></div>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-between mt-1.5 text-xs">
+                            <div class="flex gap-4">
+                                <span class="text-green-400">${votes.yes} Yes (${yesP.toFixed(0)}%)</span>
+                                <span class="text-red-400">${votes.no} No${noP > 0 ? ` (${noP.toFixed(0)}%)` : ''}</span>
+                                <span class="text-zinc-500">${votes.abstain} Abstain</span>
+                                <span class="text-yellow-400 flex items-center gap-1"><span class="w-0.5 h-3 bg-yellow-400 inline-block"></span>10% Quorum</span>
+                            </div>
+                            <div class="flex gap-4 text-zinc-400">
+                                <span><i class="fas fa-users mr-1"></i>${p.voters?.length || 0}</span>
+                                <span><i class="fas fa-chart-pie mr-1"></i>${turnout.toFixed(1)}%</span>
+                                <span><i class="fas fa-bolt mr-1"></i>${actionCount}</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    ${treasuryHtml}
+                </div>
+            </div>
+        </div>
+        
+        <!-- EXPANDED SECTION -->
+        <div id="expand-${p.id}" class="expand-section">
+            <div class="border-t border-zinc-800 p-5 space-y-5">
+                ${renderExpandedContent(p, issues)}
+            </div>
+        </div>
+    </div>`;
+}
+
+function renderExpandedContent(p, issues) {
+    const votes = p.votes || {};
+    const total = votes.yes + votes.no + votes.abstain;
+    
+    // Description section
+    const descHtml = p.description ? `
+        <div>
+            <h4 class="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-2">Description</h4>
+            <div class="text-sm text-zinc-300 bg-zinc-900/50 rounded-lg p-4 max-h-40 overflow-y-auto whitespace-pre-wrap">${escapeHtml(p.description)}</div>
+        </div>` : '';
+    
+    // Voting details
+    const voteHtml = `
+        <div>
+            <h4 class="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-3">Vote Analysis</h4>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div class="bg-zinc-900/50 rounded-lg p-3 text-center">
+                    <div class="text-2xl font-bold text-green-400">${votes.yes || 0}</div>
+                    <div class="text-xs text-zinc-500">Yes Votes</div>
+                </div>
+                <div class="bg-zinc-900/50 rounded-lg p-3 text-center">
+                    <div class="text-2xl font-bold text-red-400">${votes.no || 0}</div>
+                    <div class="text-xs text-zinc-500">No Votes</div>
+                </div>
+                <div class="bg-zinc-900/50 rounded-lg p-3 text-center">
+                    <div class="text-2xl font-bold text-zinc-400">${votes.abstain || 0}</div>
+                    <div class="text-xs text-zinc-500">Abstain</div>
+                </div>
+                <div class="bg-zinc-900/50 rounded-lg p-3 text-center">
+                    <div class="text-2xl font-bold text-violet-400">${(p.voting?.turnout || 0).toFixed(1)}%</div>
+                    <div class="text-xs text-zinc-500">Turnout</div>
+                </div>
+            </div>
+            <div class="mt-3 flex flex-wrap gap-2 text-xs">
+                <span class="${p.voting?.quorumReached ? 'text-green-400' : 'text-red-400'}">
+                    <i class="fas ${p.voting?.quorumReached ? 'fa-check' : 'fa-times'} mr-1"></i>Quorum (${p.voting?.quorumThreshold || 10}%)
+                </span>
+                <span class="${p.voting?.thresholdReached ? 'text-green-400' : 'text-red-400'}">
+                    <i class="fas ${p.voting?.thresholdReached ? 'fa-check' : 'fa-times'} mr-1"></i>Threshold (${p.voting?.passThreshold || 50}%)
+                </span>
+                ${total > 0 && votes.no > 0 && (Math.abs(votes.yes - votes.no) / total * 100) < 20 ? 
+                    '<span class="text-yellow-400"><i class="fas fa-balance-scale mr-1"></i>Close Vote</span>' : ''}
+            </div>
+        </div>`;
+    
+    // Actions
+    let actionsHtml = '';
+    if (p.decodedActions?.length) {
+        actionsHtml = `
+            <div>
+                <h4 class="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-3">On-Chain Actions (${p.decodedActions.length})</h4>
+                <div class="space-y-2">
+                    ${p.decodedActions.map((a, i) => {
+                        const rawMsg = p.rawMsgs?.[i];
+                        const rawMsgJson = rawMsg ? JSON.stringify(rawMsg, null, 2) : null;
+                        // Decode base64 msg if present
+                        let decodedMsg = null;
+                        try {
+                            if (rawMsg?.wasm?.execute?.msg) {
+                                decodedMsg = JSON.parse(atob(rawMsg.wasm.execute.msg));
+                            }
+                        } catch(e) {}
+                        
+                        return `
+                        <div class="action-card rounded-lg overflow-hidden">
+                            <div class="p-3 cursor-pointer hover:bg-violet-500/10 transition" onclick="toggleAction('${p.id}-action-${i}')">
+                                <div class="flex items-start justify-between gap-2">
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-violet-400 font-medium">#${i+1}</span>
+                                        <span class="text-white">${a.actionName || a.action || a.type}</span>
+                                        <i class="fas fa-chevron-down text-zinc-600 text-xs transition-transform" id="action-chev-${p.id}-${i}"></i>
+                                    </div>
+                                    <span class="text-xs ${a.contractType === 'unknown' ? 'text-yellow-400' : 'text-zinc-500'} mono">
+                                        ${a.contractName || a.contract?.slice(0,16) + '...'}
+                                    </span>
+                                </div>
+                                ${a.funds?.length ? `
+                                    <div class="mt-2 text-xs text-yellow-400">
+                                        <i class="fas fa-coins mr-1"></i>Funds: ${a.funds.map(f => formatNum(parseFloat(f.amount)) + ' ' + formatToken(f.denom)).join(', ')}
+                                    </div>` : ''}
+                            </div>
+                            <div id="${p.id}-action-${i}" class="expand-section border-t border-zinc-800/50">
+                                <div class="p-3 space-y-3 bg-zinc-950/50">
+                                    <!-- Decoded Action -->
+                                    <div>
+                                        <div class="text-xs font-semibold text-violet-400 mb-1">Decoded Action</div>
+                                        <pre class="text-xs bg-zinc-900 rounded p-2 overflow-x-auto text-zinc-300 max-h-32">${escapeHtml(JSON.stringify(a.params || {}, null, 2))}</pre>
+                                    </div>
+                                    <!-- Raw Message -->
+                                    ${rawMsgJson ? `
+                                    <div>
+                                        <div class="text-xs font-semibold text-cyan-400 mb-1">Raw Proposal Message</div>
+                                        <pre class="text-xs bg-zinc-900 rounded p-2 overflow-x-auto text-zinc-300 max-h-32">${escapeHtml(rawMsgJson)}</pre>
+                                    </div>` : ''}
+                                    <!-- Decoded Base64 -->
+                                    ${decodedMsg ? `
+                                    <div>
+                                        <div class="text-xs font-semibold text-green-400 mb-1">Decoded Message (base64)</div>
+                                        <pre class="text-xs bg-zinc-900 rounded p-2 overflow-x-auto text-zinc-300 max-h-32">${escapeHtml(JSON.stringify(decodedMsg, null, 2))}</pre>
+                                    </div>` : ''}
+                                    <!-- Contract Info -->
+                                    <div class="flex flex-wrap gap-2 text-xs pt-2 border-t border-zinc-800">
+                                        <span class="text-zinc-500">Contract:</span>
+                                        <a href="https://chainsco.pe/terra2/address/${a.contract}" target="_blank" class="text-cyan-400 hover:underline mono">${a.contract?.slice(0,20)}...</a>
+                                        ${a.contractType === 'unknown' ? '<span class="text-yellow-400">⚠ Not in registry</span>' : ''}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>`;
+                    }).join('')}
+                </div>
+            </div>`;
+    }
+    
+    // Audit issues
+    let auditHtml = '';
+    if (issues.length) {
+        auditHtml = `
+            <div>
+                <h4 class="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-3">Audit Issues</h4>
+                <div class="space-y-2">
+                    ${issues.map(i => `
+                        <div class="flex items-start gap-2 p-3 rounded-lg ${i.sev === 'error' ? 'bg-red-500/10 border border-red-500/20' : 'bg-yellow-500/10 border border-yellow-500/20'}">
+                            <i class="fas ${i.sev === 'error' ? 'fa-times-circle text-red-400' : 'fa-exclamation-triangle text-yellow-400'} mt-0.5"></i>
+                            <div>
+                                <div class="font-medium text-sm">${i.title}</div>
+                                <div class="text-xs text-zinc-400 mt-0.5">${i.detail}</div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>`;
+    }
+    
+    // Treasury impact
+    let treasuryHtml = '';
+    if (p.executionTx && (p.executionTx.received?.length || p.executionTx.sent?.length)) {
+        treasuryHtml = `
+            <div>
+                <h4 class="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-3">Treasury Impact (Actual)</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div class="bg-green-500/5 border border-green-500/20 rounded-lg p-3">
+                        <div class="text-xs text-green-400 font-medium mb-2"><i class="fas fa-arrow-down mr-1"></i>Received</div>
+                        ${(p.executionTx.received || []).filter(t => !isReceiptToken(t.token)).length ? 
+                            (p.executionTx.received || []).filter(t => !isReceiptToken(t.token)).map(t => 
+                                `<div class="text-sm text-green-300">+${formatNum(t.amount)} ${formatToken(t.token)}</div>`
+                            ).join('') : '<div class="text-sm text-zinc-500">None</div>'}
+                    </div>
+                    <div class="bg-red-500/5 border border-red-500/20 rounded-lg p-3">
+                        <div class="text-xs text-red-400 font-medium mb-2"><i class="fas fa-arrow-up mr-1"></i>Sent</div>
+                        ${(p.executionTx.sent || []).filter(t => !isReceiptToken(t.token)).length ? 
+                            (p.executionTx.sent || []).filter(t => !isReceiptToken(t.token)).map(t => 
+                                `<div class="text-sm text-red-300">-${formatNum(t.amount)} ${formatToken(t.token)}</div>`
+                            ).join('') : '<div class="text-sm text-zinc-500">None</div>'}
+                    </div>
+                </div>
+            </div>`;
+    }
+    
+    // Voters
+    let votersHtml = '';
+    if (p.voters?.length) {
+        votersHtml = `
+            <div>
+                <h4 class="text-xs font-semibold text-zinc-400 uppercase tracking-wide mb-3">Voters (${p.voters.length})</h4>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                    ${p.voters.slice(0, 15).map(v => `
+                        <div class="flex items-center justify-between bg-zinc-900/50 rounded-lg p-2 text-sm">
+                            <div class="flex items-center gap-2">
+                                <span class="px-1.5 py-0.5 rounded text-xs font-medium ${
+                                    v.vote === 'yes' ? 'bg-green-500/20 text-green-400' : 
+                                    v.vote === 'no' ? 'bg-red-500/20 text-red-400' : 
+                                    'bg-zinc-500/20 text-zinc-400'
+                                }">${v.vote === 'yes' ? 'Yes' : v.vote === 'no' ? 'No' : 'Abstain'}</span>
+                                <span class="${members[v.address] ? 'text-cyan-400' : 'text-zinc-400'}">${members[v.address] || v.name || v.address?.slice(0,10) + '...'}</span>
+                            </div>
+                            <span class="text-violet-400 mono text-xs">${v.power} VP</span>
+                        </div>
+                    `).join('')}
+                    ${p.voters.length > 15 ? `<div class="text-xs text-zinc-500 p-2">+${p.voters.length - 15} more</div>` : ''}
+                </div>
+            </div>`;
+    }
+    
+    // Links
+    const linksHtml = `
+        <div class="flex flex-wrap gap-4 pt-3 border-t border-zinc-800 text-xs">
+            <a href="https://daodao.zone/dao/${DAO_ADDR}/proposals/${p.id?.toUpperCase()}" target="_blank" class="text-violet-400 hover:text-violet-300">
+                <i class="fas fa-external-link-alt mr-1"></i>View on DAODAO
+            </a>
+            ${p.executionTx?.hash ? `
+                <a href="https://chainsco.pe/terra2/tx/${p.executionTx.hash}" target="_blank" class="text-cyan-400 hover:text-cyan-300">
+                    <i class="fas fa-cube mr-1"></i>TX: ${p.executionTx.hash.slice(0,12)}...
+                </a>` : ''}
+            ${p.historicalNote ? `<span class="text-yellow-400"><i class="fas fa-history mr-1"></i>${p.historicalNote}</span>` : ''}
+        </div>`;
+    
+    return [descHtml, voteHtml, actionsHtml, treasuryHtml, auditHtml, votersHtml, linksHtml].filter(Boolean).join('');
+}
+
+function toggleProp(id) {
+    const el = document.getElementById('expand-' + id);
+    const chev = document.getElementById('chev-' + id);
+    if (el) {
+        el.classList.toggle('open');
+        if (chev) chev.style.transform = el.classList.contains('open') ? 'rotate(180deg)' : '';
+    }
+}
+
+function toggleAction(id) {
+    const el = document.getElementById(id);
+    const idx = id.split('-').pop();
+    const propId = id.replace(`-action-${idx}`, '');
+    const chev = document.getElementById(`action-chev-${propId}-${idx}`);
+    if (el) {
+        el.classList.toggle('open');
+        if (chev) chev.style.transform = el.classList.contains('open') ? 'rotate(180deg)' : '';
+    }
+}
+
+// ========================================
+// AUDIT & RISK
+// ========================================
+function auditProposal(p) {
+    const issues = [];
+    
+    // Check for unknown contracts with funds
+    (p.decodedActions || []).forEach((a, i) => {
+        if (a.contractType === 'unknown' && a.funds?.length > 0) {
+            issues.push({ sev: 'error', title: 'Unknown contract receiving funds', detail: `Action #${i+1} sends funds to unverified contract` });
+        }
+        if (a.type === 'bank' && a.contractType === 'unknown') {
+            issues.push({ sev: 'warning', title: 'Payment to unknown wallet', detail: `Action #${i+1} sends to wallet not in registry` });
+        }
+    });
+    
+    // Check status mismatches
+    if (p.status === 'Executed' && !p.executionTx) {
+        issues.push({ sev: 'warning', title: 'Missing execution TX', detail: 'Proposal marked executed but no TX linked' });
+    }
+    
+    return issues;
+}
+
+function calculateRisk(p) {
+    let score = 100;
+    const issues = auditProposal(p);
+    
+    // Deduct for issues
+    issues.forEach(i => {
+        score -= i.sev === 'error' ? 25 : 10;
+    });
+    
+    // Bonus for execution TX
+    if (p.executionTx?.hash) score = Math.min(100, score + 5);
+    
+    // Deduct for low turnout
+    if ((p.voting?.turnout || 0) < 15) score -= 5;
+    
+    return { score: Math.max(0, score), level: score >= 80 ? 'low' : score >= 50 ? 'medium' : 'high' };
+}
+
+// ========================================
+// MEMBERS
+// ========================================
+function renderMembers() {
+    const search = document.getElementById('member-search').value.toLowerCase();
+    let filtered = memberStats;
+    if (search) filtered = memberStats.filter(m => m.name?.toLowerCase().includes(search) || m.address.includes(search));
+    
+    const total = Object.keys(proposals).length;
+    
+    // Render podium (top 3)
+    const podiumEl = document.getElementById('podium');
+    const top3 = memberStats.slice(0, 3);
+    if (top3.length >= 3) {
+        podiumEl.innerHTML = `
+            <!-- 2nd Place -->
+            <div class="text-center animate-in" style="animation-delay:0.1s">
+                <div class="w-20 h-20 mx-auto rounded-xl bg-gradient-to-br from-zinc-400 to-zinc-600 flex items-center justify-center text-3xl mb-2 shadow-lg border-2 border-zinc-400">
+                    🥈
+                </div>
+                <div class="bg-zinc-800 rounded-t-lg pt-3 pb-12 px-4 -mb-8">
+                    <div class="font-bold text-zinc-300 truncate max-w-[100px]">${top3[1]?.name || shortAddr(top3[1]?.address)}</div>
+                    <div class="text-2xl font-bold text-zinc-400">${top3[1]?.rate?.toFixed(1)}%</div>
+                    <div class="text-xs text-zinc-500">${top3[1]?.votes}/${total} votes</div>
+                </div>
+            </div>
+            <!-- 1st Place -->
+            <div class="text-center animate-in" style="animation-delay:0s">
+                <div class="w-24 h-24 mx-auto rounded-xl bg-gradient-to-br from-yellow-400 to-amber-600 flex items-center justify-center text-4xl mb-2 shadow-xl border-2 border-yellow-300 ring-4 ring-yellow-400/30">
+                    👑
+                </div>
+                <div class="bg-gradient-to-b from-yellow-500/20 to-zinc-800 rounded-t-lg pt-3 pb-16 px-4 -mb-12 border-t-2 border-yellow-500/50">
+                    <div class="font-bold text-yellow-400 truncate max-w-[120px]">${top3[0]?.name || shortAddr(top3[0]?.address)}</div>
+                    <div class="text-3xl font-bold text-yellow-300">${top3[0]?.rate?.toFixed(1)}%</div>
+                    <div class="text-xs text-yellow-500/70">${top3[0]?.votes}/${total} votes</div>
+                    ${top3[0]?.currentStreak > 0 ? `<div class="text-xs text-orange-400 mt-1">🔥 ${top3[0].currentStreak} streak</div>` : ''}
+                </div>
+            </div>
+            <!-- 3rd Place -->
+            <div class="text-center animate-in" style="animation-delay:0.2s">
+                <div class="w-20 h-20 mx-auto rounded-xl bg-gradient-to-br from-amber-600 to-amber-800 flex items-center justify-center text-3xl mb-2 shadow-lg border-2 border-amber-600">
+                    🥉
+                </div>
+                <div class="bg-zinc-800 rounded-t-lg pt-3 pb-8 px-4 -mb-4">
+                    <div class="font-bold text-amber-500 truncate max-w-[100px]">${top3[2]?.name || shortAddr(top3[2]?.address)}</div>
+                    <div class="text-2xl font-bold text-amber-600">${top3[2]?.rate?.toFixed(1)}%</div>
+                    <div class="text-xs text-zinc-500">${top3[2]?.votes}/${total} votes</div>
+                </div>
+            </div>
+        `;
+    }
+    
+    // Update stats cards
+    const bestStreak = Math.max(...memberStats.map(m => m.bestStreak || 0));
+    document.getElementById('streak-leader').textContent = bestStreak + ' props';
+    
+    const activeStreaks = memberStats.filter(m => (m.currentStreak || 0) >= 3).length;
+    document.getElementById('active-streaks').textContent = activeStreaks;
+    
+    const avgPart = memberStats.reduce((s, m) => s + m.rate, 0) / memberStats.length;
+    document.getElementById('avg-participation').textContent = avgPart.toFixed(1) + '%';
+    
+    document.getElementById('total-members').textContent = memberStats.length;
+    
+    // Populate exclude dropdown
+    const excludeSelect = document.getElementById('chart-exclude');
+    const currentValue = excludeSelect.value;
+    excludeSelect.innerHTML = '<option value="">Show All Members</option>' + 
+        memberStats.filter(m => m.name).map(m => 
+            `<option value="${m.address}" ${m.address === currentValue ? 'selected' : ''}>${m.name}</option>`
+        ).join('');
+    
+    // Render participation chart
+    renderParticipationChart();
+    
+    // Render leaderboard
+    const el = document.getElementById('members-list');
+    
+    // Get sorted proposal IDs for dot display
+    const sortedPropIds = Object.keys(proposals).sort((a, b) => {
+        const aNum = parseInt(a.replace(/\D/g, '') || 0);
+        const bNum = parseInt(b.replace(/\D/g, '') || 0);
+        return aNum - bNum;
+    });
+    
+    el.innerHTML = filtered.slice(0, 50).map((m, i) => {
+        const rank = memberStats.indexOf(m) + 1;
+        const tier = m.tier;
+        const memberId = `member-${m.address.slice(-8)}`;
+        
+        // Generate voting dots for each proposal
+        const votingDots = sortedPropIds.map(propId => {
+            const vote = m.voteByProp?.[propId];
+            if (vote === 'yes') return `<div class="w-2.5 h-2.5 rounded-full bg-green-500" title="${propId}: Yes"></div>`;
+            if (vote === 'no') return `<div class="w-2.5 h-2.5 rounded-full bg-red-500" title="${propId}: No"></div>`;
+            if (vote === 'abstain') return `<div class="w-2.5 h-2.5 rounded-full bg-zinc-500" title="${propId}: Abstain"></div>`;
+            return `<div class="w-2.5 h-2.5 rounded-full border border-zinc-700" title="${propId}: No vote"></div>`;
+        }).join('');
+        
+        return `
+        <div class="card animate-in hover:border-violet-500/50 transition-all cursor-pointer" style="animation-delay:${i * 0.02}s" onclick="toggleMemberExpand('${memberId}')">
+            <div class="p-4">
+                <div class="flex items-center gap-4">
+                    <!-- Rank -->
+                    <div class="w-10 text-center">
+                        ${rank <= 3 ? 
+                            `<span class="text-2xl">${rank === 1 ? '🥇' : rank === 2 ? '🥈' : '🥉'}</span>` : 
+                            `<span class="text-lg text-zinc-500 mono">#${rank}</span>`
+                        }
+                    </div>
+                    
+                    <!-- Tier Badge -->
+                    <div class="w-12 h-12 rounded-xl ${tier.bg} flex items-center justify-center text-2xl flex-shrink-0">
+                        ${tier.icon}
+                    </div>
+                    
+                    <!-- Info -->
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2">
+                            <span class="font-bold ${m.name ? tier.color : 'text-zinc-400 mono text-sm'} truncate">${m.name || shortAddr(m.address)}</span>
+                            ${m.title ? `<span class="text-xs px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400">${m.title}</span>` : ''}
+                        </div>
+                        <div class="flex items-center gap-3 text-xs text-zinc-500 mt-1">
+                            <span class="mono text-zinc-600">${shortAddr(m.address)}</span>
+                            <span>•</span>
+                            <span>${tier.name}</span>
+                            <span>•</span>
+                            <span>${m.votes}/${total} votes</span>
+                            <span>•</span>
+                            <span>${formatNum(m.vp)} VP</span>
+                            ${m.currentStreak > 0 ? `<span class="text-orange-400">🔥 ${m.currentStreak}</span>` : ''}
+                        </div>
+                    </div>
+                    
+                    <!-- Rate -->
+                    <div class="text-right flex-shrink-0">
+                        <div class="text-2xl font-bold ${tier.color}">${m.rate.toFixed(1)}%</div>
+                    </div>
+                    
+                    <!-- Vote Breakdown -->
+                    <div class="flex flex-col gap-1 text-xs min-w-[60px] flex-shrink-0">
+                        <div class="flex items-center gap-1">
+                            <div class="w-2 h-2 rounded-full bg-green-500"></div>
+                            <span class="text-green-400">${m.yes}</span>
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <div class="w-2 h-2 rounded-full bg-red-500"></div>
+                            <span class="text-red-400">${m.no}</span>
+                        </div>
+                        <div class="flex items-center gap-1">
+                            <div class="w-2 h-2 rounded-full bg-zinc-500"></div>
+                            <span class="text-zinc-400">${m.abstain}</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Expand indicator -->
+                    <div class="text-zinc-600 text-sm" id="${memberId}-arrow">▼</div>
+                </div>
+                
+                <!-- Progress Bar -->
+                <div class="mt-3 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                    <div class="h-full bg-gradient-to-r ${
+                        m.rate >= 90 ? 'from-yellow-500 to-amber-500' :
+                        m.rate >= 75 ? 'from-cyan-500 to-blue-500' :
+                        m.rate >= 50 ? 'from-zinc-400 to-zinc-500' :
+                        'from-zinc-600 to-zinc-700'
+                    }" style="width:${m.rate}%"></div>
+                </div>
+            </div>
+            
+            <!-- Expanded voting activity (hidden by default) -->
+            <div id="${memberId}" class="hidden border-t border-zinc-800 p-4 bg-zinc-900/50">
+                <div class="text-xs text-zinc-500 mb-2">Voting Activity (${total} proposals) • <span class="text-green-400">●</span> Yes <span class="text-red-400">●</span> No <span class="text-zinc-400">●</span> Abstain <span class="text-zinc-600">○</span> No vote</div>
+                <div class="flex flex-wrap gap-1">
+                    ${votingDots}
+                </div>
+            </div>
+        </div>`;
+    }).join('') || '<div class="text-zinc-500 text-center py-8">No members found</div>';
+}
+
+function sortMembers(by) {
+    document.querySelectorAll('.sort-btn').forEach(b => {
+        b.classList.toggle('bg-violet-600', b.dataset.sort === by);
+        b.classList.toggle('bg-zinc-900', b.dataset.sort !== by);
+    });
+    
+    if (by === 'rank') memberStats.sort((a, b) => b.rate - a.rate);
+    else if (by === 'vp') memberStats.sort((a, b) => b.vp - a.vp);
+    else if (by === 'streak') memberStats.sort((a, b) => (b.currentStreak || 0) - (a.currentStreak || 0));
+    else if (by === 'name') memberStats.sort((a, b) => (a.name || a.address).localeCompare(b.name || b.address));
+    
+    renderMembers();
+}
+
+function toggleMemberExpand(id) {
+    const el = document.getElementById(id);
+    const arrow = document.getElementById(id + '-arrow');
+    if (el) {
+        el.classList.toggle('hidden');
+        if (arrow) arrow.textContent = el.classList.contains('hidden') ? '▼' : '▲';
+    }
+}
+
+function renderParticipationChart() {
+    const chartEl = document.getElementById('participation-chart');
+    const excludeAddr = document.getElementById('chart-exclude').value;
+    
+    if (!chartEl) return;
+    
+    // Get proposals sorted by ID (oldest first)
+    const sortedProps = Object.values(proposals).sort((a, b) => {
+        const aNum = parseInt(a.id?.replace(/\D/g, '') || 0);
+        const bNum = parseInt(b.id?.replace(/\D/g, '') || 0);
+        return aNum - bNum;
+    });
+    
+    if (sortedProps.length === 0) {
+        chartEl.innerHTML = '<div class="text-zinc-500 text-center w-full self-center">No proposal data</div>';
+        return;
+    }
+    
+    // Count votes per proposal (excluding selected member if any)
+    const voteCounts = sortedProps.map(p => {
+        let voters = p.voters || [];
+        if (excludeAddr) {
+            voters = voters.filter(v => v.address !== excludeAddr);
+        }
+        return {
+            id: p.id,
+            title: p.title,
+            votes: voters.length,
+            yes: voters.filter(v => v.vote === 'yes').length,
+            no: voters.filter(v => v.vote === 'no').length,
+            abstain: voters.filter(v => v.vote === 'abstain').length
+        };
+    });
+    
+    const maxVotes = Math.max(...voteCounts.map(v => v.votes), 1);
+    const chartHeight = 240; // pixels (h-64 = 256px)
+    
+    chartEl.innerHTML = voteCounts.map((p, i) => {
+        const barHeight = Math.max((p.votes / maxVotes) * chartHeight, 4);
+        const yesH = p.votes > 0 ? (p.yes / p.votes) * barHeight : 0;
+        const noH = p.votes > 0 ? (p.no / p.votes) * barHeight : 0;
+        const abstainH = barHeight - yesH - noH;
+        
+        return `
+        <div class="flex-1 flex flex-col justify-end group relative cursor-pointer" style="min-width:4px; max-width:24px;">
+            <div class="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-zinc-800 border border-zinc-700 rounded-lg p-2 text-xs whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-20 pointer-events-none shadow-xl">
+                <div class="font-bold text-violet-400">${p.id?.toUpperCase()}</div>
+                <div class="text-zinc-400 max-w-[150px] truncate">${p.title?.slice(0,30)}...</div>
+                <div class="mt-1">
+                    <span class="text-green-400">${p.yes}Y</span> 
+                    <span class="text-red-400">${p.no}N</span> 
+                    <span class="text-zinc-500">${p.abstain}A</span>
+                </div>
+                <div class="font-medium mt-1">${p.votes} total</div>
+            </div>
+            ${abstainH > 0 ? `<div class="w-full rounded-t-sm" style="height:${abstainH}px; background:#52525b;"></div>` : ''}
+            ${noH > 0 ? `<div class="w-full" style="height:${noH}px; background:#ef4444;"></div>` : ''}
+            ${yesH > 0 ? `<div class="w-full rounded-b-sm group-hover:brightness-125 transition-all" style="height:${yesH}px; background:#22c55e;"></div>` : ''}
+        </div>`;
+    }).join('');
+}
+
+// ========================================
+// UTILS
+// ========================================
+function switchTab(tab, btn) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+    document.getElementById('tab-' + tab).classList.remove('hidden');
+    
+    // Update tab button styles
+    document.querySelectorAll('.tab-btn-sm').forEach(el => {
+        el.classList.remove('bg-zinc-800/50', 'text-zinc-300', 'active');
+        el.classList.add('text-zinc-500');
+    });
+    if (btn) {
+        btn.classList.remove('text-zinc-500');
+        btn.classList.add('bg-zinc-800/50', 'text-zinc-300', 'active');
+    }
+    
+    // Re-render chart when switching to members tab
+    if (tab === 'members') {
+        renderParticipationChart();
+    }
+}
+
+function formatToken(t) {
+    if (!t) return '?';
+    if (TOKEN_NAMES[t]) return TOKEN_NAMES[t];
+    if (t === 'uluna') return 'LUNA';
+    if (t.includes('factory/')) {
+        const parts = t.split('/');
+        return parts[parts.length - 1]?.toUpperCase() || t.slice(-6);
+    }
+    if (t.length > 12) return t.slice(0, 8) + '...';
+    return t;
+}
+
+function formatNum(n) {
+    if (!n || isNaN(n)) return '0';
+    if (n >= 1e9) return (n/1e9).toFixed(2) + 'B';
+    if (n >= 1e6) return (n/1e6).toFixed(2) + 'M';
+    if (n >= 1e3) return (n/1e3).toFixed(1) + 'K';
+    return n.toFixed(n < 10 ? 2 : 0);
+}
+
+function escapeHtml(t) {
+    if (!t) return '';
+    const d = document.createElement('div');
+    d.textContent = t;
+    return d.innerHTML;
+}
+
+// ========================================
+// POPUPS
+// ========================================
+function showRewardsPopup() {
+    const modal = document.getElementById('popup-modal');
+    const title = document.getElementById('popup-title');
+    const content = document.getElementById('popup-content');
+    
+    title.innerHTML = '💰 Rewards Claimed';
+    
+    if (rewardsData.length === 0) {
+        content.innerHTML = '<div class="text-zinc-500 text-center py-8">No rewards data available</div>';
+    } else {
+        content.innerHTML = rewardsData.map(r => `
+            <div class="p-4 bg-zinc-800/50 rounded-lg mb-3 border-l-2 border-green-500">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="font-bold text-violet-400">${r.id?.toUpperCase()}</span>
+                    ${r.date ? `<span class="text-xs text-zinc-500">${new Date(r.date).toLocaleDateString()}</span>` : ''}
+                </div>
+                <div class="text-sm text-zinc-400 mb-2">${r.title}</div>
+                <div class="flex flex-wrap gap-2">
+                    ${r.tokens.map(t => `
+                        <span class="px-2 py-1 rounded bg-green-500/20 text-green-400 text-xs mono">
+                            +${formatNum(t.amount)} ${t.token}
+                        </span>
+                    `).join('')}
+                </div>
+            </div>
+        `).join('');
+    }
+    
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+function showPaymentsPopup() {
+    const modal = document.getElementById('popup-modal');
+    const title = document.getElementById('popup-title');
+    const content = document.getElementById('popup-content');
+    
+    title.innerHTML = '💸 Payments Made';
+    
+    if (paymentsData.length === 0) {
+        content.innerHTML = '<div class="text-zinc-500 text-center py-8">No payments recorded</div>';
+    } else {
+        const total = paymentsData.reduce((s, p) => s + p.amount, 0);
+        
+        content.innerHTML = `
+            <div class="mb-4 p-3 bg-red-500/10 rounded-lg border border-red-500/30">
+                <div class="text-xs text-zinc-500">Total Payments</div>
+                <div class="text-2xl font-bold text-red-400">${formatNum(total)} LUNA</div>
+            </div>
+        ` + paymentsData.map(p => `
+            <div class="p-4 bg-zinc-800/50 rounded-lg mb-3 border-l-2 border-red-500">
+                <div class="flex items-center justify-between mb-1">
+                    <span class="font-bold text-violet-400">${p.id?.toUpperCase()}</span>
+                    <span class="text-red-400 mono font-medium">-${formatNum(p.amount)} ${p.token}</span>
+                </div>
+                <div class="text-sm text-zinc-400 mb-1">${p.title?.slice(0, 50)}${p.title?.length > 50 ? '...' : ''}</div>
+                <div class="text-xs text-zinc-500">→ ${p.recipient}</div>
+            </div>
+        `).join('');
+    }
+    
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+function closePopup() {
+    const modal = document.getElementById('popup-modal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+}
+
+function showChartPopup() {
+    const modal = document.getElementById('chart-modal');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    
+    // Populate exclude dropdown
+    const select = document.getElementById('chart-exclude');
+    select.innerHTML = '<option value="">Show All Members</option>' + 
+        memberStats.filter(m => m.name).map(m => 
+            `<option value="${m.address}">${m.name}</option>`
+        ).join('');
+    
+    // Render chart
+    renderParticipationChart();
+}
+
+function closeChartPopup() {
+    const modal = document.getElementById('chart-modal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+}
+
+// Close popups on Escape key
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        closePopup();
+        closeChartPopup();
+    }
+});
+
+// ========================================
+// PARTNER DAO DATA LOADING
+// ========================================
+async function loadPartnerData() {
+    try {
+        console.log('📋 Loading partner DAO data...');
+        
+        // Load member CSVs for name lookup
+        await loadPartnerMembers();
+        
+        // Load Lion DAO proposals
+        try {
+            const lionRes = await fetch(LION_PROPS_URL);
+            if (lionRes.ok) {
+                const text = await lionRes.text();
+                const data = JSON.parse(text.replace(/^"|"$/g, '').replace(/\\n/g, '\n').replace(/\\"/g, '"'));
+                lionProposals = data.proposals || {};
+                console.log(`  🦁 Lion DAO: ${Object.keys(lionProposals).length} proposals`);
+            }
+        } catch(e) { console.warn('Failed to load Lion DAO:', e); }
+        
+        // Load PixelLions proposals
+        try {
+            const pixelRes = await fetch(PIXEL_PROPS_URL);
+            if (pixelRes.ok) {
+                const text = await pixelRes.text();
+                const data = JSON.parse(text.replace(/^"|"$/g, '').replace(/\\n/g, '\n').replace(/\\"/g, '"'));
+                pixelProposals = data.proposals || {};
+                console.log(`  🎨 PixelLions: ${Object.keys(pixelProposals).length} proposals`);
+            }
+        } catch(e) { console.warn('Failed to load PixelLions:', e); }
+        
+        // Process voter participation
+        processPartnerVoters();
+        processAllianceVoters();
+        
+        console.log('✅ Partner data loaded');
+        
+    } catch(e) {
+        console.error('Error loading partner data:', e);
+    }
+}
+
+async function loadPartnerMembers() {
+    // Load all member CSVs and combine for name lookup
+    const urls = [MEMBERS_URL, LION_MEMBERS_URL, PIXEL_MEMBERS_URL];
+    
+    for (const url of urls) {
+        try {
+            const res = await fetch(url);
+            if (!res.ok) continue;
+            const csv = await res.text();
+            const lines = csv.split('\n').slice(1).filter(line => line.trim());
+            
+            lines.forEach(line => {
+                const m = line.match(/"([^"]+)","([^"]*)"/);
+                if (m && m[1] && m[2]) {
+                    partnerMembers[m[1]] = m[2];  // address -> name
+                }
+            });
+        } catch(e) { /* ignore */ }
+    }
+    
+    console.log(`  📝 Loaded ${Object.keys(partnerMembers).length} member names`);
+}
+
+function processPartnerVoters() {
+    // Build voter participation map for Lion DAO + PixelLions
+    const voterMap = {};
+    
+    // Get sorted proposal IDs for each DAO
+    const lionPropIds = Object.keys(lionProposals).sort((a, b) => {
+        const aNum = parseInt(a.replace(/\D/g, '') || 0);
+        const bNum = parseInt(b.replace(/\D/g, '') || 0);
+        return aNum - bNum;
+    });
+    const pixelPropIds = Object.keys(pixelProposals).sort((a, b) => {
+        const aNum = parseInt(a.replace(/\D/g, '') || 0);
+        const bNum = parseInt(b.replace(/\D/g, '') || 0);
+        return aNum - bNum;
+    });
+    
+    // Process Lion DAO
+    Object.values(lionProposals).forEach(prop => {
+        (prop.voters || []).forEach(v => {
+            if (!voterMap[v.address]) {
+                voterMap[v.address] = {
+                    address: v.address,
+                    name: v.name || partnerMembers[v.address] || null,
+                    lionVotes: 0,
+                    lionPropsSet: new Set(),
+                    lionVoteByProp: {},
+                    pixelVotes: 0,
+                    pixelPropsSet: new Set(),
+                    pixelVoteByProp: {}
+                };
+            }
+            voterMap[v.address].lionVotes++;
+            voterMap[v.address].lionPropsSet.add(prop.id);
+            voterMap[v.address].lionVoteByProp[prop.id] = v.vote;
+            if (v.name && !voterMap[v.address].name) voterMap[v.address].name = v.name;
+        });
+    });
+    
+    // Process PixelLions
+    Object.values(pixelProposals).forEach(prop => {
+        (prop.voters || []).forEach(v => {
+            if (!voterMap[v.address]) {
+                voterMap[v.address] = {
+                    address: v.address,
+                    name: v.name || partnerMembers[v.address] || null,
+                    lionVotes: 0,
+                    lionPropsSet: new Set(),
+                    lionVoteByProp: {},
+                    pixelVotes: 0,
+                    pixelPropsSet: new Set(),
+                    pixelVoteByProp: {}
+                };
+            }
+            voterMap[v.address].pixelVotes++;
+            voterMap[v.address].pixelPropsSet.add(prop.id);
+            voterMap[v.address].pixelVoteByProp[prop.id] = v.vote;
+            if (v.name && !voterMap[v.address].name) voterMap[v.address].name = v.name;
+        });
+    });
+    
+    // Convert to array and calculate scores
+    const lionTotal = lionPropIds.length;
+    const pixelTotal = pixelPropIds.length;
+    
+    partnerVoters = Object.values(voterMap).map(v => ({
+        ...v,
+        lionProps: v.lionPropsSet.size,
+        pixelProps: v.pixelPropsSet.size,
+        lionPropIds,
+        pixelPropIds,
+        lionPct: lionTotal > 0 ? (v.lionPropsSet.size / lionTotal * 100) : 0,
+        pixelPct: pixelTotal > 0 ? (v.pixelPropsSet.size / pixelTotal * 100) : 0,
+        combinedScore: ((v.lionPropsSet.size / Math.max(lionTotal, 1)) + (v.pixelPropsSet.size / Math.max(pixelTotal, 1))) / 2 * 100,
+        inBoth: v.lionPropsSet.size > 0 && v.pixelPropsSet.size > 0
+    })).sort((a, b) => b.combinedScore - a.combinedScore);
+    
+    // Update stats
+    const lionOnly = partnerVoters.filter(v => v.lionProps > 0 && v.pixelProps === 0).length;
+    const pixelOnly = partnerVoters.filter(v => v.pixelProps > 0 && v.lionProps === 0).length;
+    const both = partnerVoters.filter(v => v.inBoth).length;
+    
+    document.getElementById('partner-lion-voters').textContent = partnerVoters.filter(v => v.lionProps > 0).length;
+    document.getElementById('partner-pixel-voters').textContent = partnerVoters.filter(v => v.pixelProps > 0).length;
+    document.getElementById('partner-both-voters').textContent = both;
+    document.getElementById('partner-total-voters').textContent = partnerVoters.length;
+}
+
+function processAllianceVoters() {
+    // Build voter participation map for all 3 DAOs
+    const voterMap = {};
+    
+    // Get sorted proposal IDs for each DAO
+    const adaoPropIds = Object.keys(proposals).sort((a, b) => {
+        const aNum = parseInt(a.replace(/\D/g, '') || 0);
+        const bNum = parseInt(b.replace(/\D/g, '') || 0);
+        return aNum - bNum;
+    });
+    const lionPropIds = Object.keys(lionProposals).sort((a, b) => {
+        const aNum = parseInt(a.replace(/\D/g, '') || 0);
+        const bNum = parseInt(b.replace(/\D/g, '') || 0);
+        return aNum - bNum;
+    });
+    const pixelPropIds = Object.keys(pixelProposals).sort((a, b) => {
+        const aNum = parseInt(a.replace(/\D/g, '') || 0);
+        const bNum = parseInt(b.replace(/\D/g, '') || 0);
+        return aNum - bNum;
+    });
+    
+    // Get aDAO voters from memberStats (includes voteByProp)
+    memberStats.forEach(m => {
+        voterMap[m.address] = {
+            address: m.address,
+            name: m.name || partnerMembers[m.address] || null,
+            adaoVotes: m.votes,
+            adaoPct: m.rate,
+            adaoVoteByProp: m.voteByProp || {},
+            lionVotes: 0,
+            lionVoteByProp: {},
+            pixelVotes: 0,
+            pixelVoteByProp: {}
+        };
+    });
+    
+    // Add Lion DAO participation
+    Object.values(lionProposals).forEach(prop => {
+        (prop.voters || []).forEach(v => {
+            if (!voterMap[v.address]) {
+                voterMap[v.address] = {
+                    address: v.address,
+                    name: v.name || partnerMembers[v.address] || null,
+                    adaoVotes: 0,
+                    adaoPct: 0,
+                    adaoVoteByProp: {},
+                    lionVotes: 0,
+                    lionVoteByProp: {},
+                    pixelVotes: 0,
+                    pixelVoteByProp: {}
+                };
+            }
+            voterMap[v.address].lionVotes++;
+            voterMap[v.address].lionVoteByProp[prop.id] = v.vote;
+            if (v.name && !voterMap[v.address].name) voterMap[v.address].name = v.name;
+        });
+    });
+    
+    // Add PixelLions participation
+    Object.values(pixelProposals).forEach(prop => {
+        (prop.voters || []).forEach(v => {
+            if (!voterMap[v.address]) {
+                voterMap[v.address] = {
+                    address: v.address,
+                    name: v.name || partnerMembers[v.address] || null,
+                    adaoVotes: 0,
+                    adaoPct: 0,
+                    adaoVoteByProp: {},
+                    lionVotes: 0,
+                    lionVoteByProp: {},
+                    pixelVotes: 0,
+                    pixelVoteByProp: {}
+                };
+            }
+            voterMap[v.address].pixelVotes++;
+            voterMap[v.address].pixelVoteByProp[prop.id] = v.vote;
+            if (v.name && !voterMap[v.address].name) voterMap[v.address].name = v.name;
+        });
+    });
+    
+    // Calculate alliance status
+    const lionTotal = lionPropIds.length;
+    const pixelTotal = pixelPropIds.length;
+    const adaoTotal = adaoPropIds.length;
+    
+    allianceVoters = Object.values(voterMap).map(v => {
+        const inAdao = v.adaoVotes > 0;
+        const inLion = v.lionVotes > 0;
+        const inPixel = v.pixelVotes > 0;
+        const inPartner = inLion || inPixel;
+        
+        let status = 'none';
+        let statusEmoji = '👤';
+        let statusColor = 'text-zinc-500';
+        
+        if (inAdao && inLion && inPixel) {
+            status = 'all3';
+            statusEmoji = '⭐';
+            statusColor = 'text-yellow-400';
+        } else if (inAdao && inPartner) {
+            status = 'boosted';
+            statusEmoji = '🚀';
+            statusColor = 'text-green-400';
+        } else if (inLion && inPixel) {
+            status = 'partner';
+            statusEmoji = '🤝';
+            statusColor = 'text-purple-400';
+        } else if (inAdao) {
+            status = 'adao';
+            statusEmoji = '🏛️';
+            statusColor = 'text-violet-400';
+        } else if (inPartner) {
+            status = 'partnerOnly';
+            statusEmoji = inLion ? '🦁' : '🎨';
+            statusColor = inLion ? 'text-amber-400' : 'text-pink-400';
+        }
+        
+        // Combined score: average of all participation rates
+        const lionPct = lionTotal > 0 ? (v.lionVotes / lionTotal * 100) : 0;
+        const pixelPct = pixelTotal > 0 ? (v.pixelVotes / pixelTotal * 100) : 0;
+        const combinedScore = (v.adaoPct + lionPct + pixelPct) / 3;
+        
+        return {
+            ...v,
+            adaoPropIds,
+            lionPropIds,
+            pixelPropIds,
+            lionPct,
+            pixelPct,
+            status,
+            statusEmoji,
+            statusColor,
+            combinedScore,
+            inAdao,
+            inLion,
+            inPixel,
+            inPartner,
+            daoCount: (inAdao ? 1 : 0) + (inLion ? 1 : 0) + (inPixel ? 1 : 0)
+        };
+    }).sort((a, b) => b.combinedScore - a.combinedScore);
+    
+    // Update stats
+    const adaoVoters = allianceVoters.filter(v => v.inAdao).length;
+    const partnerVotersCount = allianceVoters.filter(v => v.inPartner).length;
+    const boosted = allianceVoters.filter(v => v.status === 'boosted' || v.status === 'all3').length;
+    const all3 = allianceVoters.filter(v => v.status === 'all3').length;
+    
+    document.getElementById('alliance-adao-voters').textContent = adaoVoters;
+    document.getElementById('alliance-partner-voters').textContent = partnerVotersCount;
+    document.getElementById('alliance-boosted').textContent = boosted;
+    document.getElementById('alliance-all-three').textContent = all3;
+}
+
+// ========================================
+// MEMBER VIEW SWITCHING
+// ========================================
+function switchMemberView(view) {
+    currentMemberView = view;
+    
+    // Update DAO button styles
+    document.querySelectorAll('.dao-btn').forEach(btn => {
+        const dao = btn.dataset.dao;
+        const isActive = (view === 'adao' && dao === 'adao') || 
+                         (view === 'partner' && dao === 'lion') || 
+                         (view === 'alliance' && dao === 'alliance');
+        
+        if (dao === 'adao') {
+            if (isActive) {
+                btn.className = 'dao-btn px-6 py-3 rounded-xl border border-violet-500/50 bg-violet-500/10 text-violet-300 font-medium transition-all hover:bg-violet-500/20';
+            } else {
+                btn.className = 'dao-btn px-6 py-3 rounded-xl border border-zinc-700 bg-zinc-800/50 text-zinc-400 font-medium transition-all hover:bg-violet-500/10 hover:text-violet-300 hover:border-violet-500/50';
+            }
+        } else if (dao === 'lion') {
+            if (isActive) {
+                btn.className = 'dao-btn px-6 py-3 rounded-xl border border-amber-500/50 bg-amber-500/10 text-amber-300 font-medium transition-all hover:bg-amber-500/20';
+            } else {
+                btn.className = 'dao-btn px-6 py-3 rounded-xl border border-zinc-700 bg-zinc-800/50 text-zinc-400 font-medium transition-all hover:bg-amber-500/10 hover:text-amber-300 hover:border-amber-500/50';
+            }
+        } else if (dao === 'alliance') {
+            if (isActive) {
+                btn.className = 'dao-btn dao-allies px-6 py-3 rounded-xl border-2 border-cyan-400 bg-gradient-to-r from-cyan-500/20 to-purple-500/20 text-cyan-200 font-medium transition-all shadow-lg shadow-cyan-500/30';
+            } else {
+                btn.className = 'dao-btn dao-allies px-6 py-3 rounded-xl border-2 border-cyan-500/50 bg-gradient-to-r from-cyan-500/10 to-purple-500/10 text-cyan-300 font-medium transition-all hover:from-cyan-500/20 hover:to-purple-500/20 shadow-lg shadow-cyan-500/20';
+            }
+        }
+    });
+    
+    // Show/hide views
+    document.getElementById('view-adao').classList.toggle('hidden', view !== 'adao');
+    document.getElementById('view-partner').classList.toggle('hidden', view !== 'partner');
+    document.getElementById('view-alliance').classList.toggle('hidden', view !== 'alliance');
+    
+    // Render the appropriate view
+    if (view === 'partner') renderPartnerMembers();
+    if (view === 'alliance') renderAllianceMembers();
+}
+
+function renderPartnerMembers() {
+    const container = document.getElementById('partner-members-list');
+    const search = (document.getElementById('partner-search')?.value || '').toLowerCase();
+    const filter = document.getElementById('partner-filter')?.value || 'all';
+    
+    let filtered = partnerVoters;
+    
+    // Apply filter
+    if (filter === 'both') filtered = filtered.filter(v => v.inBoth);
+    else if (filter === 'lion') filtered = filtered.filter(v => v.lionProps > 0 && v.pixelProps === 0);
+    else if (filter === 'pixel') filtered = filtered.filter(v => v.pixelProps > 0 && v.lionProps === 0);
+    
+    // Apply search
+    if (search) {
+        filtered = filtered.filter(v => 
+            v.address.toLowerCase().includes(search) || 
+            (v.name && v.name.toLowerCase().includes(search))
+        );
+    }
+    
+    if (filtered.length === 0) {
+        container.innerHTML = '<div class="text-center text-zinc-600 py-8">No matching voters found</div>';
+        return;
+    }
+    
+    container.innerHTML = filtered.slice(0, 100).map((v, i) => {
+        const badges = [];
+        if (v.lionProps > 0) badges.push(`<span class="text-amber-400">🦁 ${v.lionProps}</span>`);
+        if (v.pixelProps > 0) badges.push(`<span class="text-pink-400">🎨 ${v.pixelProps}</span>`);
+        const memberId = `partner-${v.address.slice(-8)}`;
+        
+        // Generate voting dots for Lion DAO
+        const lionDots = (v.lionPropIds || []).map(propId => {
+            const vote = v.lionVoteByProp?.[propId];
+            if (vote === 'yes') return `<div class="w-2 h-2 rounded-full bg-green-500" title="${propId}: Yes"></div>`;
+            if (vote === 'no') return `<div class="w-2 h-2 rounded-full bg-red-500" title="${propId}: No"></div>`;
+            if (vote === 'abstain') return `<div class="w-2 h-2 rounded-full bg-zinc-500" title="${propId}: Abstain"></div>`;
+            return `<div class="w-2 h-2 rounded-full border border-zinc-700" title="${propId}: No vote"></div>`;
+        }).join('');
+        
+        // Generate voting dots for PixelLions
+        const pixelDots = (v.pixelPropIds || []).map(propId => {
+            const vote = v.pixelVoteByProp?.[propId];
+            if (vote === 'yes') return `<div class="w-2 h-2 rounded-full bg-green-500" title="${propId}: Yes"></div>`;
+            if (vote === 'no') return `<div class="w-2 h-2 rounded-full bg-red-500" title="${propId}: No"></div>`;
+            if (vote === 'abstain') return `<div class="w-2 h-2 rounded-full bg-zinc-500" title="${propId}: Abstain"></div>`;
+            return `<div class="w-2 h-2 rounded-full border border-zinc-700" title="${propId}: No vote"></div>`;
+        }).join('');
+        
+        return `
+            <div class="card cursor-pointer hover:border-violet-500/30" onclick="toggleMemberExpand('${memberId}')">
+                <div class="p-3 flex items-center justify-between">
+                    <div class="flex items-center gap-3 min-w-0">
+                        <span class="text-zinc-600 text-sm w-8">#${i + 1}</span>
+                        ${v.inBoth ? '<span class="text-purple-400">🤝</span>' : (v.lionProps > 0 ? '<span class="text-amber-400">🦁</span>' : '<span class="text-pink-400">🎨</span>')}
+                        <div class="min-w-0">
+                            <div class="font-medium ${v.name ? 'text-white' : 'text-zinc-400 mono text-sm'}">${v.name || shortAddr(v.address)}</div>
+                            <div class="text-xs text-zinc-600 mono">${shortAddr(v.address)}</div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-4 text-sm">
+                        ${badges.join(' ')}
+                        <span class="text-cyan-400 font-medium">${v.combinedScore.toFixed(1)}%</span>
+                        <span class="text-zinc-600" id="${memberId}-arrow">▼</span>
+                    </div>
+                </div>
+                
+                <!-- Expanded voting activity -->
+                <div id="${memberId}" class="hidden border-t border-zinc-800 p-3 bg-zinc-900/50">
+                    <div class="text-xs text-zinc-500 mb-2">
+                        <span class="text-green-400">●</span> Yes 
+                        <span class="text-red-400">●</span> No 
+                        <span class="text-zinc-400">●</span> Abstain 
+                        <span class="text-zinc-600">○</span> No vote
+                    </div>
+                    ${v.lionProps > 0 || v.lionPropIds?.length > 0 ? `
+                        <div class="mb-2">
+                            <div class="text-xs text-amber-400 mb-1">🦁 Lion DAO (${v.lionProps}/${v.lionPropIds?.length || 0})</div>
+                            <div class="flex flex-wrap gap-1">${lionDots}</div>
+                        </div>
+                    ` : ''}
+                    ${v.pixelProps > 0 || v.pixelPropIds?.length > 0 ? `
+                        <div>
+                            <div class="text-xs text-pink-400 mb-1">🎨 PixelLions (${v.pixelProps}/${v.pixelPropIds?.length || 0})</div>
+                            <div class="flex flex-wrap gap-1">${pixelDots}</div>
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function renderAllianceMembers() {
+    const container = document.getElementById('alliance-members-list');
+    const search = (document.getElementById('alliance-search')?.value || '').toLowerCase();
+    const filter = document.getElementById('alliance-filter')?.value || 'boosted';
+    
+    let filtered = allianceVoters;
+    
+    // Apply filter
+    if (filter === 'boosted') filtered = filtered.filter(v => v.status === 'boosted' || v.status === 'all3');
+    else if (filter === 'all3') filtered = filtered.filter(v => v.status === 'all3');
+    
+    // Apply search
+    if (search) {
+        filtered = filtered.filter(v => 
+            v.address.toLowerCase().includes(search) || 
+            (v.name && v.name.toLowerCase().includes(search))
+        );
+    }
+    
+    if (filtered.length === 0) {
+        container.innerHTML = '<div class="text-center text-zinc-600 py-8">No matching voters found</div>';
+        return;
+    }
+    
+    container.innerHTML = filtered.slice(0, 100).map((v, i) => {
+        const daoBadges = [];
+        if (v.inAdao) daoBadges.push(`<span class="text-violet-400" title="aDAO ${v.adaoPct.toFixed(0)}%">🏛️</span>`);
+        if (v.inLion) daoBadges.push(`<span class="text-amber-400" title="Lion ${v.lionPct.toFixed(0)}%">🦁</span>`);
+        if (v.inPixel) daoBadges.push(`<span class="text-pink-400" title="Pixel ${v.pixelPct.toFixed(0)}%">🎨</span>`);
+        const memberId = `alliance-${v.address.slice(-8)}`;
+        
+        // Generate voting dots for aDAO
+        const adaoDots = (v.adaoPropIds || []).map(propId => {
+            const vote = v.adaoVoteByProp?.[propId];
+            if (vote === 'yes') return `<div class="w-2 h-2 rounded-full bg-green-500" title="${propId}: Yes"></div>`;
+            if (vote === 'no') return `<div class="w-2 h-2 rounded-full bg-red-500" title="${propId}: No"></div>`;
+            if (vote === 'abstain') return `<div class="w-2 h-2 rounded-full bg-zinc-500" title="${propId}: Abstain"></div>`;
+            return `<div class="w-2 h-2 rounded-full border border-zinc-700" title="${propId}: No vote"></div>`;
+        }).join('');
+        
+        // Generate voting dots for Lion DAO
+        const lionDots = (v.lionPropIds || []).map(propId => {
+            const vote = v.lionVoteByProp?.[propId];
+            if (vote === 'yes') return `<div class="w-2 h-2 rounded-full bg-green-500" title="${propId}: Yes"></div>`;
+            if (vote === 'no') return `<div class="w-2 h-2 rounded-full bg-red-500" title="${propId}: No"></div>`;
+            if (vote === 'abstain') return `<div class="w-2 h-2 rounded-full bg-zinc-500" title="${propId}: Abstain"></div>`;
+            return `<div class="w-2 h-2 rounded-full border border-zinc-700" title="${propId}: No vote"></div>`;
+        }).join('');
+        
+        // Generate voting dots for PixelLions
+        const pixelDots = (v.pixelPropIds || []).map(propId => {
+            const vote = v.pixelVoteByProp?.[propId];
+            if (vote === 'yes') return `<div class="w-2 h-2 rounded-full bg-green-500" title="${propId}: Yes"></div>`;
+            if (vote === 'no') return `<div class="w-2 h-2 rounded-full bg-red-500" title="${propId}: No"></div>`;
+            if (vote === 'abstain') return `<div class="w-2 h-2 rounded-full bg-zinc-500" title="${propId}: Abstain"></div>`;
+            return `<div class="w-2 h-2 rounded-full border border-zinc-700" title="${propId}: No vote"></div>`;
+        }).join('');
+        
+        return `
+            <div class="card cursor-pointer hover:border-violet-500/30 ${v.status === 'all3' ? 'border-yellow-500/20' : (v.status === 'boosted' ? 'border-green-500/20' : '')}" onclick="toggleMemberExpand('${memberId}')">
+                <div class="p-3 flex items-center justify-between">
+                    <div class="flex items-center gap-3 min-w-0">
+                        <span class="text-zinc-600 text-sm w-8">#${i + 1}</span>
+                        <span class="${v.statusColor}">${v.statusEmoji}</span>
+                        <div class="min-w-0">
+                            <div class="font-medium ${v.name ? 'text-white' : 'text-zinc-400 mono text-sm'}">${v.name || shortAddr(v.address)}</div>
+                            <div class="text-xs text-zinc-600 mono">${shortAddr(v.address)}</div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3 text-sm">
+                        <div class="flex gap-1">${daoBadges.join('')}</div>
+                        <div class="text-right">
+                            <div class="text-cyan-400 font-medium">${v.combinedScore.toFixed(1)}%</div>
+                            <div class="text-xs text-zinc-600">${v.daoCount}/3 DAOs</div>
+                        </div>
+                        <span class="text-zinc-600" id="${memberId}-arrow">▼</span>
+                    </div>
+                </div>
+                
+                <!-- Expanded voting activity for all 3 DAOs -->
+                <div id="${memberId}" class="hidden border-t border-zinc-800 p-3 bg-zinc-900/50">
+                    <div class="text-xs text-zinc-500 mb-2">
+                        <span class="text-green-400">●</span> Yes 
+                        <span class="text-red-400">●</span> No 
+                        <span class="text-zinc-400">●</span> Abstain 
+                        <span class="text-zinc-600">○</span> No vote
+                    </div>
+                    ${v.adaoPropIds?.length > 0 ? `
+                        <div class="mb-2">
+                            <div class="text-xs text-violet-400 mb-1">🏛️ Alliance DAO (${v.adaoVotes}/${v.adaoPropIds.length}) - ${v.adaoPct.toFixed(1)}%</div>
+                            <div class="flex flex-wrap gap-1">${adaoDots}</div>
+                        </div>
+                    ` : ''}
+                    ${v.lionPropIds?.length > 0 ? `
+                        <div class="mb-2">
+                            <div class="text-xs text-amber-400 mb-1">🦁 Lion DAO (${v.lionVotes}/${v.lionPropIds.length}) - ${v.lionPct.toFixed(1)}%</div>
+                            <div class="flex flex-wrap gap-1">${lionDots}</div>
+                        </div>
+                    ` : ''}
+                    ${v.pixelPropIds?.length > 0 ? `
+                        <div>
+                            <div class="text-xs text-pink-400 mb-1">🎨 PixelLions (${v.pixelVotes}/${v.pixelPropIds.length}) - ${v.pixelPct.toFixed(1)}%</div>
+                            <div class="flex flex-wrap gap-1">${pixelDots}</div>
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+</script>
+</body>
+</html>
