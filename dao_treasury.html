@@ -1,0 +1,1608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DAO Treasury - Alliance DAO</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #0D0D0D;
+            color: #EAEAEA;
+        }
+        
+        .stat-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+        }
+        .stat-card:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(45, 212, 191, 0.5);
+        }
+        
+        .token-row {
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        .token-row:hover {
+            background: rgba(45, 212, 191, 0.1);
+        }
+        .token-row.selected {
+            background: rgba(45, 212, 191, 0.2);
+            border-left: 3px solid #2dd4bf;
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 300px;
+        }
+        
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1a1a1a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #444;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+        
+        .pulse-live {
+            animation: pulse-live 2s infinite;
+        }
+        @keyframes pulse-live {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .card-active {
+            border-color: rgba(45, 212, 191, 0.7) !important;
+            background: rgba(45, 212, 191, 0.1) !important;
+        }
+        
+        .staked-row {
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        .staked-row:hover {
+            background: rgba(234, 179, 8, 0.1);
+        }
+        .staked-row.selected {
+            background: rgba(234, 179, 8, 0.2);
+            border-left: 3px solid #eab308;
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <!-- Header -->
+    <header class="bg-gray-900/80 border-b border-gray-800 sticky top-0 z-50">
+        <div class="container mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-4">
+                    <a href="index.html" class="text-gray-500 hover:text-white px-2 py-1 rounded hover:bg-gray-800 transition text-sm">
+                        <i class="fas fa-home mr-1"></i>Dashboard
+                    </a>
+                    <h1 class="text-xl font-bold text-white">
+                        <i class="fas fa-landmark text-cyan-400 mr-2"></i>DAO Treasury
+                    </h1>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-xs text-gray-500">Data:</span>
+                    <span id="data-status" class="text-xs text-green-400 flex items-center gap-1">
+                        <span class="w-2 h-2 bg-green-400 rounded-full pulse-live"></span>Live
+                    </span>
+                </div>
+            </div>
+        </div>
+    </header>
+    
+    <!-- Main Content -->
+    <main class="container mx-auto px-4 py-8">
+        <!-- Summary Cards - Clickable to switch views -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+            <div id="card-treasury" class="stat-card rounded-xl p-4 cursor-pointer card-active" onclick="switchView('treasury')">
+                <p class="text-sm text-gray-400">DAO Treasury</p>
+                <p id="dao-treasury-total" class="text-2xl font-bold text-white mt-1">
+                    <i class="fas fa-spinner fa-spin text-cyan-400"></i>
+                </p>
+                <p class="text-xs text-green-400 mt-1"><i class="fas fa-circle text-[8px] mr-1"></i>Live</p>
+            </div>
+            <div id="card-staked" class="stat-card rounded-xl p-4 cursor-pointer" onclick="switchView('staked')">
+                <p class="text-sm text-gray-400">DAO Staked</p>
+                <p id="dao-staked-total" class="text-2xl font-bold text-white mt-1">
+                    <i class="fas fa-spinner fa-spin text-cyan-400"></i>
+                </p>
+                <p class="text-xs text-yellow-400 mt-1"><i class="fas fa-lock text-[8px] mr-1"></i>Alliance Positions</p>
+            </div>
+            <div id="card-council" class="stat-card rounded-xl p-4 cursor-pointer" onclick="switchView('council')">
+                <p class="text-sm text-gray-400">Council Treasury</p>
+                <p id="council-treasury-total" class="text-2xl font-bold text-white mt-1">
+                    <i class="fas fa-spinner fa-spin text-cyan-400"></i>
+                </p>
+                <p class="text-xs text-green-400 mt-1"><i class="fas fa-circle text-[8px] mr-1"></i>Live</p>
+            </div>
+            <div id="card-total" class="stat-card rounded-xl p-4 border-cyan-600/50 cursor-pointer" onclick="switchView('total')">
+                <p class="text-sm text-gray-400">Total</p>
+                <p id="combined-total" class="text-2xl font-bold text-cyan-400 mt-1">
+                    <i class="fas fa-spinner fa-spin text-cyan-400"></i>
+                </p>
+                <a href="tla_deposits.html" class="text-xs text-cyan-400 mt-1 flex items-center hover:text-cyan-300" onclick="event.stopPropagation()">
+                    TLA Deposits <i class="fas fa-arrow-right ml-1 text-[10px]"></i>
+                </a>
+            </div>
+        </div>
+        
+        <!-- Value Change Breakdown -->
+        <div id="value-breakdown" class="stat-card rounded-xl p-4 mb-8 hidden">
+            <div class="flex items-center gap-2 mb-3">
+                <i class="fas fa-book-open text-cyan-400"></i>
+                <span class="text-sm font-medium text-white">What Changed Since Last Epoch</span>
+                <span id="epoch-compare-badge" class="text-xs text-gray-500 ml-2">--</span>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Left: The Story -->
+                <div class="space-y-3">
+                    <div class="flex items-start gap-3 p-3 rounded-lg bg-gray-800/30">
+                        <div id="market-icon" class="text-2xl">📉</div>
+                        <div>
+                            <p class="text-xs text-gray-400">Market Movement</p>
+                            <p id="market-value" class="text-xl font-mono font-bold text-red-400">--</p>
+                            <p id="market-explain" class="text-[10px] text-gray-500">Token prices changed</p>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-start gap-3 p-3 rounded-lg bg-gray-800/30">
+                        <div id="growth-icon" class="text-2xl">🌱</div>
+                        <div>
+                            <p class="text-xs text-gray-400">Position Growth</p>
+                            <p id="growth-value" class="text-xl font-mono font-bold text-green-400">--</p>
+                            <p id="growth-explain" class="text-[10px] text-gray-500">Token amounts changed</p>
+                        </div>
+                    </div>
+                    
+                    <div class="border-t border-gray-700 pt-3">
+                        <div class="flex items-start gap-3 p-3 rounded-lg bg-gray-800/50">
+                            <div class="text-2xl">=</div>
+                            <div>
+                                <p class="text-xs text-gray-400">Net Result</p>
+                                <p id="net-value" class="text-xl font-mono font-bold">--</p>
+                                <p id="net-explain" class="text-[10px] text-gray-500"></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Right: Token Price Changes -->
+                <div class="bg-gray-800/20 rounded-lg p-3">
+                    <p class="text-xs font-medium text-white mb-2"><i class="fas fa-chart-bar text-yellow-400 mr-1"></i>Token Price Changes</p>
+                    <div id="price-changes-list" class="space-y-1 text-xs max-h-48 overflow-y-auto">
+                        <div class="text-gray-500">Loading...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Main Layout: Chart First, Then Tables -->
+        
+        <!-- Balance History Chart - Full Width Below Summary Cards -->
+        <div class="stat-card rounded-xl p-4 mb-6">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-bold text-white">
+                    <i class="fas fa-chart-line text-green-400 mr-2"></i>Balance History
+                </h2>
+                <div id="chart-token-badge" class="text-sm text-gray-400 hidden">
+                    Showing: <span id="chart-token-name" class="text-cyan-400 font-medium">--</span>
+                </div>
+            </div>
+            
+            <!-- Chart Placeholder -->
+            <div id="chart-placeholder" class="flex flex-col items-center justify-center h-64 text-gray-500">
+                <i class="fas fa-hand-pointer text-4xl mb-3 text-gray-600"></i>
+                <p class="text-center">Click on any token row to see<br>its balance history over time</p>
+                <p class="text-xs text-gray-600 mt-2">Historical data from weekly snapshots</p>
+            </div>
+            
+            <!-- Chart Container (hidden until token selected) -->
+            <div id="chart-wrapper" class="hidden">
+                <div class="chart-container" style="height: 250px;">
+                    <canvas id="balance-chart"></canvas>
+                </div>
+                
+                <!-- Chart Stats -->
+                <div id="chart-stats" class="grid grid-cols-3 gap-4 mt-4 text-center">
+                    <div class="bg-gray-800/50 rounded-lg p-3">
+                        <p class="text-xs text-gray-500">Current Balance</p>
+                        <p id="stat-current" class="text-lg font-bold text-white">--</p>
+                    </div>
+                    <div class="bg-gray-800/50 rounded-lg p-3">
+                        <p class="text-xs text-gray-500">Change (30d)</p>
+                        <p id="stat-change" class="text-lg font-bold text-green-400">--</p>
+                    </div>
+                    <div class="bg-gray-800/50 rounded-lg p-3">
+                        <p class="text-xs text-gray-500">Avg Weekly Gain</p>
+                        <p id="stat-avg" class="text-lg font-bold text-cyan-400">--</p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- No History Message -->
+            <div id="no-history-msg" class="hidden flex flex-col items-center justify-center h-64 text-gray-500">
+                <i class="fas fa-database text-4xl mb-3 text-gray-600"></i>
+                <p class="text-center">No historical data available<br>for this token yet</p>
+                <p class="text-xs text-gray-600 mt-2">Data will accumulate with weekly snapshots</p>
+            </div>
+        </div>
+        
+        <!-- Tables Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Left: Dynamic Content Area (Tables) -->
+            <div class="space-y-6">
+                <!-- DAO Treasury Table -->
+                <div id="view-treasury" class="stat-card rounded-xl p-4">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-lg font-bold text-white">
+                            <i class="fas fa-wallet text-cyan-400 mr-2"></i>DAO Treasury
+                        </h2>
+                        <a href="https://chainsco.pe/terra2/address/terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm/balances" 
+                           target="_blank" rel="noopener noreferrer"
+                           class="text-xs text-gray-500 hover:text-cyan-400 transition-colors">
+                            View on Chainscope <i class="fas fa-external-link-alt ml-1"></i>
+                        </a>
+                    </div>
+                    <div id="dao-treasury-table" class="max-h-80 overflow-y-auto">
+                        <div class="text-center p-8 text-gray-500">
+                            <i class="fas fa-spinner fa-spin text-2xl mb-2"></i>
+                            <p>Loading treasury...</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- DAO Staked Positions -->
+                <div id="view-staked" class="stat-card rounded-xl p-4 hidden">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-lg font-bold text-white">
+                            <i class="fas fa-lock text-yellow-400 mr-2"></i>DAO Staked Positions
+                        </h2>
+                        <span class="text-xs text-yellow-400">Alliance Partners</span>
+                    </div>
+                    <div id="dao-staked-table" class="max-h-80 overflow-y-auto">
+                        <div class="text-center p-8 text-gray-500">
+                            <i class="fas fa-spinner fa-spin text-2xl mb-2"></i>
+                            <p>Loading staked positions...</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Council Treasury Table -->
+                <div id="view-council" class="stat-card rounded-xl p-4 hidden">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-lg font-bold text-white">
+                            <i class="fas fa-users text-yellow-400 mr-2"></i>Council Treasury
+                        </h2>
+                        <a href="https://chainsco.pe/terra2/address/terra1gxtsq5vtv48fza4qn49p0mp2tkj8nkzlglqnfm3ty6jwzatjslkqpflyct/balances" 
+                           target="_blank" rel="noopener noreferrer"
+                           class="text-xs text-gray-500 hover:text-cyan-400 transition-colors">
+                            View on Chainscope <i class="fas fa-external-link-alt ml-1"></i>
+                        </a>
+                    </div>
+                    <div id="council-treasury-table" class="max-h-80 overflow-y-auto">
+                        <div class="text-center p-8 text-gray-500">
+                            <i class="fas fa-spinner fa-spin text-2xl mb-2"></i>
+                            <p>Loading council treasury...</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Total Overview -->
+                <div id="view-total" class="stat-card rounded-xl p-4 hidden">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-lg font-bold text-white">
+                            <i class="fas fa-chart-pie text-cyan-400 mr-2"></i>Total Holdings Overview
+                        </h2>
+                    </div>
+                    <div id="total-overview-table" class="space-y-3">
+                        <div class="text-center p-8 text-gray-500">
+                            <i class="fas fa-spinner fa-spin text-2xl mb-2"></i>
+                            <p>Loading overview...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Right: DAO Events & Info -->
+            <div class="space-y-6">
+                <!-- DAO Events moved here -->
+                <div id="dao-events-section-moved" class="stat-card rounded-xl p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center gap-2">
+                            <i class="fas fa-gavel text-purple-400"></i>
+                            <span class="text-sm font-medium text-white">Recent DAO Proposals</span>
+                            <span id="props-count-moved" class="text-xs bg-purple-900/50 text-purple-300 px-2 py-0.5 rounded">--</span>
+                        </div>
+                        <a href="https://daodao.zone/dao/terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm/proposals" 
+                           target="_blank" class="text-xs text-gray-500 hover:text-purple-400">
+                            View all <i class="fas fa-external-link-alt ml-1"></i>
+                        </a>
+                    </div>
+                    <div id="dao-events-list-moved" class="space-y-2 max-h-80 overflow-y-auto">
+                        <div class="text-gray-500 text-sm text-center py-4"><i class="fas fa-spinner fa-spin mr-2"></i>Loading...</div>
+                    </div>
+                    <div class="mt-3 pt-3 border-t border-gray-700 text-[10px] text-gray-500">
+                        <i class="fas fa-info-circle mr-1"></i>
+                        Executed proposals with treasury impact. 🟢 Inflows add to treasury, 🔴 Outflows = DeFi deposits or payments.
+                    </div>
+                </div>
+                
+                <!-- Info Section -->
+                <div class="bg-blue-900/20 border border-blue-700/50 rounded-xl p-4">
+                    <h3 class="text-sm font-bold text-blue-400 mb-2"><i class="fas fa-info-circle mr-2"></i>About Treasury Tracking</h3>
+                    <p class="text-sm text-gray-400">
+                        Balance history is compiled from weekly epoch snapshots. The DAO Treasury receives a 10% take rate from the ALLY minting contract.
+                        Click any token row to see its balance history chart above.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </main>
+    
+    <script>
+        // ==================== Configuration ====================
+        const DAO_TREASURY_ADDRESS = 'terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm';
+        const COUNCIL_TREASURY_ADDRESS = 'terra1gxtsq5vtv48fza4qn49p0mp2tkj8nkzlglqnfm3ty6jwzatjslkqpflyct';
+        const TLA_DATA_BASE_URL = 'https://raw.githubusercontent.com/defipatriot/tla_json_storage/main';
+        const PROPS_URL = 'https://raw.githubusercontent.com/defipatriot/adao_json_storage/main/adao_props.json';
+        
+        // Token color mapping for chart
+        const TOKEN_COLORS = {
+            'ampLUNA': '#2dd4bf',
+            'LUNA': '#ffd83d',
+            'bLUNA': '#ec4899',
+            'ASTRO': '#8b5cf6',
+            'Astro': '#8b5cf6',
+            'SOLID': '#10b981',
+            'Solid': '#10b981',
+            'CAPA': '#6366f1',
+            'Capa': '#6366f1',
+            'ROAR': '#f59e0b',
+            'USDC': '#2775ca',
+            'USDT': '#50af95',
+            'wBTC.atom': '#f7931a',
+            'ATOM': '#6f7390',
+            'arbLUNA': '#ef4444',
+            'ampROAR': '#d97706',
+            'ampCAPA': '#818cf8',
+            'xASTRO': '#a78bfa',
+            'bWHALE': '#06b6d4',
+            'ampWHALE': '#0891b2',
+            'BMOS': '#84cc16',
+            'default': '#888888'
+        };
+        
+        // State
+        let daoAssets = [];
+        let councilAssets = [];
+        let stakedPositions = [];
+        let tokenPrices = {};
+        let historicalSnapshots = [];
+        let balanceChart = null;
+        let selectedToken = null;
+        let currentTlaData = null;
+        let currentView = 'treasury'; // 'treasury', 'staked', 'council', 'total'
+        let daoProps = {}; // DAO proposals with treasury impact
+        
+        // Epoch date boundaries (for mapping props to epochs)
+        const EPOCH_DATES = {
+            162: { start: '2025-12-01', end: '2025-12-08' },
+            163: { start: '2025-12-08', end: '2025-12-15' },
+            164: { start: '2025-12-15', end: '2025-12-22' },
+            165: { start: '2025-12-22', end: '2025-12-29' },
+            166: { start: '2025-12-29', end: '2026-01-05' },
+            167: { start: '2026-01-05', end: '2026-01-12' },
+            168: { start: '2026-01-12', end: '2026-01-19' },
+        };
+        
+        // Fetch DAO proposals
+        async function fetchDaoProps() {
+            try {
+                const response = await fetch(PROPS_URL);
+                if (response.ok) {
+                    const data = await response.json();
+                    daoProps = data.proposals || {};
+                    console.log(`Loaded ${Object.keys(daoProps).length} DAO proposals`);
+                    return daoProps;
+                }
+            } catch (e) {
+                console.warn('Failed to fetch DAO props:', e);
+            }
+            return {};
+        }
+        
+        // Get executed props with treasury impact
+        function getExecutedPropsWithImpact() {
+            const propsWithImpact = [];
+            
+            Object.entries(daoProps).forEach(([id, prop]) => {
+                if (prop.status !== 'Executed') return;
+                
+                // Try to get actual treasury impact from execution tx first
+                const actualImpact = getActualTreasuryImpact(prop);
+                
+                // Fall back to decoded treasuryImpact if no execution data
+                const impact = prop.treasuryImpact || {};
+                let netByToken = actualImpact?.netByToken || impact.netByToken || {};
+                
+                // Filter out receipt tokens from netByToken
+                const filteredNet = {};
+                Object.entries(netByToken).forEach(([token, amount]) => {
+                    if (!isReceiptToken(token) && Math.abs(amount) > 0.001) {
+                        filteredNet[normalizeToken(token)] = amount;
+                    }
+                });
+                
+                // Only include if there's actual treasury impact
+                if (Object.keys(filteredNet).length === 0) return;
+                
+                const execTx = prop.executionTx || {};
+                
+                propsWithImpact.push({
+                    id,
+                    title: prop.title,
+                    block: execTx.block,
+                    inflows: actualImpact?.received || impact.inflows || [],
+                    outflows: actualImpact?.sent || impact.outflows || [],
+                    netByToken: filteredNet,
+                    executedAt: prop.executedAt || null,
+                    epoch: prop.executedAt ? getEpochForDate(prop.executedAt) : null,
+                    hasActualData: !!actualImpact
+                });
+            });
+            
+            return propsWithImpact;
+        }
+        
+        // Get epoch number for a given date
+        function getEpochForDate(dateStr) {
+            const date = new Date(dateStr);
+            
+            // Check against known epoch boundaries
+            for (const [epoch, dates] of Object.entries(EPOCH_DATES)) {
+                const start = new Date(dates.start + 'T00:00:00Z');
+                const end = new Date(dates.end + 'T23:59:59Z');
+                
+                if (date >= start && date <= end) {
+                    return parseInt(epoch);
+                }
+            }
+            
+            // Estimate for dates outside known range
+            // Epoch 162 started Dec 1, 2025 - each epoch is 7 days
+            const epoch162Start = new Date('2025-12-01T00:00:00Z');
+            const msPerWeek = 7 * 24 * 60 * 60 * 1000;
+            const weeksDiff = Math.floor((date - epoch162Start) / msPerWeek);
+            return 162 + weeksDiff;
+        }
+        
+        // Get props that executed in a specific epoch
+        function getPropsForEpoch(epoch) {
+            return getExecutedPropsWithImpact().filter(p => p.epoch === epoch);
+        }
+        
+        // Receipt tokens to filter out (intermediate tokens, not real assets)
+        function isReceiptToken(token) {
+            const t = (token || '').toLowerCase();
+            return t.includes('zluna') || t.includes('zlun') || t.includes('amplp') || t.includes(' lp');
+        }
+        
+        // Normalize token names
+        function normalizeToken(token) {
+            const t = (token || '').replace(' Token', '');
+            // Common mappings
+            if (t.includes('ampLUNA') || t === 'ampLUNA Token') return 'ampLUNA';
+            if (t.includes('arbLUNA') || t === 'arbLUNA Token') return 'arbLUNA';
+            if (t === 'CAPA Token' || t === 'CAPA') return 'CAPA';
+            if (t === 'ROAR Token' || t === 'ROAR') return 'ROAR';
+            if (t === 'ampCAPA') return 'ampCAPA';
+            if (t === 'ampROAR') return 'ampROAR';
+            if (t === 'xASTRO') return 'xASTRO';
+            if (t === 'ASTRO') return 'ASTRO';
+            return t;
+        }
+        
+        // Calculate USD value of prop impact using current prices
+        function calcPropImpactUsd(netByToken) {
+            let totalUsd = 0;
+            
+            Object.entries(netByToken).forEach(([token, amount]) => {
+                // Skip receipt tokens
+                if (isReceiptToken(token)) return;
+                
+                const normalizedToken = normalizeToken(token);
+                const price = tokenPrices[normalizedToken]?.price || tokenPrices[normalizedToken] || 0;
+                totalUsd += amount * price;
+            });
+            
+            return totalUsd;
+        }
+        
+        // Get actual treasury impact from execution tx (more accurate than decoded actions)
+        function getActualTreasuryImpact(prop) {
+            const execTx = prop.executionTx;
+            if (!execTx) return null;
+            
+            const received = (execTx.received || [])
+                .filter(t => !isReceiptToken(t.token))
+                .map(t => ({ token: normalizeToken(t.token), amount: t.amount }));
+                
+            const sent = (execTx.sent || [])
+                .filter(t => !isReceiptToken(t.token))
+                .map(t => ({ token: normalizeToken(t.token), amount: t.amount }));
+            
+            // Calculate net by token
+            const netByToken = {};
+            received.forEach(t => {
+                netByToken[t.token] = (netByToken[t.token] || 0) + t.amount;
+            });
+            sent.forEach(t => {
+                netByToken[t.token] = (netByToken[t.token] || 0) - t.amount;
+            });
+            
+            return { received, sent, netByToken };
+        }
+        
+        // ==================== View Switching ====================
+        
+        // Calculate value change breakdown between two epochs
+        function calcValueBreakdown() {
+            if (historicalSnapshots.length < 2) return null;
+            
+            // Get last two snapshots
+            const current = historicalSnapshots[historicalSnapshots.length - 1];
+            const previous = historicalSnapshots[historicalSnapshots.length - 2];
+            
+            if (!current || !previous) return null;
+            
+            // Get current prices
+            const currentPrices = tokenPrices;
+            
+            // Build maps of old assets
+            const oldTreasury = {};
+            (previous.treasuryAssets || []).forEach(a => {
+                const name = a.token || a.name;
+                oldTreasury[name] = { amount: a.amount || 0, price: a.price || 0 };
+            });
+            
+            const oldCouncil = {};
+            (previous.councilAssets || []).forEach(a => {
+                const name = a.token || a.name;
+                oldCouncil[name] = { amount: a.amount || 0, price: a.price || 0 };
+            });
+            
+            let priceImpact = 0;
+            let positionChange = 0;
+            const priceChanges = [];
+            
+            // Calculate for DAO Treasury
+            daoAssets.forEach(asset => {
+                const name = asset.token || asset.name;
+                const oldAsset = oldTreasury[name];
+                if (!oldAsset) return;
+                
+                const oldPrice = oldAsset.price;
+                const newPrice = asset.price || 0;
+                const oldAmount = oldAsset.amount;
+                const newAmount = asset.amount || 0;
+                
+                if (oldPrice > 0 && newPrice > 0) {
+                    priceImpact += oldAmount * (newPrice - oldPrice);
+                    positionChange += (newAmount - oldAmount) * newPrice;
+                    
+                    const pctChange = ((newPrice - oldPrice) / oldPrice) * 100;
+                    if (Math.abs(pctChange) > 0.1) {
+                        priceChanges.push({ name, oldPrice, newPrice, pctChange });
+                    }
+                }
+            });
+            
+            // Calculate for Council Treasury
+            councilAssets.forEach(asset => {
+                const name = asset.token || asset.name;
+                const oldAsset = oldCouncil[name];
+                if (!oldAsset) return;
+                
+                const oldPrice = oldAsset.price;
+                const newPrice = asset.price || 0;
+                const oldAmount = oldAsset.amount;
+                const newAmount = asset.amount || 0;
+                
+                if (oldPrice > 0 && newPrice > 0) {
+                    priceImpact += oldAmount * (newPrice - oldPrice);
+                    positionChange += (newAmount - oldAmount) * newPrice;
+                }
+            });
+            
+            // Sort price changes by absolute change
+            priceChanges.sort((a, b) => Math.abs(b.pctChange) - Math.abs(a.pctChange));
+            
+            return {
+                priceImpact,
+                positionChange,
+                netChange: priceImpact + positionChange,
+                priceChanges,
+                currentEpoch: current.epoch,
+                previousEpoch: previous.epoch
+            };
+        }
+        
+        function renderValueBreakdown() {
+            const breakdown = calcValueBreakdown();
+            if (!breakdown) return;
+            
+            document.getElementById('value-breakdown').classList.remove('hidden');
+            
+            // Update epoch badge
+            document.getElementById('epoch-compare-badge').textContent = `E${breakdown.previousEpoch} → E${breakdown.currentEpoch}`;
+            
+            // Market movement
+            const marketEl = document.getElementById('market-value');
+            const marketIcon = document.getElementById('market-icon');
+            marketEl.textContent = (breakdown.priceImpact >= 0 ? '+' : '') + '$' + Math.abs(breakdown.priceImpact).toLocaleString(undefined, {maximumFractionDigits: 0});
+            marketEl.className = `text-xl font-mono font-bold ${breakdown.priceImpact >= 0 ? 'text-green-400' : 'text-red-400'}`;
+            marketIcon.textContent = breakdown.priceImpact >= 0 ? '📈' : '📉';
+            document.getElementById('market-explain').textContent = breakdown.priceImpact >= 0 ? 'Token prices went up' : 'Token prices went down';
+            
+            // Position growth
+            const growthEl = document.getElementById('growth-value');
+            const growthIcon = document.getElementById('growth-icon');
+            growthEl.textContent = (breakdown.positionChange >= 0 ? '+' : '') + '$' + Math.abs(breakdown.positionChange).toLocaleString(undefined, {maximumFractionDigits: 0});
+            growthEl.className = `text-xl font-mono font-bold ${breakdown.positionChange >= 0 ? 'text-green-400' : 'text-red-400'}`;
+            growthIcon.textContent = breakdown.positionChange >= 0 ? '🌱' : '🍂';
+            document.getElementById('growth-explain').textContent = breakdown.positionChange >= 0 ? 'Token amounts increased' : 'Token amounts decreased';
+            
+            // Net result
+            const netEl = document.getElementById('net-value');
+            netEl.textContent = (breakdown.netChange >= 0 ? '+' : '') + '$' + Math.abs(breakdown.netChange).toLocaleString(undefined, {maximumFractionDigits: 0});
+            netEl.className = `text-xl font-mono font-bold ${breakdown.netChange >= 0 ? 'text-green-400' : 'text-red-400'}`;
+            
+            // Explanation
+            const netExplain = document.getElementById('net-explain');
+            if (breakdown.positionChange >= 0 && breakdown.priceImpact < 0) {
+                netExplain.textContent = 'Positions grew but prices dropped';
+            } else if (breakdown.positionChange >= 0 && breakdown.priceImpact >= 0) {
+                netExplain.textContent = 'Both positions and prices up! 🎉';
+            } else if (breakdown.positionChange < 0 && breakdown.priceImpact >= 0) {
+                netExplain.textContent = 'Prices up but positions decreased';
+            } else {
+                netExplain.textContent = 'Both positions and prices down';
+            }
+            
+            // Price changes list
+            const priceListEl = document.getElementById('price-changes-list');
+            if (breakdown.priceChanges.length > 0) {
+                let html = '';
+                breakdown.priceChanges.slice(0, 8).forEach(p => {
+                    const color = TOKEN_COLORS[p.name] || TOKEN_COLORS.default;
+                    const pctDisplay = (p.pctChange >= 0 ? '+' : '') + p.pctChange.toFixed(1) + '%';
+                    const pctColor = p.pctChange >= 0 ? 'text-green-400' : 'text-red-400';
+                    html += `<div class="flex items-center justify-between py-1 border-b border-gray-800/50">
+                        <div class="flex items-center gap-1.5">
+                            <div class="w-2 h-2 rounded-full" style="background:${color}"></div>
+                            <span class="text-gray-300">${p.name}</span>
+                        </div>
+                        <span class="${pctColor}">${pctDisplay}</span>
+                    </div>`;
+                });
+                priceListEl.innerHTML = html;
+            } else {
+                priceListEl.innerHTML = '<div class="text-gray-500">No significant price changes</div>';
+            }
+        }
+        
+        // Render DAO events/proposals
+        function renderDaoEvents() {
+            const propsWithImpact = getExecutedPropsWithImpact();
+            
+            // Use the moved section in the right column
+            const section = document.getElementById('dao-events-section-moved');
+            const countEl = document.getElementById('props-count-moved');
+            const listEl = document.getElementById('dao-events-list-moved');
+            
+            // Also hide the old section if it exists
+            const oldSection = document.getElementById('dao-events-section');
+            if (oldSection) oldSection.classList.add('hidden');
+            
+            if (propsWithImpact.length === 0) {
+                listEl.innerHTML = '<div class="text-gray-500 text-sm text-center py-4">No proposals with treasury impact found</div>';
+                countEl.textContent = '0';
+                return;
+            }
+            
+            countEl.textContent = `${propsWithImpact.length} total`;
+            
+            // Sort by executedAt date (most recent first), fallback to block
+            propsWithImpact.sort((a, b) => {
+                if (a.executedAt && b.executedAt) {
+                    return new Date(b.executedAt) - new Date(a.executedAt);
+                }
+                return (b.block || 0) - (a.block || 0);
+            });
+            
+            // Render last 10
+            const recentProps = propsWithImpact.slice(0, 10);
+            let html = '';
+            
+            recentProps.forEach(prop => {
+                const netUsd = calcPropImpactUsd(prop.netByToken);
+                const isInflow = netUsd > 0;
+                const impactColor = isInflow ? 'text-green-400' : 'text-red-400';
+                const impactIcon = isInflow ? '🟢' : '🔴';
+                
+                // Format token amounts - separate inflows and outflows
+                let tokenParts = [];
+                Object.entries(prop.netByToken).forEach(([token, amount]) => {
+                    const shortToken = token.replace(' Token', '');
+                    const formatted = Math.abs(amount) >= 1000000 
+                        ? (Math.abs(amount)/1000000).toFixed(2) + 'M' 
+                        : Math.abs(amount) >= 1000 
+                            ? (Math.abs(amount)/1000).toFixed(1) + 'K'
+                            : Math.abs(amount).toFixed(2);
+                    
+                    if (amount > 0) {
+                        tokenParts.push(`<span class="text-green-400/70">+${formatted} ${shortToken}</span>`);
+                    } else {
+                        tokenParts.push(`<span class="text-red-400/70">-${formatted} ${shortToken}</span>`);
+                    }
+                });
+                
+                // Format date
+                let dateDisplay = '';
+                if (prop.executedAt) {
+                    const date = new Date(prop.executedAt);
+                    dateDisplay = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                }
+                
+                // Epoch badge
+                const epochBadge = prop.epoch ? `<span class="text-[10px] bg-gray-700 text-gray-400 px-1 rounded">E${prop.epoch}</span>` : '';
+                
+                // Data source indicator
+                const dataSourceBadge = prop.hasActualData 
+                    ? '<span class="text-[10px] text-green-600" title="From actual execution transaction">✓</span>' 
+                    : '';
+                
+                html += `
+                    <div class="p-2 rounded-lg bg-gray-800/30 hover:bg-gray-800/50 transition-colors">
+                        <div class="flex items-start justify-between gap-2">
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-xs">${impactIcon}</span>
+                                    <span class="text-xs text-purple-300 font-medium">${prop.id}</span>
+                                    <span class="text-xs text-gray-300 truncate">${prop.title.substring(0, 35)}${prop.title.length > 35 ? '...' : ''}</span>
+                                    ${dataSourceBadge}
+                                </div>
+                                <div class="text-[10px] mt-1 flex flex-wrap gap-x-2">
+                                    ${tokenParts.join(' ')}
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <span class="${impactColor} text-sm font-mono">${netUsd >= 0 ? '+' : ''}$${Math.abs(netUsd).toLocaleString(undefined, {maximumFractionDigits: 0})}</span>
+                                <div class="flex items-center justify-end gap-1 mt-0.5">
+                                    ${epochBadge}
+                                    ${dateDisplay ? `<span class="text-[10px] text-gray-600">${dateDisplay}</span>` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            listEl.innerHTML = html;
+        }
+        
+        function switchView(view) {
+            currentView = view;
+            
+            // Update card active states
+            ['treasury', 'staked', 'council', 'total'].forEach(v => {
+                document.getElementById(`card-${v}`).classList.remove('card-active');
+            });
+            document.getElementById(`card-${view}`).classList.add('card-active');
+            
+            // Hide all views
+            ['treasury', 'staked', 'council', 'total'].forEach(v => {
+                document.getElementById(`view-${v}`).classList.add('hidden');
+            });
+            
+            // Show selected view
+            document.getElementById(`view-${view}`).classList.remove('hidden');
+            
+            // Auto-select first item in the view for chart
+            if (view === 'treasury' && daoAssets.length > 0) {
+                const defaultToken = daoAssets.find(a => (a.token || a.name) === 'ampLUNA') || daoAssets[0];
+                selectToken(defaultToken.token || defaultToken.name, 'dao');
+            } else if (view === 'staked' && stakedPositions.length > 0) {
+                selectStakedPosition(stakedPositions[0].name);
+            } else if (view === 'council' && councilAssets.length > 0) {
+                selectToken(councilAssets[0].token || councilAssets[0].name, 'council');
+            } else if (view === 'total') {
+                renderTotalChart();
+            }
+        }
+        
+        // ==================== Data Fetching ====================
+        
+        function getCurrentEpoch() {
+            const epochReferenceDate = new Date('2025-12-01T00:00:00Z');
+            const epochReferenceNumber = 162;
+            const msPerWeek = 7 * 24 * 60 * 60 * 1000;
+            const now = new Date();
+            const weeksDiff = Math.floor((now - epochReferenceDate) / msPerWeek);
+            return epochReferenceNumber + weeksDiff;
+        }
+        
+        async function fetchCurrentTlaData() {
+            // Try to fetch the most recent TLA data file
+            const currentEpoch = getCurrentEpoch();
+            
+            // Try current-1 first (most recent completed), then current-2, etc.
+            for (let tryEpoch = currentEpoch - 1; tryEpoch >= currentEpoch - 5; tryEpoch--) {
+                try {
+                    const url = `${TLA_DATA_BASE_URL}/tla-data-epoch-${tryEpoch}-end.json`;
+                    console.log(`Trying to fetch TLA data: ${url}`);
+                    const response = await fetch(url);
+                    if (response.ok) {
+                        const data = await response.json();
+                        console.log(`Loaded TLA data from epoch ${tryEpoch}`);
+                        currentTlaData = data;
+                        return data;
+                    }
+                } catch (e) {
+                    console.warn(`Failed to fetch epoch ${tryEpoch}:`, e);
+                }
+            }
+            console.error('Could not fetch any TLA data');
+            return null;
+        }
+        
+        async function fetchHistoricalSnapshots() {
+            // Fetch TLA data files for historical treasury data
+            const snapshots = [];
+            const currentEpoch = getCurrentEpoch();
+            
+            console.log(`Fetching historical snapshots, current epoch: ${currentEpoch}`);
+            
+            // Try to fetch last 20 snapshots from TLA data files
+            for (let epoch = currentEpoch - 1; epoch >= currentEpoch - 20 && epoch > 160; epoch--) {
+                try {
+                    const url = `${TLA_DATA_BASE_URL}/tla-data-epoch-${epoch}-end.json`;
+                    const response = await fetch(url);
+                    if (response.ok) {
+                        const data = await response.json();
+                        const treasury = data.dashboard?.treasury;
+                        if (treasury) {
+                            snapshots.push({
+                                epoch: data.meta?.epoch || epoch,
+                                timestamp: data.meta?.generated_at,
+                                treasuryAssets: treasury.tokens || [],
+                                councilAssets: treasury.council?.tokens || [],
+                                treasuryTotal_USD: treasury.total_usd,
+                                councilTotal_USD: treasury.council?.total_usd,
+                                prices: data.token_prices || {}
+                            });
+                            console.log(`Loaded historical epoch ${epoch}: ${treasury.tokens?.length || 0} treasury tokens`);
+                        }
+                    }
+                } catch (e) {
+                    // Snapshot not found
+                }
+            }
+            
+            historicalSnapshots = snapshots.reverse(); // Oldest first
+            console.log(`Loaded ${historicalSnapshots.length} historical snapshots from TLA data`);
+            return historicalSnapshots;
+        }
+        
+        // ==================== Rendering ====================
+        
+        function renderTokenTable(containerId, assets, walletType) {
+            const container = document.getElementById(containerId);
+            if (!container) return 0;
+            
+            if (!assets || assets.length === 0) {
+                container.innerHTML = '<div class="text-center py-4 text-gray-500">No tokens found</div>';
+                return 0;
+            }
+            
+            // Get previous snapshot for price comparison
+            const prevSnapshot = historicalSnapshots.length >= 2 ? historicalSnapshots[historicalSnapshots.length - 2] : null;
+            const prevAssets = prevSnapshot ? (walletType === 'dao' ? prevSnapshot.treasuryAssets : prevSnapshot.councilAssets) : [];
+            const prevAssetMap = {};
+            prevAssets.forEach(a => { prevAssetMap[a.token || a.name] = a; });
+            
+            // Assets from TLA data already have: token, amount, price, usd
+            // Sort by USD value descending
+            const sortedAssets = [...assets].sort((a, b) => (b.usd || 0) - (a.usd || 0));
+            
+            let totalUsd = 0;
+            let html = `
+                <table class="w-full text-sm">
+                    <thead class="text-xs text-gray-500 border-b border-gray-700">
+                        <tr>
+                            <th class="text-left py-2 pl-2">Token</th>
+                            <th class="text-right py-2">Balance</th>
+                            <th class="text-right py-2 pr-2">Value (USD)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            for (const asset of sortedAssets) {
+                const tokenName = asset.token || asset.name || 'Unknown';
+                const amount = asset.amount || 0;
+                const usdValue = asset.usd || 0;
+                totalUsd += usdValue;
+                
+                const color = TOKEN_COLORS[tokenName] || TOKEN_COLORS.default;
+                const valueDisplay = usdValue > 0.01 
+                    ? '$' + usdValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                    : usdValue > 0 ? '$' + usdValue.toFixed(4) : '<span class="text-gray-600">$0.00</span>';
+                
+                // Format amount based on size
+                let amountDisplay;
+                if (amount >= 1000000) {
+                    amountDisplay = (amount / 1000000).toFixed(2) + 'M';
+                } else if (amount >= 1000) {
+                    amountDisplay = amount.toLocaleString(undefined, { maximumFractionDigits: 2 });
+                } else if (amount < 0.01) {
+                    amountDisplay = amount.toFixed(6);
+                } else {
+                    amountDisplay = amount.toLocaleString(undefined, { maximumFractionDigits: 2 });
+                }
+                
+                // Calculate price change from previous epoch
+                let priceChangeHtml = '';
+                const prevAsset = prevAssetMap[tokenName];
+                if (prevAsset && prevAsset.price > 0 && asset.price > 0) {
+                    const pricePct = ((asset.price - prevAsset.price) / prevAsset.price) * 100;
+                    if (Math.abs(pricePct) > 0.1) {
+                        const pctColor = pricePct >= 0 ? 'text-green-400' : 'text-red-400';
+                        priceChangeHtml = `<span class="${pctColor} text-[10px] ml-1">${pricePct >= 0 ? '+' : ''}${pricePct.toFixed(1)}%</span>`;
+                    }
+                }
+                
+                html += `
+                    <tr class="token-row border-b border-gray-800" 
+                        data-token="${tokenName}" 
+                        data-wallet="${walletType}"
+                        onclick="selectToken('${tokenName}', '${walletType}')">
+                        <td class="py-3 pl-2">
+                            <div class="flex items-center gap-2">
+                                <div class="w-2 h-2 rounded-full" style="background-color: ${color}"></div>
+                                <span class="font-medium">${tokenName}</span>
+                                ${priceChangeHtml}
+                            </div>
+                        </td>
+                        <td class="py-3 text-right font-mono text-gray-300">${amountDisplay}</td>
+                        <td class="py-3 text-right font-mono pr-2">${valueDisplay}</td>
+                    </tr>
+                `;
+            }
+            
+            html += `
+                    </tbody>
+                    <tfoot class="border-t-2 border-cyan-700">
+                        <tr>
+                            <td class="py-3 pl-2 font-bold" colspan="2">Total</td>
+                            <td class="py-3 text-right font-mono font-bold text-cyan-400 pr-2">
+                                $${totalUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            `;
+            
+            container.innerHTML = html;
+            return totalUsd;
+        }
+        
+        function renderStakedTable(positions) {
+            const container = document.getElementById('dao-staked-table');
+            if (!container) return 0;
+            
+            if (!positions || positions.length === 0) {
+                container.innerHTML = '<div class="text-center py-4 text-gray-500">No staked positions found</div>';
+                return 0;
+            }
+            
+            let totalUsd = 0;
+            let html = `
+                <table class="w-full text-sm">
+                    <thead class="text-xs text-gray-500 border-b border-gray-700">
+                        <tr>
+                            <th class="text-left py-2 pl-2">Position</th>
+                            <th class="text-left py-2">Partner</th>
+                            <th class="text-right py-2">Staked</th>
+                            <th class="text-right py-2 pr-2">Value (USD)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            for (const pos of positions) {
+                const usdValue = pos.usd || 0;
+                totalUsd += usdValue;
+                
+                const valueDisplay = usdValue > 0.01 
+                    ? '$' + usdValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                    : usdValue > 0 ? '$' + usdValue.toFixed(4) : '<span class="text-gray-600">--</span>';
+                
+                // Format staked amount
+                let stakedDisplay = '';
+                if (pos.staked) {
+                    if (pos.staked.token === 'NFT') {
+                        stakedDisplay = `${pos.staked.amount} NFTs`;
+                    } else {
+                        stakedDisplay = `${pos.staked.amount.toLocaleString()} ${pos.staked.token}`;
+                    }
+                }
+                
+                // Extra info (rewards, VP, etc)
+                let extraInfo = '';
+                if (pos.rewards?.amount) {
+                    extraInfo = `<span class="text-green-400 text-xs">+${pos.rewards.amount.toLocaleString()} rewards</span>`;
+                } else if (pos.vp_percent) {
+                    extraInfo = `<span class="text-yellow-400 text-xs">${pos.vp_percent}% VP</span>`;
+                }
+                
+                html += `
+                    <tr class="staked-row border-b border-gray-800" 
+                        data-position="${pos.name}"
+                        onclick="selectStakedPosition('${pos.name}')">
+                        <td class="py-3 pl-2">
+                            <div class="flex flex-col">
+                                <span class="font-medium">${pos.name}</span>
+                                ${extraInfo}
+                            </div>
+                        </td>
+                        <td class="py-3 text-gray-400">${pos.partner || '--'}</td>
+                        <td class="py-3 text-right font-mono text-gray-300">${stakedDisplay}</td>
+                        <td class="py-3 text-right font-mono pr-2">${valueDisplay}</td>
+                    </tr>
+                `;
+            }
+            
+            html += `
+                    </tbody>
+                    <tfoot class="border-t-2 border-yellow-700">
+                        <tr>
+                            <td class="py-3 pl-2 font-bold" colspan="3">Total Staked Value</td>
+                            <td class="py-3 text-right font-mono font-bold text-yellow-400 pr-2">
+                                $${totalUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            `;
+            
+            container.innerHTML = html;
+            return totalUsd;
+        }
+        
+        function renderTotalOverview(daoTotal, stakedTotal, councilTotal) {
+            const container = document.getElementById('total-overview-table');
+            if (!container) return;
+            
+            const grandTotal = daoTotal + stakedTotal + councilTotal;
+            
+            const items = [
+                { name: 'DAO Treasury', value: daoTotal, color: 'text-cyan-400', pct: (daoTotal / grandTotal * 100) },
+                { name: 'DAO Staked', value: stakedTotal, color: 'text-yellow-400', pct: (stakedTotal / grandTotal * 100) },
+                { name: 'Council Treasury', value: councilTotal, color: 'text-green-400', pct: (councilTotal / grandTotal * 100) }
+            ];
+            
+            let html = '';
+            for (const item of items) {
+                html += `
+                    <div class="flex items-center justify-between py-3 border-b border-gray-800">
+                        <div class="flex items-center gap-3">
+                            <div class="w-3 h-3 rounded-full ${item.color.replace('text-', 'bg-')}"></div>
+                            <span class="font-medium">${item.name}</span>
+                        </div>
+                        <div class="text-right">
+                            <span class="font-mono font-bold ${item.color}">$${item.value.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                            <span class="text-gray-500 text-xs ml-2">(${item.pct.toFixed(1)}%)</span>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            html += `
+                <div class="flex items-center justify-between py-4 mt-2">
+                    <span class="font-bold text-lg">Grand Total</span>
+                    <span class="font-mono font-bold text-2xl text-cyan-400">$${grandTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                </div>
+                <div class="mt-4 pt-4 border-t border-gray-700">
+                    <a href="tla_deposits.html" class="flex items-center justify-between p-3 bg-gray-800/50 rounded-lg hover:bg-gray-700/50 transition-colors">
+                        <div>
+                            <span class="text-sm text-gray-300">TLA Deposits (Liquid Staking)</span>
+                            <p class="text-xs text-gray-500">View deposit positions and rewards</p>
+                        </div>
+                        <i class="fas fa-arrow-right text-cyan-400"></i>
+                    </a>
+                </div>
+            `;
+            
+            container.innerHTML = html;
+        }
+        
+        function selectStakedPosition(positionName) {
+            // Update selection UI
+            document.querySelectorAll('.staked-row').forEach(row => {
+                row.classList.remove('selected');
+            });
+            const selectedRow = document.querySelector(`.staked-row[data-position="${positionName}"]`);
+            if (selectedRow) selectedRow.classList.add('selected');
+            
+            selectedToken = { name: positionName, wallet: 'staked' };
+            
+            // Show chart section with position info
+            document.getElementById('chart-placeholder').classList.add('hidden');
+            document.getElementById('chart-token-badge').classList.remove('hidden');
+            document.getElementById('chart-token-name').textContent = `${positionName} (Staked)`;
+            
+            // For staked positions, show the position details instead of a chart for now
+            renderStakedPositionChart(positionName);
+        }
+        
+        function renderStakedPositionChart(positionName) {
+            const chartWrapper = document.getElementById('chart-wrapper');
+            const noHistoryMsg = document.getElementById('no-history-msg');
+            
+            // Find the position
+            const position = stakedPositions.find(p => p.name === positionName);
+            if (!position) {
+                chartWrapper.classList.add('hidden');
+                noHistoryMsg.classList.remove('hidden');
+                return;
+            }
+            
+            // For now, show position details - historical data would need to be tracked
+            chartWrapper.classList.add('hidden');
+            noHistoryMsg.innerHTML = `
+                <div class="text-center">
+                    <i class="fas fa-lock text-4xl mb-3 text-yellow-500"></i>
+                    <p class="text-lg font-bold text-white mb-2">${position.name}</p>
+                    <p class="text-gray-400 mb-4">Partner: ${position.partner}</p>
+                    ${position.staked ? `
+                        <div class="bg-gray-800/50 rounded-lg p-4 inline-block">
+                            <p class="text-xs text-gray-500">Staked Amount</p>
+                            <p class="text-xl font-bold text-yellow-400">${position.staked.amount.toLocaleString()} ${position.staked.token}</p>
+                            ${position.staked.usd ? `<p class="text-sm text-gray-400">≈ $${position.staked.usd.toLocaleString()}</p>` : ''}
+                        </div>
+                    ` : ''}
+                    ${position.rewards ? `
+                        <div class="bg-gray-800/50 rounded-lg p-4 inline-block ml-2">
+                            <p class="text-xs text-gray-500">Unclaimed Rewards</p>
+                            <p class="text-xl font-bold text-green-400">+${position.rewards.amount.toLocaleString()} ${position.rewards.token || ''}</p>
+                        </div>
+                    ` : ''}
+                    ${position.apr ? `<p class="text-sm text-green-400 mt-3">APR: ${position.apr}%</p>` : ''}
+                    ${position.vp_percent ? `<p class="text-sm text-yellow-400 mt-2">Voting Power: ${position.vp_percent}%</p>` : ''}
+                </div>
+            `;
+            noHistoryMsg.classList.remove('hidden');
+            
+            // Update stats to show position info
+            document.getElementById('stat-current').textContent = position.staked ? position.staked.amount.toLocaleString() : '--';
+            document.getElementById('stat-change').textContent = position.rewards ? `+${position.rewards.amount.toLocaleString()}` : '--';
+            document.getElementById('stat-change').className = 'text-lg font-bold text-green-400';
+            document.getElementById('stat-avg').textContent = position.apr ? `${position.apr}% APR` : '--';
+        }
+        
+        function renderTotalChart() {
+            // Show total value trend
+            document.getElementById('chart-placeholder').classList.add('hidden');
+            document.getElementById('chart-token-badge').classList.remove('hidden');
+            document.getElementById('chart-token-name').textContent = 'Total Holdings';
+            
+            const chartWrapper = document.getElementById('chart-wrapper');
+            const noHistoryMsg = document.getElementById('no-history-msg');
+            
+            // Build total USD data from historical snapshots
+            const dataPoints = [];
+            for (const snapshot of historicalSnapshots) {
+                let totalUsd = 0;
+                if (snapshot.treasuryAssets) {
+                    totalUsd += snapshot.treasuryAssets.reduce((sum, a) => sum + (a.usd || 0), 0);
+                }
+                if (snapshot.councilAssets) {
+                    totalUsd += snapshot.councilAssets.reduce((sum, a) => sum + (a.usd || 0), 0);
+                }
+                // Note: Staked positions historical data would need to be added to snapshots
+                
+                if (totalUsd > 0) {
+                    dataPoints.push({
+                        x: new Date(snapshot.timestamp),
+                        y: totalUsd,
+                        epoch: snapshot.epoch
+                    });
+                }
+            }
+            
+            // Add current total
+            const currentTotal = daoAssets.reduce((sum, a) => sum + (a.usd || 0), 0) +
+                                councilAssets.reduce((sum, a) => sum + (a.usd || 0), 0) +
+                                stakedPositions.reduce((sum, p) => sum + (p.usd || 0), 0);
+            
+            dataPoints.push({
+                x: new Date(),
+                y: currentTotal,
+                epoch: 'Live'
+            });
+            
+            if (dataPoints.length < 2) {
+                chartWrapper.classList.add('hidden');
+                noHistoryMsg.classList.remove('hidden');
+                noHistoryMsg.innerHTML = `
+                    <div class="text-center">
+                        <i class="fas fa-chart-pie text-4xl mb-3 text-cyan-400"></i>
+                        <p class="text-lg font-bold text-white mb-2">Total Holdings</p>
+                        <p class="text-3xl font-bold text-cyan-400">$${currentTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                        <p class="text-xs text-gray-500 mt-2">Historical trend will show with more snapshots</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            chartWrapper.classList.remove('hidden');
+            noHistoryMsg.classList.add('hidden');
+            
+            // Calculate stats
+            const currentBalance = dataPoints[dataPoints.length - 1].y;
+            const oldestBalance = dataPoints[0].y;
+            const change = currentBalance - oldestBalance;
+            const changePercent = oldestBalance > 0 ? (change / oldestBalance * 100) : 0;
+            
+            document.getElementById('stat-current').textContent = '$' + currentBalance.toLocaleString(undefined, { maximumFractionDigits: 0 });
+            const changeEl = document.getElementById('stat-change');
+            changeEl.textContent = `${change >= 0 ? '+$' : '-$'}${Math.abs(change).toLocaleString(undefined, { maximumFractionDigits: 0 })} (${changePercent.toFixed(1)}%)`;
+            changeEl.className = `text-lg font-bold ${change >= 0 ? 'text-green-400' : 'text-red-400'}`;
+            document.getElementById('stat-avg').textContent = `${dataPoints.length} epochs`;
+            
+            // Render chart
+            const ctx = document.getElementById('balance-chart').getContext('2d');
+            if (balanceChart) balanceChart.destroy();
+            
+            balanceChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    datasets: [{
+                        label: 'Total Holdings',
+                        data: dataPoints,
+                        borderColor: '#2dd4bf',
+                        backgroundColor: '#2dd4bf20',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 4,
+                        pointHoverRadius: 6,
+                        pointBackgroundColor: '#2dd4bf',
+                        pointBorderColor: '#1a1a1a',
+                        pointBorderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(26, 26, 26, 0.95)',
+                            borderColor: '#2dd4bf',
+                            borderWidth: 1,
+                            callbacks: {
+                                title: (items) => {
+                                    const epoch = items[0].raw.epoch;
+                                    const date = new Date(items[0].raw.x).toLocaleDateString();
+                                    return epoch === 'Live' ? `Live (${date})` : `Epoch ${epoch} (${date})`;
+                                },
+                                label: (context) => `Total: $${context.raw.y.toLocaleString()}`
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: { unit: 'week', displayFormats: { week: 'MMM d' } },
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                            ticks: { color: '#888' }
+                        },
+                        y: {
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                            ticks: {
+                                color: '#888',
+                                callback: (value) => '$' + (value >= 1000 ? (value/1000).toFixed(0) + 'K' : value)
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function selectToken(tokenName, walletType) {
+            // Update selection UI
+            document.querySelectorAll('.token-row').forEach(row => {
+                row.classList.remove('selected');
+            });
+            const selectedRow = document.querySelector(`.token-row[data-token="${tokenName}"][data-wallet="${walletType}"]`);
+            if (selectedRow) selectedRow.classList.add('selected');
+            
+            selectedToken = { name: tokenName, wallet: walletType };
+            
+            // Show chart
+            document.getElementById('chart-placeholder').classList.add('hidden');
+            document.getElementById('chart-token-badge').classList.remove('hidden');
+            document.getElementById('chart-token-name').textContent = `${tokenName} (${walletType === 'dao' ? 'DAO' : 'Council'})`;
+            
+            renderBalanceChart(tokenName, walletType);
+        }
+        
+        function renderBalanceChart(tokenName, walletType) {
+            const chartWrapper = document.getElementById('chart-wrapper');
+            const noHistoryMsg = document.getElementById('no-history-msg');
+            
+            console.log(`Rendering chart for ${tokenName} (${walletType}), ${historicalSnapshots.length} snapshots available`);
+            
+            // Build historical data for this token
+            const dataPoints = [];
+            
+            for (const snapshot of historicalSnapshots) {
+                const assets = walletType === 'dao' ? snapshot.treasuryAssets : snapshot.councilAssets;
+                if (assets && assets.length > 0) {
+                    // TLA data uses 'token' field, not 'name'
+                    const tokenData = assets.find(a => (a.token || a.name) === tokenName);
+                    if (tokenData) {
+                        dataPoints.push({
+                            x: new Date(snapshot.timestamp),
+                            y: tokenData.amount,
+                            epoch: snapshot.epoch
+                        });
+                    }
+                }
+            }
+            
+            // Add current value as latest point
+            const currentAssets = walletType === 'dao' ? daoAssets : councilAssets;
+            const currentToken = currentAssets.find(a => (a.token || a.name) === tokenName);
+            if (currentToken) {
+                dataPoints.push({
+                    x: new Date(),
+                    y: currentToken.amount,
+                    epoch: 'Live'
+                });
+            }
+            
+            console.log(`Found ${dataPoints.length} data points for ${tokenName}`);
+            
+            if (dataPoints.length < 1) {
+                // No data at all
+                chartWrapper.classList.add('hidden');
+                noHistoryMsg.classList.remove('hidden');
+                return;
+            }
+            
+            chartWrapper.classList.remove('hidden');
+            noHistoryMsg.classList.add('hidden');
+            
+            // Calculate stats
+            const currentBalance = dataPoints[dataPoints.length - 1].y;
+            const oldestBalance = dataPoints.length > 1 ? dataPoints[0].y : currentBalance;
+            const change = currentBalance - oldestBalance;
+            const changePercent = oldestBalance > 0 ? (change / oldestBalance * 100) : 0;
+            const avgWeeklyGain = dataPoints.length > 1 ? change / (dataPoints.length - 1) : 0;
+            
+            // Update stats display
+            document.getElementById('stat-current').textContent = currentBalance.toLocaleString(undefined, { maximumFractionDigits: 2 });
+            
+            const changeEl = document.getElementById('stat-change');
+            if (dataPoints.length > 1) {
+                changeEl.textContent = `${change >= 0 ? '+' : ''}${change.toLocaleString(undefined, { maximumFractionDigits: 2 })} (${changePercent.toFixed(1)}%)`;
+                changeEl.className = `text-lg font-bold ${change >= 0 ? 'text-green-400' : 'text-red-400'}`;
+            } else {
+                changeEl.textContent = 'N/A (need more data)';
+                changeEl.className = 'text-lg font-bold text-gray-500';
+            }
+            
+            document.getElementById('stat-avg').textContent = dataPoints.length > 1 
+                ? `${avgWeeklyGain >= 0 ? '+' : ''}${avgWeeklyGain.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+                : 'N/A';
+            
+            // Get token color
+            const color = TOKEN_COLORS[tokenName] || TOKEN_COLORS.default;
+            
+            // Render chart
+            const ctx = document.getElementById('balance-chart').getContext('2d');
+            
+            if (balanceChart) {
+                balanceChart.destroy();
+            }
+            
+            balanceChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    datasets: [{
+                        label: tokenName + ' Balance',
+                        data: dataPoints,
+                        borderColor: color,
+                        backgroundColor: color + '20',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 4,
+                        pointHoverRadius: 6,
+                        pointBackgroundColor: color,
+                        pointBorderColor: '#1a1a1a',
+                        pointBorderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(26, 26, 26, 0.95)',
+                            borderColor: color,
+                            borderWidth: 1,
+                            titleColor: '#fff',
+                            bodyColor: '#ccc',
+                            padding: 12,
+                            callbacks: {
+                                title: function(items) {
+                                    const item = items[0];
+                                    const epoch = item.raw.epoch;
+                                    const date = new Date(item.raw.x).toLocaleDateString();
+                                    return epoch === 'Live' ? `Live (${date})` : `Epoch ${epoch} (${date})`;
+                                },
+                                label: function(context) {
+                                    return `${tokenName}: ${context.raw.y.toLocaleString(undefined, { maximumFractionDigits: 4 })}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                unit: 'week',
+                                displayFormats: {
+                                    week: 'MMM d'
+                                }
+                            },
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.05)'
+                            },
+                            ticks: {
+                                color: '#888'
+                            }
+                        },
+                        y: {
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.05)'
+                            },
+                            ticks: {
+                                color: '#888',
+                                callback: function(value) {
+                                    if (value >= 1000000) return (value/1000000).toFixed(1) + 'M';
+                                    if (value >= 1000) return (value/1000).toFixed(1) + 'K';
+                                    return value.toLocaleString();
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // ==================== Initialization ====================
+        
+        async function init() {
+            console.log('Initializing DAO Treasury page...');
+            
+            // Fetch current TLA data (has treasury balances and prices)
+            const tlaData = await fetchCurrentTlaData();
+            
+            if (!tlaData) {
+                document.getElementById('dao-treasury-table').innerHTML = '<div class="text-center py-4 text-red-400">Failed to load TLA data</div>';
+                document.getElementById('council-treasury-table').innerHTML = '<div class="text-center py-4 text-red-400">Failed to load TLA data</div>';
+                document.getElementById('dao-staked-table').innerHTML = '<div class="text-center py-4 text-red-400">Failed to load TLA data</div>';
+                return;
+            }
+            
+            // Extract treasury data from TLA
+            const treasury = tlaData.dashboard?.treasury;
+            tokenPrices = tlaData.token_prices || {};
+            
+            if (treasury) {
+                daoAssets = treasury.tokens || [];
+                councilAssets = treasury.council?.tokens || [];
+                console.log(`Loaded ${daoAssets.length} DAO tokens, ${councilAssets.length} Council tokens`);
+            }
+            
+            // Extract staked positions from TLA alliance data
+            const alliance = treasury?.alliance;
+            if (alliance?.positions) {
+                stakedPositions = alliance.positions.map(pos => ({
+                    name: pos.name,
+                    partner: pos.partner,
+                    proposal: pos.proposal,
+                    staked: pos.staked,
+                    rewards: pos.rewards || pos.unclaimed,
+                    apr: pos.apr,
+                    vp_percent: pos.vp_percent,
+                    usd: pos.staked?.usd || 0
+                }));
+                console.log(`Loaded ${stakedPositions.length} staked positions`);
+            }
+            
+            // Fetch historical snapshots for charts
+            await fetchHistoricalSnapshots();
+            
+            // Render all tables
+            const daoTotal = renderTokenTable('dao-treasury-table', daoAssets, 'dao');
+            const stakedTotal = renderStakedTable(stakedPositions);
+            const councilTotal = renderTokenTable('council-treasury-table', councilAssets, 'council');
+            
+            // Render total overview
+            renderTotalOverview(daoTotal, stakedTotal, councilTotal);
+            
+            // Update summary cards
+            document.getElementById('dao-treasury-total').textContent = '$' + daoTotal.toLocaleString(undefined, { maximumFractionDigits: 0 });
+            document.getElementById('dao-staked-total').textContent = '$' + stakedTotal.toLocaleString(undefined, { maximumFractionDigits: 0 });
+            document.getElementById('council-treasury-total').textContent = '$' + councilTotal.toLocaleString(undefined, { maximumFractionDigits: 0 });
+            
+            // Combined total (DAO Treasury + DAO Staked + Council)
+            const combinedTotal = daoTotal + stakedTotal + councilTotal;
+            document.getElementById('combined-total').textContent = '$' + combinedTotal.toLocaleString(undefined, { maximumFractionDigits: 0 });
+            
+            // Render value breakdown (price vs position change)
+            renderValueBreakdown();
+            
+            // Fetch and render DAO proposals
+            await fetchDaoProps();
+            renderDaoEvents();
+            
+            // Auto-select ampLUNA from DAO Treasury to show chart by default
+            if (daoAssets.length > 0) {
+                // Find ampLUNA or use first token
+                const defaultToken = daoAssets.find(a => (a.token || a.name) === 'ampLUNA') || daoAssets[0];
+                const tokenName = defaultToken.token || defaultToken.name;
+                selectToken(tokenName, 'dao');
+            }
+            
+            console.log('Treasury page initialized');
+            console.log(`DAO Assets: ${daoAssets.length}, Staked Positions: ${stakedPositions.length}, Council Assets: ${councilAssets.length}`);
+            console.log(`Historical snapshots: ${historicalSnapshots.length}`);
+        }
+        
+        // Start
+        init();
+    </script>
+</body>
+</html>
