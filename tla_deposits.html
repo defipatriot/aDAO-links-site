@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TLA Deposits - Alliance DAO</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #0D0D0D; color: #EAEAEA; }
+        .stat-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); }
+        .pool-row { transition: all 0.2s; }
+        .pool-row:hover { background: rgba(45,212,191,0.1); }
+        .badge-amp { background: linear-gradient(135deg, #f97316, #ea580c); color: white; font-size: 10px; padding: 2px 6px; border-radius: 4px; }
+        .badge-non-amp { background: rgba(255,255,255,0.15); color: #d1d5db; font-size: 10px; padding: 2px 6px; border-radius: 4px; }
+        .badge-single { background: rgba(168,85,247,0.3); color: #c4b5fd; font-size: 10px; padding: 2px 6px; border-radius: 4px; }
+        .chart-container { position: relative; height: 180px; }
+        .tab-btn { padding: 6px 14px; border-radius: 6px; font-size: 12px; transition: all 0.2s; }
+        .tab-btn.active { background: rgba(45,212,191,0.2); color: #2dd4bf; }
+        .tab-btn:hover:not(.active) { background: rgba(255,255,255,0.1); }
+        .period-btn { padding: 4px 10px; border-radius: 4px; font-size: 11px; border: 1px solid rgba(255,255,255,0.2); }
+        .period-btn.active { background: rgba(45,212,191,0.3); border-color: #2dd4bf; color: #2dd4bf; }
+        .period-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: #1a1a1a; } ::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+    </style>
+</head>
+<body class="min-h-screen">
+    <header class="bg-gray-900/80 border-b border-gray-800 sticky top-0 z-50">
+        <div class="container mx-auto px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-4">
+                    <div class="flex items-center gap-2 text-sm">
+                        <a href="index.html" class="text-gray-500 hover:text-white px-2 py-1 rounded hover:bg-gray-800 transition"><i class="fas fa-home mr-1"></i>Dashboard</a>
+                        <span class="text-gray-700">/</span>
+                        <a href="dao_treasury.html" class="text-gray-500 hover:text-white px-2 py-1 rounded hover:bg-gray-800 transition"><i class="fas fa-landmark mr-1"></i>Treasury</a>
+                    </div>
+                    <h1 class="text-lg font-bold text-white"><i class="fas fa-water text-cyan-400 mr-2"></i>TLA Deposits</h1>
+                </div>
+                <div class="flex items-center gap-3">
+                    <div class="flex gap-1">
+                        <button class="period-btn active" onclick="setPeriod('last',this)">vs Last</button>
+                        <button class="period-btn" onclick="setPeriod('30d',this)" disabled title="Need more data">30d</button>
+                        <button class="period-btn" onclick="setPeriod('90d',this)" disabled title="Need more data">90d</button>
+                    </div>
+                    <span id="epoch-badge" class="text-xs bg-gray-800 px-2 py-1 rounded text-gray-400">Loading...</span>
+                </div>
+            </div>
+        </div>
+    </header>
+    
+    <main class="container mx-auto px-4 py-4">
+        <!-- Summary Row -->
+        <div class="grid grid-cols-3 md:grid-cols-6 gap-2 mb-4">
+            <div class="stat-card rounded-lg p-2">
+                <p class="text-[10px] text-gray-500">Total Value</p>
+                <p id="total-value" class="text-lg font-bold text-white">--</p>
+                <p id="total-change" class="text-[10px] text-gray-600">--</p>
+            </div>
+            <div class="stat-card rounded-lg p-2">
+                <p class="text-[10px] text-gray-500">Non-Amp</p>
+                <p id="total-non-amp" class="text-lg font-bold text-gray-300">--</p>
+            </div>
+            <div class="stat-card rounded-lg p-2">
+                <p class="text-[10px] text-gray-500">Amplified</p>
+                <p id="total-amp" class="text-lg font-bold text-orange-400">--</p>
+            </div>
+            <div class="stat-card rounded-lg p-2">
+                <p class="text-[10px] text-gray-500">Avg APR</p>
+                <p id="avg-apr" class="text-lg font-bold text-green-400">--</p>
+                <p id="weekly-rate" class="text-[10px] text-gray-600">--</p>
+            </div>
+            <div class="stat-card rounded-lg p-2">
+                <p class="text-[10px] text-gray-500">Rewards</p>
+                <p id="pending-rewards" class="text-lg font-bold text-yellow-400">--</p>
+            </div>
+            <div class="stat-card rounded-lg p-2 border-l-2" id="position-card">
+                <p class="text-[10px] text-gray-500">Tokens</p>
+                <p id="position-status" class="text-lg font-bold text-gray-500">--</p>
+                <p id="position-note" class="text-[10px] text-gray-600">--</p>
+            </div>
+        </div>
+        
+        <!-- Value Change Breakdown - Simplified Story -->
+        <div id="value-breakdown" class="stat-card rounded-lg p-4 mb-4 hidden">
+            <div class="flex items-center gap-2 mb-3">
+                <i class="fas fa-book-open text-cyan-400"></i>
+                <span class="text-sm font-medium text-white">What Happened This Week</span>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Left: The Story -->
+                <div class="space-y-3">
+                    <div id="story-market" class="flex items-start gap-3 p-2 rounded bg-gray-800/30">
+                        <div class="text-2xl">📉</div>
+                        <div>
+                            <p class="text-xs text-gray-400">Market Movement</p>
+                            <p id="market-value" class="text-lg font-mono font-bold">--</p>
+                            <p id="market-explain" class="text-[10px] text-gray-500">Token prices changed</p>
+                        </div>
+                    </div>
+                    
+                    <div id="story-growth" class="flex items-start gap-3 p-2 rounded bg-gray-800/30">
+                        <div class="text-2xl">🌱</div>
+                        <div>
+                            <p class="text-xs text-gray-400">Your Tokens Grew</p>
+                            <p id="growth-value" class="text-lg font-mono font-bold">--</p>
+                            <p id="growth-explain" class="text-[10px] text-gray-500">From compounding rewards</p>
+                        </div>
+                    </div>
+                    
+                    <div class="border-t border-gray-700 pt-3">
+                        <div class="flex items-start gap-3 p-2 rounded bg-gray-800/50">
+                            <div class="text-2xl">=</div>
+                            <div>
+                                <p class="text-xs text-gray-400">Net Result</p>
+                                <p id="net-value" class="text-lg font-mono font-bold">--</p>
+                                <p id="net-explain" class="text-[10px] text-gray-500"></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Right: Context -->
+                <div class="bg-gray-800/20 rounded-lg p-3">
+                    <p class="text-xs font-medium text-white mb-2"><i class="fas fa-info-circle text-blue-400 mr-1"></i>Understanding This</p>
+                    <div class="space-y-2 text-[11px] text-gray-400">
+                        <p id="context-apr"></p>
+                        <p id="context-comparison"></p>
+                        <p id="context-verdict" class="font-medium"></p>
+                    </div>
+                    
+                    <div class="mt-3 pt-3 border-t border-gray-700">
+                        <p class="text-[10px] text-gray-500 mb-1">Quick Check:</p>
+                        <div class="flex items-center gap-2">
+                            <span id="check-tokens" class="text-[10px]">--</span>
+                        </div>
+                        <div class="flex items-center gap-2 mt-1">
+                            <span id="check-expected" class="text-[10px]">--</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Main Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <!-- Left: Positions & Tokens -->
+            <div class="lg:col-span-2 space-y-4">
+                <!-- LP Positions -->
+                <div class="stat-card rounded-xl p-3">
+                    <div class="flex items-center justify-between mb-3">
+                        <h2 class="text-sm font-bold text-white"><i class="fas fa-layer-group text-cyan-400 mr-2"></i>LP Positions</h2>
+                        <div class="flex gap-1"><span class="badge-non-amp">Non-Amp</span><span class="badge-amp">Amp</span></div>
+                    </div>
+                    <div id="positions-table" class="text-xs"><div class="text-center p-6 text-gray-500"><i class="fas fa-spinner fa-spin"></i> Loading...</div></div>
+                </div>
+                
+                <!-- Token Balances -->
+                <div class="stat-card rounded-xl p-3">
+                    <div class="flex items-center justify-between mb-3">
+                        <h2 class="text-sm font-bold text-white"><i class="fas fa-coins text-yellow-400 mr-2"></i>Token Balances</h2>
+                        <span class="text-[10px] text-gray-500">From TLA snapshot</span>
+                    </div>
+                    <div id="token-balances" class="grid grid-cols-2 md:grid-cols-3 gap-2"><div class="col-span-full text-center p-4 text-gray-500"><i class="fas fa-spinner fa-spin"></i></div></div>
+                </div>
+                
+                <!-- Pool Token Breakdown (when available) -->
+                <div id="pool-breakdown-section" class="stat-card rounded-xl p-3 hidden">
+                    <div class="flex items-center justify-between mb-3">
+                        <h2 class="text-sm font-bold text-white"><i class="fas fa-balance-scale text-purple-400 mr-2"></i>Pool Token Breakdown</h2>
+                    </div>
+                    <div id="pool-breakdown" class="space-y-3"></div>
+                </div>
+            </div>
+            
+            <!-- Right: Analytics -->
+            <div class="space-y-4">
+                <div class="flex gap-1">
+                    <button class="tab-btn active" onclick="showTab('trend',this)">Trend</button>
+                    <button class="tab-btn" onclick="showTab('compare',this)">Compare</button>
+                    <button class="tab-btn" onclick="showTab('rewards',this)">Rewards</button>
+                </div>
+                
+                <!-- Tab: Trend -->
+                <div id="tab-trend" class="space-y-3">
+                    <div class="stat-card rounded-xl p-3">
+                        <div class="flex items-center justify-between mb-2">
+                            <h3 class="text-xs font-bold text-white"><i class="fas fa-chart-area text-green-400 mr-1"></i>Value Over Time</h3>
+                            <span class="text-[10px] text-gray-500"><span class="inline-block w-2 h-2 rounded-full bg-purple-500 mr-1"></span>DAO Action</span>
+                        </div>
+                        <div class="chart-container"><canvas id="value-chart"></canvas></div>
+                    </div>
+                    <div class="stat-card rounded-xl p-3">
+                        <h3 class="text-xs font-bold text-white mb-2"><i class="fas fa-lock text-purple-400 mr-1"></i>Locks & VP</h3>
+                        <div id="locks-info" class="space-y-1 text-xs"></div>
+                    </div>
+                </div>
+                
+                <!-- Tab: Compare -->
+                <div id="tab-compare" class="space-y-3 hidden">
+                    <div class="stat-card rounded-xl p-3">
+                        <h3 class="text-xs font-bold text-white mb-2"><i class="fas fa-exchange-alt text-cyan-400 mr-1"></i>Token Amount Changes</h3>
+                        <div id="token-changes" class="space-y-1 text-xs"></div>
+                    </div>
+                    <div class="stat-card rounded-xl p-3">
+                        <h3 class="text-xs font-bold text-white mb-2"><i class="fas fa-chart-bar text-yellow-400 mr-1"></i>Price Changes</h3>
+                        <div id="price-changes" class="space-y-1 text-xs"></div>
+                    </div>
+                </div>
+                
+                <!-- Tab: Rewards -->
+                <div id="tab-rewards" class="space-y-3 hidden">
+                    <div class="stat-card rounded-xl p-3">
+                        <h3 class="text-xs font-bold text-white mb-2"><i class="fas fa-gift text-orange-400 mr-1"></i>Pending Rewards</h3>
+                        <div id="rewards-breakdown" class="space-y-1 text-xs"></div>
+                    </div>
+                    <div class="bg-yellow-900/30 border border-yellow-800/50 rounded-lg p-2 text-[10px]">
+                        <p class="text-yellow-400 font-medium"><i class="fas fa-info-circle mr-1"></i>Note</p>
+                        <p class="text-gray-400 mt-1">Non-amp rewards don't auto-compound. Amp positions do.</p>
+                    </div>
+                </div>
+                
+                <!-- TLA Actions Section (always visible) -->
+                <div class="stat-card rounded-xl p-3 mt-3">
+                    <div class="flex items-center justify-between mb-2">
+                        <h3 class="text-xs font-bold text-white"><i class="fas fa-gavel text-purple-400 mr-1"></i>Recent TLA Actions</h3>
+                        <span id="tla-actions-count" class="text-[10px] bg-purple-900/50 text-purple-300 px-1.5 py-0.5 rounded">--</span>
+                    </div>
+                    <div id="tla-actions-list" class="space-y-1.5 max-h-48 overflow-y-auto text-xs">
+                        <div class="text-gray-500 text-center py-2"><i class="fas fa-spinner fa-spin mr-1"></i>Loading...</div>
+                    </div>
+                    <div class="mt-2 pt-2 border-t border-gray-800 text-[10px] text-gray-600">
+                        <i class="fas fa-info-circle mr-1"></i>Props that adjusted LP positions, locks, or TLA deposits
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Live Note -->
+        <div id="live-note" class="mt-4 bg-blue-900/20 border border-blue-800/50 rounded-lg p-2 text-xs text-center hidden">
+            <i class="fas fa-broadcast-tower text-blue-400 mr-1"></i>
+            <span class="text-gray-400">Currently in Epoch <span id="current-epoch">--</span>. Snapshot from Epoch <span id="snapshot-epoch">--</span>.</span>
+        </div>
+    </main>
+    
+    <script>
+        const TLA_URL = 'https://raw.githubusercontent.com/defipatriot/tla_json_storage/main';
+        const PROPS_URL = 'https://raw.githubusercontent.com/defipatriot/adao_json_storage/main/adao_props.json';
+        const AVAILABLE_EPOCHS = [165, 166];
+        const COLORS = {LUNA:'#ffd83d',ampLUNA:'#2dd4bf',CAPA:'#6366f1',ampCAPA:'#818cf8',ROAR:'#f59e0b',ampROAR:'#d97706',xASTRO:'#a78bfa'};
+        
+        let currentData=null, compareData=null, tokenPrices={}, lpPositions=[], tokenBalances=[], history=[], chart=null;
+        let daoProps = {}; // DAO proposals
+        
+        const fmt=(v,d=2)=>v==null?'--':'$'+v.toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d});
+        const fmtNum=v=>v==null?'--':v>=1e9?(v/1e9).toFixed(2)+'B':v>=1e6?(v/1e6).toFixed(2)+'M':v>=1e3?(v/1e3).toFixed(2)+'K':v.toFixed(2);
+        const fmtPct=(v,plus=true)=>v==null?'--':(plus&&v>0?'+':'')+v.toFixed(1)+'%';
+        const fmtChg=(v)=>v==null?'--':(v>=0?'+':'')+fmt(v,0);
+        const getPrice=(t,p)=>{const x=p?.[t];return typeof x==='object'?x.price||0:x||0;};
+        
+        // Epoch date boundaries for mapping
+        const EPOCH_DATES = {
+            162: { start: '2025-12-01', end: '2025-12-08' },
+            163: { start: '2025-12-08', end: '2025-12-15' },
+            164: { start: '2025-12-15', end: '2025-12-22' },
+            165: { start: '2025-12-22', end: '2025-12-29' },
+            166: { start: '2025-12-29', end: '2026-01-05' },
+            167: { start: '2026-01-05', end: '2026-01-12' },
+            168: { start: '2026-01-12', end: '2026-01-19' },
+        };
+        
+        // Check if a proposal is TLA-related (LP positions, locks, deposits)
+        function isTlaRelatedProp(prop) {
+            const title = (prop.title || '').toLowerCase();
+            const actions = prop.decodedActions || [];
+            
+            // Title keywords
+            if (/\b(tla|liquidity alliance|lp |deposit|withdraw|lock|arbluna|ampluna|rebase|amp gauge)\b/i.test(title)) {
+                return true;
+            }
+            
+            // Action/contract keywords
+            for (const action of actions) {
+                const actionName = (action.actionName || '').toLowerCase();
+                const contractName = (action.contractName || '').toLowerCase();
+                
+                if (/\b(tla|liquidity alliance|amp gauge|lock|lp|pool|pcl)\b/.test(contractName)) return true;
+                if (/\b(deposit|withdraw|stake|unstake|lock|claim.*reward|provide|zap|create.*lp)\b/.test(actionName)) return true;
+            }
+            
+            return false;
+        }
+        
+        // Get epoch for a date
+        function getEpochForDate(dateStr) {
+            if (!dateStr) return null;
+            const date = new Date(dateStr);
+            
+            for (const [epoch, dates] of Object.entries(EPOCH_DATES)) {
+                const start = new Date(dates.start + 'T00:00:00Z');
+                const end = new Date(dates.end + 'T23:59:59Z');
+                if (date >= start && date <= end) return parseInt(epoch);
+            }
+            
+            // Estimate for dates outside range
+            const epoch162Start = new Date('2025-12-01T00:00:00Z');
+            const msPerWeek = 7 * 24 * 60 * 60 * 1000;
+            return 162 + Math.floor((date - epoch162Start) / msPerWeek);
+        }
+        
+        // Get TLA-related props for a specific epoch
+        function getTlaPropsForEpoch(epoch) {
+            const props = [];
+            Object.entries(daoProps).forEach(([id, prop]) => {
+                if (prop.status !== 'Executed') return;
+                if (!isTlaRelatedProp(prop)) return;
+                
+                const propEpoch = getEpochForDate(prop.executedAt);
+                if (propEpoch === epoch) {
+                    props.push({ id, title: prop.title });
+                }
+            });
+            return props;
+        }
+        
+        // Get all TLA-related executed props
+        function getAllTlaProps() {
+            const props = [];
+            Object.entries(daoProps).forEach(([id, prop]) => {
+                if (prop.status !== 'Executed') return;
+                if (!isTlaRelatedProp(prop)) return;
+                
+                const epoch = getEpochForDate(prop.executedAt);
+                const actions = (prop.decodedActions || []).map(a => a.actionName).filter(Boolean);
+                
+                props.push({
+                    id,
+                    title: prop.title,
+                    executedAt: prop.executedAt,
+                    epoch,
+                    actions: actions.slice(0, 3)
+                });
+            });
+            
+            // Sort by date, most recent first
+            props.sort((a, b) => {
+                if (a.executedAt && b.executedAt) {
+                    return new Date(b.executedAt) - new Date(a.executedAt);
+                }
+                return (b.epoch || 0) - (a.epoch || 0);
+            });
+            
+            return props;
+        }
+        
+        // Render TLA actions list
+        function renderTlaActions() {
+            const props = getAllTlaProps();
+            const listEl = document.getElementById('tla-actions-list');
+            const countEl = document.getElementById('tla-actions-count');
+            
+            if (props.length === 0) {
+                listEl.innerHTML = '<div class="text-gray-500 text-center py-2">No TLA-related proposals found</div>';
+                countEl.textContent = '0';
+                return;
+            }
+            
+            countEl.textContent = props.length;
+            
+            // Show last 8
+            let html = '';
+            props.slice(0, 8).forEach(prop => {
+                // Format date
+                let dateStr = '';
+                if (prop.executedAt) {
+                    const d = new Date(prop.executedAt);
+                    dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                }
+                
+                // Action summary
+                const actionSummary = prop.actions.length > 0 
+                    ? prop.actions.slice(0, 2).join(', ')
+                    : '';
+                
+                html += `
+                    <div class="p-1.5 rounded bg-gray-800/30 hover:bg-gray-800/50 transition-colors">
+                        <div class="flex items-start justify-between gap-2">
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-1.5">
+                                    <span class="text-purple-400 font-medium">${prop.id}</span>
+                                    <span class="text-gray-300 truncate">${prop.title.substring(0, 28)}${prop.title.length > 28 ? '...' : ''}</span>
+                                </div>
+                                ${actionSummary ? `<div class="text-[10px] text-gray-500 mt-0.5">${actionSummary}</div>` : ''}
+                            </div>
+                            <div class="text-right flex-shrink-0">
+                                ${prop.epoch ? `<span class="text-[10px] bg-gray-700 text-gray-400 px-1 rounded">E${prop.epoch}</span>` : ''}
+                                ${dateStr ? `<div class="text-[10px] text-gray-600">${dateStr}</div>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            if (props.length > 8) {
+                html += `<div class="text-[10px] text-gray-600 text-center pt-1">+${props.length - 8} more</div>`;
+            }
+            
+            listEl.innerHTML = html;
+        }
+        
+        // Fetch DAO proposals
+        async function fetchDaoProps() {
+            try {
+                const r = await fetch(PROPS_URL);
+                if (r.ok) {
+                    const data = await r.json();
+                    daoProps = data.proposals || {};
+                    console.log(`✓ Loaded ${Object.keys(daoProps).length} props`);
+                }
+            } catch (e) {
+                console.warn('Props fetch failed:', e);
+            }
+        }
+        
+        async function fetchEpoch(e){
+            try{const r=await fetch(`${TLA_URL}/tla-data-epoch-${e}-end.json`);if(r.ok){console.log(`✓ E${e}`);return await r.json();}}catch(err){}
+            return null;
+        }
+        
+        async function loadData(){
+            for(let i=AVAILABLE_EPOCHS.length-1;i>=0;i--){const d=await fetchEpoch(AVAILABLE_EPOCHS[i]);if(d){currentData=d;break;}}
+            if(!currentData)return false;
+            const curr=currentData.meta?.epoch;
+            for(let i=AVAILABLE_EPOCHS.length-1;i>=0;i--){if(AVAILABLE_EPOCHS[i]<curr){const d=await fetchEpoch(AVAILABLE_EPOCHS[i]);if(d){compareData=d;break;}}}
+            history=[];
+            for(const e of AVAILABLE_EPOCHS){const d=await fetchEpoch(e);if(d)history.push({epoch:d.meta?.epoch||e,ts:d.meta?.generated_at,usd:d.liquidity?.adao_deposits?.total_usd||0,tokens:d.liquidity?.adao_deposits?.tokens||[],prices:d.token_prices||{}});}
+            return true;
+        }
+        
+        function extractPos(d){
+            if(!d?.liquidity?.active_pools)return[];
+            return d.liquidity.active_pools.filter(p=>(p.adao_deposit?.non_amp||0)+(p.adao_deposit?.amplified||0)>0)
+                .map(p=>({name:p.name,dex:p.dex,type:p.type,apr:p.apr||{},staked:p.tla_staked||0,nonAmp:p.adao_deposit?.non_amp||0,amp:p.adao_deposit?.amplified||0,total:(p.adao_deposit?.non_amp||0)+(p.adao_deposit?.amplified||0)}))
+                .sort((a,b)=>b.total-a.total);
+        }
+        
+        // Calculate value change breakdown
+        function calcValueBreakdown(){
+            if(!compareData) return null;
+            
+            const oldTokens = compareData.liquidity?.adao_deposits?.tokens || [];
+            const oldPrices = compareData.token_prices || {};
+            const newPrices = tokenPrices;
+            
+            let priceImpact = 0;
+            let positionChange = 0;
+            
+            tokenBalances.forEach(newTok => {
+                const oldTok = oldTokens.find(t => t.symbol === newTok.symbol);
+                if(!oldTok) return;
+                
+                const oldPrice = getPrice(newTok.symbol, oldPrices);
+                const newPrice = getPrice(newTok.symbol, newPrices);
+                const oldAmount = oldTok.amount;
+                const newAmount = newTok.amount;
+                
+                if(oldPrice <= 0 || newPrice <= 0) return;
+                
+                priceImpact += oldAmount * (newPrice - oldPrice);
+                positionChange += (newAmount - oldAmount) * newPrice;
+            });
+            
+            return { priceImpact, positionChange, netChange: priceImpact + positionChange };
+        }
+        
+        function showTab(name,btn){
+            document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+            btn.classList.add('active');
+            ['trend','compare','rewards'].forEach(t=>document.getElementById('tab-'+t).classList.add('hidden'));
+            document.getElementById('tab-'+name).classList.remove('hidden');
+        }
+        
+        function setPeriod(p,btn){if(btn.disabled)return;document.querySelectorAll('.period-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');}
+        
+        function renderPositions(){
+            const c=document.getElementById('positions-table');
+            if(!lpPositions.length){c.innerHTML='<div class="text-center py-4 text-gray-500">No positions</div>';return;}
+            const oldPos=compareData?extractPos(compareData):[];
+            let html='<table class="w-full"><thead class="text-gray-500 border-b border-gray-800"><tr><th class="text-left py-1 pl-1">Pool</th><th class="text-right py-1">Non-Amp</th><th class="text-right py-1">Amp</th><th class="text-right py-1">Total</th><th class="text-right py-1 pr-1">Δ</th></tr></thead><tbody>';
+            let totalNa=0,totalAmp=0;
+            lpPositions.forEach(p=>{
+                totalNa+=p.nonAmp;totalAmp+=p.amp;
+                const old=oldPos.find(x=>x.name===p.name);
+                const chg=old?(p.total-old.total):null;
+                const chgPct=old&&old.total>0?(chg/old.total*100):null;
+                html+=`<tr class="pool-row border-b border-gray-800/50">
+                    <td class="py-1.5 pl-1"><span class="text-white">${p.name}</span>${p.type==='single'?'<span class="badge-single ml-1">S</span>':''}</td>
+                    <td class="py-1.5 text-right font-mono ${p.nonAmp>0?'text-gray-300':'text-gray-700'}">${p.nonAmp>0?fmt(p.nonAmp,0):'--'}</td>
+                    <td class="py-1.5 text-right font-mono ${p.amp>0?'text-orange-400':'text-gray-700'}">${p.amp>0?fmt(p.amp,0):'--'}</td>
+                    <td class="py-1.5 text-right font-mono font-bold text-white">${fmt(p.total,0)}</td>
+                    <td class="py-1.5 text-right pr-1 ${chg!==null?(chg>=0?'text-green-400':'text-red-400'):'text-gray-600'}">${chgPct!==null?fmtPct(chgPct):'--'}</td>
+                </tr>`;
+            });
+            html+=`</tbody><tfoot class="border-t border-cyan-800"><tr class="font-bold"><td class="py-1.5 pl-1">Total</td><td class="py-1.5 text-right font-mono text-gray-300">${fmt(totalNa,0)}</td><td class="py-1.5 text-right font-mono text-orange-400">${fmt(totalAmp,0)}</td><td class="py-1.5 text-right font-mono text-cyan-400">${fmt(totalNa+totalAmp,0)}</td><td></td></tr></tfoot></table>`;
+            c.innerHTML=html;
+        }
+        
+        function renderTokenBalances(){
+            const c=document.getElementById('token-balances');
+            if(!tokenBalances.length){c.innerHTML='<div class="col-span-full text-center py-4 text-gray-500">No token data</div>';return;}
+            
+            const sorted = [...tokenBalances].sort((a,b)=>(b.usd||0)-(a.usd||0));
+            const oldTokens = compareData?.liquidity?.adao_deposits?.tokens || [];
+            const oldPrices = compareData?.token_prices || {};
+            
+            let html='';
+            sorted.forEach(t=>{
+                const color = COLORS[t.symbol] || '#666';
+                const old = oldTokens.find(x=>x.symbol===t.symbol);
+                const amtChg = old ? (t.amount - old.amount) : null;
+                const amtPct = old && old.amount > 0 ? (amtChg / old.amount * 100) : null;
+                const oldPrice = old ? getPrice(t.symbol, oldPrices) : null;
+                const newPrice = getPrice(t.symbol, tokenPrices);
+                const priceChg = oldPrice && oldPrice > 0 ? ((newPrice - oldPrice) / oldPrice * 100) : null;
+                
+                html+=`<div class="bg-gray-800/30 rounded-lg p-2">
+                    <div class="flex items-center justify-between mb-1">
+                        <div class="flex items-center gap-1.5">
+                            <div class="w-2 h-2 rounded-full" style="background:${color}"></div>
+                            <span class="font-medium text-white text-xs">${t.symbol}</span>
+                        </div>
+                        ${priceChg !== null ? `<span class="text-[10px] ${priceChg>=0?'text-green-400':'text-red-400'}">${fmtPct(priceChg)} price</span>` : ''}
+                    </div>
+                    <p class="font-mono text-sm text-cyan-400">${fmt(t.usd)}</p>
+                    <div class="flex justify-between items-center">
+                        <p class="text-[10px] text-gray-500">${fmtNum(t.amount)}</p>
+                        ${amtPct !== null ? `<span class="text-[10px] ${amtChg>=0?'text-green-400':'text-red-400'}">${fmtPct(amtPct)} amt</span>` : ''}
+                    </div>
+                </div>`;
+            });
+            c.innerHTML=html;
+        }
+        
+        function renderValueBreakdown(){
+            const breakdown = calcValueBreakdown();
+            if(!breakdown) return;
+            
+            const dep = currentData.liquidity?.adao_deposits || {};
+            const avgApr = dep.avg_apr || 0;
+            const totalValue = dep.total_usd || 0;
+            const weeklyRate = avgApr / 52;
+            const expectedWeekly = totalValue * (weeklyRate / 100);
+            
+            document.getElementById('value-breakdown').classList.remove('hidden');
+            
+            // Market movement
+            const marketEl = document.getElementById('market-value');
+            marketEl.textContent = fmtChg(breakdown.priceImpact);
+            marketEl.className = `text-lg font-mono font-bold ${breakdown.priceImpact >= 0 ? 'text-green-400' : 'text-red-400'}`;
+            document.getElementById('story-market').querySelector('.text-2xl').textContent = breakdown.priceImpact >= 0 ? '📈' : '📉';
+            document.getElementById('market-explain').textContent = breakdown.priceImpact >= 0 
+                ? 'Token prices went up' 
+                : 'Token prices went down';
+            
+            // Token growth
+            const growthEl = document.getElementById('growth-value');
+            growthEl.textContent = fmtChg(breakdown.positionChange);
+            growthEl.className = `text-lg font-mono font-bold ${breakdown.positionChange >= 0 ? 'text-green-400' : 'text-red-400'}`;
+            document.getElementById('story-growth').querySelector('.text-2xl').textContent = breakdown.positionChange >= 0 ? '🌱' : '🍂';
+            document.getElementById('growth-explain').textContent = breakdown.positionChange >= 0 
+                ? 'From compounding & rewards' 
+                : 'Tokens decreased (withdrawals or IL)';
+            
+            // Net result
+            const netEl = document.getElementById('net-value');
+            netEl.textContent = fmtChg(breakdown.netChange);
+            netEl.className = `text-lg font-mono font-bold ${breakdown.netChange >= 0 ? 'text-green-400' : 'text-red-400'}`;
+            
+            // Explanation
+            if(breakdown.positionChange >= 0 && breakdown.priceImpact < 0) {
+                document.getElementById('net-explain').textContent = 'Tokens grew but prices dropped more';
+            } else if(breakdown.positionChange >= 0 && breakdown.priceImpact >= 0) {
+                document.getElementById('net-explain').textContent = 'Both tokens and prices up! 🎉';
+            } else if(breakdown.positionChange < 0 && breakdown.priceImpact >= 0) {
+                document.getElementById('net-explain').textContent = 'Prices up but lost some tokens';
+            } else {
+                document.getElementById('net-explain').textContent = 'Both tokens and prices down';
+            }
+            
+            // Context section
+            document.getElementById('context-apr').innerHTML = `
+                <strong>Your APR is ${avgApr.toFixed(0)}%</strong> which equals ~${weeklyRate.toFixed(2)}% per week.
+                On $${(totalValue/1000).toFixed(1)}K, that's roughly <span class="text-green-400">${fmt(expectedWeekly,0)}/week</span> expected.
+            `;
+            
+            const actualVsExpected = breakdown.positionChange / expectedWeekly * 100;
+            document.getElementById('context-comparison').innerHTML = `
+                You got <span class="${breakdown.positionChange >= 0 ? 'text-green-400' : 'text-red-400'}">${fmtChg(breakdown.positionChange)}</span> token growth 
+                (${actualVsExpected.toFixed(0)}% of expected weekly yield).
+            `;
+            
+            // Verdict
+            const verdictEl = document.getElementById('context-verdict');
+            
+            // Check for unusually large position change (possible DAO action)
+            const largeChangeThreshold = totalValue * 0.05; // 5% of total value
+            const isLargeChange = Math.abs(breakdown.positionChange) > largeChangeThreshold;
+            
+            if(isLargeChange && breakdown.positionChange > expectedWeekly * 2) {
+                verdictEl.innerHTML = '<span class="text-blue-400">📋 Large increase - check for recent deposits or DAO actions</span>';
+            } else if(isLargeChange && breakdown.positionChange < -expectedWeekly) {
+                verdictEl.innerHTML = '<span class="text-orange-400">📋 Large decrease - check for withdrawals or DAO actions</span>';
+            } else if(breakdown.positionChange >= expectedWeekly * 0.8) {
+                verdictEl.innerHTML = '<span class="text-green-400">✓ Rewards are compounding as expected!</span>';
+            } else if(breakdown.positionChange >= 0) {
+                verdictEl.innerHTML = '<span class="text-yellow-400">⚠ Growth is slower than expected APR suggests</span>';
+            } else {
+                verdictEl.innerHTML = '<span class="text-red-400">⚠ Token amounts decreased - check for IL or withdrawals</span>';
+            }
+            
+            // Quick checks
+            document.getElementById('check-tokens').innerHTML = breakdown.positionChange >= 0 
+                ? '<span class="text-green-400">✓</span> Tokens growing' 
+                : '<span class="text-red-400">✗</span> Tokens shrinking';
+            
+            document.getElementById('check-expected').innerHTML = breakdown.positionChange >= expectedWeekly * 0.5 
+                ? '<span class="text-green-400">✓</span> Near expected yield' 
+                : '<span class="text-yellow-400">~</span> Below expected yield';
+            
+            // Header position status
+            const statusEl = document.getElementById('position-status');
+            const noteEl = document.getElementById('position-note');
+            const cardEl = document.getElementById('position-card');
+            
+            if(breakdown.positionChange >= expectedWeekly * 0.8){
+                statusEl.textContent = 'Growing';
+                statusEl.className = 'text-lg font-bold text-green-400';
+                noteEl.textContent = 'on track';
+                cardEl.className = 'stat-card rounded-lg p-2 border-l-2 border-green-500';
+            } else if(breakdown.positionChange >= 0){
+                statusEl.textContent = 'Growing';
+                statusEl.className = 'text-lg font-bold text-yellow-400';
+                noteEl.textContent = 'slower than APR';
+                cardEl.className = 'stat-card rounded-lg p-2 border-l-2 border-yellow-500';
+            } else {
+                statusEl.textContent = 'Shrinking';
+                statusEl.className = 'text-lg font-bold text-red-400';
+                noteEl.textContent = 'check positions';
+                cardEl.className = 'stat-card rounded-lg p-2 border-l-2 border-red-500';
+            }
+        }
+        
+        function renderChart(){
+            const ctx=document.getElementById('value-chart');
+            if(!ctx||history.length<1)return;
+            
+            // Current prices for normalization
+            const currentPrices = tokenPrices;
+            
+            // Calculate two datasets:
+            // 1. Actual USD value at the time (affected by price changes)
+            // 2. Token amounts valued at TODAY's prices (shows pure token growth)
+            const actualData = [];
+            const normalizedData = [];
+            
+            history.forEach(h => {
+                const ts = new Date(h.ts);
+                
+                // Check if this epoch had DAO actions on TLA positions
+                const tlaProps = getTlaPropsForEpoch(h.epoch);
+                const hasDaoAction = tlaProps.length > 0;
+                
+                // Actual value at that time
+                actualData.push({x: ts, y: h.usd, epoch: h.epoch, tlaProps, hasDaoAction});
+                
+                // Token amounts at current prices (removes price effect)
+                let normalizedValue = 0;
+                (h.tokens || []).forEach(tok => {
+                    const currentPrice = getPrice(tok.symbol, currentPrices);
+                    normalizedValue += tok.amount * currentPrice;
+                });
+                normalizedData.push({x: ts, y: normalizedValue || h.usd, epoch: h.epoch, tlaProps, hasDaoAction});
+            });
+            
+            if(chart)chart.destroy();
+            
+            // Dynamic scale
+            const allValues = [...actualData.map(d=>d.y), ...normalizedData.map(d=>d.y)];
+            const minVal = Math.min(...allValues);
+            const maxVal = Math.max(...allValues);
+            const range = maxVal - minVal;
+            const padding = Math.max(range * 0.5, 100);
+            const yMin = Math.max(0, minVal - padding);
+            const yMax = maxVal + padding;
+            
+            // Point colors - highlight epochs with DAO actions
+            const normalizedPointColors = normalizedData.map(d => d.hasDaoAction ? '#a855f7' : '#22c55e');
+            const actualPointColors = actualData.map(d => d.hasDaoAction ? '#a855f7' : '#64748b');
+            const normalizedPointRadius = normalizedData.map(d => d.hasDaoAction ? 8 : 5);
+            const actualPointRadius = actualData.map(d => d.hasDaoAction ? 8 : 5);
+            
+            chart=new Chart(ctx,{
+                type:'line',
+                data:{
+                    datasets:[
+                        {
+                            label: 'Token Growth',
+                            data: normalizedData,
+                            borderColor: '#22c55e',
+                            backgroundColor: '#22c55e20',
+                            fill: false,
+                            tension: 0.3,
+                            pointRadius: normalizedPointRadius,
+                            pointBackgroundColor: normalizedPointColors,
+                            pointBorderColor: normalizedPointColors,
+                            pointBorderWidth: normalizedData.map(d => d.hasDaoAction ? 2 : 0),
+                            borderWidth: 2
+                        },
+                        {
+                            label: 'Actual Value',
+                            data: actualData,
+                            borderColor: '#64748b',
+                            backgroundColor: '#64748b20',
+                            fill: true,
+                            tension: 0.3,
+                            pointRadius: actualPointRadius,
+                            pointBackgroundColor: actualPointColors,
+                            pointBorderColor: actualPointColors,
+                            pointBorderWidth: actualData.map(d => d.hasDaoAction ? 2 : 0),
+                            borderWidth: 2,
+                            borderDash: [5, 5]
+                        }
+                    ]
+                },
+                options:{
+                    responsive:true,
+                    maintainAspectRatio:false,
+                    plugins:{
+                        legend:{
+                            display: true,
+                            position: 'top',
+                            labels: {
+                                color: '#888',
+                                font: {size: 9},
+                                boxWidth: 12,
+                                padding: 8
+                            }
+                        },
+                        tooltip:{
+                            callbacks:{
+                                title: function(items) {
+                                    const d = items[0].raw;
+                                    let title = `Epoch ${d.epoch}`;
+                                    if (d.hasDaoAction) title += ' ⚡DAO Action';
+                                    return title;
+                                },
+                                label: c => `${c.dataset.label}: ${fmt(c.raw.y)}`,
+                                afterBody: function(items) {
+                                    const d = items[0].raw;
+                                    if (d.tlaProps && d.tlaProps.length > 0) {
+                                        return ['', '📋 DAO Props:', ...d.tlaProps.map(p => `  ${p.id}: ${p.title.substring(0,30)}...`)];
+                                    }
+                                    return [];
+                                }
+                            }
+                        }
+                    },
+                    scales:{
+                        x:{type:'time',time:{unit:'day'},grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#666',font:{size:9}}},
+                        y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#666',font:{size:9},callback:v=>'$'+(v/1000).toFixed(1)+'K'},min:yMin,max:yMax}
+                    }
+                }
+            });
+        }
+        
+        function renderTokenChanges(){
+            const c=document.getElementById('token-changes');
+            if(!compareData){c.innerHTML='<p class="text-gray-500">Need comparison data</p>';return;}
+            const oldTokens = compareData.liquidity?.adao_deposits?.tokens || [];
+            let html='';
+            tokenBalances.forEach(t=>{
+                const old=oldTokens.find(x=>x.symbol===t.symbol);if(!old)return;
+                const amtChg=t.amount-old.amount;
+                const amtPct=old.amount>0?(amtChg/old.amount*100):0;
+                const price = getPrice(t.symbol, tokenPrices);
+                const valueChg = amtChg * price;
+                html+=`<div class="flex items-center justify-between py-1 border-b border-gray-800/50">
+                    <div class="flex items-center gap-1.5"><div class="w-2 h-2 rounded-full" style="background:${COLORS[t.symbol]||'#666'}"></div><span class="text-gray-300">${t.symbol}</span></div>
+                    <div class="text-right">
+                        <span class="${amtChg>=0?'text-green-400':'text-red-400'}">${fmtPct(amtPct)}</span>
+                        <span class="text-gray-600 ml-1">(${fmtChg(valueChg)})</span>
+                    </div>
+                </div>`;
+            });
+            c.innerHTML=html||'<p class="text-gray-500">No changes</p>';
+        }
+        
+        function renderPriceChanges(){
+            const c=document.getElementById('price-changes');
+            if(!compareData){c.innerHTML='<p class="text-gray-500">Need comparison data</p>';return;}
+            const oldPrices=compareData.token_prices||{};
+            let html='';
+            ['LUNA','ampLUNA','CAPA','ROAR','ampCAPA','ampROAR'].forEach(t=>{
+                const oldP=getPrice(t,oldPrices),newP=getPrice(t,tokenPrices);
+                if(oldP<=0||newP<=0)return;
+                const chg=(newP-oldP)/oldP*100;
+                html+=`<div class="flex items-center justify-between py-0.5">
+                    <div class="flex items-center gap-1.5"><div class="w-2 h-2 rounded-full" style="background:${COLORS[t]||'#666'}"></div><span class="text-gray-400">${t}</span></div>
+                    <div class="text-right">
+                        <span class="${chg>=0?'text-green-400':'text-red-400'}">${fmtPct(chg)}</span>
+                        <span class="text-gray-600 ml-1">${fmt(newP,4)}</span>
+                    </div>
+                </div>`;
+            });
+            c.innerHTML=html||'<p class="text-gray-500">No data</p>';
+        }
+        
+        function renderRewards(){
+            const c=document.getElementById('rewards-breakdown');
+            if(!currentData){c.innerHTML='<p class="text-gray-500">No data</p>';return;}
+            const u=currentData.dashboard?.unclaimed_rewards||{};
+            const v=currentData.dashboard?.vote_rewards?.by_token||{};
+            let html='';
+            if(u.deposit_rewards_usd)html+=`<div class="flex justify-between py-1 border-b border-gray-800/50"><span class="text-gray-400">Deposit Rewards</span><span class="font-mono text-green-400">${fmt(u.deposit_rewards_usd)}</span></div>`;
+            if(u.zAssets)html+=`<div class="flex justify-between py-1 border-b border-gray-800/50"><span class="text-gray-400">zAssets</span><span class="font-mono text-purple-400">${fmt(u.zAssets)}</span></div>`;
+            if(Object.keys(v).length > 0){
+                html+=`<div class="text-gray-500 text-[10px] mt-2 mb-1">Vote Rewards:</div>`;
+                Object.entries(v).forEach(([t,d])=>html+=`<div class="flex justify-between py-0.5"><span class="text-gray-500">${t}</span><span class="font-mono text-yellow-400">${fmtNum(d.amount)}</span></div>`);
+            }
+            c.innerHTML=html||'<p class="text-gray-500">No pending rewards</p>';
+        }
+        
+        function renderLocks(){
+            const c=document.getElementById('locks-info');
+            if(!currentData){c.innerHTML='<p class="text-gray-500">No data</p>';return;}
+            const locks=currentData.locks?.individual_locks||[];
+            const totalVp=currentData.locks?.summary?.total_vp||0;
+            if(!locks.length){c.innerHTML='<p class="text-gray-500">No locks</p>';return;}
+            let html=`<div class="flex justify-between py-1 border-b border-gray-700 mb-1"><span class="text-gray-400">Total VP</span><span class="font-mono text-purple-400 font-bold">${fmtNum(totalVp)}</span></div>`;
+            locks.forEach(l=>html+=`<div class="flex items-center justify-between py-0.5"><div class="flex items-center gap-1.5"><div class="w-2 h-2 rounded-full" style="background:${COLORS[l.asset]||'#666'}"></div><span class="text-gray-400">${l.asset}</span></div><span class="font-mono text-gray-300">${fmtNum(l.vp)}</span></div>`);
+            c.innerHTML=html;
+        }
+        
+        async function init(){
+            const ok=await loadData();
+            if(!ok){document.getElementById('positions-table').innerHTML='<div class="text-center py-4 text-red-400"><i class="fas fa-exclamation-triangle mr-2"></i>Failed to load</div>';return;}
+            
+            // Fetch DAO proposals for chart annotations and TLA actions list
+            await fetchDaoProps();
+            renderTlaActions();
+            
+            document.getElementById('epoch-badge').textContent=`E${compareData?.meta?.epoch||'--'} → ${currentData.meta?.epoch||'--'}`;
+            
+            const actualCurrent=167;
+            if(actualCurrent>(currentData.meta?.epoch||0)){
+                document.getElementById('live-note').classList.remove('hidden');
+                document.getElementById('current-epoch').textContent=actualCurrent;
+                document.getElementById('snapshot-epoch').textContent=currentData.meta?.epoch;
+            }
+            
+            tokenPrices=currentData.token_prices||{};
+            lpPositions=extractPos(currentData);
+            tokenBalances=currentData.liquidity?.adao_deposits?.tokens||[];
+            
+            const dep=currentData.liquidity?.adao_deposits||{};
+            const na=lpPositions.reduce((s,p)=>s+p.nonAmp,0);
+            const am=lpPositions.reduce((s,p)=>s+p.amp,0);
+            const avgApr = dep.avg_apr || 0;
+            
+            document.getElementById('total-value').textContent=fmt(dep.total_usd,0);
+            document.getElementById('total-non-amp').textContent=fmt(na,0);
+            document.getElementById('total-amp').textContent=fmt(am,0);
+            document.getElementById('avg-apr').textContent=avgApr.toFixed(0)+'%';
+            document.getElementById('weekly-rate').textContent=`~${(avgApr/52).toFixed(2)}%/wk`;
+            
+            if(compareData){
+                const oldUsd=compareData.liquidity?.adao_deposits?.total_usd||0;
+                const chg=(dep.total_usd||0)-oldUsd;
+                const chgPct=oldUsd>0?(chg/oldUsd*100):0;
+                const chgEl=document.getElementById('total-change');
+                chgEl.textContent=`${fmtChg(chg)} (${fmtPct(chgPct)})`;
+                chgEl.className=`text-[10px] ${chg>=0?'text-green-400':'text-red-400'}`;
+            }
+            
+            const u=currentData.dashboard?.unclaimed_rewards||{};
+            document.getElementById('pending-rewards').textContent=fmt((u.deposit_rewards_usd||0)+(u.zAssets||0),0);
+            
+            renderPositions();
+            renderTokenBalances();
+            renderValueBreakdown();
+            renderChart();
+            renderTokenChanges();
+            renderPriceChanges();
+            renderRewards();
+            renderLocks();
+            
+            console.log('✓ Initialized');
+        }
+        
+        init();
+    </script>
+</body>
+</html>
