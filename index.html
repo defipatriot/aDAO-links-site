@@ -4,6 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Alliance DAO Dashboard</title>
+    
+    <!-- Favicons -->
+    <link rel="icon" type="image/x-icon" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/apple-touch-icon.png">
+    
+    <!-- SEO -->
+    <meta name="description" content="Alliance DAO Dashboard - Track treasury, TLA deposits, NFT backing, and governance.">
+    <meta property="og:title" content="Alliance DAO Dashboard">
+    <meta property="og:description" content="Community dashboard for Alliance DAO on Terra blockchain.">
+    <meta property="og:image" content="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/android-chrome-512x512.png">
+    
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -19,24 +32,56 @@
         /* --- Base Styles --- */
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            background-color: #0D0D0D;
+            background-color: #0a0b0f;
             color: #EAEAEA;
+        }
+        
+        /* Subtle animated gradient background */
+        .bg-mesh {
+            position: fixed;
+            inset: 0;
+            z-index: -1;
+            background: 
+                radial-gradient(ellipse 80% 50% at 20% 40%, rgba(6, 182, 212, 0.08), transparent),
+                radial-gradient(ellipse 60% 40% at 80% 60%, rgba(45, 212, 191, 0.05), transparent);
+            pointer-events: none;
         }
 
         /* --- Card Styles --- */
         .stat-card {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            /* backdrop-filter: blur(10px); */ /* PERFORMANCE: Commented out, this is very expensive */
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
             transition: all 0.3s ease;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
         }
         .stat-card:hover {
-            background: rgba(255, 255, 255, 0.1);
-            border-color: rgba(45, 212, 191, 0.5);
+            background: rgba(255, 255, 255, 0.06);
+            border-color: rgba(45, 212, 191, 0.4);
+            transform: translateY(-2px);
         }
+        
+        /* Clickable card with link styling */
+        .stat-card-link {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            text-decoration: none;
+        }
+        .stat-card-link:hover {
+            background: rgba(45, 212, 191, 0.1);
+            border-color: rgba(45, 212, 191, 0.5);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(45, 212, 191, 0.15);
+        }
+        .stat-card-link:hover h3 {
+            color: #2dd4bf;
+        }
+        
         .info-card {
             justify-content: center;
             align-items: center;
@@ -69,6 +114,51 @@
         .stat-card .subtext {
             min-height: 1.25rem; /* Ensures space is reserved for subtext */
         }
+        
+        /* Section headers */
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        .section-header h2 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #94a3b8;
+        }
+        .section-header .icon {
+            color: #2dd4bf;
+        }
+        
+        /* Live Proposal Popup */
+        .vote-popup {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            max-width: 360px;
+            background: linear-gradient(135deg, rgba(15, 23, 42, 0.98), rgba(30, 41, 59, 0.95));
+            border: 1px solid rgba(168, 85, 247, 0.4);
+            border-radius: 16px;
+            padding: 16px;
+            z-index: 1000;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 40px rgba(168, 85, 247, 0.15);
+            animation: slideUp 0.4s ease;
+        }
+        @keyframes slideUp {
+            from { transform: translateY(100px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .vote-popup-close {
+            position: absolute;
+            top: 8px;
+            right: 10px;
+            color: #64748b;
+            cursor: pointer;
+            padding: 4px;
+            transition: color 0.2s;
+        }
+        .vote-popup-close:hover { color: #fff; }
 
         /* --- Slider Styles --- */
         .slider-bar {
@@ -433,6 +523,8 @@
     </style>
 </head>
 <body class="antialiased">
+    <!-- Subtle gradient background -->
+    <div class="bg-mesh"></div>
 
     <header class="py-4">
         <!-- Flex Container wrapping content. Mobile: Wrap allowed. Desktop: No Wrap. -->
@@ -667,21 +759,25 @@
                 </div>
                  <p class="subtext text-xs font-semibold mt-1 text-gray-500">Click to see details</p>
             </div>
-            <div id="dao-treasury-card" class="stat-card p-6 rounded-xl text-center cursor-pointer group">
+            <a href="dao_treasury.html" class="stat-card-link p-6 rounded-xl text-center group">
                 <div>
-                    <h3 id="dao-treasury-title" class="text-md font-medium text-gray-400 group-hover:text-teal-400 flex justify-center items-center gap-2">DAO Treasury</h3>
+                    <h3 id="dao-treasury-title" class="text-md font-medium text-gray-400 flex justify-center items-center gap-2">
+                        <i class="fas fa-landmark text-cyan-400 text-sm"></i>DAO Treasury
+                    </h3>
                     <p id="dao-treasury-total" class="text-3xl font-bold text-white mt-2"><i class="fas fa-spinner fa-spin text-cyan-400 text-2xl"></i></p>
                 </div>
-                <p class="subtext text-xs font-semibold mt-1 text-gray-500">Click to see details</p>
-            </div>
-             <div id="dao-tla-card" class="stat-card p-6 rounded-xl text-center cursor-pointer group">
+                <p class="subtext text-xs font-semibold mt-1 text-gray-500 group-hover:text-cyan-400">View details <i class="fas fa-arrow-right text-[10px] ml-1"></i></p>
+            </a>
+            <a href="dao_tla_deposits.html" class="stat-card-link p-6 rounded-xl text-center group">
                 <div>
-                    <h3 id="dao-tla-title" class="text-md font-medium text-gray-400 group-hover:text-teal-400 flex justify-center items-center gap-2">DAO TLA Deposits</h3>
+                    <h3 id="dao-tla-title" class="text-md font-medium text-gray-400 flex justify-center items-center gap-2">
+                        <i class="fas fa-water text-cyan-400 text-sm"></i>DAO TLA Deposits
+                    </h3>
                     <p id="dao-tla-total" class="text-3xl font-bold text-white mt-2"><i class="fas fa-spinner fa-spin text-cyan-400 text-2xl"></i></p>
                     <p id="dao-tla-apr" class="text-base font-semibold text-gray-300"><i class="fas fa-spinner fa-spin text-gray-300"></i></p>
                 </div>
-                 <p class="subtext text-xs font-semibold mt-1 text-gray-500">Click to see details</p>
-            </div>
+                <p class="subtext text-xs font-semibold mt-1 text-gray-500 group-hover:text-cyan-400">View details <i class="fas fa-arrow-right text-[10px] ml-1"></i></p>
+            </a>
              <div id="dao-tla-vp-card" class="stat-card p-6 rounded-xl text-center cursor-pointer group">
                  <div>
                     <h3 id="dao-tla-vp-title" class="text-md font-medium text-gray-400 group-hover:text-teal-400 flex justify-center items-center gap-2">DAO TLA VP</h3>
@@ -4768,11 +4864,10 @@ est. APR 58.53 %"></textarea>
                     'enterprise-staked-card': 'enterpriseModal',
                     'dao-broken-card': 'daoBrokenModal',
                     'unminted-backing-card': 'unmintedModal',
-                    'dao-treasury-card': 'treasuryModal',
                     'logo-modal-trigger': 'logoModal', 
                     'dao-tla-vp-card': 'tlaVpModal',
-                    'dao-tla-card': 'tlaModal',
                     'snapshot-link': 'snapshotModal'
+                    // Treasury and TLA cards now link directly to separate pages
                 };
 
                 const openModal = (modalId) => {
@@ -7668,8 +7763,116 @@ est. APR 58.53 %"></textarea>
                     banner.style.display = 'none';
                 });
             }
+            
+            // --- Live Proposal Detection & Popup ---
+            checkForLiveProposals();
 
         }); // End of main DOMContentLoaded listener
+        
+        // Check for live/pending proposals
+        async function checkForLiveProposals() {
+            try {
+                // Load known proposals from registry
+                const PROPS_URL = 'https://raw.githubusercontent.com/defipatriot/adao_json_storage/main/adao_props.json';
+                const propsRes = await fetch(PROPS_URL);
+                let maxKnownId = 0;
+                
+                if (propsRes.ok) {
+                    const propsData = await propsRes.json();
+                    const knownIds = Object.keys(propsData.proposals || {}).map(id => parseInt(id.replace(/\D/g, '') || 0));
+                    maxKnownId = Math.max(...knownIds, 0);
+                }
+                
+                console.log('Checking for proposals newer than A' + maxKnownId);
+                
+                // Query Terra LCD for pending proposals
+                const PROP_CONTRACT = 'terra1va3tny5252fca04wqzf7gqh5naa8599nzxqq2vptycgv077zhmjqetanj2';
+                const LCD_BASE = 'https://terra-lcd.publicnode.com';
+                
+                const liveProposals = [];
+                
+                // Check next few proposal IDs
+                for (let i = maxKnownId + 1; i <= maxKnownId + 5; i++) {
+                    try {
+                        const query = btoa(JSON.stringify({ proposal: { proposal_id: i } }));
+                        const url = `${LCD_BASE}/cosmwasm/wasm/v1/contract/${PROP_CONTRACT}/smart/${query}`;
+                        
+                        const res = await fetch(url);
+                        if (!res.ok) continue;
+                        
+                        const data = await res.json();
+                        const prop = data.data;
+                        
+                        if (prop && prop.proposal) {
+                            const status = prop.proposal.status?.toLowerCase() || 'open';
+                            // Only show open/voting proposals
+                            if (status === 'open' || status === 'voting') {
+                                liveProposals.push({
+                                    id: i,
+                                    title: prop.proposal.title || `Proposal ${i}`,
+                                    status: status
+                                });
+                            }
+                        }
+                    } catch (e) {
+                        break; // Stop if we hit a gap
+                    }
+                }
+                
+                if (liveProposals.length > 0) {
+                    showVotePopup(liveProposals);
+                }
+            } catch(e) { 
+                console.log('Could not check for live proposals:', e.message); 
+            }
+        }
+        
+        function showVotePopup(proposals) {
+            // Check if user dismissed recently (session storage)
+            const dismissed = sessionStorage.getItem('vote-popup-dismissed');
+            if (dismissed) return;
+            
+            // Create popup
+            const popup = document.createElement('div');
+            popup.className = 'vote-popup';
+            popup.id = 'vote-popup';
+            
+            const prop = proposals[0]; // Show first one
+            const DAO_ADDR = 'terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm';
+            
+            popup.innerHTML = `
+                <div class="vote-popup-close" onclick="closeVotePopup()">
+                    <i class="fas fa-times"></i>
+                </div>
+                <div class="flex items-center gap-2 mb-3">
+                    <div class="w-3 h-3 bg-green-400 rounded-full animate-pulse"></div>
+                    <span class="text-sm font-bold text-green-400">Live Proposal</span>
+                </div>
+                <div class="mb-3">
+                    <span class="text-xs bg-purple-500/20 text-purple-300 px-2 py-1 rounded font-mono font-bold">A${prop.id}</span>
+                    <p class="text-white font-medium mt-2 text-sm leading-snug">${prop.title}</p>
+                </div>
+                <div class="flex gap-2">
+                    <a href="https://daodao.zone/dao/${DAO_ADDR}/proposals/A${prop.id}" 
+                       target="_blank"
+                       class="flex-1 bg-gradient-to-r from-purple-600 to-purple-500 text-white text-center py-2 px-4 rounded-lg text-sm font-semibold hover:from-purple-500 hover:to-purple-400 transition-all">
+                        <i class="fas fa-vote-yea mr-2"></i>Vote Now
+                    </a>
+                </div>
+                ${proposals.length > 1 ? `<p class="text-xs text-gray-500 mt-2 text-center">+${proposals.length - 1} more open proposal${proposals.length > 2 ? 's' : ''}</p>` : ''}
+            `;
+            
+            document.body.appendChild(popup);
+        }
+        
+        function closeVotePopup() {
+            const popup = document.getElementById('vote-popup');
+            if (popup) {
+                popup.style.animation = 'slideUp 0.3s ease reverse';
+                setTimeout(() => popup.remove(), 300);
+                sessionStorage.setItem('vote-popup-dismissed', 'true');
+            }
+        }
 
     </script>
 </body>
