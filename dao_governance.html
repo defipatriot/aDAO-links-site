@@ -187,6 +187,17 @@
                         </p>
                     </div>
                 </div>
+                
+                <!-- Main Navigation Tabs in Header -->
+                <div class="flex items-center gap-2">
+                    <button class="header-tab active px-5 py-2 rounded-lg font-medium transition-all bg-cyan-500/20 text-cyan-300 border border-cyan-500/50" data-tab="members" onclick="switchTab('members', this)">
+                        👥 Members
+                    </button>
+                    <button class="header-tab px-5 py-2 rounded-lg font-medium transition-all bg-zinc-800/50 text-zinc-400 border border-zinc-700 hover:bg-zinc-700/50" data-tab="proposals" onclick="switchTab('proposals', this)">
+                        📜 Proposals
+                    </button>
+                </div>
+                
                 <div class="flex items-center gap-4">
                     <div id="load-status" class="text-xs text-gray-500"><i class="fas fa-circle-notch fa-spin mr-1"></i> Loading...</div>
                     <a href="https://daodao.zone/dao/terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm" 
@@ -200,8 +211,8 @@
     </header>
     
     <main class="max-w-7xl mx-auto px-4 py-6">
-        <!-- Stats Grid -->
-        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
+        <!-- Stats Grid - aDAO specific stats -->
+        <div id="adao-stats-bar" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-6">
             <div class="card p-4">
                 <div class="text-xs text-zinc-500 uppercase tracking-wide mb-1">Proposals</div>
                 <div class="text-2xl font-bold" id="stat-total">-</div>
@@ -278,27 +289,30 @@
             </div>
         </div>
         
-        <!-- DAO Selector - Three equal buttons, Allies stands out -->
-        <div class="flex justify-center gap-3 mb-4">
-            <button class="dao-btn px-6 py-3 rounded-xl border border-violet-500/50 bg-violet-500/10 text-violet-300 font-medium transition-all hover:bg-violet-500/20" data-dao="adao" onclick="switchMemberView('adao')">
-                🏛️ aDAO
-            </button>
-            <button class="dao-btn px-6 py-3 rounded-xl border border-zinc-700 bg-zinc-800/50 text-zinc-400 font-medium transition-all hover:bg-amber-500/10 hover:text-amber-300 hover:border-amber-500/50" data-dao="lion" onclick="switchMemberView('partner')">
-                🦁 Lions
-            </button>
-            <button class="dao-btn dao-allies px-6 py-3 rounded-xl border-2 border-cyan-500/50 bg-gradient-to-r from-cyan-500/10 to-purple-500/10 text-cyan-300 font-medium transition-all hover:from-cyan-500/20 hover:to-purple-500/20 shadow-lg shadow-cyan-500/20" data-dao="alliance" onclick="switchMemberView('alliance')">
-                🚀 Allies
-            </button>
+        <!-- Streak Popup Modal -->
+        <div id="streak-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4" onclick="if(event.target === this) closeStreakPopup()">
+            <div class="bg-zinc-900 border border-zinc-700 rounded-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden shadow-2xl">
+                <div class="flex items-center justify-between p-4 border-b border-zinc-800">
+                    <h3 class="text-lg font-bold" id="streak-popup-title">⚡ Active Streaks</h3>
+                    <button onclick="closeStreakPopup()" class="text-zinc-400 hover:text-white text-2xl">&times;</button>
+                </div>
+                <div class="p-4 overflow-y-auto max-h-[60vh]" id="streak-popup-content">
+                    <!-- Filled by JS -->
+                </div>
+            </div>
         </div>
         
-        <!-- Secondary Nav: Proposals / Members -->
-        <div class="flex justify-center gap-2 mb-6">
-            <button class="tab-btn-sm px-4 py-1.5 text-sm rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50 transition-all" onclick="switchTab('proposals', this)">
-                📜 Proposals
-            </button>
-            <button class="tab-btn-sm px-4 py-1.5 text-sm rounded-lg bg-zinc-800/50 text-zinc-300 transition-all active" onclick="switchTab('members', this)">
-                👥 Members
-            </button>
+        <!-- Members Popup Modal -->
+        <div id="members-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4" onclick="if(event.target === this) closeMembersPopup()">
+            <div class="bg-zinc-900 border border-zinc-700 rounded-2xl max-w-3xl w-full max-h-[85vh] overflow-hidden shadow-2xl">
+                <div class="flex items-center justify-between p-4 border-b border-zinc-800">
+                    <h3 class="text-lg font-bold" id="members-popup-title">👥 All Members</h3>
+                    <button onclick="closeMembersPopup()" class="text-zinc-400 hover:text-white text-2xl">&times;</button>
+                </div>
+                <div class="p-4 overflow-y-auto max-h-[70vh]" id="members-popup-content">
+                    <!-- Filled by JS -->
+                </div>
+            </div>
         </div>
         
         <!-- PROPOSALS TAB -->
@@ -344,42 +358,57 @@
         <!-- MEMBERS TAB -->
         <div id="tab-members" class="tab-content">
             
+            <!-- DAO Selector - Three equal buttons with glow on selected -->
+            <div class="flex justify-center gap-3 mb-6">
+                <button class="dao-btn px-6 py-3 rounded-xl font-medium transition-all border-2 border-violet-500 bg-violet-500/20 text-violet-200 shadow-lg shadow-violet-500/30" data-dao="adao" onclick="switchMemberView('adao')">
+                    🏛️ aDAO
+                </button>
+                <button class="dao-btn px-6 py-3 rounded-xl font-medium transition-all border border-zinc-700 bg-zinc-800/50 text-zinc-400 hover:bg-amber-500/10 hover:text-amber-300 hover:border-amber-500/50" data-dao="lion" onclick="switchMemberView('partner')">
+                    🦁 Lions
+                </button>
+                <button class="dao-btn px-6 py-3 rounded-xl font-medium transition-all border border-zinc-700 bg-zinc-800/50 text-zinc-400 hover:bg-cyan-500/10 hover:text-cyan-300 hover:border-cyan-500/50" data-dao="alliance" onclick="switchMemberView('alliance')">
+                    🚀 Allies
+                </button>
+            </div>
+            
+            <!-- Shared Podium - Updates based on selected DAO -->
+            <div class="mb-8">
+                <h2 id="podium-title" class="text-xl font-bold text-center mb-6 flex items-center justify-center gap-2">
+                    <span class="text-yellow-400">🏆</span> Governance Champions <span class="text-yellow-400">🏆</span>
+                </h2>
+                <div id="podium" class="flex justify-center items-end gap-4 pb-8">
+                    <!-- Filled by JS -->
+                </div>
+            </div>
+            
+            <!-- Shared Stats Cards - Updates based on selected DAO -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                <div class="card p-4 text-center">
+                    <div class="text-3xl mb-1">🔥</div>
+                    <div class="text-xl font-bold text-orange-400" id="streak-leader">-</div>
+                    <div class="text-xs text-zinc-500" id="streak-leader-name">Best Streak</div>
+                </div>
+                <div class="card p-4 text-center cursor-pointer hover:border-yellow-500/50 transition-colors" onclick="showStreakPopup()">
+                    <div class="text-3xl mb-1">⚡</div>
+                    <div class="text-xl font-bold text-yellow-400" id="active-streaks">-</div>
+                    <div class="text-xs text-zinc-500">On Active Streak</div>
+                    <div class="text-xs text-zinc-600 mt-1">Click for details</div>
+                </div>
+                <div class="card p-4 text-center">
+                    <div class="text-3xl mb-1">🎯</div>
+                    <div class="text-xl font-bold text-green-400" id="avg-participation">-</div>
+                    <div class="text-xs text-zinc-500">Avg Participation</div>
+                </div>
+                <div class="card p-4 text-center cursor-pointer hover:border-cyan-500/50 transition-colors" onclick="showMembersPopup()">
+                    <div class="text-3xl mb-1">👥</div>
+                    <div class="text-xl font-bold text-cyan-400" id="total-members">-</div>
+                    <div class="text-xs text-zinc-500">Registered / All Members</div>
+                    <div class="text-xs text-zinc-600 mt-1">Click for details</div>
+                </div>
+            </div>
+            
             <!-- Alliance DAO View (default) -->
             <div id="view-adao">
-                <!-- Top 3 Podium -->
-                <div class="mb-12">
-                    <h2 class="text-xl font-bold text-center mb-6 flex items-center justify-center gap-2">
-                        <span class="text-yellow-400">🏆</span> Governance Champions <span class="text-yellow-400">🏆</span>
-                    </h2>
-                    <div id="podium" class="flex justify-center items-end gap-4 pb-8">
-                        <!-- Filled by JS -->
-                    </div>
-                </div>
-                
-                <!-- Stats Overview -->
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-                    <div class="card p-4 text-center">
-                        <div class="text-3xl mb-1">🔥</div>
-                        <div class="text-xl font-bold text-orange-400" id="streak-leader">-</div>
-                        <div class="text-xs text-zinc-500">Best Streak</div>
-                    </div>
-                    <div class="card p-4 text-center">
-                        <div class="text-3xl mb-1">⚡</div>
-                        <div class="text-xl font-bold text-yellow-400" id="active-streaks">-</div>
-                        <div class="text-xs text-zinc-500">On Active Streak</div>
-                    </div>
-                    <div class="card p-4 text-center">
-                        <div class="text-3xl mb-1">🎯</div>
-                        <div class="text-xl font-bold text-green-400" id="avg-participation">-</div>
-                        <div class="text-xs text-zinc-500">Avg Participation</div>
-                    </div>
-                    <div class="card p-4 text-center">
-                        <div class="text-3xl mb-1">👥</div>
-                        <div class="text-xl font-bold text-cyan-400" id="total-members">-</div>
-                        <div class="text-xs text-zinc-500">Total Members</div>
-                    </div>
-                </div>
-                
                 <!-- Filters & Search -->
                 <div class="flex flex-wrap gap-3 mb-5">
                     <input type="text" id="member-search" onkeyup="renderMembers()" placeholder="🔍 Search members..." 
@@ -538,7 +567,7 @@
                 <span class="text-zinc-700">•</span>
                 <a href="https://daodao.zone/dao/terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm" target="_blank" class="text-violet-400 hover:underline">DAODAO ↗</a>
             </div>
-            <p class="text-center text-xs text-zinc-700 mt-3">Built with 💜 for the Alliance DAO community</p>
+            <p class="text-center text-xs text-zinc-700 mt-3">Built with <span class="text-violet-400">💜</span> for the Alliance DAO community and its Allies</p>
         </div>
     </footer>
 
@@ -564,8 +593,14 @@ const PIXEL_MEMBERS_URL = 'https://raw.githubusercontent.com/defipatriot/adao_js
 let lionProposals = {};
 let pixelProposals = {};
 let partnerMembers = {};  // Combined member names from all sources
+let memberImages = {};    // Member profile images (address -> image URL)
 let partnerVoters = [];   // Processed voter participation across partner DAOs
 let allianceVoters = [];  // Processed voter participation across all 3 DAOs
+
+// Total member counts from CSV files
+let totalAdaoMembers = 0;
+let totalLionMembers = 0;
+let totalPixelMembers = 0;
 
 let currentMemberView = 'adao';
 
@@ -591,6 +626,26 @@ function shortAddr(addr) {
     return addr.slice(0, 10) + '...' + addr.slice(-6);
 }
 
+// Check if image URL is valid (not a placeholder)
+function isValidImage(img) {
+    if (!img) return false;
+    // Placeholders start with /placeholders/
+    if (img.startsWith('/placeholders/')) return false;
+    // Must be ipfs:// or https:// or http://
+    return img.startsWith('ipfs://') || img.startsWith('https://') || img.startsWith('http://');
+}
+
+// Convert IPFS URL to gateway URL
+function getImageUrl(img) {
+    if (!img) return null;
+    if (!isValidImage(img)) return null;
+    if (img.startsWith('ipfs://')) {
+        // Use a public IPFS gateway
+        return 'https://ipfs.io/ipfs/' + img.slice(7);
+    }
+    return img;
+}
+
 // ========================================
 // INIT
 // ========================================
@@ -600,6 +655,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     calculateStats();
     renderProposals();
     renderMembers();
+    updateStatsCards('adao');
     document.getElementById('load-status').innerHTML = '<i class="fas fa-check text-green-400 mr-1"></i>Live';
     
     // Load pending proposals from DAODAO (after main data)
@@ -620,14 +676,27 @@ async function loadMembers() {
         
         // Total stakers = all rows in CSV
         totalRegisteredMembers = lines.length;
+        totalAdaoMembers = lines.length;
         
-        // Only store named members for display lookup
+        // Parse each line for address, name, and image
         lines.forEach(line => {
-            const m = line.match(/"([^"]+)","([^"]*)"/);
-            if (m && m[2]) members[m[1]] = m[2]; // Only if has name
+            // Match: "address","name","image",...
+            const m = line.match(/"([^"]+)","([^"]*)","([^"]*)"/);
+            if (m) {
+                const addr = m[1];
+                const name = m[2];
+                const image = m[3];
+                
+                if (name && isValidName(name)) {
+                    members[addr] = name;
+                }
+                if (isValidImage(image)) {
+                    memberImages[addr] = image;
+                }
+            }
         });
         
-        console.log('Loaded members:', totalRegisteredMembers, 'total stakers');
+        console.log('Loaded members:', totalRegisteredMembers, 'total stakers,', Object.keys(members).length, 'named');
     } catch(e) { console.error(e); }
 }
 
@@ -1333,59 +1402,10 @@ function renderMembers() {
     
     const total = Object.keys(proposals).length;
     
-    // Render podium (top 3)
-    const podiumEl = document.getElementById('podium');
-    const top3 = memberStats.slice(0, 3);
-    if (top3.length >= 3) {
-        podiumEl.innerHTML = `
-            <!-- 2nd Place -->
-            <div class="text-center animate-in" style="animation-delay:0.1s">
-                <div class="w-20 h-20 mx-auto rounded-xl bg-gradient-to-br from-zinc-400 to-zinc-600 flex items-center justify-center text-3xl mb-2 shadow-lg border-2 border-zinc-400">
-                    🥈
-                </div>
-                <div class="bg-zinc-800 rounded-t-lg pt-3 pb-12 px-4 -mb-8">
-                    <div class="font-bold text-zinc-300 truncate max-w-[100px]">${top3[1]?.name || shortAddr(top3[1]?.address)}</div>
-                    <div class="text-2xl font-bold text-zinc-400">${top3[1]?.rate?.toFixed(1)}%</div>
-                    <div class="text-xs text-zinc-500">${top3[1]?.votes}/${total} votes</div>
-                </div>
-            </div>
-            <!-- 1st Place -->
-            <div class="text-center animate-in" style="animation-delay:0s">
-                <div class="w-24 h-24 mx-auto rounded-xl bg-gradient-to-br from-yellow-400 to-amber-600 flex items-center justify-center text-4xl mb-2 shadow-xl border-2 border-yellow-300 ring-4 ring-yellow-400/30">
-                    👑
-                </div>
-                <div class="bg-gradient-to-b from-yellow-500/20 to-zinc-800 rounded-t-lg pt-3 pb-16 px-4 -mb-12 border-t-2 border-yellow-500/50">
-                    <div class="font-bold text-yellow-400 truncate max-w-[120px]">${top3[0]?.name || shortAddr(top3[0]?.address)}</div>
-                    <div class="text-3xl font-bold text-yellow-300">${top3[0]?.rate?.toFixed(1)}%</div>
-                    <div class="text-xs text-yellow-500/70">${top3[0]?.votes}/${total} votes</div>
-                    ${top3[0]?.currentStreak > 0 ? `<div class="text-xs text-orange-400 mt-1">🔥 ${top3[0].currentStreak} streak</div>` : ''}
-                </div>
-            </div>
-            <!-- 3rd Place -->
-            <div class="text-center animate-in" style="animation-delay:0.2s">
-                <div class="w-20 h-20 mx-auto rounded-xl bg-gradient-to-br from-amber-600 to-amber-800 flex items-center justify-center text-3xl mb-2 shadow-lg border-2 border-amber-600">
-                    🥉
-                </div>
-                <div class="bg-zinc-800 rounded-t-lg pt-3 pb-8 px-4 -mb-4">
-                    <div class="font-bold text-amber-500 truncate max-w-[100px]">${top3[2]?.name || shortAddr(top3[2]?.address)}</div>
-                    <div class="text-2xl font-bold text-amber-600">${top3[2]?.rate?.toFixed(1)}%</div>
-                    <div class="text-xs text-zinc-500">${top3[2]?.votes}/${total} votes</div>
-                </div>
-            </div>
-        `;
+    // Render podium for aDAO (if on adao view)
+    if (currentMemberView === 'adao') {
+        renderPodium('adao');
     }
-    
-    // Update stats cards
-    const bestStreak = Math.max(...memberStats.map(m => m.bestStreak || 0));
-    document.getElementById('streak-leader').textContent = bestStreak + ' props';
-    
-    const activeStreaks = memberStats.filter(m => (m.currentStreak || 0) >= 3).length;
-    document.getElementById('active-streaks').textContent = activeStreaks;
-    
-    const avgPart = memberStats.reduce((s, m) => s + m.rate, 0) / memberStats.length;
-    document.getElementById('avg-participation').textContent = avgPart.toFixed(1) + '%';
-    
-    document.getElementById('total-members').textContent = memberStats.length;
     
     // Populate exclude dropdown
     const excludeSelect = document.getElementById('chart-exclude');
@@ -1413,7 +1433,7 @@ function renderMembers() {
         const tier = m.tier;
         const memberId = `member-${m.address.slice(-8)}`;
         
-        // Generate voting dots for each proposal
+        // Generate voting dots for each proposal (all)
         const votingDots = sortedPropIds.map(propId => {
             const vote = m.voteByProp?.[propId];
             if (vote === 'yes') return `<div class="w-2.5 h-2.5 rounded-full bg-green-500" title="${propId}: Yes"></div>`;
@@ -1422,48 +1442,73 @@ function renderMembers() {
             return `<div class="w-2.5 h-2.5 rounded-full border border-zinc-700" title="${propId}: No vote"></div>`;
         }).join('');
         
+        // Generate last 20 voting dots for desktop preview
+        const last20Props = sortedPropIds.slice(-20);
+        const last20Dots = last20Props.map(propId => {
+            const vote = m.voteByProp?.[propId];
+            if (vote === 'yes') return `<div class="w-2 h-2 rounded-full bg-green-500" title="${propId}: Yes"></div>`;
+            if (vote === 'no') return `<div class="w-2 h-2 rounded-full bg-red-500" title="${propId}: No"></div>`;
+            if (vote === 'abstain') return `<div class="w-2 h-2 rounded-full bg-zinc-500" title="${propId}: Abstain"></div>`;
+            return `<div class="w-2 h-2 rounded-full border border-zinc-700" title="${propId}: No vote"></div>`;
+        }).join('');
+        
+        // Profile image
+        const imgUrl = getImageUrl(memberImages[m.address]);
+        const profileImg = imgUrl ? 
+            `<img src="${imgUrl}" alt="" class="w-10 h-10 md:w-12 md:h-12 rounded-xl object-cover flex-shrink-0 border-2 border-zinc-700" onerror="this.outerHTML='<div class=\\'w-10 h-10 md:w-12 md:h-12 rounded-xl ${tier.bg} flex items-center justify-center text-xl md:text-2xl flex-shrink-0\\'>${tier.icon}</div>'" />` :
+            `<div class="w-10 h-10 md:w-12 md:h-12 rounded-xl ${tier.bg} flex items-center justify-center text-xl md:text-2xl flex-shrink-0">${tier.icon}</div>`;
+        
         return `
         <div class="card animate-in hover:border-violet-500/50 transition-all cursor-pointer" style="animation-delay:${i * 0.02}s" onclick="toggleMemberExpand('${memberId}')">
             <div class="p-4">
                 <div class="flex items-center gap-4">
                     <!-- Rank -->
-                    <div class="w-10 text-center">
+                    <div class="w-10 text-center flex-shrink-0">
                         ${rank <= 3 ? 
                             `<span class="text-2xl">${rank === 1 ? '🥇' : rank === 2 ? '🥈' : '🥉'}</span>` : 
                             `<span class="text-lg text-zinc-500 mono">#${rank}</span>`
                         }
                     </div>
                     
-                    <!-- Tier Badge -->
-                    <div class="w-12 h-12 rounded-xl ${tier.bg} flex items-center justify-center text-2xl flex-shrink-0">
-                        ${tier.icon}
-                    </div>
+                    <!-- Profile Image / Tier Badge -->
+                    ${profileImg}
                     
                     <!-- Info -->
                     <div class="flex-1 min-w-0">
                         <div class="flex items-center gap-2">
-                            <span class="font-bold ${m.name ? tier.color : 'text-zinc-400 mono text-sm'} truncate">${m.name || shortAddr(m.address)}</span>
+                            ${isValidName(m.name) ? `
+                                <span class="font-bold ${tier.color} truncate">${m.name}</span>
+                            ` : `
+                                <span class="font-bold text-zinc-400 mono text-sm truncate">${m.address}</span>
+                            `}
                             ${m.title ? `<span class="text-xs px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400">${m.title}</span>` : ''}
                         </div>
-                        <div class="flex items-center gap-3 text-xs text-zinc-500 mt-1">
-                            <span class="mono text-zinc-600">${shortAddr(m.address)}</span>
-                            <span>•</span>
+                        <div class="flex items-center gap-2 md:gap-3 text-xs text-zinc-500 mt-1">
+                            ${isValidName(m.name) ? `
+                                <span class="mono text-zinc-600 hidden md:inline">${shortAddr(m.address)}</span>
+                                <span class="hidden md:inline">•</span>
+                            ` : `
+                                <span class="text-zinc-500">Unknown Member</span>
+                                <span>•</span>
+                            `}
                             <span>${tier.name}</span>
                             <span>•</span>
-                            <span>${m.votes}/${total} votes</span>
-                            <span>•</span>
-                            <span>${formatNum(m.vp)} VP</span>
-                            ${m.currentStreak > 0 ? `<span class="text-orange-400">🔥 ${m.currentStreak}</span>` : ''}
+                            <span>${m.votes}/${total}</span>
+                            ${m.currentStreak > 0 ? `<span class="text-orange-400">🔥${m.currentStreak}</span>` : ''}
+                        </div>
+                        <!-- Last 20 votes - Desktop only -->
+                        <div class="hidden lg:flex items-center gap-0.5 mt-2" title="Last 20 proposals">
+                            ${last20Dots}
                         </div>
                     </div>
                     
                     <!-- Rate -->
                     <div class="text-right flex-shrink-0">
-                        <div class="text-2xl font-bold ${tier.color}">${m.rate.toFixed(1)}%</div>
+                        <div class="text-xl md:text-2xl font-bold ${tier.color}">${m.rate.toFixed(1)}%</div>
                     </div>
                     
-                    <!-- Vote Breakdown -->
-                    <div class="flex flex-col gap-1 text-xs min-w-[60px] flex-shrink-0">
+                    <!-- Vote Breakdown - Hidden on small mobile -->
+                    <div class="hidden sm:flex flex-col gap-1 text-xs min-w-[50px] flex-shrink-0">
                         <div class="flex items-center gap-1">
                             <div class="w-2 h-2 rounded-full bg-green-500"></div>
                             <span class="text-green-400">${m.yes}</span>
@@ -1525,6 +1570,434 @@ function toggleMemberExpand(id) {
         el.classList.toggle('hidden');
         if (arrow) arrow.textContent = el.classList.contains('hidden') ? '▼' : '▲';
     }
+}
+
+function renderPodium(view) {
+    const podiumEl = document.getElementById('podium');
+    const titleEl = document.getElementById('podium-title');
+    
+    let top3 = [];
+    let total = 0;
+    let title = 'Governance Champions';
+    let accentColor = 'yellow';
+    
+    if (view === 'adao') {
+        top3 = memberStats.slice(0, 3);
+        total = Object.keys(proposals).length;
+        title = 'Governance Champions';
+        accentColor = 'violet';
+    } else if (view === 'partner') {
+        // Get current filter and apply same filter as leaderboard
+        const filter = document.getElementById('partner-filter')?.value || 'all';
+        let filtered = [...partnerVoters];
+        
+        if (filter === 'both') filtered = filtered.filter(v => v.inBoth);
+        else if (filter === 'lion') filtered = filtered.filter(v => v.lionProps > 0 && v.pixelProps === 0);
+        else if (filter === 'pixel') filtered = filtered.filter(v => v.pixelProps > 0 && v.lionProps === 0);
+        
+        // Sort by combinedScore
+        filtered.sort((a, b) => b.combinedScore - a.combinedScore);
+        
+        top3 = filtered.slice(0, 3).map(v => ({
+            name: v.name,
+            address: v.address,
+            rate: v.combinedScore,
+            votes: v.lionProps + v.pixelProps,
+            currentStreak: 0
+        }));
+        total = Object.keys(lionProposals).length + Object.keys(pixelProposals).length;
+        title = filter === 'both' ? 'Dual DAO Champions' : (filter === 'lion' ? 'Lion DAO Champions' : (filter === 'pixel' ? 'PixelLion Champions' : 'Partner DAO Champions'));
+        accentColor = 'amber';
+    } else if (view === 'alliance') {
+        // Get current filter setting and apply same filter as leaderboard
+        const filter = document.getElementById('alliance-filter')?.value || 'boosted';
+        let filtered = [...allianceVoters];
+        
+        if (filter === 'boosted') filtered = filtered.filter(v => v.status === 'boosted' || v.status === 'all3');
+        else if (filter === 'all3') filtered = filtered.filter(v => v.status === 'all3');
+        
+        // Sort by alliancePartnerCount first, then combined score (consistent with table)
+        filtered.sort((a, b) => {
+            if (b.alliancePartnerCount !== a.alliancePartnerCount) return b.alliancePartnerCount - a.alliancePartnerCount;
+            return b.combinedScore - a.combinedScore;
+        });
+        
+        top3 = filtered.slice(0, 3).map(v => ({
+            name: v.name,
+            address: v.address,
+            rate: v.combinedScore,
+            votes: v.adaoVotes + v.lionVotes + v.pixelVotes,
+            currentStreak: 0,
+            allianceCount: v.alliancePartnerCount,
+            daoCount: v.daoCount
+        }));
+        total = Object.keys(proposals).length + Object.keys(lionProposals).length + Object.keys(pixelProposals).length;
+        title = filter === 'all3' ? 'All 3 DAO Champions' : (filter === 'boosted' ? 'Alliance Champions' : 'All Participants');
+        accentColor = 'cyan';
+    }
+    
+    // Update title
+    if (titleEl) {
+        titleEl.innerHTML = `<span class="text-${accentColor}-400">🏆</span> ${title} <span class="text-${accentColor}-400">🏆</span>`;
+    }
+    
+    if (top3.length >= 3) {
+        const getName = (member) => isValidName(member?.name) ? member.name : shortAddr(member?.address);
+        const getPodiumImage = (member, medal, size) => {
+            const imgUrl = getImageUrl(memberImages[member?.address]);
+            if (imgUrl) {
+                return `<img src="${imgUrl}" alt="" class="${size} mx-auto rounded-xl object-cover mb-2 shadow-lg border-2 ${medal === '👑' ? 'border-yellow-300 ring-4 ring-yellow-400/30' : medal === '🥈' ? 'border-zinc-400' : 'border-amber-600'}" onerror="this.outerHTML='<div class=\\'${size} mx-auto rounded-xl bg-gradient-to-br ${medal === '👑' ? 'from-yellow-400 to-amber-600' : medal === '🥈' ? 'from-zinc-400 to-zinc-600' : 'from-amber-600 to-amber-800'} flex items-center justify-center ${size === 'w-24 h-24' ? 'text-4xl' : 'text-3xl'} mb-2 shadow-lg border-2 ${medal === '👑' ? 'border-yellow-300 ring-4 ring-yellow-400/30' : medal === '🥈' ? 'border-zinc-400' : 'border-amber-600'}\\'>${medal}</div>'" />`;
+            }
+            return `<div class="${size} mx-auto rounded-xl bg-gradient-to-br ${medal === '👑' ? 'from-yellow-400 to-amber-600' : medal === '🥈' ? 'from-zinc-400 to-zinc-600' : 'from-amber-600 to-amber-800'} flex items-center justify-center ${size === 'w-24 h-24' ? 'text-4xl' : 'text-3xl'} mb-2 shadow-lg border-2 ${medal === '👑' ? 'border-yellow-300 ring-4 ring-yellow-400/30' : medal === '🥈' ? 'border-zinc-400' : 'border-amber-600'}">${medal}</div>`;
+        };
+        
+        podiumEl.innerHTML = `
+            <!-- 2nd Place -->
+            <div class="text-center animate-in" style="animation-delay:0.1s">
+                ${getPodiumImage(top3[1], '🥈', 'w-20 h-20')}
+                <div class="bg-zinc-800 rounded-t-lg pt-3 pb-12 px-4 -mb-8">
+                    <div class="font-bold text-zinc-300 truncate max-w-[100px]">${getName(top3[1])}</div>
+                    <div class="text-2xl font-bold text-zinc-400">${top3[1]?.rate?.toFixed(1)}%</div>
+                    <div class="text-xs text-zinc-500">${top3[1]?.votes || 0} votes</div>
+                    ${top3[1]?.allianceCount ? `<div class="text-xs text-cyan-400">🚀 ${top3[1].allianceCount}/2 Allies</div>` : (top3[1]?.daoCount ? `<div class="text-xs text-cyan-400">${top3[1].daoCount}/3 DAOs</div>` : '')}
+                </div>
+            </div>
+            <!-- 1st Place -->
+            <div class="text-center animate-in" style="animation-delay:0s">
+                ${getPodiumImage(top3[0], '👑', 'w-24 h-24')}
+                <div class="bg-gradient-to-b from-yellow-500/20 to-zinc-800 rounded-t-lg pt-3 pb-16 px-4 -mb-12 border-t-2 border-yellow-500/50">
+                    <div class="font-bold text-yellow-400 truncate max-w-[120px]">${getName(top3[0])}</div>
+                    <div class="text-3xl font-bold text-yellow-300">${top3[0]?.rate?.toFixed(1)}%</div>
+                    <div class="text-xs text-yellow-500/70">${top3[0]?.votes || 0} votes</div>
+                    ${top3[0]?.allianceCount ? `<div class="text-xs text-cyan-400 mt-1">🚀 ${top3[0].allianceCount}/2 Allies</div>` : (top3[0]?.daoCount ? `<div class="text-xs text-cyan-400 mt-1">${top3[0].daoCount}/3 DAOs</div>` : '')}
+                    ${top3[0]?.currentStreak > 0 ? `<div class="text-xs text-orange-400 mt-1">🔥 ${top3[0].currentStreak} streak</div>` : ''}
+                </div>
+            </div>
+            <!-- 3rd Place -->
+            <div class="text-center animate-in" style="animation-delay:0.2s">
+                ${getPodiumImage(top3[2], '🥉', 'w-20 h-20')}
+                <div class="bg-zinc-800 rounded-t-lg pt-3 pb-8 px-4 -mb-4">
+                    <div class="font-bold text-amber-500 truncate max-w-[100px]">${getName(top3[2])}</div>
+                    <div class="text-2xl font-bold text-amber-600">${top3[2]?.rate?.toFixed(1)}%</div>
+                    <div class="text-xs text-zinc-500">${top3[2]?.votes || 0} votes</div>
+                    ${top3[2]?.allianceCount ? `<div class="text-xs text-cyan-400">🚀 ${top3[2].allianceCount}/2 Allies</div>` : (top3[2]?.daoCount ? `<div class="text-xs text-cyan-400">${top3[2].daoCount}/3 DAOs</div>` : '')}
+                </div>
+            </div>
+        `;
+    } else if (top3.length > 0) {
+        podiumEl.innerHTML = '<div class="text-zinc-500 text-center">Loading top participants...</div>';
+    }
+}
+
+// ========================================
+// STATS CARDS - Dynamic based on selected DAO
+// ========================================
+
+// Helper to check if a name is valid (not "Unknown Member", "Member", etc.)
+function isValidName(name) {
+    if (!name) return false;
+    const invalidNames = ['unknown member', 'member', 'unknown', ''];
+    return !invalidNames.includes(name.toLowerCase().trim());
+}
+
+function updateStatsCards(view) {
+    let bestStreak = 0;
+    let bestStreakMember = null;
+    let activeStreakCount = 0;
+    let avgParticipation = 0;
+    let namedMembers = 0;
+    let totalMembers = 0;
+    
+    if (view === 'adao') {
+        // aDAO stats
+        bestStreak = Math.max(...memberStats.map(m => m.currentStreak || 0), 0);
+        bestStreakMember = bestStreak > 0 ? memberStats.find(m => (m.currentStreak || 0) === bestStreak) : null;
+        activeStreakCount = memberStats.filter(m => (m.currentStreak || 0) >= 3).length;
+        avgParticipation = memberStats.length > 0 ? memberStats.reduce((s, m) => s + m.rate, 0) / memberStats.length : 0;
+        // Named = addresses with valid names, Total = all stakers from CSV
+        namedMembers = Object.keys(members).length;
+        totalMembers = totalAdaoMembers || memberStats.length;
+        
+    } else if (view === 'partner') {
+        // Partner DAOs (Lions) - streak requires voting in BOTH Lion DAO and PixelLions recent props
+        partnerVoters.forEach(v => {
+            // Calculate streak: must have voted in recent props from BOTH DAOs
+            const lionStreak = calculatePartnerStreak(v, 'lion');
+            const pixelStreak = calculatePartnerStreak(v, 'pixel');
+            // Combined streak is the minimum of both (must be active in both)
+            v.combinedStreak = Math.min(lionStreak, pixelStreak);
+        });
+        
+        bestStreak = Math.max(...partnerVoters.map(v => v.combinedStreak || 0), 0);
+        bestStreakMember = bestStreak > 0 ? partnerVoters.find(v => (v.combinedStreak || 0) === bestStreak) : null;
+        activeStreakCount = partnerVoters.filter(v => (v.combinedStreak || 0) >= 2).length;
+        avgParticipation = partnerVoters.length > 0 ? partnerVoters.reduce((s, v) => s + v.combinedScore, 0) / partnerVoters.length : 0;
+        // Named = partner voters with valid names, Total = unique voters (Lion + Pixel combined)
+        namedMembers = partnerVoters.filter(v => isValidName(v.name)).length;
+        totalMembers = partnerVoters.length;
+        
+    } else if (view === 'alliance') {
+        // Alliance - streak requires voting in recent aDAO props AND at least one Lions DAO
+        const boosted = allianceVoters.filter(v => v.status === 'boosted' || v.status === 'all3');
+        
+        boosted.forEach(v => {
+            // Calculate aDAO streak
+            const adaoStreak = calculateAllianceAdaoStreak(v);
+            // Calculate Lions streak (at least one of the partner DAOs)
+            const lionStreak = calculatePartnerStreak(v, 'lion');
+            const pixelStreak = calculatePartnerStreak(v, 'pixel');
+            const partnerStreak = Math.max(lionStreak, pixelStreak);
+            // Alliance streak is the minimum of aDAO and partner (must be active in both alliances)
+            v.allianceStreak = Math.min(adaoStreak, partnerStreak);
+        });
+        
+        bestStreak = Math.max(...boosted.map(v => v.allianceStreak || 0), 0);
+        bestStreakMember = bestStreak > 0 ? boosted.find(v => (v.allianceStreak || 0) === bestStreak) : null;
+        activeStreakCount = boosted.filter(v => (v.allianceStreak || 0) >= 2).length;
+        avgParticipation = boosted.length > 0 ? boosted.reduce((s, v) => s + v.combinedScore, 0) / boosted.length : 0;
+        // Named = boosted members with valid names, Total = all boosted members
+        namedMembers = boosted.filter(v => isValidName(v.name)).length;
+        totalMembers = boosted.length;
+    }
+    
+    // Update UI
+    document.getElementById('streak-leader').textContent = bestStreak + ' props';
+    // Only show name if streak > 0
+    if (bestStreak > 0 && bestStreakMember) {
+        const displayName = isValidName(bestStreakMember.name) ? bestStreakMember.name : shortAddr(bestStreakMember.address);
+        document.getElementById('streak-leader-name').textContent = `🔥 ${displayName}`;
+    } else {
+        document.getElementById('streak-leader-name').textContent = 'Best Streak';
+    }
+    document.getElementById('active-streaks').textContent = activeStreakCount;
+    document.getElementById('avg-participation').textContent = avgParticipation.toFixed(1) + '%';
+    document.getElementById('total-members').textContent = `${namedMembers} / ${totalMembers}`;
+}
+
+function calculatePartnerStreak(voter, dao) {
+    // Get sorted prop IDs for the specific DAO
+    const propIds = dao === 'lion' ? 
+        Object.keys(lionProposals).sort((a, b) => parseInt(b.replace(/\D/g, '') || 0) - parseInt(a.replace(/\D/g, '') || 0)) :
+        Object.keys(pixelProposals).sort((a, b) => parseInt(b.replace(/\D/g, '') || 0) - parseInt(a.replace(/\D/g, '') || 0));
+    
+    const voteMap = dao === 'lion' ? voter.lionVoteByProp : voter.pixelVoteByProp;
+    if (!voteMap) return 0;
+    
+    let streak = 0;
+    for (const propId of propIds) {
+        if (voteMap[propId]) streak++;
+        else break;
+    }
+    return streak;
+}
+
+function calculateAllianceAdaoStreak(voter) {
+    // Get sorted aDAO prop IDs (most recent first)
+    const propIds = Object.keys(proposals).sort((a, b) => 
+        parseInt(b.replace(/\D/g, '') || 0) - parseInt(a.replace(/\D/g, '') || 0)
+    );
+    
+    const voteMap = voter.adaoVoteByProp || {};
+    let streak = 0;
+    for (const propId of propIds) {
+        if (voteMap[propId]) streak++;
+        else break;
+    }
+    return streak;
+}
+
+function showStreakPopup() {
+    const view = currentMemberView;
+    const modal = document.getElementById('streak-modal');
+    const titleEl = document.getElementById('streak-popup-title');
+    const contentEl = document.getElementById('streak-popup-content');
+    
+    let streakData = [];
+    let title = '⚡ Active Streaks';
+    
+    if (view === 'adao') {
+        title = '⚡ aDAO Active Streaks';
+        streakData = memberStats
+            .filter(m => (m.currentStreak || 0) > 0)
+            .sort((a, b) => (b.currentStreak || 0) - (a.currentStreak || 0))
+            .map(m => ({
+                name: isValidName(m.name) ? m.name : shortAddr(m.address),
+                address: m.address,
+                streak: m.currentStreak || 0,
+                hasName: isValidName(m.name)
+            }));
+    } else if (view === 'partner') {
+        title = '⚡ Partner DAO Active Streaks';
+        streakData = partnerVoters
+            .filter(v => (v.combinedStreak || 0) > 0)
+            .sort((a, b) => (b.combinedStreak || 0) - (a.combinedStreak || 0))
+            .map(v => ({
+                name: isValidName(v.name) ? v.name : shortAddr(v.address),
+                address: v.address,
+                streak: v.combinedStreak || 0,
+                hasName: isValidName(v.name)
+            }));
+    } else if (view === 'alliance') {
+        title = '⚡ Alliance Active Streaks';
+        const boosted = allianceVoters.filter(v => v.status === 'boosted' || v.status === 'all3');
+        streakData = boosted
+            .filter(v => (v.allianceStreak || 0) > 0)
+            .sort((a, b) => (b.allianceStreak || 0) - (a.allianceStreak || 0))
+            .map(v => ({
+                name: isValidName(v.name) ? v.name : shortAddr(v.address),
+                address: v.address,
+                streak: v.allianceStreak || 0,
+                hasName: isValidName(v.name)
+            }));
+    }
+    
+    titleEl.textContent = title;
+    
+    if (streakData.length === 0) {
+        contentEl.innerHTML = '<div class="text-zinc-500 text-center py-8">No active streaks found</div>';
+    } else {
+        contentEl.innerHTML = `
+            <div class="space-y-2">
+                ${streakData.map((m, i) => `
+                    <div class="flex items-center justify-between p-3 bg-zinc-800/50 rounded-lg">
+                        <div class="flex items-center gap-3">
+                            <span class="text-zinc-500 w-8">#${i + 1}</span>
+                            <div>
+                                ${m.hasName ? `
+                                    <div class="font-medium text-white">${m.name}</div>
+                                    <div class="text-xs text-zinc-600 mono">${shortAddr(m.address)}</div>
+                                ` : `
+                                    <div class="font-medium text-zinc-400 mono text-sm">${m.address}</div>
+                                    <div class="text-xs text-zinc-500">Unknown Member</div>
+                                `}
+                            </div>
+                        </div>
+                        <div class="text-orange-400 font-bold">🔥 ${m.streak}</div>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    }
+    
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+function closeStreakPopup() {
+    const modal = document.getElementById('streak-modal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+}
+
+function showMembersPopup() {
+    const view = currentMemberView;
+    const modal = document.getElementById('members-modal');
+    const titleEl = document.getElementById('members-popup-title');
+    const contentEl = document.getElementById('members-popup-content');
+    
+    let registeredMembers = [];
+    let unknownMembers = [];
+    let title = '👥 All Members';
+    
+    if (view === 'adao') {
+        title = '👥 aDAO Members by Voting Power';
+        // Get all members sorted by voting power (rate)
+        memberStats.forEach(m => {
+            const vp = m.rate.toFixed(1) + '%';
+            if (isValidName(m.name)) {
+                registeredMembers.push({ name: m.name, address: m.address, vp, rate: m.rate });
+            } else {
+                unknownMembers.push({ address: m.address, vp, rate: m.rate });
+            }
+        });
+        // Sort by rate (VP)
+        registeredMembers.sort((a, b) => b.rate - a.rate);
+        unknownMembers.sort((a, b) => b.rate - a.rate);
+        
+    } else if (view === 'partner') {
+        title = '👥 Partner DAO Members by Score';
+        partnerVoters.forEach(v => {
+            const vp = v.combinedScore.toFixed(1) + '%';
+            if (isValidName(v.name)) {
+                registeredMembers.push({ name: v.name, address: v.address, vp, rate: v.combinedScore });
+            } else {
+                unknownMembers.push({ address: v.address, vp, rate: v.combinedScore });
+            }
+        });
+        registeredMembers.sort((a, b) => b.rate - a.rate);
+        unknownMembers.sort((a, b) => b.rate - a.rate);
+        
+    } else if (view === 'alliance') {
+        title = '👥 Alliance Boosted Members by Score';
+        const boosted = allianceVoters.filter(v => v.status === 'boosted' || v.status === 'all3');
+        boosted.forEach(v => {
+            const vp = v.combinedScore.toFixed(1) + '%';
+            if (isValidName(v.name)) {
+                registeredMembers.push({ name: v.name, address: v.address, vp, rate: v.combinedScore });
+            } else {
+                unknownMembers.push({ address: v.address, vp, rate: v.combinedScore });
+            }
+        });
+        registeredMembers.sort((a, b) => b.rate - a.rate);
+        unknownMembers.sort((a, b) => b.rate - a.rate);
+    }
+    
+    titleEl.textContent = title;
+    
+    const renderMemberRow = (m, i, isRegistered) => `
+        <div class="flex items-center justify-between p-3 bg-zinc-800/50 rounded-lg">
+            <div class="flex items-center gap-3">
+                <span class="text-zinc-500 w-8">#${i + 1}</span>
+                <div>
+                    ${isRegistered ? `
+                        <div class="font-medium text-white">${m.name}</div>
+                        <div class="text-xs text-zinc-600 mono">${shortAddr(m.address)}</div>
+                    ` : `
+                        <div class="font-medium text-zinc-400 mono text-sm">${m.address}</div>
+                        <div class="text-xs text-zinc-500">Unknown Member</div>
+                    `}
+                </div>
+            </div>
+            <div class="text-cyan-400 font-bold">${m.vp}</div>
+        </div>
+    `;
+    
+    contentEl.innerHTML = `
+        <!-- Registered Members -->
+        <div class="mb-6">
+            <h4 class="text-sm font-semibold text-green-400 mb-3 flex items-center gap-2">
+                <span>✓</span> Registered Members (${registeredMembers.length})
+            </h4>
+            <div class="space-y-2 max-h-[30vh] overflow-y-auto">
+                ${registeredMembers.length > 0 ? 
+                    registeredMembers.map((m, i) => renderMemberRow(m, i, true)).join('') :
+                    '<div class="text-zinc-500 text-center py-4">No registered members</div>'
+                }
+            </div>
+        </div>
+        
+        <!-- Unknown Members -->
+        <div>
+            <h4 class="text-sm font-semibold text-zinc-400 mb-3 flex items-center gap-2">
+                <span>?</span> Unknown Members (${unknownMembers.length})
+            </h4>
+            <div class="space-y-2 max-h-[30vh] overflow-y-auto">
+                ${unknownMembers.length > 0 ? 
+                    unknownMembers.map((m, i) => renderMemberRow(m, i, false)).join('') :
+                    '<div class="text-zinc-500 text-center py-4">No unknown members</div>'
+                }
+            </div>
+        </div>
+    `;
+    
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+function closeMembersPopup() {
+    const modal = document.getElementById('members-modal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
 }
 
 function renderParticipationChart() {
@@ -1596,15 +2069,14 @@ function switchTab(tab, btn) {
     document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
     document.getElementById('tab-' + tab).classList.remove('hidden');
     
-    // Update tab button styles
-    document.querySelectorAll('.tab-btn-sm').forEach(el => {
-        el.classList.remove('bg-zinc-800/50', 'text-zinc-300', 'active');
-        el.classList.add('text-zinc-500');
+    // Update header tab styles
+    document.querySelectorAll('.header-tab').forEach(el => {
+        if (el.dataset.tab === tab) {
+            el.className = 'header-tab active px-5 py-2 rounded-lg font-medium transition-all bg-cyan-500/20 text-cyan-300 border border-cyan-500/50';
+        } else {
+            el.className = 'header-tab px-5 py-2 rounded-lg font-medium transition-all bg-zinc-800/50 text-zinc-400 border border-zinc-700 hover:bg-zinc-700/50';
+        }
     });
-    if (btn) {
-        btn.classList.remove('text-zinc-500');
-        btn.classList.add('bg-zinc-800/50', 'text-zinc-300', 'active');
-    }
     
     // Re-render chart when switching to members tab
     if (tab === 'members') {
@@ -1788,25 +2260,46 @@ async function loadPartnerData() {
 
 async function loadPartnerMembers() {
     // Load all member CSVs and combine for name lookup
-    const urls = [MEMBERS_URL, LION_MEMBERS_URL, PIXEL_MEMBERS_URL];
+    const urlsWithType = [
+        { url: MEMBERS_URL, type: 'adao' },
+        { url: LION_MEMBERS_URL, type: 'lion' },
+        { url: PIXEL_MEMBERS_URL, type: 'pixel' }
+    ];
     
-    for (const url of urls) {
+    for (const { url, type } of urlsWithType) {
         try {
             const res = await fetch(url);
             if (!res.ok) continue;
             const csv = await res.text();
             const lines = csv.split('\n').slice(1).filter(line => line.trim());
             
+            // Track total members per DAO
+            if (type === 'lion') totalLionMembers = lines.length;
+            if (type === 'pixel') totalPixelMembers = lines.length;
+            
             lines.forEach(line => {
-                const m = line.match(/"([^"]+)","([^"]*)"/);
-                if (m && m[1] && m[2]) {
-                    partnerMembers[m[1]] = m[2];  // address -> name
+                // Match: "address","name","image",...
+                const m = line.match(/"([^"]+)","([^"]*)","([^"]*)"/);
+                if (m) {
+                    const addr = m[1];
+                    const name = m[2];
+                    const image = m[3];
+                    
+                    // Store name if valid and not already stored
+                    if (name && isValidName(name) && !partnerMembers[addr]) {
+                        partnerMembers[addr] = name;
+                    }
+                    // Store image if valid and not already stored
+                    if (isValidImage(image) && !memberImages[addr]) {
+                        memberImages[addr] = image;
+                    }
                 }
             });
         } catch(e) { /* ignore */ }
     }
     
-    console.log(`  📝 Loaded ${Object.keys(partnerMembers).length} member names`);
+    console.log(`  📝 Loaded ${Object.keys(partnerMembers).length} member names, ${Object.keys(memberImages).length} images`);
+    console.log(`  👥 Members: aDAO=${totalAdaoMembers}, Lion=${totalLionMembers}, Pixel=${totalPixelMembers}`);
 }
 
 function processPartnerVoters() {
@@ -2013,10 +2506,18 @@ function processAllianceVoters() {
             statusColor = inLion ? 'text-amber-400' : 'text-pink-400';
         }
         
-        // Combined score: average of all participation rates
+        // Calculate per-DAO percentages
         const lionPct = lionTotal > 0 ? (v.lionVotes / lionTotal * 100) : 0;
         const pixelPct = pixelTotal > 0 ? (v.pixelVotes / pixelTotal * 100) : 0;
-        const combinedScore = (v.adaoPct + lionPct + pixelPct) / 3;
+        
+        // FAIR SCORING: 50% aDAO + 50% Lions (combined)
+        // Lions combined = average of Lion DAO + PixelLions
+        // This makes pure aDAO (100%) = 50% and pure Lions (100% both) = 50%
+        const lionsPartnerScore = inPartner ? ((lionPct + pixelPct) / 2) : 0;
+        const combinedScore = (v.adaoPct * 0.5) + (lionsPartnerScore * 0.5);
+        
+        // Alliance partner count: how many alliance partners active in (aDAO=1, Lions=1)
+        const alliancePartnerCount = (inAdao ? 1 : 0) + (inPartner ? 1 : 0);
         
         return {
             ...v,
@@ -2025,6 +2526,7 @@ function processAllianceVoters() {
             pixelPropIds,
             lionPct,
             pixelPct,
+            lionsPartnerScore,
             status,
             statusEmoji,
             statusColor,
@@ -2033,9 +2535,14 @@ function processAllianceVoters() {
             inLion,
             inPixel,
             inPartner,
-            daoCount: (inAdao ? 1 : 0) + (inLion ? 1 : 0) + (inPixel ? 1 : 0)
+            daoCount: (inAdao ? 1 : 0) + (inLion ? 1 : 0) + (inPixel ? 1 : 0),
+            alliancePartnerCount
         };
-    }).sort((a, b) => b.combinedScore - a.combinedScore);
+    }).sort((a, b) => {
+        // Sort by alliancePartnerCount first (2 > 1), then by combinedScore
+        if (b.alliancePartnerCount !== a.alliancePartnerCount) return b.alliancePartnerCount - a.alliancePartnerCount;
+        return b.combinedScore - a.combinedScore;
+    });
     
     // Update stats
     const adaoVoters = allianceVoters.filter(v => v.inAdao).length;
@@ -2055,7 +2562,7 @@ function processAllianceVoters() {
 function switchMemberView(view) {
     currentMemberView = view;
     
-    // Update DAO button styles
+    // Update DAO button styles - selected has glow
     document.querySelectorAll('.dao-btn').forEach(btn => {
         const dao = btn.dataset.dao;
         const isActive = (view === 'adao' && dao === 'adao') || 
@@ -2064,21 +2571,21 @@ function switchMemberView(view) {
         
         if (dao === 'adao') {
             if (isActive) {
-                btn.className = 'dao-btn px-6 py-3 rounded-xl border border-violet-500/50 bg-violet-500/10 text-violet-300 font-medium transition-all hover:bg-violet-500/20';
+                btn.className = 'dao-btn px-6 py-3 rounded-xl font-medium transition-all border-2 border-violet-500 bg-violet-500/20 text-violet-200 shadow-lg shadow-violet-500/30';
             } else {
-                btn.className = 'dao-btn px-6 py-3 rounded-xl border border-zinc-700 bg-zinc-800/50 text-zinc-400 font-medium transition-all hover:bg-violet-500/10 hover:text-violet-300 hover:border-violet-500/50';
+                btn.className = 'dao-btn px-6 py-3 rounded-xl font-medium transition-all border border-zinc-700 bg-zinc-800/50 text-zinc-400 hover:bg-violet-500/10 hover:text-violet-300 hover:border-violet-500/50';
             }
         } else if (dao === 'lion') {
             if (isActive) {
-                btn.className = 'dao-btn px-6 py-3 rounded-xl border border-amber-500/50 bg-amber-500/10 text-amber-300 font-medium transition-all hover:bg-amber-500/20';
+                btn.className = 'dao-btn px-6 py-3 rounded-xl font-medium transition-all border-2 border-amber-500 bg-amber-500/20 text-amber-200 shadow-lg shadow-amber-500/30';
             } else {
-                btn.className = 'dao-btn px-6 py-3 rounded-xl border border-zinc-700 bg-zinc-800/50 text-zinc-400 font-medium transition-all hover:bg-amber-500/10 hover:text-amber-300 hover:border-amber-500/50';
+                btn.className = 'dao-btn px-6 py-3 rounded-xl font-medium transition-all border border-zinc-700 bg-zinc-800/50 text-zinc-400 hover:bg-amber-500/10 hover:text-amber-300 hover:border-amber-500/50';
             }
         } else if (dao === 'alliance') {
             if (isActive) {
-                btn.className = 'dao-btn dao-allies px-6 py-3 rounded-xl border-2 border-cyan-400 bg-gradient-to-r from-cyan-500/20 to-purple-500/20 text-cyan-200 font-medium transition-all shadow-lg shadow-cyan-500/30';
+                btn.className = 'dao-btn px-6 py-3 rounded-xl font-medium transition-all border-2 border-cyan-500 bg-cyan-500/20 text-cyan-200 shadow-lg shadow-cyan-500/30';
             } else {
-                btn.className = 'dao-btn dao-allies px-6 py-3 rounded-xl border-2 border-cyan-500/50 bg-gradient-to-r from-cyan-500/10 to-purple-500/10 text-cyan-300 font-medium transition-all hover:from-cyan-500/20 hover:to-purple-500/20 shadow-lg shadow-cyan-500/20';
+                btn.className = 'dao-btn px-6 py-3 rounded-xl font-medium transition-all border border-zinc-700 bg-zinc-800/50 text-zinc-400 hover:bg-cyan-500/10 hover:text-cyan-300 hover:border-cyan-500/50';
             }
         }
     });
@@ -2087,6 +2594,15 @@ function switchMemberView(view) {
     document.getElementById('view-adao').classList.toggle('hidden', view !== 'adao');
     document.getElementById('view-partner').classList.toggle('hidden', view !== 'partner');
     document.getElementById('view-alliance').classList.toggle('hidden', view !== 'alliance');
+    
+    // Show/hide aDAO-specific top stats bar
+    document.getElementById('adao-stats-bar').classList.toggle('hidden', view !== 'adao');
+    
+    // Update the podium for the selected view
+    renderPodium(view);
+    
+    // Update stats cards for the selected view
+    updateStatsCards(view);
     
     // Render the appropriate view
     if (view === 'partner') renderPartnerMembers();
@@ -2097,6 +2613,9 @@ function renderPartnerMembers() {
     const container = document.getElementById('partner-members-list');
     const search = (document.getElementById('partner-search')?.value || '').toLowerCase();
     const filter = document.getElementById('partner-filter')?.value || 'all';
+    
+    // Update podium to match filter
+    renderPodium('partner');
     
     let filtered = partnerVoters;
     
@@ -2142,15 +2661,27 @@ function renderPartnerMembers() {
             return `<div class="w-2 h-2 rounded-full border border-zinc-700" title="${propId}: No vote"></div>`;
         }).join('');
         
+        // Profile image
+        const imgUrl = getImageUrl(memberImages[v.address]);
+        const daoIcon = v.inBoth ? '<span class="text-purple-400">🤝</span>' : (v.lionProps > 0 ? '<span class="text-amber-400">🦁</span>' : '<span class="text-pink-400">🎨</span>');
+        const profileImg = imgUrl ? 
+            `<img src="${imgUrl}" alt="" class="w-8 h-8 rounded-lg object-cover border border-zinc-700" onerror="this.outerHTML='${daoIcon}'" />` :
+            daoIcon;
+        
         return `
             <div class="card cursor-pointer hover:border-violet-500/30" onclick="toggleMemberExpand('${memberId}')">
                 <div class="p-3 flex items-center justify-between">
                     <div class="flex items-center gap-3 min-w-0">
                         <span class="text-zinc-600 text-sm w-8">#${i + 1}</span>
-                        ${v.inBoth ? '<span class="text-purple-400">🤝</span>' : (v.lionProps > 0 ? '<span class="text-amber-400">🦁</span>' : '<span class="text-pink-400">🎨</span>')}
+                        ${profileImg}
                         <div class="min-w-0">
-                            <div class="font-medium ${v.name ? 'text-white' : 'text-zinc-400 mono text-sm'}">${v.name || shortAddr(v.address)}</div>
-                            <div class="text-xs text-zinc-600 mono">${shortAddr(v.address)}</div>
+                            ${isValidName(v.name) ? `
+                                <div class="font-medium text-white">${v.name}</div>
+                                <div class="text-xs text-zinc-600 mono">${shortAddr(v.address)}</div>
+                            ` : `
+                                <div class="font-medium text-zinc-400 mono text-sm truncate">${v.address}</div>
+                                <div class="text-xs text-zinc-500">Unknown Member</div>
+                            `}
                         </div>
                     </div>
                     <div class="flex items-center gap-4 text-sm">
@@ -2190,6 +2721,9 @@ function renderAllianceMembers() {
     const container = document.getElementById('alliance-members-list');
     const search = (document.getElementById('alliance-search')?.value || '').toLowerCase();
     const filter = document.getElementById('alliance-filter')?.value || 'boosted';
+    
+    // Update podium to match filter
+    renderPodium('alliance');
     
     let filtered = allianceVoters;
     
@@ -2244,22 +2778,34 @@ function renderAllianceMembers() {
             return `<div class="w-2 h-2 rounded-full border border-zinc-700" title="${propId}: No vote"></div>`;
         }).join('');
         
+        // Profile image
+        const imgUrl = getImageUrl(memberImages[v.address]);
+        const statusIcon = `<span class="${v.statusColor}">${v.statusEmoji}</span>`;
+        const profileImg = imgUrl ? 
+            `<img src="${imgUrl}" alt="" class="w-8 h-8 rounded-lg object-cover border border-zinc-700" onerror="this.outerHTML='${statusIcon}'" />` :
+            statusIcon;
+        
         return `
             <div class="card cursor-pointer hover:border-violet-500/30 ${v.status === 'all3' ? 'border-yellow-500/20' : (v.status === 'boosted' ? 'border-green-500/20' : '')}" onclick="toggleMemberExpand('${memberId}')">
                 <div class="p-3 flex items-center justify-between">
                     <div class="flex items-center gap-3 min-w-0">
                         <span class="text-zinc-600 text-sm w-8">#${i + 1}</span>
-                        <span class="${v.statusColor}">${v.statusEmoji}</span>
+                        ${profileImg}
                         <div class="min-w-0">
-                            <div class="font-medium ${v.name ? 'text-white' : 'text-zinc-400 mono text-sm'}">${v.name || shortAddr(v.address)}</div>
-                            <div class="text-xs text-zinc-600 mono">${shortAddr(v.address)}</div>
+                            ${isValidName(v.name) ? `
+                                <div class="font-medium text-white">${v.name}</div>
+                                <div class="text-xs text-zinc-600 mono">${shortAddr(v.address)}</div>
+                            ` : `
+                                <div class="font-medium text-zinc-400 mono text-sm truncate">${v.address}</div>
+                                <div class="text-xs text-zinc-500">Unknown Member</div>
+                            `}
                         </div>
                     </div>
                     <div class="flex items-center gap-3 text-sm">
                         <div class="flex gap-1">${daoBadges.join('')}</div>
                         <div class="text-right">
                             <div class="text-cyan-400 font-medium">${v.combinedScore.toFixed(1)}%</div>
-                            <div class="text-xs text-zinc-600">${v.daoCount}/3 DAOs</div>
+                            <div class="text-xs text-zinc-600">${v.alliancePartnerCount}/2 Allies</div>
                         </div>
                         <span class="text-zinc-600" id="${memberId}-arrow">▼</span>
                     </div>
