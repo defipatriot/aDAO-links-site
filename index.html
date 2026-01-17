@@ -721,7 +721,7 @@
                  <div class="text-sm">
                      <span class="text-gray-500">Locks:</span>
                      <span class="text-white ml-2">#600 (arbLUNA) + #711 (ampLUNA)</span>
-                     <span class="text-cyan-400 ml-2">638.9K VP</span>
+                     <span id="locks-total-vp" class="text-cyan-400 ml-2"><i class="fas fa-spinner fa-spin text-xs"></i></span>
                  </div>
                  <button id="view-full-details-btn" class="text-xs bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-1 rounded transition-colors">
                      View Full Details
@@ -844,6 +844,7 @@
                     <div class="marketplace-header">
                         <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/BBL%20No%20Background.png" alt="BBL" onerror="this.style.display='none'">
                         <h3>BBL Marketplace</h3>
+                        <span id="bbl-live-indicator" class="text-[9px] text-green-400 ml-2 hidden"><i class="fas fa-circle text-[6px] animate-pulse mr-1"></i>LIVE</span>
                         <a href="https://app.backbonelabs.io/nfts/marketplace/collections/terra1phr9fngjv7a8an4dhmhd0u0f98wazxfnzccqtyheq4zqrrp4fpuqw3apw9" target="_blank" class="text-xs text-gray-500 hover:text-cyan-400 ml-auto">
                             <i class="fas fa-external-link-alt mr-1"></i>View
                         </a>
@@ -852,6 +853,14 @@
                     <!-- Stats -->
                     <div class="bg-gray-800/50 rounded-lg p-3">
                         <div class="flex justify-between items-center">
+                            <span class="text-gray-400 text-sm">Floor Price</span>
+                            <div class="text-right">
+                                <span id="bbl-floor-bluna" class="text-yellow-400 font-mono font-bold">--</span>
+                                <span class="text-gray-500 text-xs ml-1">bLUNA</span>
+                                <span id="bbl-floor-usd" class="text-green-400 text-xs ml-2">--</span>
+                            </div>
+                        </div>
+                        <div class="flex justify-between items-center mt-2">
                             <span class="text-gray-400 text-sm">All-Time Volume</span>
                             <div class="text-right">
                                 <span id="bbl-volume-bluna" class="text-cyan-400 font-mono font-bold">--</span>
@@ -860,8 +869,11 @@
                             </div>
                         </div>
                         <div class="flex justify-between items-center mt-2">
-                            <span class="text-gray-400 text-sm">Total Sales</span>
-                            <span id="bbl-total-sales" class="text-gray-400 text-sm">--</span>
+                            <span class="text-gray-400 text-sm">Last Sale</span>
+                            <div class="text-right">
+                                <span id="bbl-last-sale" class="text-gray-300 font-mono">--</span>
+                                <span class="text-gray-500 text-xs ml-1">bLUNA</span>
+                            </div>
                         </div>
                         <div class="flex justify-between items-center mt-2 pt-2 border-t border-gray-700">
                             <span class="text-gray-400 text-sm">Currently Listed</span>
@@ -870,8 +882,8 @@
                             </button>
                         </div>
                     </div>
-                    <div class="text-[10px] text-gray-600 mt-2 text-center">
-                        <i class="fas fa-database mr-1"></i>Listings from deving.zone (updated every 6 hours)
+                    <div id="bbl-data-source" class="text-[10px] text-gray-600 mt-2 text-center">
+                        <i class="fas fa-spinner fa-spin mr-1"></i>Loading live data...
                     </div>
                 </div>
                 
@@ -2218,7 +2230,7 @@ est. APR 58.53 %"></textarea>
                     
                     // Update the tile with live data
                     if (avgDailyGainEl) {
-                        const displayValue = avgDailyGain >= 0 ? `+${avgDailyGain.toFixed(2)}` : avgDailyGain.toFixed(2);
+                        const displayValue = avgDailyGain >= 0 ? `+${avgDailyGain.toFixed(2)} LUNA` : `${avgDailyGain.toFixed(2)} LUNA`;
                         avgDailyGainEl.textContent = displayValue;
                     }
                     
@@ -2244,7 +2256,7 @@ est. APR 58.53 %"></textarea>
                     // Fall back to static snapshot value
                     const { keyMetrics } = dashboardData;
                     if (avgDailyGainEl && avgDailyGainEl.innerHTML.includes('fa-spinner')) {
-                        avgDailyGainEl.textContent = `+${keyMetrics.avgDailyGain}`;
+                        avgDailyGainEl.textContent = `+${keyMetrics.avgDailyGain} LUNA`;
                     }
                     if (avgDailyGainSubEl && avgDailyGainSubEl.innerHTML.includes('fa-spinner')) {
                         avgDailyGainSubEl.textContent = '(Snapshot)';
@@ -2364,10 +2376,12 @@ est. APR 58.53 %"></textarea>
                     format: (v) => '$' + v.toFixed(2),
                     color: '#22c55e', // green
                     tileId: 'backing-per-nft-usd',
-                    secondaryKey: 'backingPerNft_LUNA',
-                    secondaryLabel: 'LUNA Amount',
-                    secondaryColor: '#f97316',
-                    secondaryFormat: (v) => v.toFixed(2) + ' LUNA',
+                    secondaryKey: 'lunaPrice_USD',
+                    secondaryLabel: 'LUNA Price',
+                    secondaryColor: '#f97316', // orange
+                    secondaryFormat: (v) => '$' + v.toFixed(4),
+                    tertiaryKey: 'backingPerNft_LUNA',
+                    tertiaryLabel: 'LUNA Amount',
                     showLunaPriceInTable: true
                 },
                 'backingPerNft_ampLUNA': {
@@ -2382,9 +2396,13 @@ est. APR 58.53 %"></textarea>
                 },
                 'avgDailyGainPerNft_LUNA': {
                     label: 'Avg Daily Gain (LUNA)',
-                    format: (v) => '+' + v.toFixed(4) + ' LUNA',
+                    format: (v) => (v >= 0 ? '+' : '') + v.toFixed(4) + ' LUNA',
                     color: '#10b981', // emerald
-                    tileId: 'avg-daily-gain'
+                    tileId: 'avg-daily-gain',
+                    secondaryKey: 'backingPerNft_LUNA',
+                    secondaryLabel: 'Backing (LUNA)',
+                    secondaryColor: '#3b82f6',
+                    secondaryFormat: (v) => v.toFixed(2) + ' LUNA'
                 },
                 'treasuryTotal_USD': {
                     label: 'DAO Treasury (USD)',
@@ -2666,6 +2684,11 @@ est. APR 58.53 %"></textarea>
                         if (s.circulatingSupply && s.daodaoStaked) {
                             secondaryValue = (s.daodaoStaked / s.circulatingSupply) * 100;
                         }
+                    } else if (metricKey === 'avgDailyGainPerNft_LUNA') {
+                        // Use stored value from snapshot (already calculated at snapshot time)
+                        value = s.avgDailyGainPerNft_LUNA;
+                        // Show backing as secondary for context
+                        secondaryValue = s.backingPerNft_LUNA;
                     } else {
                         value = s[metricKey];
                     }
@@ -2676,6 +2699,10 @@ est. APR 58.53 %"></textarea>
                     } else if (metric.secondaryKey && !secondaryValue) {
                         if (metric.secondaryKey === 'daodaoStakedPercent') {
                             // Already calculated above
+                        } else if (metric.secondaryKey === 'ampLUNA_LUNA_Ratio') {
+                            // Get ampLUNA ratio from lstRatios (loaded from TLA ext file)
+                            const lstRatios = s.lstRatios || s.tlaDeposits?.lstRatios || {};
+                            secondaryValue = lstRatios.ampLUNA || s.ampLUNA_LUNA_Ratio || null;
                         } else {
                             secondaryValue = s[metric.secondaryKey];
                         }
@@ -2806,6 +2833,10 @@ est. APR 58.53 %"></textarea>
                         if (s.circulatingSupply && s.daodaoStaked) {
                             secondaryValue = (s.daodaoStaked / s.circulatingSupply) * 100;
                         }
+                    } else if (metricKey === 'avgDailyGainPerNft_LUNA') {
+                        // Use stored value from snapshot
+                        value = s.avgDailyGainPerNft_LUNA;
+                        secondaryValue = s.backingPerNft_LUNA;
                     } else {
                         value = s[metricKey];
                     }
@@ -2813,7 +2844,13 @@ est. APR 58.53 %"></textarea>
                     if (metric.usdKey && !secondaryValue) {
                         secondaryValue = s[metric.usdKey];
                     } else if (metric.secondaryKey && !secondaryValue && metric.secondaryKey !== 'daodaoStakedPercent') {
-                        secondaryValue = s[metric.secondaryKey];
+                        if (metric.secondaryKey === 'ampLUNA_LUNA_Ratio') {
+                            // Get ampLUNA ratio from lstRatios (loaded from TLA ext file)
+                            const lstRatios = s.lstRatios || s.tlaDeposits?.lstRatios || {};
+                            secondaryValue = lstRatios.ampLUNA || s.ampLUNA_LUNA_Ratio || null;
+                        } else {
+                            secondaryValue = s[metric.secondaryKey];
+                        }
                     }
                     
                     return {
@@ -3539,13 +3576,26 @@ est. APR 58.53 %"></textarea>
                             }
                         }
                         
-                        // Secondary value
+                        // Secondary value (with % change for LUNA price)
                         let secondaryDisplay = '';
                         if (hasSecondary) {
                             const secondaryFormat = metric.secondaryFormat || ((v) => metric.usdKey ? '$' + v.toLocaleString('en-US', {maximumFractionDigits: 2}) : v.toFixed(4));
-                            secondaryDisplay = d.secondaryValue !== null && d.secondaryValue !== undefined 
-                                ? `<td class="p-2 text-right font-mono text-gray-400">${secondaryFormat(d.secondaryValue)}</td>`
-                                : `<td class="p-2 text-right font-mono text-gray-600">--</td>`;
+                            
+                            if (d.secondaryValue !== null && d.secondaryValue !== undefined) {
+                                let secondaryHtml = secondaryFormat(d.secondaryValue);
+                                
+                                // Add % change for LUNA price secondary
+                                if (metric.secondaryKey === 'lunaPrice_USD' && olderData && olderData.secondaryValue) {
+                                    const pricePctChg = ((d.secondaryValue - olderData.secondaryValue) / olderData.secondaryValue) * 100;
+                                    const pricePctClass = pricePctChg > 0 ? 'text-green-400' : pricePctChg < 0 ? 'text-red-400' : 'text-gray-500';
+                                    const pricePctStr = (pricePctChg >= 0 ? '+' : '') + pricePctChg.toFixed(2) + '%';
+                                    secondaryHtml = `<span class="text-orange-400">${secondaryFormat(d.secondaryValue)}</span> <span class="${pricePctClass} text-xs">${pricePctStr}</span>`;
+                                }
+                                
+                                secondaryDisplay = `<td class="p-2 text-right font-mono">${secondaryHtml}</td>`;
+                            } else {
+                                secondaryDisplay = `<td class="p-2 text-right font-mono text-gray-600">--</td>`;
+                            }
                         }
                         
                         const originalIdx = reversedData.length - 1 - i;
@@ -6403,6 +6453,10 @@ est. APR 58.53 %"></textarea>
                     mainTileUsdEl.textContent = totalLiveUsd > 0 ? `$${totalLiveUsd.toLocaleString('en-US', {maximumFractionDigits: 0})}` : '...';
                     updateTile('dao-tla-vp-usd', null, ratesAreValid, { titleId: 'dao-tla-vp-title' });
                     
+                    // Update locks summary VP display (in Unclaimed Rewards section)
+                    const locksTotalVpEl = document.getElementById('locks-total-vp');
+                    if (locksTotalVpEl) locksTotalVpEl.textContent = (totalStaticVp / 1000).toFixed(1) + 'K VP';
+                    
                     // Modal values
                     modalLunaEl.textContent = `~${(totalUnderlyingLuna).toLocaleString('en-US', {maximumFractionDigits:1})} LUNA`;
                     modalUsdEl.textContent = totalLiveUsd > 0 ? `$${totalLiveUsd.toLocaleString('en-US', {maximumFractionDigits: 2})}` : '--';
@@ -7075,6 +7129,40 @@ est. APR 58.53 %"></textarea>
                 const STATUS_URL = 'https://deving.zone/en/nfts/alliance_daos.json';
                 const SALES_BASE_URL = 'https://raw.githubusercontent.com/defipatriot/adao_json_storage/main/';
                 const BBL_CONTRACT = 'terra1phr9fngjv7a8an4dhmhd0u0f98wazxfnzccqtyheq4zqrrp4fpuqw3apw9';
+                const PIXELIONS_CONTRACT = 'terra17z7fpaa8kah698xn5tarrcucvualdy4wsztkfc404g3garucpu6qmxp50g';
+                
+                // BBL API endpoints
+                const BBL_API_BASE = 'https://warlock.backbonelabs.io/api/v1/dapps/necropolis';
+                const CORS_PROXY = 'https://corsproxy.io/?'; // CORS proxy for BBL API
+                const BBL_COLLECTIONS = {
+                    'alliance_dao': {
+                        name: 'Alliance DAO',
+                        contract: BBL_CONTRACT,
+                        icon: 'https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/logo_stamp_primary.png'
+                    },
+                    'pixelions': {
+                        name: 'pixeLions',
+                        contract: PIXELIONS_CONTRACT,
+                        icon: 'https://pbs.twimg.com/profile_images/1529419694846246913/mvdFbqRe_400x400.jpg'
+                    }
+                };
+                
+                // Fetch with CORS proxy fallback
+                async function fetchWithCorsProxy(url) {
+                    try {
+                        // Try direct fetch first
+                        const response = await fetch(url);
+                        if (response.ok) return response;
+                    } catch (e) {
+                        // Direct fetch failed (likely CORS)
+                    }
+                    
+                    // Try with CORS proxy
+                    const proxyUrl = CORS_PROXY + encodeURIComponent(url);
+                    const proxyResponse = await fetch(proxyUrl);
+                    if (!proxyResponse.ok) throw new Error('Proxy fetch failed');
+                    return proxyResponse;
+                }
                 
                 let nftStatusData = null;  // deving.zone data
                 let salesData = null;       // Sales history
@@ -7123,8 +7211,7 @@ est. APR 58.53 %"></textarea>
                         }
                     });
                     
-                    // Update counts
-                    document.getElementById('bbl-listed-count').textContent = bblListedNfts.length;
+                    // Update Boost count (still from deving.zone)
                     document.getElementById('boost-listed-count').textContent = `${boostCount} NFTs`;
                     
                     // Setup BBL listed button
@@ -7133,6 +7220,25 @@ est. APR 58.53 %"></textarea>
                     // Re-render recent sales to update broken status
                     if (salesData) {
                         renderRecentSales();
+                    }
+                    
+                    // Fetch live BBL listing count
+                    fetchBblListingCount();
+                }
+                
+                // Fetch live BBL listing count
+                async function fetchBblListingCount() {
+                    try {
+                        const url = `${BBL_API_BASE}/nfts?nftContract=${BBL_CONTRACT}&page=1&perPage=1&types=buy_now`;
+                        const response = await fetchWithCorsProxy(url);
+                        const data = await response.json();
+                        
+                        if (data.pagination?.totalResults !== undefined) {
+                            document.getElementById('bbl-listed-count').textContent = data.pagination.totalResults;
+                        }
+                    } catch (err) {
+                        // Fallback to deving.zone count already set
+                        document.getElementById('bbl-listed-count').textContent = bblListedNfts.length || '--';
                     }
                 }
                 
@@ -7146,59 +7252,113 @@ est. APR 58.53 %"></textarea>
                     });
                 }
                 
-                // Show modal with all BBL listed NFTs
-                function showBblListedModal() {
+                // Fetch BBL collection stats (floor, volume, last sale)
+                async function fetchBblCollectionStats() {
+                    try {
+                        const url = `${BBL_API_BASE}/collections/${BBL_CONTRACT}`;
+                        const response = await fetchWithCorsProxy(url);
+                        const data = await response.json();
+                        
+                        // Get bLUNA price for USD conversion
+                        const blunaPrice = window.tokenPrices?.bLUNA || 0;
+                        
+                        // Update floor price
+                        const floorEl = document.getElementById('bbl-floor-bluna');
+                        const floorUsdEl = document.getElementById('bbl-floor-usd');
+                        if (floorEl && data.floor) {
+                            floorEl.textContent = data.floor.toLocaleString();
+                            if (floorUsdEl && blunaPrice > 0) {
+                                floorUsdEl.textContent = `($${(data.floor * blunaPrice).toFixed(2)})`;
+                            }
+                        }
+                        
+                        // Update volume
+                        const volEl = document.getElementById('bbl-volume-bluna');
+                        const volUsdEl = document.getElementById('bbl-volume-usd');
+                        if (volEl && data.volume) {
+                            volEl.textContent = Math.round(data.volume).toLocaleString();
+                            if (volUsdEl && blunaPrice > 0) {
+                                volUsdEl.textContent = `($${Math.round(data.volume * blunaPrice).toLocaleString()})`;
+                            }
+                        }
+                        
+                        // Update last sale
+                        const lastSaleEl = document.getElementById('bbl-last-sale');
+                        if (lastSaleEl && data.last_sale_amount) {
+                            lastSaleEl.textContent = data.last_sale_amount.toFixed(2);
+                        }
+                        
+                        // Update live indicator and source
+                        const liveIndicator = document.getElementById('bbl-live-indicator');
+                        const dataSource = document.getElementById('bbl-data-source');
+                        if (liveIndicator) liveIndicator.classList.remove('hidden');
+                        if (dataSource) dataSource.innerHTML = '<i class="fas fa-bolt text-yellow-400 mr-1"></i>Live from BBL API';
+                        
+                        return data;
+                    } catch (err) {
+                        console.error('BBL collection stats error:', err);
+                        const dataSource = document.getElementById('bbl-data-source');
+                        if (dataSource) dataSource.innerHTML = '<i class="fas fa-exclamation-triangle text-yellow-500 mr-1"></i>Using cached data (API unavailable)';
+                        return null;
+                    }
+                }
+                
+                // Fetch BBL listings for a collection
+                async function fetchBblListings(contract, perPage = 40) {
+                    try {
+                        const url = `${BBL_API_BASE}/nfts?nftContract=${contract}&page=1&perPage=${perPage}&types=buy_now&sort=price-asc`;
+                        const response = await fetchWithCorsProxy(url);
+                        return await response.json();
+                    } catch (err) {
+                        console.error('BBL listings error:', err);
+                        return null;
+                    }
+                }
+                
+                // Show modal with live BBL listings
+                let currentListingsCollection = 'alliance_dao';
+                
+                async function showBblListedModal() {
                     const existingModal = document.getElementById('bbl-listed-modal');
                     if (existingModal) existingModal.remove();
                     
-                    // Sort: unbroken first, then by ID
-                    const sorted = [...bblListedNfts].sort((a, b) => {
-                        if (a.broken !== b.broken) return a.broken ? 1 : -1;
-                        return a.id - b.id;
-                    });
-                    
-                    const unbrokenCount = sorted.filter(n => !n.broken).length;
-                    const brokenCount = sorted.filter(n => n.broken).length;
-                    
-                    let listHtml = sorted.map(nft => {
-                        const nftUrl = `https://app.backbonelabs.io/nfts/marketplace/collections/${BBL_CONTRACT}/${nft.id}`;
-                        const brokenBadge = nft.broken 
-                            ? '<span class="absolute top-1 left-1 bg-red-500 text-white text-[6px] px-1 py-0.5 rounded font-bold">BROKEN</span>'
-                            : '';
-                        return `
-                            <a href="${nftUrl}" target="_blank" class="flex items-center gap-3 p-2 bg-gray-800/50 rounded-lg hover:bg-gray-700 transition-colors">
-                                <div class="relative">
-                                    ${brokenBadge}
-                                    <img src="${getNftImageUrl(nft.id)}" alt="#${nft.id}" class="w-12 h-12 rounded object-cover"
-                                         onerror="this.src='https://placehold.co/48x48/1f2937/666?text=${nft.id}'">
-                                </div>
-                                <div class="flex-1">
-                                    <div class="font-bold text-white">#${nft.id}</div>
-                                    <div class="text-xs text-gray-400">${nft.broken ? 'Broken' : 'Unbroken'}</div>
-                                </div>
-                                <i class="fas fa-external-link-alt text-gray-500"></i>
-                            </a>
-                        `;
-                    }).join('');
-                    
+                    // Create modal with loading state
                     const modal = document.createElement('div');
                     modal.id = 'bbl-listed-modal';
                     modal.className = 'fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70';
                     modal.innerHTML = `
-                        <div class="bg-gray-900 rounded-xl border border-gray-700 max-w-md w-full max-h-[80vh] overflow-hidden">
-                            <div class="p-4 border-b border-gray-700 flex items-center justify-between">
-                                <h3 class="text-lg font-bold text-white">BBL Listed NFTs</h3>
-                                <button class="text-gray-400 hover:text-white text-2xl">&times;</button>
+                        <div class="bg-gray-900 rounded-xl border border-gray-700 max-w-2xl w-full max-h-[85vh] overflow-hidden">
+                            <div class="p-4 border-b border-gray-700">
+                                <div class="flex items-center justify-between mb-3">
+                                    <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                                        <i class="fas fa-store text-cyan-400"></i>
+                                        BBL Marketplace Listings
+                                    </h3>
+                                    <button class="text-gray-400 hover:text-white text-2xl leading-none" id="close-listings-modal">&times;</button>
+                                </div>
+                                <!-- Collection Selector -->
+                                <div class="flex gap-2">
+                                    <button id="listings-tab-adao" class="flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-600 text-white text-sm font-bold transition-colors">
+                                        <img src="${BBL_COLLECTIONS.alliance_dao.icon}" class="w-5 h-5 rounded" onerror="this.style.display='none'">
+                                        Alliance DAO
+                                    </button>
+                                    <button id="listings-tab-pixelions" class="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-700 text-gray-300 hover:bg-gray-600 text-sm font-bold transition-colors">
+                                        <img src="https://pbs.twimg.com/profile_images/1529419694846246913/mvdFbqRe_400x400.jpg" class="w-5 h-5 rounded" onerror="this.style.display='none'">
+                                        pixeLions
+                                    </button>
+                                </div>
                             </div>
-                            <div class="p-3 bg-gray-800/50 flex gap-4 text-sm">
-                                <span class="text-cyan-400"><span class="font-bold">${unbrokenCount}</span> Unbroken</span>
-                                <span class="text-red-400"><span class="font-bold">${brokenCount}</span> Broken</span>
+                            <div id="listings-summary" class="p-3 bg-gray-800/50 flex gap-4 text-sm">
+                                <span class="text-gray-400"><i class="fas fa-spinner fa-spin mr-1"></i>Loading...</span>
                             </div>
-                            <div class="p-4 overflow-y-auto max-h-[55vh] space-y-2">
-                                ${listHtml}
+                            <div id="listings-container" class="p-4 overflow-y-auto max-h-[55vh]">
+                                <div class="text-center py-8 text-gray-500">
+                                    <i class="fas fa-spinner fa-spin text-2xl mb-2"></i>
+                                    <p>Fetching live listings...</p>
+                                </div>
                             </div>
                             <div class="p-3 border-t border-gray-700 text-center">
-                                <a href="https://app.backbonelabs.io/nfts/marketplace/collections/${BBL_CONTRACT}" target="_blank" 
+                                <a id="listings-marketplace-link" href="https://app.backbonelabs.io/nfts/marketplace/collections/${BBL_CONTRACT}" target="_blank" 
                                    class="text-cyan-400 hover:text-cyan-300 text-sm">
                                     <i class="fas fa-external-link-alt mr-1"></i>View all on BBL Marketplace
                                 </a>
@@ -7207,8 +7367,161 @@ est. APR 58.53 %"></textarea>
                     `;
                     
                     document.body.appendChild(modal);
-                    modal.querySelector('button').addEventListener('click', () => modal.remove());
+                    
+                    // Setup close handlers
+                    document.getElementById('close-listings-modal').addEventListener('click', () => modal.remove());
                     modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+                    
+                    // Setup tab handlers
+                    document.getElementById('listings-tab-adao').addEventListener('click', () => {
+                        switchListingsCollection('alliance_dao');
+                    });
+                    document.getElementById('listings-tab-pixelions').addEventListener('click', () => {
+                        switchListingsCollection('pixelions');
+                    });
+                    
+                    // Load initial collection (Alliance DAO)
+                    await loadListingsForCollection('alliance_dao');
+                }
+                
+                async function switchListingsCollection(collectionKey) {
+                    if (currentListingsCollection === collectionKey) return;
+                    currentListingsCollection = collectionKey;
+                    
+                    // Update tab styles
+                    const adaoTab = document.getElementById('listings-tab-adao');
+                    const pixelionsTab = document.getElementById('listings-tab-pixelions');
+                    
+                    if (collectionKey === 'alliance_dao') {
+                        adaoTab.className = 'flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-600 text-white text-sm font-bold transition-colors';
+                        pixelionsTab.className = 'flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-700 text-gray-300 hover:bg-gray-600 text-sm font-bold transition-colors';
+                    } else {
+                        adaoTab.className = 'flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-700 text-gray-300 hover:bg-gray-600 text-sm font-bold transition-colors';
+                        pixelionsTab.className = 'flex items-center gap-2 px-4 py-2 rounded-lg bg-orange-600 text-white text-sm font-bold transition-colors';
+                    }
+                    
+                    // Show loading state
+                    const container = document.getElementById('listings-container');
+                    const summary = document.getElementById('listings-summary');
+                    if (container) {
+                        container.innerHTML = `
+                            <div class="text-center py-8 text-gray-500">
+                                <i class="fas fa-spinner fa-spin text-2xl mb-2"></i>
+                                <p>Fetching ${BBL_COLLECTIONS[collectionKey].name} listings...</p>
+                            </div>
+                        `;
+                    }
+                    if (summary) {
+                        summary.innerHTML = '<span class="text-gray-400"><i class="fas fa-spinner fa-spin mr-1"></i>Loading...</span>';
+                    }
+                    
+                    await loadListingsForCollection(collectionKey);
+                }
+                
+                async function loadListingsForCollection(collectionKey) {
+                    const collection = BBL_COLLECTIONS[collectionKey];
+                    const container = document.getElementById('listings-container');
+                    const summary = document.getElementById('listings-summary');
+                    const marketplaceLink = document.getElementById('listings-marketplace-link');
+                    
+                    // Update marketplace link
+                    if (marketplaceLink) {
+                        marketplaceLink.href = `https://app.backbonelabs.io/nfts/marketplace/collections/${collection.contract}`;
+                    }
+                    
+                    // Fetch listings
+                    const data = await fetchBblListings(collection.contract, 50);
+                    
+                    if (!data || !data.nfts) {
+                        container.innerHTML = `
+                            <div class="text-center py-8 text-red-400">
+                                <i class="fas fa-exclamation-triangle text-2xl mb-2"></i>
+                                <p>Failed to load listings</p>
+                            </div>
+                        `;
+                        return;
+                    }
+                    
+                    const listings = data.nfts;
+                    const totalListings = data.pagination?.totalResults || listings.length;
+                    const blunaPrice = window.tokenPrices?.bLUNA || 0;
+                    
+                    // Update summary
+                    if (summary) {
+                        const floorPrice = listings[0]?.auction?.reserve_price ? parseInt(listings[0].auction.reserve_price) / 1000000 : 0;
+                        const floorUsd = blunaPrice > 0 ? ` (~$${(floorPrice * blunaPrice).toFixed(2)})` : '';
+                        
+                        // Count broken/unbroken for Alliance DAO
+                        let summaryHtml = '';
+                        if (collectionKey === 'alliance_dao') {
+                            const brokenCount = listings.filter(n => n.special_trait === 'BROKEN').length;
+                            const unbrokenCount = listings.length - brokenCount;
+                            summaryHtml = `
+                                <span class="text-yellow-400"><i class="fas fa-tag mr-1"></i>Floor: <span class="font-bold">${floorPrice.toFixed(0)} bLUNA</span>${floorUsd}</span>
+                                <span class="text-gray-400">|</span>
+                                <span class="text-cyan-400"><span class="font-bold">${totalListings}</span> Listed</span>
+                                <span class="text-gray-400">|</span>
+                                <span class="text-green-400"><span class="font-bold">${unbrokenCount}</span> Unbroken</span>
+                                <span class="text-red-400"><span class="font-bold">${brokenCount}</span> Broken</span>
+                            `;
+                        } else {
+                            summaryHtml = `
+                                <span class="text-yellow-400"><i class="fas fa-tag mr-1"></i>Floor: <span class="font-bold">${floorPrice.toFixed(0)} bLUNA</span>${floorUsd}</span>
+                                <span class="text-gray-400">|</span>
+                                <span class="text-orange-400"><span class="font-bold">${totalListings}</span> Listed</span>
+                            `;
+                        }
+                        summary.innerHTML = summaryHtml;
+                    }
+                    
+                    // Render listings
+                    if (listings.length === 0) {
+                        container.innerHTML = `
+                            <div class="text-center py-8 text-gray-500">
+                                <i class="fas fa-inbox text-2xl mb-2"></i>
+                                <p>No listings found</p>
+                            </div>
+                        `;
+                        return;
+                    }
+                    
+                    const listHtml = listings.map(nft => {
+                        const price = nft.auction?.reserve_price ? parseInt(nft.auction.reserve_price) / 1000000 : 0;
+                        const priceUsd = blunaPrice > 0 ? `$${(price * blunaPrice).toFixed(2)}` : '';
+                        const isBroken = nft.special_trait === 'BROKEN';
+                        const imageUrl = nft.cf_url || nft.image_url?.replace('ipfs://', 'https://ipfs.io/ipfs/') || '';
+                        const nftUrl = `https://app.backbonelabs.io/nfts/marketplace/collections/${collection.contract}/${nft.nft_token_id}`;
+                        const rankDisplay = nft.rank ? `#${nft.rank}` : '--';
+                        const rarityPct = nft.top_percent ? `Top ${nft.top_percent.toFixed(1)}%` : '';
+                        
+                        const brokenBadge = isBroken 
+                            ? '<span class="absolute top-1 left-1 bg-red-500 text-white text-[7px] px-1 py-0.5 rounded font-bold">BROKEN</span>'
+                            : '';
+                        
+                        return `
+                            <a href="${nftUrl}" target="_blank" class="flex items-center gap-3 p-3 bg-gray-800/50 rounded-lg hover:bg-gray-700 transition-colors border border-gray-700/50">
+                                <div class="relative flex-shrink-0">
+                                    ${brokenBadge}
+                                    <img src="${imageUrl}" alt="#${nft.nft_token_id}" class="w-14 h-14 rounded-lg object-cover"
+                                         onerror="this.src='https://placehold.co/56x56/1f2937/666?text=${nft.nft_token_id}'">
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <div class="font-bold text-white">${nft.nft_name || '#' + nft.nft_token_id}</div>
+                                    <div class="text-xs text-gray-400 flex gap-2">
+                                        ${nft.rank ? `<span class="text-purple-400">Rank ${rankDisplay}</span>` : ''}
+                                        ${rarityPct ? `<span class="text-gray-500">${rarityPct}</span>` : ''}
+                                    </div>
+                                </div>
+                                <div class="text-right flex-shrink-0">
+                                    <div class="text-yellow-400 font-bold">${price.toFixed(0)} bLUNA</div>
+                                    ${priceUsd ? `<div class="text-xs text-green-400">${priceUsd}</div>` : ''}
+                                </div>
+                                <i class="fas fa-external-link-alt text-gray-500 text-xs"></i>
+                            </a>
+                        `;
+                    }).join('');
+                    
+                    container.innerHTML = `<div class="space-y-2">${listHtml}</div>`;
                 }
                 
                 // Store all-time sales for chart (combined from all years)
@@ -7335,9 +7648,11 @@ est. APR 58.53 %"></textarea>
                         }
                     }
                     
-                    document.getElementById('bbl-total-sales').textContent = `${bblSales} sales`;
-                    document.getElementById('boost-volume-usd').textContent = `$${boostVolume.toFixed(2)}`;
-                    document.getElementById('boost-total-sales').textContent = `${boostSales} sales`;
+                    // bbl-total-sales removed - now using live API for stats
+                    const boostVolUsd = document.getElementById('boost-volume-usd');
+                    const boostTotalSales = document.getElementById('boost-total-sales');
+                    if (boostVolUsd) boostVolUsd.textContent = `$${boostVolume.toFixed(2)}`;
+                    if (boostTotalSales) boostTotalSales.textContent = `${boostSales} sales`;
                 }
                 
                 // Make globally accessible for price update callback
@@ -7524,6 +7839,7 @@ est. APR 58.53 %"></textarea>
                 setupFilterButtons();
                 loadNftStatus();      // Load deving.zone for listing counts
                 loadSalesHistory();   // Load sales history for volume/sales
+                fetchBblCollectionStats(); // Load live BBL stats (floor, volume)
                 
                 // Sales Chart button handler
                 const salesChartBtn = document.getElementById('sales-chart-btn');
