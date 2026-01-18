@@ -8537,17 +8537,97 @@ est. APR 58.53 %"></textarea>
                         document.getElementById('boost-floor-usd').textContent = boostData.floorUsd > 0 ? `($${boostData.floorUsd.toFixed(2)})` : '';
                         document.getElementById('boost-listed-count').textContent = boostData.count || 0;
                         
-                        // Volume/sales - use live data if available for pixeLions/TLA, JSON for aDAO
+                        // Volume/sales - use live data for all collections
                         if (collectionKey === 'alliance_dao') {
                             // These come from our tracked sales data, not Boost API
                             // Will be populated by loadSalesHistory()
                         } else {
-                            // For pixeLions/TLA, show "Load data" or update when live data loads
-                            document.getElementById('boost-volume-usd').textContent = '--';
-                            document.getElementById('boost-total-sales').textContent = 'Click tab to load';
+                            // For pixeLions/TLA, auto-load live sales data
+                            const cacheKey = collectionKey === 'pixelions' ? 'pixelions' : 'tla';
+                            const contractAddress = collectionKey === 'pixelions' ? PIXELIONS_CONTRACT : TLA_LOCKS_CONTRACT;
+                            
+                            // Check if already cached
+                            if (window.liveBoostSalesCache?.[cacheKey]) {
+                                updateBoostTileWithLiveData(cacheKey);
+                            } else {
+                                // Show loading state and fetch
+                                document.getElementById('boost-volume-usd').textContent = '--';
+                                document.getElementById('boost-total-sales').innerHTML = '<i class="fas fa-spinner fa-spin text-xs"></i>';
+                                
+                                // Fetch live sales data (async, will update tile when done)
+                                fetchBoostSalesAndUpdateTile(cacheKey, contractAddress);
+                            }
                         }
                         
                         document.getElementById('boost-data-source').innerHTML = '<i class="fas fa-bolt text-yellow-400 mr-1"></i>Live from Boost';
+                    }
+                }
+                
+                // Fetch Boost sales and update tile (called from stats update)
+                async function fetchBoostSalesAndUpdateTile(cacheKey, contractAddress) {
+                    try {
+                        const result = await fetchBoostSales(contractAddress);
+                        
+                        if (result.sales && result.sales.length > 0) {
+                            const totalVolume = result.sales.reduce((sum, s) => sum + (s.to_usd || 0), 0);
+                            
+                            // Initialize cache if needed
+                            if (!window.liveBoostSalesCache) {
+                                window.liveBoostSalesCache = {};
+                            }
+                            
+                            // Transform sales for cache
+                            const transformedSales = result.sales.map(sale => {
+                                let tokenName = 'Token';
+                                const toId = sale.to_id || '';
+                                if (toId === 'uluna') tokenName = 'LUNA';
+                                else if (toId.includes('10aa3zdk')) tokenName = 'SOLID';
+                                else if (toId.includes('2C962DAB9F57FE')) tokenName = 'USDC';
+                                else if (toId.includes('ecgaz')) tokenName = 'ampLUNA';
+                                else if (toId.includes('17aj4')) tokenName = 'bLUNA';
+                                else if (toId.includes('roar')) tokenName = 'ROAR';
+                                
+                                return {
+                                    nft_id: sale.from_nft_id,
+                                    amount: (sale.to_amount || 0) / 1000000,
+                                    token: tokenName,
+                                    usd_at_time: sale.to_usd || 0,
+                                    timestamp: null,
+                                    launch_id: sale.launch_id,
+                                    seller: sale.creator,
+                                    marketplace: 'boost',
+                                    lockType: cacheKey === 'tla' ? detectLockType(sale) : null,
+                                    lockData: cacheKey === 'tla' ? {
+                                        lockId: sale.from_nft_id,
+                                        fromAmount: (sale.from_amount || 0) / 1000000,
+                                        fromUsd: sale.from_usd || 0,
+                                        toAmount: (sale.to_amount || 0) / 1000000,
+                                        toUsd: sale.to_usd || 0,
+                                        discount: sale.discount || 0
+                                    } : null
+                                };
+                            });
+                            
+                            transformedSales.sort((a, b) => b.launch_id - a.launch_id);
+                            
+                            window.liveBoostSalesCache[cacheKey] = {
+                                sales: transformedSales,
+                                totalCount: result.totalCount,
+                                totalVolume: totalVolume
+                            };
+                            
+                            updateBoostTileWithLiveData(cacheKey);
+                        } else {
+                            window.liveBoostSalesCache = window.liveBoostSalesCache || {};
+                            window.liveBoostSalesCache[cacheKey] = { sales: [], totalCount: 0, totalVolume: 0 };
+                            
+                            document.getElementById('boost-volume-usd').textContent = '$0.00';
+                            document.getElementById('boost-total-sales').textContent = '0 sales';
+                        }
+                    } catch (err) {
+                        console.error(`Failed to fetch ${cacheKey} sales:`, err);
+                        document.getElementById('boost-volume-usd').textContent = 'Error';
+                        document.getElementById('boost-total-sales').textContent = 'Failed';
                     }
                 }
                 
@@ -9717,8 +9797,9 @@ est. APR 58.53 %"></textarea>
                 
                 // Setup filter buttons
                 let boostSubFilter = 'adao'; // 'adao', 'pixelions', 'tla'
-                let liveBoostSalesCache = {}; // Cache for live Boost sales by collection
-                window.liveBoostSalesCache = liveBoostSalesCache; // Make available globally for updateBoostTileWithLiveData
+                // Use window global for cache (may be populated by tile fetch before this runs)
+                window.liveBoostSalesCache = window.liveBoostSalesCache || {};
+                let liveBoostSalesCache = window.liveBoostSalesCache;
                 
                 function setupFilterButtons() {
                     const allBtn = document.getElementById('sales-filter-all');
