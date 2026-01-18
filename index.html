@@ -980,6 +980,7 @@
                         <i class="fas fa-stream text-purple-400"></i>
                         Live Activity
                         <span class="text-[10px] bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded-full">7 days</span>
+                        <img src="https://pbs.twimg.com/profile_images/1572588537997434881/XhUfT1Hx_400x400.jpg" class="w-4 h-4 rounded" title="BBL Marketplace only">
                     </h3>
                     <div class="flex items-center gap-3">
                         <span id="activity-count" class="text-xs text-gray-500"></span>
@@ -8812,13 +8813,11 @@ est. APR 58.53 %"></textarea>
                     // Get NFT ID
                     const nftId = item.token_id;
                     
-                    // Use the same CDN URLs that work elsewhere in the dashboard
+                    // Use getNftImageUrl for aDAO, deving.zone for pixeLions
                     let imageUrl;
                     if (isAdao) {
-                        // aDAO uses Cloudflare CDN
-                        imageUrl = `${CLOUDFLARE_CDN}/${nftId}/public`;
+                        imageUrl = getNftImageUrl(nftId);
                     } else {
-                        // pixeLions uses deving.zone
                         imageUrl = `https://www.deving.zone/pixelions/images/${nftId}.png`;
                     }
                     
@@ -8827,9 +8826,15 @@ est. APR 58.53 %"></textarea>
                     const timeAgo = getTimeAgo(date);
                     
                     // Format price (convert from micro units)
-                    const price = item.event_type === 'settle' && item.final_price 
-                        ? (parseInt(item.final_price) / 1000000).toFixed(0)
-                        : (parseInt(item.reserve_price) / 1000000).toFixed(0);
+                    const priceNum = item.event_type === 'settle' && item.final_price 
+                        ? parseInt(item.final_price) / 1000000
+                        : parseInt(item.reserve_price) / 1000000;
+                    const price = priceNum.toFixed(0);
+                    
+                    // Calculate USD price
+                    const bLunaPrice = window.tokenPrices?.bLUNA || 0;
+                    const usdPrice = bLunaPrice > 0 ? (priceNum * bLunaPrice).toFixed(2) : null;
+                    const usdStr = usdPrice ? `<span class="text-green-400 text-[10px]">$${usdPrice}</span>` : '';
                     
                     // Event label
                     let eventLabel;
@@ -8840,9 +8845,6 @@ est. APR 58.53 %"></textarea>
                         default: eventLabel = item.event_type.toUpperCase();
                     }
                     
-                    // Buyer info for sales
-                    const buyerShort = item.buyer ? `→ ${item.buyer.slice(0, 6)}...` : '';
-                    
                     row.innerHTML = `
                         <img src="${imageUrl}" alt="#${nftId}" 
                              class="w-8 h-8 rounded object-cover flex-shrink-0"
@@ -8852,9 +8854,11 @@ est. APR 58.53 %"></textarea>
                             <span class="text-${collectionColor}-400 text-[9px]">${collectionName}</span>
                         </div>
                         <span class="activity-event ${item.event_type}">${eventLabel}</span>
-                        <span class="text-yellow-400 text-sm font-medium w-16 text-right">${price} bL</span>
+                        <div class="text-right w-24">
+                            <div class="text-yellow-400 text-sm font-medium">${price} bLUNA</div>
+                            ${usdStr}
+                        </div>
                         <span class="text-gray-500 text-xs w-16 text-right">${timeAgo}</span>
-                        ${item.event_type === 'settle' ? `<span class="text-gray-600 text-[10px] w-16 text-right hidden sm:block">${buyerShort}</span>` : '<span class="w-16 hidden sm:block"></span>'}
                     `;
                     
                     // Click to open transaction
