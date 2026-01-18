@@ -979,11 +979,9 @@
                     <h3 class="text-lg font-bold text-white flex items-center gap-2">
                         <i class="fas fa-stream text-purple-400"></i>
                         Live Activity
-                        <span class="text-[10px] bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded-full">
-                            <i class="fas fa-circle text-[6px] mr-1 animate-pulse"></i>7 days
-                        </span>
+                        <span class="text-[10px] bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded-full">7 days</span>
                     </h3>
-                    <div class="flex items-center gap-2">
+                    <div class="flex items-center gap-3">
                         <span id="activity-count" class="text-xs text-gray-500"></span>
                         <button id="refresh-activity" class="text-xs text-gray-500 hover:text-cyan-400 transition-colors" title="Refresh">
                             <i class="fas fa-sync-alt"></i>
@@ -991,51 +989,37 @@
                     </div>
                 </div>
                 
-                <div id="activity-container" class="overflow-x-auto pb-2">
-                    <div class="flex gap-3 min-w-max" id="activity-list">
-                        <div class="text-gray-500 text-sm py-4 px-2">
+                <div id="activity-container" class="bg-gray-800/30 rounded-lg overflow-hidden">
+                    <div id="activity-list" class="divide-y divide-gray-700/50">
+                        <div class="text-gray-500 text-sm py-4 px-3 text-center">
                             <i class="fas fa-spinner fa-spin mr-1"></i> Loading activity...
                         </div>
                     </div>
                 </div>
                 
                 <style>
-                    .activity-card {
-                        background: rgba(31, 41, 55, 0.5);
-                        border-radius: 0.5rem;
-                        padding: 0.75rem;
-                        min-width: 200px;
-                        max-width: 220px;
-                        border: 1px solid rgba(55, 65, 81, 0.5);
-                        transition: all 0.2s;
+                    .activity-row {
+                        display: flex;
+                        align-items: center;
+                        gap: 0.75rem;
+                        padding: 0.5rem 0.75rem;
+                        transition: background 0.15s;
                         cursor: pointer;
                     }
-                    .activity-card:hover {
-                        border-color: rgba(6, 182, 212, 0.5);
-                        background: rgba(31, 41, 55, 0.8);
+                    .activity-row:hover {
+                        background: rgba(55, 65, 81, 0.3);
                     }
-                    .activity-card.event-settle {
-                        border-left: 3px solid #10b981;
-                    }
-                    .activity-card.event-listed {
-                        border-left: 3px solid #3b82f6;
-                    }
-                    .activity-card.event-cancel {
-                        border-left: 3px solid #6b7280;
-                    }
-                    .activity-badge {
-                        font-size: 9px;
+                    .activity-event {
+                        font-size: 10px;
                         padding: 2px 6px;
                         border-radius: 4px;
                         font-weight: 600;
-                        text-transform: uppercase;
+                        min-width: 60px;
+                        text-align: center;
                     }
-                    .activity-badge.settle { background: rgba(16, 185, 129, 0.2); color: #10b981; }
-                    .activity-badge.listed { background: rgba(59, 130, 246, 0.2); color: #3b82f6; }
-                    .activity-badge.cancel { background: rgba(107, 114, 128, 0.2); color: #9ca3af; }
-                    #activity-container::-webkit-scrollbar { height: 6px; }
-                    #activity-container::-webkit-scrollbar-track { background: rgba(31, 41, 55, 0.5); border-radius: 3px; }
-                    #activity-container::-webkit-scrollbar-thumb { background: rgba(107, 114, 128, 0.5); border-radius: 3px; }
+                    .activity-event.settle { background: rgba(16, 185, 129, 0.2); color: #10b981; }
+                    .activity-event.listed { background: rgba(59, 130, 246, 0.2); color: #3b82f6; }
+                    .activity-event.cancel { background: rgba(107, 114, 128, 0.2); color: #9ca3af; }
                 </style>
             </div>
             
@@ -8747,7 +8731,7 @@ est. APR 58.53 %"></textarea>
                     if (!container) return;
                     
                     container.innerHTML = `
-                        <div class="text-gray-500 text-sm py-4 px-2">
+                        <div class="text-gray-500 text-sm py-4 px-3 text-center">
                             <i class="fas fa-spinner fa-spin mr-1"></i> Loading activity...
                         </div>
                     `;
@@ -8756,7 +8740,7 @@ est. APR 58.53 %"></textarea>
                     
                     if (!data || !data.auctionHistory) {
                         container.innerHTML = `
-                            <div class="text-gray-500 text-sm py-4 px-2">
+                            <div class="text-gray-500 text-sm py-4 px-3 text-center">
                                 <i class="fas fa-exclamation-triangle mr-1"></i> Failed to load activity
                             </div>
                         `;
@@ -8780,7 +8764,7 @@ est. APR 58.53 %"></textarea>
                     
                     if (relevantActivity.length === 0) {
                         container.innerHTML = `
-                            <div class="text-gray-500 text-sm py-4 px-2">
+                            <div class="text-gray-500 text-sm py-4 px-3 text-center">
                                 <i class="fas fa-info-circle mr-1"></i> No activity in the last 7 days
                             </div>
                         `;
@@ -8795,34 +8779,56 @@ est. APR 58.53 %"></textarea>
                     if (countEl) {
                         const sales = relevantActivity.filter(a => a.event_type === 'settle').length;
                         const listings = relevantActivity.filter(a => a.event_type === 'listed').length;
-                        countEl.textContent = `${sales} sales, ${listings} listings`;
+                        const cancels = relevantActivity.filter(a => a.event_type === 'cancel').length;
+                        let countText = [];
+                        if (sales > 0) countText.push(`${sales} sale${sales > 1 ? 's' : ''}`);
+                        if (listings > 0) countText.push(`${listings} listed`);
+                        if (cancels > 0) countText.push(`${cancels} cancel`);
+                        countEl.textContent = countText.join(', ');
                     }
                     
-                    // Render cards
+                    // Render rows
                     container.innerHTML = '';
                     
-                    relevantActivity.forEach(item => {
-                        const card = createActivityCard(item);
-                        container.appendChild(card);
+                    // Limit to 15 most recent
+                    relevantActivity.slice(0, 15).forEach(item => {
+                        const row = createActivityCard(item);
+                        container.appendChild(row);
                     });
+                    
+                    // Add "see more" indicator if truncated
+                    if (relevantActivity.length > 15) {
+                        const moreEl = document.createElement('div');
+                        moreEl.className = 'text-center text-xs text-gray-500 py-2';
+                        moreEl.textContent = `+${relevantActivity.length - 15} more in last 7 days`;
+                        container.appendChild(moreEl);
+                    }
                 }
                 
                 // Create activity card
                 function createActivityCard(item) {
-                    const card = document.createElement('div');
-                    card.className = `activity-card event-${item.event_type}`;
+                    const row = document.createElement('div');
+                    row.className = 'activity-row';
                     
                     // Determine collection
                     const isAdao = item.nft_contract === BBL_CONTRACT;
-                    const collectionName = isAdao ? 'aDAO' : 'pixeLions';
+                    const collectionName = isAdao ? 'aDAO' : 'pL';
                     const collectionColor = isAdao ? 'cyan' : 'orange';
                     
-                    // Get NFT ID from name
+                    // Get NFT ID
                     const nftId = item.token_id;
                     
-                    // Get image URL - use our CDN
+                    // Get image URL - convert IPFS to gateway or use CDN
                     let imageUrl;
-                    if (isAdao) {
+                    if (item.nft_image_url) {
+                        // Convert IPFS URL to gateway
+                        if (item.nft_image_url.startsWith('ipfs://')) {
+                            const ipfsHash = item.nft_image_url.replace('ipfs://', '');
+                            imageUrl = `https://cloudflare-ipfs.com/ipfs/${ipfsHash}`;
+                        } else {
+                            imageUrl = item.nft_image_url;
+                        }
+                    } else if (isAdao) {
                         imageUrl = `${CLOUDFLARE_CDN}/${nftId}/public`;
                     } else {
                         imageUrl = `https://www.deving.zone/pixelions/images/${nftId}.png`;
@@ -8837,62 +8843,38 @@ est. APR 58.53 %"></textarea>
                         ? (parseInt(item.final_price) / 1000000).toFixed(0)
                         : (parseInt(item.reserve_price) / 1000000).toFixed(0);
                     
-                    // Event badge
-                    let eventLabel, eventIcon;
+                    // Event label
+                    let eventLabel;
                     switch (item.event_type) {
-                        case 'settle':
-                            eventLabel = 'Sold';
-                            eventIcon = 'fa-check-circle';
-                            break;
-                        case 'listed':
-                            eventLabel = 'Listed';
-                            eventIcon = 'fa-tag';
-                            break;
-                        case 'cancel':
-                            eventLabel = 'Cancelled';
-                            eventIcon = 'fa-times-circle';
-                            break;
-                        default:
-                            eventLabel = item.event_type;
-                            eventIcon = 'fa-circle';
+                        case 'settle': eventLabel = 'SOLD'; break;
+                        case 'listed': eventLabel = 'LISTED'; break;
+                        case 'cancel': eventLabel = 'CANCEL'; break;
+                        default: eventLabel = item.event_type.toUpperCase();
                     }
                     
-                    // Truncate address
-                    const sellerShort = item.seller ? `${item.seller.slice(0, 8)}...` : '';
-                    const buyerShort = item.buyer ? `${item.buyer.slice(0, 8)}...` : '';
+                    // Buyer info for sales
+                    const buyerShort = item.buyer ? `→ ${item.buyer.slice(0, 6)}...` : '';
                     
-                    card.innerHTML = `
-                        <div class="flex items-start gap-2 mb-2">
-                            <img src="${imageUrl}" alt="#${nftId}" 
-                                 class="w-10 h-10 rounded object-cover flex-shrink-0"
-                                 onerror="this.src='https://placehold.co/40x40/1f2937/666?text=${nftId}'">
-                            <div class="flex-1 min-w-0">
-                                <div class="flex items-center gap-1 mb-0.5">
-                                    <span class="text-white text-sm font-bold">#${nftId}</span>
-                                    <span class="text-${collectionColor}-400 text-[9px] px-1 py-0.5 rounded bg-${collectionColor}-500/20">${collectionName}</span>
-                                </div>
-                                <span class="activity-badge ${item.event_type}">
-                                    <i class="fas ${eventIcon} mr-1"></i>${eventLabel}
-                                </span>
-                            </div>
+                    row.innerHTML = `
+                        <img src="${imageUrl}" alt="#${nftId}" 
+                             class="w-8 h-8 rounded object-cover flex-shrink-0"
+                             onerror="this.src='https://placehold.co/32x32/1f2937/666?text=${nftId}'">
+                        <div class="flex-1 min-w-0 flex items-center gap-2">
+                            <span class="text-white text-sm font-medium">#${nftId}</span>
+                            <span class="text-${collectionColor}-400 text-[9px]">${collectionName}</span>
                         </div>
-                        <div class="flex justify-between items-center text-xs">
-                            <span class="text-yellow-400 font-bold">${price} bLUNA</span>
-                            <span class="text-gray-500">${timeAgo}</span>
-                        </div>
-                        ${item.event_type === 'settle' && buyerShort ? `
-                            <div class="text-[10px] text-gray-500 mt-1 truncate">
-                                <i class="fas fa-arrow-right mr-1"></i>${buyerShort}
-                            </div>
-                        ` : ''}
+                        <span class="activity-event ${item.event_type}">${eventLabel}</span>
+                        <span class="text-yellow-400 text-sm font-medium w-20 text-right">${price} bL</span>
+                        <span class="text-gray-500 text-xs w-16 text-right">${timeAgo}</span>
+                        ${item.event_type === 'settle' ? `<span class="text-gray-600 text-[10px] w-20 text-right hidden sm:block">${buyerShort}</span>` : '<span class="w-20 hidden sm:block"></span>'}
                     `;
                     
                     // Click to open transaction
-                    card.addEventListener('click', () => {
+                    row.addEventListener('click', () => {
                         window.open(item.tx_explorer_url, '_blank');
                     });
                     
-                    return card;
+                    return row;
                 }
                 
                 // Helper: Get time ago string
