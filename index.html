@@ -973,6 +973,72 @@
                 </div>
             </div>
             
+            <!-- Live Activity Feed (Last 7 Days) -->
+            <div class="marketplace-section mb-6" id="live-activity-section">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                        <i class="fas fa-stream text-purple-400"></i>
+                        Live Activity
+                        <span class="text-[10px] bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded-full">
+                            <i class="fas fa-circle text-[6px] mr-1 animate-pulse"></i>7 days
+                        </span>
+                    </h3>
+                    <div class="flex items-center gap-2">
+                        <span id="activity-count" class="text-xs text-gray-500"></span>
+                        <button id="refresh-activity" class="text-xs text-gray-500 hover:text-cyan-400 transition-colors" title="Refresh">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="activity-container" class="overflow-x-auto pb-2">
+                    <div class="flex gap-3 min-w-max" id="activity-list">
+                        <div class="text-gray-500 text-sm py-4 px-2">
+                            <i class="fas fa-spinner fa-spin mr-1"></i> Loading activity...
+                        </div>
+                    </div>
+                </div>
+                
+                <style>
+                    .activity-card {
+                        background: rgba(31, 41, 55, 0.5);
+                        border-radius: 0.5rem;
+                        padding: 0.75rem;
+                        min-width: 200px;
+                        max-width: 220px;
+                        border: 1px solid rgba(55, 65, 81, 0.5);
+                        transition: all 0.2s;
+                        cursor: pointer;
+                    }
+                    .activity-card:hover {
+                        border-color: rgba(6, 182, 212, 0.5);
+                        background: rgba(31, 41, 55, 0.8);
+                    }
+                    .activity-card.event-settle {
+                        border-left: 3px solid #10b981;
+                    }
+                    .activity-card.event-listed {
+                        border-left: 3px solid #3b82f6;
+                    }
+                    .activity-card.event-cancel {
+                        border-left: 3px solid #6b7280;
+                    }
+                    .activity-badge {
+                        font-size: 9px;
+                        padding: 2px 6px;
+                        border-radius: 4px;
+                        font-weight: 600;
+                        text-transform: uppercase;
+                    }
+                    .activity-badge.settle { background: rgba(16, 185, 129, 0.2); color: #10b981; }
+                    .activity-badge.listed { background: rgba(59, 130, 246, 0.2); color: #3b82f6; }
+                    .activity-badge.cancel { background: rgba(107, 114, 128, 0.2); color: #9ca3af; }
+                    #activity-container::-webkit-scrollbar { height: 6px; }
+                    #activity-container::-webkit-scrollbar-track { background: rgba(31, 41, 55, 0.5); border-radius: 3px; }
+                    #activity-container::-webkit-scrollbar-thumb { background: rgba(107, 114, 128, 0.5); border-radius: 3px; }
+                </style>
+            </div>
+            
             <!-- Combined Current Listings Section -->
             <div class="marketplace-section mb-6">
                 <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
@@ -8658,6 +8724,208 @@ est. APR 58.53 %"></textarea>
                     if (salesEl) salesEl.textContent = `${boostSales} sales`;
                 }
                 
+                // ==================== LIVE ACTIVITY FEED ====================
+                
+                // Fetch BBL activity feed
+                async function fetchBblActivity() {
+                    const url = `${BBL_API_BASE}/activity?page=1&perPage=100&chains=phoenix-1`;
+                    try {
+                        const response = await fetchWithCorsProxy(url);
+                        if (!response.ok) throw new Error('Activity fetch failed');
+                        return await response.json();
+                    } catch (err) {
+                        console.error('Failed to fetch BBL activity:', err);
+                        return null;
+                    }
+                }
+                
+                // Render activity feed
+                async function renderActivityFeed() {
+                    const container = document.getElementById('activity-list');
+                    const countEl = document.getElementById('activity-count');
+                    
+                    if (!container) return;
+                    
+                    container.innerHTML = `
+                        <div class="text-gray-500 text-sm py-4 px-2">
+                            <i class="fas fa-spinner fa-spin mr-1"></i> Loading activity...
+                        </div>
+                    `;
+                    
+                    const data = await fetchBblActivity();
+                    
+                    if (!data || !data.auctionHistory) {
+                        container.innerHTML = `
+                            <div class="text-gray-500 text-sm py-4 px-2">
+                                <i class="fas fa-exclamation-triangle mr-1"></i> Failed to load activity
+                            </div>
+                        `;
+                        return;
+                    }
+                    
+                    // Filter for aDAO and pixeLions only, last 7 days
+                    const sevenDaysAgo = new Date();
+                    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+                    
+                    const relevantActivity = data.auctionHistory.filter(item => {
+                        // Check if it's aDAO or pixeLions
+                        const isRelevant = item.nft_contract === BBL_CONTRACT || 
+                                          item.nft_contract === PIXELIONS_CONTRACT;
+                        // Check if within last 7 days
+                        const itemDate = new Date(item.timestamp);
+                        const isRecent = itemDate >= sevenDaysAgo;
+                        
+                        return isRelevant && isRecent;
+                    });
+                    
+                    if (relevantActivity.length === 0) {
+                        container.innerHTML = `
+                            <div class="text-gray-500 text-sm py-4 px-2">
+                                <i class="fas fa-info-circle mr-1"></i> No activity in the last 7 days
+                            </div>
+                        `;
+                        if (countEl) countEl.textContent = '';
+                        return;
+                    }
+                    
+                    // Sort by timestamp (newest first)
+                    relevantActivity.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                    
+                    // Update count
+                    if (countEl) {
+                        const sales = relevantActivity.filter(a => a.event_type === 'settle').length;
+                        const listings = relevantActivity.filter(a => a.event_type === 'listed').length;
+                        countEl.textContent = `${sales} sales, ${listings} listings`;
+                    }
+                    
+                    // Render cards
+                    container.innerHTML = '';
+                    
+                    relevantActivity.forEach(item => {
+                        const card = createActivityCard(item);
+                        container.appendChild(card);
+                    });
+                }
+                
+                // Create activity card
+                function createActivityCard(item) {
+                    const card = document.createElement('div');
+                    card.className = `activity-card event-${item.event_type}`;
+                    
+                    // Determine collection
+                    const isAdao = item.nft_contract === BBL_CONTRACT;
+                    const collectionName = isAdao ? 'aDAO' : 'pixeLions';
+                    const collectionColor = isAdao ? 'cyan' : 'orange';
+                    
+                    // Get NFT ID from name
+                    const nftId = item.token_id;
+                    
+                    // Get image URL - use our CDN
+                    let imageUrl;
+                    if (isAdao) {
+                        imageUrl = `${CLOUDFLARE_CDN}/${nftId}/public`;
+                    } else {
+                        imageUrl = `https://www.deving.zone/pixelions/images/${nftId}.png`;
+                    }
+                    
+                    // Format timestamp
+                    const date = new Date(item.timestamp);
+                    const timeAgo = getTimeAgo(date);
+                    
+                    // Format price (convert from micro units)
+                    const price = item.event_type === 'settle' && item.final_price 
+                        ? (parseInt(item.final_price) / 1000000).toFixed(0)
+                        : (parseInt(item.reserve_price) / 1000000).toFixed(0);
+                    
+                    // Event badge
+                    let eventLabel, eventIcon;
+                    switch (item.event_type) {
+                        case 'settle':
+                            eventLabel = 'Sold';
+                            eventIcon = 'fa-check-circle';
+                            break;
+                        case 'listed':
+                            eventLabel = 'Listed';
+                            eventIcon = 'fa-tag';
+                            break;
+                        case 'cancel':
+                            eventLabel = 'Cancelled';
+                            eventIcon = 'fa-times-circle';
+                            break;
+                        default:
+                            eventLabel = item.event_type;
+                            eventIcon = 'fa-circle';
+                    }
+                    
+                    // Truncate address
+                    const sellerShort = item.seller ? `${item.seller.slice(0, 8)}...` : '';
+                    const buyerShort = item.buyer ? `${item.buyer.slice(0, 8)}...` : '';
+                    
+                    card.innerHTML = `
+                        <div class="flex items-start gap-2 mb-2">
+                            <img src="${imageUrl}" alt="#${nftId}" 
+                                 class="w-10 h-10 rounded object-cover flex-shrink-0"
+                                 onerror="this.src='https://placehold.co/40x40/1f2937/666?text=${nftId}'">
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-1 mb-0.5">
+                                    <span class="text-white text-sm font-bold">#${nftId}</span>
+                                    <span class="text-${collectionColor}-400 text-[9px] px-1 py-0.5 rounded bg-${collectionColor}-500/20">${collectionName}</span>
+                                </div>
+                                <span class="activity-badge ${item.event_type}">
+                                    <i class="fas ${eventIcon} mr-1"></i>${eventLabel}
+                                </span>
+                            </div>
+                        </div>
+                        <div class="flex justify-between items-center text-xs">
+                            <span class="text-yellow-400 font-bold">${price} bLUNA</span>
+                            <span class="text-gray-500">${timeAgo}</span>
+                        </div>
+                        ${item.event_type === 'settle' && buyerShort ? `
+                            <div class="text-[10px] text-gray-500 mt-1 truncate">
+                                <i class="fas fa-arrow-right mr-1"></i>${buyerShort}
+                            </div>
+                        ` : ''}
+                    `;
+                    
+                    // Click to open transaction
+                    card.addEventListener('click', () => {
+                        window.open(item.tx_explorer_url, '_blank');
+                    });
+                    
+                    return card;
+                }
+                
+                // Helper: Get time ago string
+                function getTimeAgo(date) {
+                    const now = new Date();
+                    const diffMs = now - date;
+                    const diffMins = Math.floor(diffMs / 60000);
+                    const diffHours = Math.floor(diffMs / 3600000);
+                    const diffDays = Math.floor(diffMs / 86400000);
+                    
+                    if (diffMins < 60) return `${diffMins}m ago`;
+                    if (diffHours < 24) return `${diffHours}h ago`;
+                    if (diffDays === 1) return 'Yesterday';
+                    return `${diffDays}d ago`;
+                }
+                
+                // Setup activity feed refresh button
+                function setupActivityFeed() {
+                    const refreshBtn = document.getElementById('refresh-activity');
+                    if (refreshBtn) {
+                        refreshBtn.addEventListener('click', async () => {
+                            refreshBtn.classList.add('animate-spin');
+                            await renderActivityFeed();
+                            setTimeout(() => refreshBtn.classList.remove('animate-spin'), 500);
+                        });
+                    }
+                    
+                    // Initial load
+                    renderActivityFeed();
+                }
+                
+                // ==================== END LIVE ACTIVITY FEED ====================
+                
                 // Fetch BBL stats for specific collection
                 async function fetchBblCollectionStatsFor(contract) {
                     try {
@@ -10079,6 +10347,7 @@ est. APR 58.53 %"></textarea>
                 setupListingsFilters();   // Listings filter buttons
                 loadNftStatus();          // Load deving.zone for listing counts
                 loadSalesHistory();       // Load sales history for volume/sales
+                setupActivityFeed();      // Load live activity feed
                 
                 // Load ALL marketplace data once (wait for token prices first)
                 async function initializeMarketplace() {
