@@ -8005,10 +8005,13 @@ est. APR 58.53 %"></textarea>
                             };
                             
                             const proxyUrl = CORS_PROXY + encodeURIComponent(BOOST_API_URL);
+                            const requestBody = JSON.stringify(query);
+                            console.log('Boost API request body:', requestBody.slice(0, 800));
+                            
                             const response = await fetch(proxyUrl, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify(query)
+                                body: requestBody
                             });
                             
                             if (response.status === 429) {
@@ -8016,15 +8019,37 @@ est. APR 58.53 %"></textarea>
                                 break;
                             }
                             
-                            if (!response.ok) throw new Error('Fetch failed');
+                            if (!response.ok) {
+                                console.error('Boost API response not OK:', response.status, response.statusText);
+                                throw new Error('Fetch failed');
+                            }
                             
-                            const data = await response.json();
+                            const responseText = await response.text();
+                            console.log('Boost API raw text (first 500 chars):', responseText.slice(0, 500));
+                            
+                            let data;
+                            try {
+                                data = JSON.parse(responseText);
+                            } catch (e) {
+                                console.error('Failed to parse Boost API response:', e);
+                                console.log('Full response text:', responseText);
+                                throw e;
+                            }
+                            
+                            console.log('Boost API parsed response:', JSON.stringify(data).slice(0, 500));
+                            
                             const launches = data.data?.launches || [];
                             
                             // Get total count from first page
                             if (totalCount === null) {
                                 totalCount = data.data?.aggregateLaunch?._count?._all || 0;
                                 console.log(`Total Boost sales for collection: ${totalCount}`);
+                                
+                                // Debug: log what we got
+                                if (totalCount === 0) {
+                                    console.log('DEBUG: Query returned 0 results. Collection:', collectionContract);
+                                    console.log('DEBUG: Full response data:', data);
+                                }
                             }
                             
                             // No more results - stop
