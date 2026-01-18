@@ -1032,32 +1032,22 @@
                     <h3 class="text-lg font-bold text-white flex items-center gap-2">
                         <i class="fas fa-receipt text-green-400"></i>
                         Recent Sales
-                        <span id="live-boost-stats-badge" class="hidden text-[10px] bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full">
-                            <i class="fas fa-bolt mr-1"></i>Live
-                        </span>
                     </h3>
                     <div class="flex gap-2 items-center">
                         <button id="sales-filter-all" class="text-xs px-3 py-1 rounded bg-cyan-600 text-white">All</button>
                         <button id="sales-filter-bbl" class="text-xs px-3 py-1 rounded bg-gray-700 text-gray-300 hover:bg-gray-600">BBL</button>
                         <button id="sales-filter-boost" class="text-xs px-3 py-1 rounded bg-gray-700 text-gray-300 hover:bg-gray-600">Boost</button>
-                        <button id="load-live-boost-stats" class="text-xs px-3 py-1 rounded bg-purple-600/50 text-purple-300 hover:bg-purple-600 border border-purple-500/30" title="Load live Boost sales data">
-                            <i class="fas fa-sync-alt mr-1"></i>Live Stats
-                        </button>
                     </div>
                 </div>
                 
-                <!-- Live Boost Stats Panel (hidden until loaded) -->
-                <div id="live-boost-stats-panel" class="hidden mb-4 p-3 bg-purple-900/20 border border-purple-500/30 rounded-lg">
-                    <div class="flex items-center justify-between">
-                        <div class="text-sm text-purple-300">
-                            <i class="fas fa-bolt text-yellow-400 mr-1"></i>
-                            <span class="font-bold">Live Boost Data:</span>
-                            <span id="live-boost-total-sales">--</span> sales |
-                            <span id="live-boost-total-volume">--</span> USD volume
-                        </div>
-                        <button id="view-boost-sales-detail" class="text-xs px-2 py-1 bg-purple-600/50 text-purple-300 rounded hover:bg-purple-600">
-                            View All <i class="fas fa-external-link-alt ml-1"></i>
-                        </button>
+                <!-- Boost Sub-tabs (hidden until Boost filter selected) -->
+                <div id="boost-subtabs" class="hidden mb-3">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <span class="text-xs text-gray-500">Collection:</span>
+                        <button id="boost-sub-adao" class="text-[10px] px-2 py-1 rounded bg-purple-600 text-white">aDAO</button>
+                        <button id="boost-sub-pixelions" class="text-[10px] px-2 py-1 rounded bg-gray-700 text-gray-300 hover:bg-gray-600">pixeLions</button>
+                        <button id="boost-sub-tla" class="text-[10px] px-2 py-1 rounded bg-gray-700 text-gray-300 hover:bg-gray-600">TLA Locks</button>
+                        <span id="boost-live-stats" class="ml-auto text-[10px] text-gray-400"></span>
                     </div>
                 </div>
                 
@@ -7273,6 +7263,7 @@ est. APR 58.53 %"></textarea>
                 const SALES_BASE_URL = 'https://raw.githubusercontent.com/defipatriot/adao_json_storage/main/';
                 const BBL_CONTRACT = 'terra1phr9fngjv7a8an4dhmhd0u0f98wazxfnzccqtyheq4zqrrp4fpuqw3apw9';
                 const PIXELIONS_CONTRACT = 'terra17z7fpaa8kah698xn5tarrcucvualdy4wsztkfc404g3garucpu6qmxp50g';
+                const TLA_LOCKS_CONTRACT = 'terra1uqhj8agyeaz8fu6mdggfuwr3lp32jlrx5hqag4jxexde92rzkamq3l62zg';
                 
                 // BBL API endpoints
                 const BBL_API_BASE = 'https://warlock.backbonelabs.io/api/v1/dapps/necropolis';
@@ -9550,22 +9541,55 @@ est. APR 58.53 %"></textarea>
                     if (salesFilter === 'all' || salesFilter === 'bbl') {
                         (salesData.sales.bbl || []).forEach(s => allSales.push({ ...s, marketplace: 'bbl' }));
                     }
-                    if (salesFilter === 'all' || salesFilter === 'boost') {
+                    
+                    if (salesFilter === 'all') {
+                        // For "All", show aDAO Boost sales from JSON
                         (salesData.sales.boost || []).forEach(s => allSales.push({ ...s, marketplace: 'boost' }));
+                    } else if (salesFilter === 'boost') {
+                        // For Boost filter, use sub-tabs
+                        if (boostSubFilter === 'adao') {
+                            (salesData.sales.boost || []).forEach(s => allSales.push({ ...s, marketplace: 'boost' }));
+                        } else if (boostSubFilter === 'pixelions' && liveBoostSalesCache.pixelions?.sales) {
+                            liveBoostSalesCache.pixelions.sales.forEach(s => allSales.push({ ...s, collection: 'pixelions' }));
+                        } else if (boostSubFilter === 'tla' && liveBoostSalesCache.tla?.sales) {
+                            liveBoostSalesCache.tla.sales.forEach(s => allSales.push({ ...s, collection: 'tla_locks' }));
+                        }
+                        // Update stats display
+                        updateBoostLiveStatsDisplay();
                     }
                     
-                    allSales.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                    // Sort by timestamp (JSON data) or launch_id (live data)
+                    allSales.sort((a, b) => {
+                        if (a.timestamp && b.timestamp) {
+                            return new Date(b.timestamp) - new Date(a.timestamp);
+                        }
+                        // Fall back to launch_id for live data
+                        return (b.launch_id || 0) - (a.launch_id || 0);
+                    });
                     
                     container.innerHTML = '';
                     
                     if (allSales.length === 0) {
-                        container.innerHTML = '<div class="text-gray-500 text-sm text-center py-8 col-span-full">No sales found</div>';
+                        let message = 'No sales found';
+                        if (salesFilter === 'boost' && (boostSubFilter === 'pixelions' || boostSubFilter === 'tla')) {
+                            if (!liveBoostSalesCache[boostSubFilter]) {
+                                message = '<i class="fas fa-spinner fa-spin mr-1"></i> Loading sales data...';
+                            }
+                        }
+                        container.innerHTML = `<div class="text-gray-500 text-sm text-center py-8 col-span-full">${message}</div>`;
                         loadMoreBtn.classList.add('hidden');
                         return;
                     }
                     
                     allSales.slice(0, displayedSalesCount).forEach(sale => {
-                        container.appendChild(createSaleRow(sale, sale.marketplace));
+                        // Use different row creator for live Boost sales (pixeLions/TLA)
+                        if (sale.collection === 'pixelions') {
+                            container.appendChild(createLiveBoostSaleRow(sale, 'pixelions'));
+                        } else if (sale.collection === 'tla_locks') {
+                            container.appendChild(createLiveBoostSaleRow(sale, 'tla_locks'));
+                        } else {
+                            container.appendChild(createSaleRow(sale, sale.marketplace));
+                        }
                     });
                     
                     // Update Show More button
@@ -9579,12 +9603,95 @@ est. APR 58.53 %"></textarea>
                     }
                 }
                 
+                // Create sale row for live Boost data (pixeLions/TLA Locks)
+                function createLiveBoostSaleRow(sale, collection) {
+                    const row = document.createElement('div');
+                    row.className = 'recent-sale-row cursor-pointer';
+                    
+                    // No timestamp for live Boost data
+                    const dateStr = '<span class="text-gray-500 text-[10px]">via Boost</span>';
+                    
+                    // Get appropriate image URL
+                    let imageUrl;
+                    if (collection === 'pixelions') {
+                        imageUrl = `https://cloudflare-ipfs.com/ipfs/bafybeigfixpqfxcppmnsdumnn5j5vsb6q55s5hxuuuqvj5c2awjcqq5s3m/${sale.nft_id}.png`;
+                    } else if (collection === 'tla_locks') {
+                        // TLA Lock - use token logo
+                        const tokenInfo = TLA_LOCK_TOKENS[sale.lockType] || TLA_LOCK_TOKENS['arbLUNA'];
+                        imageUrl = tokenInfo.logo;
+                    } else {
+                        imageUrl = `https://placehold.co/48x48/1f2937/666?text=${sale.nft_id}`;
+                    }
+                    
+                    const usdStr = sale.usd_at_time ? `<div class="sale-usd">$${sale.usd_at_time.toFixed(2)}</div>` : '';
+                    
+                    // Seller info (truncated)
+                    const sellerShort = sale.seller ? `${sale.seller.slice(0, 8)}...` : '';
+                    const sellerInfo = sale.seller 
+                        ? `<div class="text-[9px] text-gray-500"><i class="fas fa-user mr-1"></i>${sellerShort}</div>` 
+                        : '';
+                    
+                    // Collection badge
+                    const collectionBadge = collection === 'pixelions' 
+                        ? '<span class="text-[9px] px-1 py-0.5 rounded bg-orange-600/30 text-orange-400">pixeLions</span>'
+                        : '<span class="text-[9px] px-1 py-0.5 rounded bg-purple-600/30 text-purple-400">TLA Lock</span>';
+                    
+                    // For TLA Locks, show discount
+                    let discountBadge = '';
+                    if (collection === 'tla_locks' && sale.lockData) {
+                        const discountPct = (sale.lockData.discount * 100).toFixed(1);
+                        const isDiscount = sale.lockData.discount > 0;
+                        discountBadge = isDiscount 
+                            ? `<span class="text-[9px] text-green-400">+${discountPct}%</span>`
+                            : `<span class="text-[9px] text-red-400">${discountPct}%</span>`;
+                    }
+                    
+                    row.innerHTML = `
+                        <div class="relative">
+                            <img src="${imageUrl}" alt="#${sale.nft_id}" loading="lazy"
+                                 class="w-12 h-12 rounded object-cover ${collection === 'tla_locks' ? 'p-1 bg-gray-800' : ''}"
+                                 onerror="this.src='https://placehold.co/48x48/1f2937/666?text=${sale.nft_id}'">
+                            ${collection === 'tla_locks' ? '<div class="absolute -bottom-1 -right-1 w-4 h-4 bg-purple-600 rounded-full flex items-center justify-center"><i class="fas fa-lock text-white text-[8px]"></i></div>' : ''}
+                        </div>
+                        <div class="sale-info">
+                            <div class="sale-nft-id">#${sale.nft_id} ${collectionBadge}</div>
+                            <div class="sale-date flex items-center gap-2">${dateStr} ${discountBadge}</div>
+                            ${sellerInfo}
+                        </div>
+                        <div class="sale-price text-right">
+                            <div class="sale-amount">${sale.amount.toLocaleString(undefined, {maximumFractionDigits: 4})} ${sale.token}</div>
+                            ${usdStr}
+                        </div>
+                    `;
+                    
+                    // Click to view on Boost or Terra Finder
+                    row.addEventListener('click', () => {
+                        if (collection === 'tla_locks') {
+                            window.open(`https://www.boostdao.io/launch/${sale.launch_id}`, '_blank');
+                        } else {
+                            window.open(`https://www.boostdao.io/launch/${sale.launch_id}`, '_blank');
+                        }
+                    });
+                    
+                    return row;
+                }
+                
                 // Setup filter buttons
+                let boostSubFilter = 'adao'; // 'adao', 'pixelions', 'tla'
+                let liveBoostSalesCache = {}; // Cache for live Boost sales by collection
+                
                 function setupFilterButtons() {
                     const allBtn = document.getElementById('sales-filter-all');
                     const bblBtn = document.getElementById('sales-filter-bbl');
                     const boostBtn = document.getElementById('sales-filter-boost');
                     const loadMoreBtn = document.getElementById('load-more-sales');
+                    const boostSubtabs = document.getElementById('boost-subtabs');
+                    
+                    // Boost sub-tab buttons
+                    const subAdao = document.getElementById('boost-sub-adao');
+                    const subPixelions = document.getElementById('boost-sub-pixelions');
+                    const subTla = document.getElementById('boost-sub-tla');
+                    const boostLiveStats = document.getElementById('boost-live-stats');
                     
                     const setActive = (activeBtn) => {
                         [allBtn, bblBtn, boostBtn].forEach(btn => {
@@ -9592,165 +9699,162 @@ est. APR 58.53 %"></textarea>
                                 ? 'text-xs px-3 py-1 rounded bg-cyan-600 text-white'
                                 : 'text-xs px-3 py-1 rounded bg-gray-700 text-gray-300 hover:bg-gray-600';
                         });
+                        // Show/hide boost subtabs
+                        if (activeBtn === boostBtn) {
+                            boostSubtabs.classList.remove('hidden');
+                        } else {
+                            boostSubtabs.classList.add('hidden');
+                        }
                     };
                     
-                    allBtn.addEventListener('click', () => { salesFilter = 'all'; displayedSalesCount = 12; setActive(allBtn); renderRecentSales(); });
-                    bblBtn.addEventListener('click', () => { salesFilter = 'bbl'; displayedSalesCount = 12; setActive(bblBtn); renderRecentSales(); });
-                    boostBtn.addEventListener('click', () => { salesFilter = 'boost'; displayedSalesCount = 12; setActive(boostBtn); renderRecentSales(); });
+                    const setSubActive = (activeSubBtn) => {
+                        [subAdao, subPixelions, subTla].forEach(btn => {
+                            btn.className = btn === activeSubBtn 
+                                ? 'text-[10px] px-2 py-1 rounded bg-purple-600 text-white'
+                                : 'text-[10px] px-2 py-1 rounded bg-gray-700 text-gray-300 hover:bg-gray-600';
+                        });
+                    };
+                    
+                    allBtn.addEventListener('click', () => { 
+                        salesFilter = 'all'; 
+                        displayedSalesCount = 12; 
+                        setActive(allBtn); 
+                        renderRecentSales(); 
+                    });
+                    
+                    bblBtn.addEventListener('click', () => { 
+                        salesFilter = 'bbl'; 
+                        displayedSalesCount = 12; 
+                        setActive(bblBtn); 
+                        renderRecentSales(); 
+                    });
+                    
+                    boostBtn.addEventListener('click', () => { 
+                        salesFilter = 'boost'; 
+                        boostSubFilter = 'adao';
+                        displayedSalesCount = 12; 
+                        setActive(boostBtn);
+                        setSubActive(subAdao);
+                        renderRecentSales(); 
+                    });
+                    
+                    // Boost sub-tab handlers
+                    subAdao.addEventListener('click', () => {
+                        boostSubFilter = 'adao';
+                        displayedSalesCount = 12;
+                        setSubActive(subAdao);
+                        renderRecentSales();
+                    });
+                    
+                    subPixelions.addEventListener('click', async () => {
+                        boostSubFilter = 'pixelions';
+                        displayedSalesCount = 12;
+                        setSubActive(subPixelions);
+                        // Load live data if not cached
+                        if (!liveBoostSalesCache.pixelions) {
+                            boostLiveStats.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading pixeLions sales...';
+                            await loadLiveBoostSalesFor('pixelions', PIXELIONS_CONTRACT);
+                        }
+                        renderRecentSales();
+                    });
+                    
+                    subTla.addEventListener('click', async () => {
+                        boostSubFilter = 'tla';
+                        displayedSalesCount = 12;
+                        setSubActive(subTla);
+                        // Load live data if not cached
+                        if (!liveBoostSalesCache.tla) {
+                            boostLiveStats.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading TLA Lock sales...';
+                            await loadLiveBoostSalesFor('tla', TLA_LOCKS_CONTRACT);
+                        }
+                        renderRecentSales();
+                    });
+                    
                     loadMoreBtn.addEventListener('click', () => { displayedSalesCount += 12; renderRecentSales(); });
-                    
-                    // Live Boost Stats button handler
-                    const liveStatsBtn = document.getElementById('load-live-boost-stats');
-                    if (liveStatsBtn) {
-                        liveStatsBtn.addEventListener('click', loadLiveBoostStats);
-                    }
-                    
-                    // View Boost Sales Detail button
-                    const viewDetailBtn = document.getElementById('view-boost-sales-detail');
-                    if (viewDetailBtn) {
-                        viewDetailBtn.addEventListener('click', showBoostSalesModal);
-                    }
                 }
                 
-                // Store live Boost sales data
-                let liveBoostSalesData = null;
-                
-                // Load live Boost sales stats
-                async function loadLiveBoostStats() {
-                    const btn = document.getElementById('load-live-boost-stats');
-                    const panel = document.getElementById('live-boost-stats-panel');
-                    const badge = document.getElementById('live-boost-stats-badge');
-                    const totalSalesEl = document.getElementById('live-boost-total-sales');
-                    const totalVolumeEl = document.getElementById('live-boost-total-volume');
-                    
-                    // Show loading state
-                    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Loading...';
-                    btn.disabled = true;
+                // Load live Boost sales for a collection
+                async function loadLiveBoostSalesFor(cacheKey, contractAddress) {
+                    const boostLiveStats = document.getElementById('boost-live-stats');
                     
                     try {
-                        // Fetch Alliance DAO sales
-                        const adaoSales = await fetchBoostSales(BBL_CONTRACT);
+                        const result = await fetchBoostSales(contractAddress);
                         
-                        // Optionally fetch pixeLions sales too
-                        // const pixelionsSales = await fetchBoostSales(PIXELIONS_CONTRACT);
-                        
-                        // Combine and calculate stats
-                        const allSales = adaoSales.sales || [];
-                        const totalVolume = allSales.reduce((sum, s) => sum + (s.to_usd || 0), 0);
-                        
-                        // Store for modal
-                        liveBoostSalesData = {
-                            adao: adaoSales.sales || [],
-                            totalCount: adaoSales.totalCount || allSales.length,
-                            totalVolume: totalVolume
-                        };
-                        
-                        // Update display
-                        totalSalesEl.textContent = liveBoostSalesData.totalCount;
-                        totalVolumeEl.textContent = '$' + totalVolume.toFixed(2);
-                        
-                        // Show panel and badge
-                        panel.classList.remove('hidden');
-                        badge.classList.remove('hidden');
-                        
-                        // Update button
-                        btn.innerHTML = '<i class="fas fa-check mr-1"></i>Loaded';
-                        btn.className = 'text-xs px-3 py-1 rounded bg-green-600/50 text-green-300 border border-green-500/30';
-                        
-                        console.log('Live Boost stats loaded:', liveBoostSalesData);
-                        
+                        if (result.sales && result.sales.length > 0) {
+                            // Transform to match our sale format
+                            const transformedSales = result.sales.map(sale => {
+                                // Determine token name
+                                let tokenName = 'Token';
+                                const toId = sale.to_id || '';
+                                if (toId === 'uluna') tokenName = 'LUNA';
+                                else if (toId.includes('10aa3zdk')) tokenName = 'SOLID';
+                                else if (toId.includes('2C962DAB9F57FE')) tokenName = 'USDC';
+                                else if (toId.includes('ecgaz')) tokenName = 'ampLUNA';
+                                else if (toId.includes('17aj4')) tokenName = 'bLUNA';
+                                else if (toId.includes('roar')) tokenName = 'ROAR';
+                                
+                                return {
+                                    nft_id: sale.from_nft_id,
+                                    amount: (sale.to_amount || 0) / 1000000,
+                                    token: tokenName,
+                                    usd_at_time: sale.to_usd || 0,
+                                    timestamp: null, // No timestamp from Boost
+                                    launch_id: sale.launch_id,
+                                    seller: sale.creator,
+                                    marketplace: 'boost',
+                                    // For TLA Locks, include lock data
+                                    lockType: cacheKey === 'tla' ? detectLockType(sale) : null,
+                                    lockData: cacheKey === 'tla' ? {
+                                        lockId: sale.from_nft_id,
+                                        fromAmount: (sale.from_amount || 0) / 1000000,
+                                        fromUsd: sale.from_usd || 0,
+                                        toAmount: (sale.to_amount || 0) / 1000000,
+                                        toUsd: sale.to_usd || 0,
+                                        discount: sale.discount || 0
+                                    } : null
+                                };
+                            });
+                            
+                            // Sort by launch_id descending (most recent first)
+                            transformedSales.sort((a, b) => b.launch_id - a.launch_id);
+                            
+                            // Calculate volume
+                            const totalVolume = result.sales.reduce((sum, s) => sum + (s.to_usd || 0), 0);
+                            
+                            liveBoostSalesCache[cacheKey] = {
+                                sales: transformedSales,
+                                totalCount: result.totalCount,
+                                totalVolume: totalVolume
+                            };
+                            
+                            boostLiveStats.innerHTML = `<i class="fas fa-bolt text-yellow-400"></i> ${result.totalCount} sales | $${totalVolume.toFixed(2)} volume`;
+                        } else {
+                            liveBoostSalesCache[cacheKey] = { sales: [], totalCount: 0, totalVolume: 0 };
+                            boostLiveStats.innerHTML = `<i class="fas fa-info-circle text-gray-500"></i> No sales found`;
+                        }
                     } catch (err) {
-                        console.error('Failed to load live Boost stats:', err);
-                        btn.innerHTML = '<i class="fas fa-exclamation-triangle mr-1"></i>Error';
-                        btn.className = 'text-xs px-3 py-1 rounded bg-red-600/50 text-red-300 border border-red-500/30';
+                        console.error(`Failed to load ${cacheKey} sales:`, err);
+                        boostLiveStats.innerHTML = `<i class="fas fa-exclamation-triangle text-red-400"></i> Error loading`;
+                        liveBoostSalesCache[cacheKey] = { sales: [], totalCount: 0, totalVolume: 0, error: true };
                     }
-                    
-                    btn.disabled = false;
                 }
                 
-                // Show Boost Sales Modal with seller info
-                function showBoostSalesModal() {
-                    if (!liveBoostSalesData?.adao?.length) {
-                        alert('No Boost sales data loaded. Click "Live Stats" first.');
-                        return;
+                // Update renderRecentSales to handle sub-tabs
+                function updateBoostLiveStatsDisplay() {
+                    const boostLiveStats = document.getElementById('boost-live-stats');
+                    if (!boostLiveStats) return;
+                    
+                    if (salesFilter === 'boost') {
+                        if (boostSubFilter === 'adao') {
+                            // Show stats from JSON data
+                            const boostSales = salesData?.sales?.boost || [];
+                            const totalVolume = boostSales.reduce((sum, s) => sum + (s.usd_at_time || 0), 0);
+                            boostLiveStats.innerHTML = `<i class="fas fa-database text-cyan-400"></i> ${boostSales.length} sales | $${totalVolume.toFixed(2)} volume`;
+                        } else if (liveBoostSalesCache[boostSubFilter]) {
+                            const cache = liveBoostSalesCache[boostSubFilter];
+                            boostLiveStats.innerHTML = `<i class="fas fa-bolt text-yellow-400"></i> ${cache.totalCount} sales | $${cache.totalVolume.toFixed(2)} volume`;
+                        }
                     }
-                    
-                    // Create or update modal
-                    let modal = document.getElementById('boost-sales-modal');
-                    if (!modal) {
-                        modal = document.createElement('div');
-                        modal.id = 'boost-sales-modal';
-                        modal.className = 'fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70';
-                        document.body.appendChild(modal);
-                    }
-                    
-                    const sales = liveBoostSalesData.adao;
-                    const truncateAddress = (addr) => addr ? `${addr.slice(0, 10)}...${addr.slice(-6)}` : 'Unknown';
-                    
-                    // Build sales rows
-                    const salesRows = sales.slice(0, 50).map(sale => {
-                        // Parse token name
-                        let tokenName = 'Token';
-                        const toId = sale.to_id || '';
-                        if (toId === 'uluna') tokenName = 'LUNA';
-                        else if (toId.includes('10aa3zdk')) tokenName = 'SOLID';
-                        else if (toId.includes('2C962DAB9F57FE')) tokenName = 'USDC';
-                        else if (toId.includes('ecgaz')) tokenName = 'ampLUNA';
-                        
-                        const priceToken = (sale.to_amount || 0) / 1000000;
-                        const priceUsd = sale.to_usd || 0;
-                        const seller = truncateAddress(sale.creator);
-                        
-                        return `
-                            <div class="flex items-center gap-3 p-2 bg-gray-800/50 rounded-lg border border-gray-700/50 hover:bg-gray-700/50 transition-colors">
-                                <img src="${getNftImageUrl(sale.from_nft_id)}" alt="#${sale.from_nft_id}" 
-                                     class="w-10 h-10 rounded object-cover"
-                                     onerror="this.src='https://placehold.co/40x40/1f2937/666?text=${sale.from_nft_id}'">
-                                <div class="flex-1 min-w-0">
-                                    <div class="text-sm font-bold text-white">#${sale.from_nft_id}</div>
-                                    <div class="text-[10px] text-gray-400">
-                                        <i class="fas fa-user mr-1"></i>Seller: 
-                                        <a href="https://finder.terra.money/mainnet/address/${sale.creator}" target="_blank" 
-                                           class="text-cyan-400 hover:text-cyan-300">${seller}</a>
-                                    </div>
-                                </div>
-                                <div class="text-right">
-                                    <div class="text-green-400 font-bold text-sm">$${priceUsd.toFixed(2)}</div>
-                                    <div class="text-[10px] text-yellow-400">${priceToken.toFixed(2)} ${tokenName}</div>
-                                </div>
-                            </div>
-                        `;
-                    }).join('');
-                    
-                    modal.innerHTML = `
-                        <div class="bg-gray-900 rounded-xl border border-purple-500/30 max-w-2xl w-full max-h-[80vh] overflow-hidden shadow-xl">
-                            <div class="p-4 border-b border-gray-700 bg-gradient-to-r from-purple-900/30 to-gray-900 flex items-center justify-between">
-                                <div>
-                                    <h3 class="text-lg font-bold text-white">
-                                        <i class="fas fa-bolt text-yellow-400 mr-2"></i>Live Boost Sales - Alliance DAO
-                                    </h3>
-                                    <div class="text-sm text-gray-400">
-                                        ${liveBoostSalesData.totalCount} total sales | $${liveBoostSalesData.totalVolume.toFixed(2)} volume
-                                    </div>
-                                </div>
-                                <button class="text-gray-400 hover:text-white text-2xl leading-none" id="close-boost-sales-modal">&times;</button>
-                            </div>
-                            <div class="p-4 overflow-y-auto max-h-[60vh] space-y-2">
-                                ${salesRows}
-                                ${sales.length > 50 ? `<div class="text-center text-gray-500 text-sm py-2">Showing 50 of ${sales.length} sales</div>` : ''}
-                            </div>
-                            <div class="p-4 border-t border-gray-700 text-center">
-                                <button onclick="document.getElementById('boost-sales-modal').remove()" 
-                                        class="px-6 py-2 bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600 transition-colors">
-                                    Close
-                                </button>
-                            </div>
-                        </div>
-                    `;
-                    
-                    // Close handlers
-                    document.getElementById('close-boost-sales-modal').addEventListener('click', () => modal.remove());
-                    modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
                 }
                 
                 // Setup Top 10 modal
