@@ -989,7 +989,7 @@
                     </div>
                 </div>
                 
-                <div id="activity-container" class="bg-gray-800/30 rounded-lg overflow-hidden">
+                <div id="activity-container" class="bg-gray-800/30 rounded-lg overflow-hidden max-h-[220px] overflow-y-auto">
                     <div id="activity-list" class="divide-y divide-gray-700/50">
                         <div class="text-gray-500 text-sm py-4 px-3 text-center">
                             <i class="fas fa-spinner fa-spin mr-1"></i> Loading activity...
@@ -1014,12 +1014,15 @@
                         padding: 2px 6px;
                         border-radius: 4px;
                         font-weight: 600;
-                        min-width: 60px;
+                        min-width: 55px;
                         text-align: center;
                     }
                     .activity-event.settle { background: rgba(16, 185, 129, 0.2); color: #10b981; }
                     .activity-event.listed { background: rgba(59, 130, 246, 0.2); color: #3b82f6; }
                     .activity-event.cancel { background: rgba(107, 114, 128, 0.2); color: #9ca3af; }
+                    #activity-container::-webkit-scrollbar { width: 4px; }
+                    #activity-container::-webkit-scrollbar-track { background: transparent; }
+                    #activity-container::-webkit-scrollbar-thumb { background: rgba(107, 114, 128, 0.4); border-radius: 2px; }
                 </style>
             </div>
             
@@ -8787,22 +8790,13 @@ est. APR 58.53 %"></textarea>
                         countEl.textContent = countText.join(', ');
                     }
                     
-                    // Render rows
+                    // Render rows (all of them, container scrolls)
                     container.innerHTML = '';
                     
-                    // Limit to 15 most recent
-                    relevantActivity.slice(0, 15).forEach(item => {
+                    relevantActivity.forEach(item => {
                         const row = createActivityCard(item);
                         container.appendChild(row);
                     });
-                    
-                    // Add "see more" indicator if truncated
-                    if (relevantActivity.length > 15) {
-                        const moreEl = document.createElement('div');
-                        moreEl.className = 'text-center text-xs text-gray-500 py-2';
-                        moreEl.textContent = `+${relevantActivity.length - 15} more in last 7 days`;
-                        container.appendChild(moreEl);
-                    }
                 }
                 
                 // Create activity card
@@ -8818,19 +8812,13 @@ est. APR 58.53 %"></textarea>
                     // Get NFT ID
                     const nftId = item.token_id;
                     
-                    // Get image URL - convert IPFS to gateway or use CDN
+                    // Use the same CDN URLs that work elsewhere in the dashboard
                     let imageUrl;
-                    if (item.nft_image_url) {
-                        // Convert IPFS URL to gateway
-                        if (item.nft_image_url.startsWith('ipfs://')) {
-                            const ipfsHash = item.nft_image_url.replace('ipfs://', '');
-                            imageUrl = `https://cloudflare-ipfs.com/ipfs/${ipfsHash}`;
-                        } else {
-                            imageUrl = item.nft_image_url;
-                        }
-                    } else if (isAdao) {
+                    if (isAdao) {
+                        // aDAO uses Cloudflare CDN
                         imageUrl = `${CLOUDFLARE_CDN}/${nftId}/public`;
                     } else {
+                        // pixeLions uses deving.zone
                         imageUrl = `https://www.deving.zone/pixelions/images/${nftId}.png`;
                     }
                     
@@ -8847,7 +8835,7 @@ est. APR 58.53 %"></textarea>
                     let eventLabel;
                     switch (item.event_type) {
                         case 'settle': eventLabel = 'SOLD'; break;
-                        case 'listed': eventLabel = 'LISTED'; break;
+                        case 'listed': eventLabel = 'LIST'; break;
                         case 'cancel': eventLabel = 'CANCEL'; break;
                         default: eventLabel = item.event_type.toUpperCase();
                     }
@@ -8864,9 +8852,9 @@ est. APR 58.53 %"></textarea>
                             <span class="text-${collectionColor}-400 text-[9px]">${collectionName}</span>
                         </div>
                         <span class="activity-event ${item.event_type}">${eventLabel}</span>
-                        <span class="text-yellow-400 text-sm font-medium w-20 text-right">${price} bL</span>
+                        <span class="text-yellow-400 text-sm font-medium w-16 text-right">${price} bL</span>
                         <span class="text-gray-500 text-xs w-16 text-right">${timeAgo}</span>
-                        ${item.event_type === 'settle' ? `<span class="text-gray-600 text-[10px] w-20 text-right hidden sm:block">${buyerShort}</span>` : '<span class="w-20 hidden sm:block"></span>'}
+                        ${item.event_type === 'settle' ? `<span class="text-gray-600 text-[10px] w-16 text-right hidden sm:block">${buyerShort}</span>` : '<span class="w-16 hidden sm:block"></span>'}
                     `;
                     
                     // Click to open transaction
