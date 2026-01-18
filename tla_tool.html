@@ -1464,6 +1464,16 @@
                         <span class="text-gray-500">= USD:</span>
                         <span id="nft-back-usd" class="text-green-400 font-mono">$0</span>
                     </div>
+                    <div class="flex justify-between items-center border-t border-gray-700 pt-1 mt-1">
+                        <span class="text-gray-500" title="Average LUNA gained per NFT per day this epoch">Avg Daily Gain:</span>
+                        <div class="flex items-center gap-1">
+                            <input type="number" id="nft-avg-daily-gain-input" class="input-dark w-20 text-right text-emerald-400 font-mono" placeholder="0" step="0.0001" onchange="updateAvgDailyGain()">
+                            <span class="text-gray-500 text-[8px]">LUNA</span>
+                        </div>
+                    </div>
+                    <div id="avg-daily-gain-calc" class="text-[8px] text-gray-600 hidden">
+                        <!-- Auto-calc hint will show here -->
+                    </div>
                 </div>
             </div>
         </div>
@@ -2962,6 +2972,7 @@ let store = {
         backingAmpLuna: 0,
         backingLuna: 0,
         backingUsd: 0,
+        avgDailyGain: 0, // LUNA gained per NFT per day (calculated from backing change)
         // BBL Marketplace
         bblSales: [],
         bblFloor: null,
@@ -6250,6 +6261,7 @@ async function loadV3Snapshot(d, ep, ph, isTestFile) {
             store.nftStats.backingAmpLuna = d.nft_stats.backing_per_nft.ampLUNA || 0;
             store.nftStats.backingLuna = d.nft_stats.backing_per_nft.LUNA_equivalent || 0;
             store.nftStats.backingUsd = d.nft_stats.backing_per_nft.USD || 0;
+            store.nftStats.avgDailyGain = d.nft_stats.backing_per_nft.avg_daily_gain_luna || 0;
         }
         
         // BBL marketplace
@@ -6394,6 +6406,11 @@ function populateNftStatsFromStore() {
     if ($('nft-back-amp-input')) {
         $('nft-back-amp-input').value = store.nftStats.backingAmpLuna || '';
         updateNftBacking();
+    }
+    
+    // Avg Daily Gain
+    if ($('nft-avg-daily-gain-input')) {
+        $('nft-avg-daily-gain-input').value = store.nftStats.avgDailyGain || '';
     }
     
     // BBL Floor
@@ -8908,7 +8925,8 @@ function buildNftStatsData() {
         backing_per_nft: {
             ampLUNA: nftData.backingAmpLuna || 0,
             LUNA_equivalent: nftData.backingLuna || 0,
-            USD: nftData.backingUsd || 0
+            USD: nftData.backingUsd || 0,
+            avg_daily_gain_luna: nftData.avgDailyGain || 0
         },
         marketplaces: {
             bbl: {
@@ -9238,6 +9256,56 @@ function updateNftBacking() {
     store.nftStats.backingAmpLuna = ampLuna;
     store.nftStats.backingLuna = lunaEquiv;
     store.nftStats.backingUsd = usd;
+    
+    // Try to auto-calculate avg daily gain if we have last epoch data
+    autoCalcAvgDailyGain();
+}
+
+// Update Avg Daily Gain from input
+function updateAvgDailyGain() {
+    let avgGain = parseFloat($('nft-avg-daily-gain-input')?.value) || 0;
+    store.nftStats.avgDailyGain = avgGain;
+}
+
+// Auto-calculate avg daily gain from backing change
+function autoCalcAvgDailyGain() {
+    const calcEl = $('avg-daily-gain-calc');
+    if (!calcEl) return;
+    
+    // Get current backing LUNA
+    const currentBacking = store.nftStats.backingLuna || 0;
+    if (currentBacking <= 0) {
+        calcEl.classList.add('hidden');
+        return;
+    }
+    
+    // Get previous epoch backing from lastEpochData
+    const prevBacking = lastEpochData?.nft_stats?.backing_per_nft?.LUNA_equivalent || 
+                        lastEpochData?.nftStats?.backingLuna || 0;
+    
+    if (prevBacking <= 0) {
+        calcEl.classList.add('hidden');
+        return;
+    }
+    
+    // Calculate difference
+    const backingDiff = currentBacking - prevBacking;
+    const daysPerEpoch = 7; // Approx 7 days per epoch
+    const avgDailyGain = backingDiff / daysPerEpoch;
+    
+    // Show hint
+    calcEl.innerHTML = `<span class="text-gray-500">Auto-calc:</span> <span class="text-emerald-400">${avgDailyGain >= 0 ? '+' : ''}${avgDailyGain.toFixed(4)}</span> <span class="text-gray-600">(${prevBacking.toFixed(2)} → ${currentBacking.toFixed(2)} over ~7d)</span>
+        <button onclick="applyAutoAvgDailyGain(${avgDailyGain})" class="ml-2 text-cyan-400 hover:text-cyan-300 underline">Apply</button>`;
+    calcEl.classList.remove('hidden');
+}
+
+// Apply auto-calculated avg daily gain
+function applyAutoAvgDailyGain(value) {
+    const input = $('nft-avg-daily-gain-input');
+    if (input) {
+        input.value = value.toFixed(4);
+        updateAvgDailyGain();
+    }
 }
 
 // Update BBL floor USD displays
@@ -10033,6 +10101,9 @@ function saveNftStats() {
     let lunaPrice = getTokenPrice('LUNA');
     store.nftStats.backingLuna = lunaPrice > 0 ? (store.nftStats.backingAmpLuna * ampPrice / lunaPrice) : 0;
     store.nftStats.backingUsd = store.nftStats.backingAmpLuna * ampPrice;
+    
+    // Avg Daily Gain
+    store.nftStats.avgDailyGain = parseFloat($('nft-avg-daily-gain-input')?.value) || 0;
     
     // BBL floors - separate broken/unbroken
     let bblUnbrokenAmt = parseFloat($('nft-bbl-floor-unbroken-amt')?.value) || 0;
