@@ -7320,26 +7320,109 @@ est. APR 58.53 %"></textarea>
                 
                 // Detect lock type from Boost API data
                 function detectLockType(launch) {
-                    // Check from_id against known contracts
+                    // Check from_id against known contracts (exact match)
                     if (launch.from_id && TLA_TOKEN_CONTRACTS[launch.from_id]) {
                         return TLA_TOKEN_CONTRACTS[launch.from_id];
                     }
                     
-                    // Check for partial matches in from_id
+                    // Check for partial matches in from_id as fallback
                     const fromId = launch.from_id?.toLowerCase() || '';
-                    if (fromId.includes('arb') || fromId.includes('se7rv')) return 'arbLUNA';
-                    if (fromId.includes('amp') || fromId.includes('ecgaz')) return 'ampLUNA';
-                    if (fromId.includes('bluna') || fromId.includes('17aj4')) return 'bLUNA';
-                    
-                    // Check name field
-                    const name = (launch.name || '').toLowerCase();
-                    if (name.includes('arbluna') || name.includes('arb')) return 'arbLUNA';
-                    if (name.includes('ampluna') || name.includes('amp')) return 'ampLUNA';
-                    if (name.includes('bluna')) return 'bLUNA';
-                    if (name.includes('luna')) return 'LUNA';
+                    if (fromId === 'uluna') return 'LUNA';
+                    if (fromId.includes('se7rv')) return 'arbLUNA';
+                    if (fromId.includes('ecgaz')) return 'ampLUNA';
+                    if (fromId.includes('17aj4')) return 'bLUNA';
                     
                     // Default to arbLUNA (most common for TLA)
                     return 'arbLUNA';
+                }
+                
+                // Query TLA Lock NFT for lock details (unlock date)
+                async function fetchTlaLockDetails(tokenId) {
+                    try {
+                        const TLA_LOCKS_CONTRACT = 'terra1uqhj8agyeaz8fu6mdggfuwr3lp32jlrx5hqag4jxexde92rzkamq3l62zg';
+                        const query = btoa(JSON.stringify({ 
+                            nft_info: { token_id: tokenId.toString() } 
+                        }));
+                        const url = `https://terra-lcd.publicnode.com/cosmwasm/wasm/v1/contract/${TLA_LOCKS_CONTRACT}/smart/${query}`;
+                        
+                        const response = await fetch(url);
+                        if (!response.ok) return null;
+                        
+                        const data = await response.json();
+                        const extension = data.data?.extension;
+                        
+                        console.log('TLA Lock NFT data:', data.data);
+                        
+                        if (extension) {
+                            const attrs = extension.attributes || [];
+                            
+                            // Look for end_time/unlock_time in various formats
+                            const endTimeAttr = attrs.find(a => {
+                                const traitType = (a.trait_type || '').toLowerCase();
+                                return traitType === 'end_time' || 
+                                       traitType === 'unlock_time' ||
+                                       traitType === 'lock_end' ||
+                                       traitType === 'end' ||
+                                       traitType === 'expiry';
+                            });
+                            
+                            // Check if it's explicitly a max-lock
+                            const maxLockAttr = attrs.find(a => {
+                                const traitType = (a.trait_type || '').toLowerCase();
+                                const value = (a.value || '').toString().toLowerCase();
+                                return (traitType === 'max_lock' && (value === 'true' || value === '1')) ||
+                                       (traitType === 'lock_type' && value === 'max') ||
+                                       (traitType === 'type' && value === 'max-lock');
+                            });
+                            
+                            if (maxLockAttr) {
+                                return { isMaxLock: true, unlockDate: null };
+                            }
+                            
+                            if (endTimeAttr?.value) {
+                                let timestamp = parseInt(endTimeAttr.value);
+                                
+                                // Handle different timestamp formats
+                                // Nanoseconds (19 digits): 1893456000000000000
+                                // Milliseconds (13 digits): 1893456000000
+                                // Seconds (10 digits): 1893456000
+                                if (timestamp > 1e15) {
+                                    // Nanoseconds
+                                    timestamp = Math.floor(timestamp / 1e6);
+                                } else if (timestamp < 1e12) {
+                                    // Seconds
+                                    timestamp = timestamp * 1000;
+                                }
+                                // Otherwise assume milliseconds
+                                
+                                const date = new Date(timestamp);
+                                
+                                // Sanity check - if date is invalid or too far in past
+                                if (isNaN(date.getTime()) || date.getTime() < Date.now() - (365 * 24 * 60 * 60 * 1000)) {
+                                    console.log('Invalid or past date, assuming max-lock');
+                                    return { isMaxLock: true, unlockDate: null };
+                                }
+                                
+                                // If date is more than 50 years in future, consider it max-lock
+                                const fiftyYearsFromNow = Date.now() + (50 * 365 * 24 * 60 * 60 * 1000);
+                                if (date.getTime() > fiftyYearsFromNow) {
+                                    return { isMaxLock: true, unlockDate: null };
+                                }
+                                
+                                return { isMaxLock: false, unlockDate: date };
+                            }
+                            
+                            // If no end_time found, try to determine from other attributes
+                            // Default to max-lock if we can't determine
+                            console.log('No end_time attribute found, defaulting to max-lock');
+                            return { isMaxLock: true, unlockDate: null };
+                        }
+                        
+                        return null;
+                    } catch (err) {
+                        console.error('Failed to fetch TLA lock details:', err);
+                        return null;
+                    }
                 }
                 
                 // Get TLA Lock image URL with token logo
@@ -8928,7 +9011,7 @@ est. APR 58.53 %"></textarea>
                 }
                 
                 // Show TLA Lock details popup
-                function showTlaLockDetails(listingIdx) {
+                async function showTlaLockDetails(listingIdx) {
                     const listing = window.currentListings?.[listingIdx];
                     if (!listing || listing.collection !== 'tla_locks' || !listing.lockData) {
                         console.error('Invalid listing for TLA Lock details');
@@ -8943,6 +9026,7 @@ est. APR 58.53 %"></textarea>
                     if (lockData.toId === 'uluna') askingTokenName = 'LUNA';
                     else if (lockData.toId?.includes('10aa3zdk')) askingTokenName = 'SOLID';
                     else if (lockData.toId?.includes('roar')) askingTokenName = 'ROAR';
+                    else if (lockData.toId?.includes('2C962DAB9F57FE')) askingTokenName = 'USDC'; // IBC USDC
                     
                     // Calculate discount/premium display
                     const discountPct = (lockData.discount * 100).toFixed(2);
@@ -8951,7 +9035,7 @@ est. APR 58.53 %"></textarea>
                     const discountColor = isDiscount ? 'text-green-400' : 'text-red-400';
                     const discountBg = isDiscount ? 'bg-green-500/20' : 'bg-red-500/20';
                     
-                    // Create modal
+                    // Create modal with loading state for lock details
                     const existingModal = document.getElementById('tla-lock-details-modal');
                     if (existingModal) existingModal.remove();
                     
@@ -8979,6 +9063,17 @@ est. APR 58.53 %"></textarea>
                             </div>
                             
                             <div class="p-4 space-y-4">
+                                <!-- Lock Duration -->
+                                <div id="lock-duration-section" class="bg-purple-900/20 rounded-lg p-3 border border-purple-500/30">
+                                    <div class="flex items-center justify-between">
+                                        <div class="text-xs text-gray-500 uppercase">Lock Type</div>
+                                        <div id="lock-duration-display" class="text-sm">
+                                            <i class="fas fa-spinner fa-spin text-purple-400"></i>
+                                            <span class="text-gray-400 ml-1">Loading...</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                
                                 <!-- Lock Contents -->
                                 <div class="bg-gray-800/50 rounded-lg p-3 border border-gray-700">
                                     <div class="text-xs text-gray-500 uppercase mb-2">Lock Contents</div>
@@ -9045,6 +9140,44 @@ est. APR 58.53 %"></textarea>
                     // Close handlers
                     document.getElementById('close-tla-details').addEventListener('click', () => modal.remove());
                     modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+                    
+                    // Fetch lock duration details asynchronously
+                    fetchTlaLockDetails(lockData.lockId).then(details => {
+                        const displayEl = document.getElementById('lock-duration-display');
+                        if (!displayEl) return;
+                        
+                        if (details === null) {
+                            // Couldn't fetch - show unknown
+                            displayEl.innerHTML = `<span class="text-gray-400">Unable to determine</span>`;
+                        } else if (details.isMaxLock) {
+                            // Max-lock
+                            displayEl.innerHTML = `
+                                <span class="text-purple-400 font-bold">
+                                    <i class="fas fa-infinity mr-1"></i>Max-Lock
+                                </span>
+                            `;
+                        } else if (details.unlockDate) {
+                            // Time-locked with specific date
+                            const dateStr = details.unlockDate.toLocaleDateString('en-US', {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric'
+                            });
+                            displayEl.innerHTML = `
+                                <span class="text-yellow-400 font-bold">
+                                    <i class="fas fa-calendar-alt mr-1"></i>Unlocks ${dateStr}
+                                </span>
+                            `;
+                        } else {
+                            displayEl.innerHTML = `<span class="text-gray-400">Unknown lock type</span>`;
+                        }
+                    }).catch(err => {
+                        console.error('Failed to fetch lock details:', err);
+                        const displayEl = document.getElementById('lock-duration-display');
+                        if (displayEl) {
+                            displayEl.innerHTML = `<span class="text-gray-400">Unable to fetch</span>`;
+                        }
+                    });
                 }
                 // Make showTlaLockDetails globally accessible for onclick handlers
                 window.showTlaLockDetails = showTlaLockDetails;
