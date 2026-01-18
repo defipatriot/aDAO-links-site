@@ -8100,14 +8100,21 @@ est. APR 58.53 %"></textarea>
                 // ===== END BOOST FUNCTIONS =====
                 
                 // ===== COMBINED LISTINGS =====
-                // Store listings per collection
-                let allCollectionListings = {
-                    alliance_dao: [],
-                    pixelions: [],
-                    tla_locks: []
+                // Cache for ALL marketplace data (load once, use everywhere)
+                let marketplaceCache = {
+                    bbl: {
+                        alliance_dao: { listings: [], floor: 0, count: 0, volume: 0, lastSale: 0 },
+                        pixelions: { listings: [], floor: 0, count: 0, volume: 0, lastSale: 0 }
+                    },
+                    boost: {
+                        alliance_dao: { listings: [], floor: 0, floorToken: 'LUNA', floorUsd: 0, count: 0 },
+                        pixelions: { listings: [], floor: 0, floorToken: 'LUNA', floorUsd: 0, count: 0 },
+                        tla_locks: { listings: [], floor: 0, floorToken: 'LUNA', floorUsd: 0, count: 0 }
+                    },
+                    loaded: false
                 };
+                
                 let selectedOverviewCollection = 'alliance_dao'; // Which collection overview tiles show
-                let displayedListingsCount = 12;
                 
                 // Collection visibility filters (all visible by default)
                 let collectionFilters = {
@@ -8152,40 +8159,59 @@ est. APR 58.53 %"></textarea>
                                 }
                             }
                             
-                            // Reload overview data for new collection (overview only, not listings)
-                            loadOverviewData(collection);
+                            // Display cached data for new collection (no API calls)
+                            displayCachedOverviewData(collection);
                         });
                     });
                 }
                 
-                // Load overview data for selected collection tab
-                async function loadOverviewData(collectionKey) {
+                // Display overview data from cache (NO API CALLS)
+                function displayCachedOverviewData(collectionKey) {
                     const collectionConfig = BBL_COLLECTIONS[collectionKey];
-                    const contract = collectionConfig.contract;
+                    const blunaPrice = window.tokenPrices?.bLUNA || 0;
                     
-                    // Reset UI to loading state
-                    document.getElementById('bbl-floor-bluna').textContent = '--';
-                    document.getElementById('bbl-floor-usd').textContent = '';
-                    document.getElementById('bbl-volume-bluna').textContent = collectionKey === 'alliance_dao' ? '--' : 'N/A';
-                    document.getElementById('bbl-volume-usd').textContent = '';
-                    document.getElementById('bbl-last-sale').textContent = '--';
-                    document.getElementById('bbl-listed-count').textContent = '--';
-                    document.getElementById('boost-floor-luna').textContent = '--';
-                    document.getElementById('boost-floor-usd').textContent = '';
-                    document.getElementById('boost-volume-usd').textContent = collectionKey === 'alliance_dao' ? '--' : 'N/A';
-                    document.getElementById('boost-total-sales').textContent = collectionKey === 'alliance_dao' ? '--' : 'N/A';
-                    document.getElementById('boost-listed-count').textContent = '--';
-                    
-                    // Fetch BBL data for collection (if supported)
-                    if (collectionConfig.bblSupported) {
-                        await fetchBblCollectionStatsFor(contract);
-                    } else {
+                    // BBL Data from cache
+                    if (collectionConfig.bblSupported && marketplaceCache.bbl[collectionKey]) {
+                        const bblData = marketplaceCache.bbl[collectionKey];
+                        
+                        document.getElementById('bbl-floor-bluna').textContent = bblData.floor > 0 ? bblData.floor.toLocaleString() : '--';
+                        document.getElementById('bbl-floor-usd').textContent = bblData.floor > 0 && blunaPrice > 0 ? `($${(bblData.floor * blunaPrice).toFixed(2)})` : '';
+                        document.getElementById('bbl-listed-count').textContent = bblData.count || 0;
+                        document.getElementById('bbl-last-sale').textContent = bblData.lastSale > 0 ? bblData.lastSale.toFixed(2) : '--';
+                        
+                        // Volume only available for aDAO (from our tracked data)
+                        if (collectionKey === 'alliance_dao') {
+                            document.getElementById('bbl-volume-bluna').textContent = bblData.volume > 0 ? Math.round(bblData.volume).toLocaleString() : '--';
+                            document.getElementById('bbl-volume-usd').textContent = bblData.volume > 0 && blunaPrice > 0 ? `($${Math.round(bblData.volume * blunaPrice).toLocaleString()})` : '';
+                        } else {
+                            document.getElementById('bbl-volume-bluna').textContent = 'N/A';
+                            document.getElementById('bbl-volume-usd').textContent = '';
+                        }
+                        
+                        document.getElementById('bbl-data-source').innerHTML = '<i class="fas fa-bolt text-yellow-400 mr-1"></i>Live from BBL';
+                    } else if (!collectionConfig.bblSupported) {
                         document.getElementById('bbl-data-source').innerHTML = '<span class="text-gray-500">Not available on BBL</span>';
                     }
                     
-                    // Fetch Boost data for collection
-                    if (collectionConfig.boostSupported) {
-                        await fetchBoostStatsFor(contract);
+                    // Boost Data from cache
+                    if (collectionConfig.boostSupported && marketplaceCache.boost[collectionKey]) {
+                        const boostData = marketplaceCache.boost[collectionKey];
+                        
+                        document.getElementById('boost-floor-luna').textContent = boostData.floor > 0 ? boostData.floor.toLocaleString() : '--';
+                        document.getElementById('boost-floor-token-label').textContent = boostData.floorToken || 'LUNA';
+                        document.getElementById('boost-floor-usd').textContent = boostData.floorUsd > 0 ? `($${boostData.floorUsd.toFixed(2)})` : '';
+                        document.getElementById('boost-listed-count').textContent = boostData.count || 0;
+                        
+                        // Volume/sales only for aDAO
+                        if (collectionKey === 'alliance_dao') {
+                            // These come from our tracked sales data, not Boost API
+                            // Will be populated by loadSalesHistory()
+                        } else {
+                            document.getElementById('boost-volume-usd').textContent = 'N/A';
+                            document.getElementById('boost-total-sales').textContent = 'N/A';
+                        }
+                        
+                        document.getElementById('boost-data-source').innerHTML = '<i class="fas fa-bolt text-yellow-400 mr-1"></i>Live from Boost';
                     }
                 }
                 
@@ -8219,6 +8245,17 @@ est. APR 58.53 %"></textarea>
                         const lastSaleEl = document.getElementById('bbl-last-sale');
                         if (lastSaleEl && data.last_sale_amount) {
                             lastSaleEl.textContent = data.last_sale_amount.toFixed(2);
+                        }
+                        
+                        // Fetch listing count (separate API call)
+                        try {
+                            const listingsUrl = `${BBL_API_BASE}/nfts?nftContract=${contract}&page=1&perPage=1&types=buy_now`;
+                            const listingsResponse = await fetchWithCorsProxy(listingsUrl);
+                            const listingsData = await listingsResponse.json();
+                            const listedCount = listingsData.pagination?.totalResults || 0;
+                            document.getElementById('bbl-listed-count').textContent = listedCount;
+                        } catch (e) {
+                            console.error('BBL listings count error:', e);
                         }
                         
                         const liveIndicator = document.getElementById('bbl-live-indicator');
@@ -8258,30 +8295,47 @@ est. APR 58.53 %"></textarea>
                         const totalCount = data.aggregateLaunch?._count?._all || launches.length;
                         const lunaPrice = window.tokenPrices?.LUNA || 0;
                         
-                        // Find floor (lowest USD)
-                        const lunaListings = launches.filter(l => l.to_id === 'uluna');
-                        let floorLuna = 0;
+                        // Find floor (lowest USD from any token)
+                        let floorPrice = 0;
                         let floorUsd = 0;
+                        let floorToken = 'LUNA';
                         
-                        if (lunaListings.length > 0) {
-                            const sorted = lunaListings.sort((a, b) => (a.to_usd || 0) - (b.to_usd || 0));
-                            floorLuna = (sorted[0].to_amount || 0) / 1000000;
-                            floorUsd = sorted[0].to_usd || 0;
+                        if (launches.length > 0) {
+                            // Sort by USD price
+                            const sorted = [...launches].sort((a, b) => (a.to_usd || 0) - (b.to_usd || 0));
+                            const cheapest = sorted[0];
+                            floorPrice = (cheapest.to_amount || 0) / 1000000;
+                            floorUsd = cheapest.to_usd || 0;
+                            
+                            // Determine token type
+                            if (cheapest.to_id === 'uluna') {
+                                floorToken = 'LUNA';
+                            } else if (cheapest.to_id?.includes('10aa3zdk')) {
+                                floorToken = 'SOLID';
+                            } else if (cheapest.to_id?.includes('roar')) {
+                                floorToken = 'ROAR';
+                            } else {
+                                floorToken = 'Token';
+                            }
                         }
                         
                         const floorLunaEl = document.getElementById('boost-floor-luna');
+                        const floorTokenLabel = document.getElementById('boost-floor-token-label');
                         const floorUsdEl = document.getElementById('boost-floor-usd');
                         const listedCountEl = document.getElementById('boost-listed-count');
                         const liveIndicator = document.getElementById('boost-live-indicator');
                         const dataSource = document.getElementById('boost-data-source');
                         
                         if (floorLunaEl) {
-                            floorLunaEl.textContent = floorLuna > 0 ? floorLuna.toLocaleString() : '--';
+                            floorLunaEl.textContent = floorPrice > 0 ? floorPrice.toLocaleString() : '--';
+                        }
+                        if (floorTokenLabel) {
+                            floorTokenLabel.textContent = floorToken;
                         }
                         if (floorUsdEl) {
                             floorUsdEl.textContent = floorUsd > 0 ? `($${floorUsd.toFixed(2)})` : '';
                         }
-                        if (listedCountEl) listedCountEl.textContent = totalCount;
+                        if (listedCountEl) listedCountEl.textContent = totalCount > 0 ? totalCount : '0';
                         if (liveIndicator) liveIndicator.classList.remove('hidden');
                         if (dataSource) dataSource.innerHTML = '<i class="fas fa-bolt text-yellow-400 mr-1"></i>Live from Boost';
                         
@@ -8292,119 +8346,196 @@ est. APR 58.53 %"></textarea>
                     }
                 }
                 
-                // Load listings from ALL collections
-                async function loadAllCollectionListings() {
+                // Load ALL marketplace data ONCE (minimizes API calls)
+                async function loadAllMarketplaceData() {
                     const container = document.getElementById('combined-listings-container');
                     
                     container.innerHTML = `
                         <div class="text-gray-500 text-sm text-center py-8 col-span-full">
                             <i class="fas fa-spinner fa-spin text-gray-600"></i> 
-                            <span class="text-gray-600">Loading listings from all collections...</span>
+                            <span class="text-gray-600">Loading marketplace data...</span>
                         </div>
                     `;
                     
                     const blunaPrice = window.tokenPrices?.bLUNA || 0;
                     const lunaPrice = window.tokenPrices?.LUNA || 0;
                     
-                    console.log('Loading all collection listings. bLUNA price:', blunaPrice, 'LUNA price:', lunaPrice);
+                    console.log('Loading all marketplace data. bLUNA:', blunaPrice, 'LUNA:', lunaPrice);
                     
-                    // Load each collection in parallel
-                    const loadPromises = Object.entries(BBL_COLLECTIONS).map(async ([collectionKey, config]) => {
-                        const listings = [];
-                        
-                        // Fetch BBL listings (if supported)
+                    // Parallel load: BBL listings for each collection + Boost listings for each collection
+                    // This is 2 BBL calls + 3 Boost calls = 5 total API calls (down from 10+)
+                    const promises = [];
+                    
+                    // BBL listings (aDAO + pixeLions)
+                    Object.entries(BBL_COLLECTIONS).forEach(([collectionKey, config]) => {
                         if (config.bblSupported) {
-                            try {
-                                const bblData = await fetchBblListings(config.contract, 50);
-                                if (bblData?.nfts) {
-                                    bblData.nfts.forEach(nft => {
-                                        const price = nft.auction?.reserve_price ? parseInt(nft.auction.reserve_price) / 1000000 : 0;
-                                        const priceUsd = price * blunaPrice;
-                                        
-                                        // For pixeLions, always use b-cdn (BBL's IPFS URLs are unreliable)
-                                        // For other collections, try cf_url first, then IPFS conversion
-                                        let imageUrl;
-                                        if (collectionKey === 'pixelions') {
-                                            imageUrl = getCollectionImageUrl(collectionKey, nft.nft_token_id);
-                                        } else {
-                                            imageUrl = nft.cf_url || convertIpfsToHttp(nft.image_url) || getCollectionImageUrl(collectionKey, nft.nft_token_id);
-                                        }
-                                        
-                                        listings.push({
-                                            marketplace: 'bbl',
-                                            collection: collectionKey,
-                                            tokenId: nft.nft_token_id,
-                                            name: nft.nft_name || `#${nft.nft_token_id}`,
-                                            price: price,
-                                            priceToken: 'bLUNA',
-                                            priceUsd: priceUsd,
-                                            imageUrl: imageUrl,
-                                            isBroken: config.hasBroken ? (nft.special_trait === 'BROKEN') : false,
-                                            rank: nft.rank,
-                                            url: `https://app.backbonelabs.io/nfts/marketplace/collections/${config.contract}/${nft.nft_token_id}`
-                                        });
-                                    });
-                                }
-                            } catch (err) {
-                                console.error(`BBL listings error for ${collectionKey}:`, err);
-                            }
+                            promises.push(
+                                fetchBblListings(config.contract, 100).then(data => ({
+                                    type: 'bbl',
+                                    collectionKey,
+                                    data,
+                                    config
+                                })).catch(err => {
+                                    console.error(`BBL error for ${collectionKey}:`, err);
+                                    return { type: 'bbl', collectionKey, data: null, config };
+                                })
+                            );
                         }
-                        
-                        // Fetch Boost listings (if supported)
+                    });
+                    
+                    // Boost listings (aDAO + pixeLions + TLA Locks)
+                    Object.entries(BBL_COLLECTIONS).forEach(([collectionKey, config]) => {
                         if (config.boostSupported) {
-                            try {
-                                const boostData = await fetchBoostListings(config.contract);
-                                if (boostData?.launches) {
-                                    boostData.launches.forEach(launch => {
-                                        const priceRaw = launch.to_amount || 0;
-                                        const isLuna = launch.to_id === 'uluna';
-                                        let priceToken = 'LUNA';
-                                        
-                                        if (!isLuna) {
-                                            if (launch.to_id?.includes('10aa3zdk')) priceToken = 'SOLID';
-                                            else if (launch.to_id?.includes('roar')) priceToken = 'ROAR';
-                                            else priceToken = 'Token';
-                                        }
-                                        
-                                        // Get NFT name based on collection
-                                        let nftName = `#${launch.from_nft_id}`;
-                                        if (collectionKey === 'tla_locks' && launch.name) {
-                                            nftName = launch.name;
-                                        }
-                                        
-                                        listings.push({
-                                            marketplace: 'boost',
-                                            collection: collectionKey,
-                                            tokenId: launch.from_nft_id,
-                                            name: nftName,
-                                            price: priceRaw / 1000000,
-                                            priceToken: priceToken,
-                                            priceUsd: launch.to_usd || 0,
-                                            imageUrl: getCollectionImageUrl(collectionKey, launch.from_nft_id),
-                                            isBroken: config.hasBroken && nftStatusData?.nfts?.find(n => n.id == launch.from_nft_id)?.broken || false,
-                                            url: `https://www.boostdao.io/ignite/permissionless-terra?launch_id=${launch.launch_id}`
-                                        });
-                                    });
+                            promises.push(
+                                fetchBoostListings(config.contract).then(data => ({
+                                    type: 'boost',
+                                    collectionKey,
+                                    data,
+                                    config
+                                })).catch(err => {
+                                    console.error(`Boost error for ${collectionKey}:`, err);
+                                    return { type: 'boost', collectionKey, data: null, config };
+                                })
+                            );
+                        }
+                    });
+                    
+                    // Only fetch /collections endpoint for aDAO (for volume data)
+                    promises.push(
+                        fetchWithCorsProxy(`${BBL_API_BASE}/collections/${BBL_CONTRACT}`)
+                            .then(r => r.json())
+                            .then(data => ({ type: 'bbl_volume', collectionKey: 'alliance_dao', data }))
+                            .catch(() => ({ type: 'bbl_volume', collectionKey: 'alliance_dao', data: null }))
+                    );
+                    
+                    const results = await Promise.all(promises);
+                    
+                    // Process results and populate cache
+                    results.forEach(result => {
+                        if (result.type === 'bbl' && result.data?.nfts) {
+                            const { collectionKey, data, config } = result;
+                            const listings = [];
+                            
+                            // Extract floor from sorted listings
+                            const sortedNfts = [...data.nfts].sort((a, b) => {
+                                const priceA = a.auction?.reserve_price ? parseInt(a.auction.reserve_price) : Infinity;
+                                const priceB = b.auction?.reserve_price ? parseInt(b.auction.reserve_price) : Infinity;
+                                return priceA - priceB;
+                            });
+                            
+                            const floorNft = sortedNfts[0];
+                            const floor = floorNft?.auction?.reserve_price ? parseInt(floorNft.auction.reserve_price) / 1000000 : 0;
+                            const count = data.pagination?.totalResults || data.nfts.length;
+                            
+                            // Build listings array
+                            data.nfts.forEach(nft => {
+                                const price = nft.auction?.reserve_price ? parseInt(nft.auction.reserve_price) / 1000000 : 0;
+                                const priceUsd = price * blunaPrice;
+                                
+                                let imageUrl;
+                                if (collectionKey === 'pixelions') {
+                                    imageUrl = getCollectionImageUrl(collectionKey, nft.nft_token_id);
+                                } else {
+                                    imageUrl = nft.cf_url || convertIpfsToHttp(nft.image_url) || getCollectionImageUrl(collectionKey, nft.nft_token_id);
                                 }
-                            } catch (err) {
-                                console.error(`Boost listings error for ${collectionKey}:`, err);
+                                
+                                listings.push({
+                                    marketplace: 'bbl',
+                                    collection: collectionKey,
+                                    tokenId: nft.nft_token_id,
+                                    name: nft.nft_name || `#${nft.nft_token_id}`,
+                                    price: price,
+                                    priceToken: 'bLUNA',
+                                    priceUsd: priceUsd,
+                                    imageUrl: imageUrl,
+                                    isBroken: config.hasBroken ? (nft.special_trait === 'BROKEN') : false,
+                                    rank: nft.rank,
+                                    url: `https://app.backbonelabs.io/nfts/marketplace/collections/${config.contract}/${nft.nft_token_id}`
+                                });
+                            });
+                            
+                            // Store in cache
+                            marketplaceCache.bbl[collectionKey] = {
+                                listings,
+                                floor,
+                                count,
+                                volume: 0, // Will be set from /collections endpoint for aDAO
+                                lastSale: 0
+                            };
+                            
+                        } else if (result.type === 'boost' && result.data?.launches) {
+                            const { collectionKey, data, config } = result;
+                            const listings = [];
+                            const launches = data.launches || [];
+                            
+                            // Find floor (lowest USD)
+                            let floorPrice = 0, floorUsd = 0, floorToken = 'LUNA';
+                            if (launches.length > 0) {
+                                const sorted = [...launches].sort((a, b) => (a.to_usd || 0) - (b.to_usd || 0));
+                                const cheapest = sorted[0];
+                                floorPrice = (cheapest.to_amount || 0) / 1000000;
+                                floorUsd = cheapest.to_usd || 0;
+                                
+                                if (cheapest.to_id === 'uluna') floorToken = 'LUNA';
+                                else if (cheapest.to_id?.includes('10aa3zdk')) floorToken = 'SOLID';
+                                else if (cheapest.to_id?.includes('roar')) floorToken = 'ROAR';
+                                else floorToken = 'Token';
+                            }
+                            
+                            // Build listings array
+                            launches.forEach(launch => {
+                                const priceRaw = launch.to_amount || 0;
+                                let priceToken = 'LUNA';
+                                if (launch.to_id !== 'uluna') {
+                                    if (launch.to_id?.includes('10aa3zdk')) priceToken = 'SOLID';
+                                    else if (launch.to_id?.includes('roar')) priceToken = 'ROAR';
+                                    else priceToken = 'Token';
+                                }
+                                
+                                let nftName = `#${launch.from_nft_id}`;
+                                if (collectionKey === 'tla_locks' && launch.name) {
+                                    nftName = launch.name;
+                                }
+                                
+                                listings.push({
+                                    marketplace: 'boost',
+                                    collection: collectionKey,
+                                    tokenId: launch.from_nft_id,
+                                    name: nftName,
+                                    price: priceRaw / 1000000,
+                                    priceToken: priceToken,
+                                    priceUsd: launch.to_usd || 0,
+                                    imageUrl: getCollectionImageUrl(collectionKey, launch.from_nft_id),
+                                    isBroken: config.hasBroken && nftStatusData?.nfts?.find(n => n.id == launch.from_nft_id)?.broken || false,
+                                    url: `https://www.boostdao.io/ignite/permissionless-terra?launch_id=${launch.launch_id}`
+                                });
+                            });
+                            
+                            // Store in cache
+                            marketplaceCache.boost[collectionKey] = {
+                                listings,
+                                floor: floorPrice,
+                                floorToken,
+                                floorUsd,
+                                count: data.aggregateLaunch?._count?._all || launches.length
+                            };
+                            
+                        } else if (result.type === 'bbl_volume' && result.data) {
+                            // Store volume data for aDAO
+                            if (marketplaceCache.bbl.alliance_dao) {
+                                marketplaceCache.bbl.alliance_dao.volume = result.data.volume || 0;
+                                marketplaceCache.bbl.alliance_dao.lastSale = result.data.last_sale_amount || 0;
                             }
                         }
-                        
-                        return { collectionKey, listings };
                     });
                     
-                    // Wait for all collections
-                    const results = await Promise.all(loadPromises);
+                    marketplaceCache.loaded = true;
+                    console.log('Marketplace cache populated:', marketplaceCache);
                     
-                    // Store in allCollectionListings
-                    results.forEach(({ collectionKey, listings }) => {
-                        allCollectionListings[collectionKey] = listings;
-                        console.log(`Loaded ${listings.length} listings for ${collectionKey}`);
-                    });
+                    // Display initial overview (aDAO)
+                    displayCachedOverviewData('alliance_dao');
                     
                     // Render combined listings
-                    displayedListingsCount = 12;
                     renderCombinedListings();
                 }
                 
@@ -8424,8 +8555,8 @@ est. APR 58.53 %"></textarea>
                         case 'alliance_dao':
                             return getNftImageUrl(tokenId);
                         case 'pixelions':
-                            // Use b-cdn.net which is reliable (160px thumbnails)
-                            return `https://nft-storage.b-cdn.net/ipfs/bafybeihgrne4vcqirlb26rs4y2gpaka32dqssidwvx2qui2kx5osc6oxie_${tokenId}_160`;
+                            // Use deving.zone CDN (reliable) - format: /pixelions/images/{id}.png
+                            return `https://www.deving.zone/pixelions/images/${tokenId}.png`;
                         case 'tla_locks':
                             // TLA Locks use Eris Protocol imagery
                             return `https://www.theliquidityalliance.com/logo.svg`;
@@ -8438,13 +8569,19 @@ est. APR 58.53 %"></textarea>
                 function renderCombinedListings() {
                     const container = document.getElementById('combined-listings-container');
                     const totalCountEl = document.getElementById('listings-total-count');
-                    const loadMoreBtn = document.getElementById('load-more-listings');
                     
-                    // Combine listings from all visible collections
+                    // Combine listings from cache for all visible collections
                     let allListings = [];
                     Object.entries(collectionFilters).forEach(([collectionKey, isVisible]) => {
-                        if (isVisible && allCollectionListings[collectionKey]) {
-                            allListings = allListings.concat(allCollectionListings[collectionKey]);
+                        if (!isVisible) return;
+                        
+                        // Get BBL listings from cache
+                        if (marketplaceCache.bbl[collectionKey]?.listings) {
+                            allListings = allListings.concat(marketplaceCache.bbl[collectionKey].listings);
+                        }
+                        // Get Boost listings from cache
+                        if (marketplaceCache.boost[collectionKey]?.listings) {
+                            allListings = allListings.concat(marketplaceCache.boost[collectionKey].listings);
                         }
                     });
                     
@@ -8524,12 +8661,19 @@ est. APR 58.53 %"></textarea>
                             }
                         }
                         
+                        // Build fallback image URL for pixeLions
+                        let fallbackUrl = `https://placehold.co/48x48/1f2937/666?text=${listing.tokenId}`;
+                        if (listing.collection === 'pixelions') {
+                            // Try b-cdn as fallback for pixeLions
+                            fallbackUrl = `https://nft-storage.b-cdn.net/ipfs/bafybeihgrne4vcqirlb26rs4y2gpaka32dqssidwvx2qui2kx5osc6oxie_${listing.tokenId}_160`;
+                        }
+                        
                         return `
                             <a href="${listing.url}" target="_blank" class="flex items-center gap-3 p-3 bg-gray-800/50 rounded-lg hover:bg-gray-700 transition-colors border border-gray-700/50">
                                 <div class="relative flex-shrink-0">
                                     ${brokenBadge}
                                     <img src="${listing.imageUrl}" alt="${listing.name}" class="w-12 h-12 rounded-lg object-cover"
-                                         onerror="this.src='https://placehold.co/48x48/1f2937/666?text=${listing.tokenId}'">
+                                         onerror="this.onerror=null; this.src='${fallbackUrl}'">
                                 </div>
                                 <div class="flex-1 min-w-0">
                                     <div class="font-bold text-white text-sm flex items-center gap-1.5 flex-wrap">
@@ -8906,21 +9050,40 @@ est. APR 58.53 %"></textarea>
                 setupListingsFilters();   // Listings filter buttons
                 loadNftStatus();          // Load deving.zone for listing counts
                 loadSalesHistory();       // Load sales history for volume/sales
-                fetchBblCollectionStats(); // Load live BBL stats (floor, volume)
-                fetchBoostStats();        // Load live Boost stats (floor, listings)
                 
-                // Load all collection listings (wait for token prices if needed)
-                async function initializeListings() {
-                    // Wait up to 5 seconds for token prices to be available
+                // Load ALL marketplace data once (wait for token prices first)
+                async function initializeMarketplace() {
+                    // Wait up to 10 seconds for token prices to be available
                     let attempts = 0;
-                    while (!window.tokenPrices?.bLUNA && attempts < 50) {
+                    while ((!window.tokenPrices?.bLUNA || !window.tokenPrices?.LUNA) && attempts < 100) {
                         await new Promise(r => setTimeout(r, 100));
                         attempts++;
                     }
-                    console.log('Token prices available:', window.tokenPrices);
-                    loadAllCollectionListings();
+                    
+                    // Final check - if still no prices, try to get from CoinGecko directly
+                    if (!window.tokenPrices?.bLUNA || !window.tokenPrices?.LUNA) {
+                        console.log('Token prices not available, fetching directly...');
+                        try {
+                            const priceResp = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=terra-luna-2,backbone-labs-staked-luna&vs_currencies=usd');
+                            const priceData = await priceResp.json();
+                            window.tokenPrices = window.tokenPrices || {};
+                            window.tokenPrices.LUNA = priceData['terra-luna-2']?.usd || 0;
+                            window.tokenPrices.bLUNA = priceData['backbone-labs-staked-luna']?.usd || 0;
+                        } catch (e) {
+                            console.error('Failed to fetch prices:', e);
+                        }
+                    }
+                    
+                    console.log('Token prices ready:', window.tokenPrices);
+                    
+                    // Single consolidated load of all marketplace data
+                    // This makes only 6 API calls total:
+                    // - 2 BBL listings calls (aDAO, pixeLions)
+                    // - 3 Boost GraphQL calls (aDAO, pixeLions, TLA Locks)
+                    // - 1 BBL /collections call (aDAO volume only)
+                    await loadAllMarketplaceData();
                 }
-                initializeListings();
+                initializeMarketplace();
                 
                 // Sales Chart button handler
                 const salesChartBtn = document.getElementById('sales-chart-btn');
