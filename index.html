@@ -8813,12 +8813,25 @@ est. APR 58.53 %"></textarea>
                     // Get NFT ID
                     const nftId = item.token_id;
                     
-                    // Use getNftImageUrl for aDAO, deving.zone for pixeLions
+                    // Check if broken (aDAO only - from deving.zone data)
+                    let isBroken = false;
+                    if (isAdao && nftStatusData?.nfts) {
+                        const nftStatus = nftStatusData.nfts.find(n => n.id == nftId);
+                        isBroken = nftStatus?.broken || false;
+                    }
+                    
+                    // Image URL
                     let imageUrl;
                     if (isAdao) {
                         imageUrl = getNftImageUrl(nftId);
                     } else {
-                        imageUrl = `https://www.deving.zone/pixelions/images/${nftId}.png`;
+                        // pixeLions - convert IPFS URL from API to realityflux gateway
+                        if (item.nft_image_url && item.nft_image_url.startsWith('ipfs://')) {
+                            const ipfsPath = item.nft_image_url.replace('ipfs://', '');
+                            imageUrl = `https://ipfs.realityflux.io/ipfs/${ipfsPath}?pinataGatewayToken=B9zzwsO_1qJRcH8Ki5NU0senaMF1a_De5Ib-PVeu9KUcY6Z0QhLgLkHq018_lF7e`;
+                        } else {
+                            imageUrl = `https://www.deving.zone/pixelions/images/${nftId}.png`;
+                        }
                     }
                     
                     // Format timestamp
@@ -8845,12 +8858,15 @@ est. APR 58.53 %"></textarea>
                         default: eventLabel = item.event_type.toUpperCase();
                     }
                     
+                    // Broken indicator
+                    const brokenBadge = isBroken ? '<span class="text-red-400 text-[9px] ml-1" title="Currently broken">💔</span>' : '';
+                    
                     row.innerHTML = `
                         <img src="${imageUrl}" alt="#${nftId}" 
-                             class="w-8 h-8 rounded object-cover flex-shrink-0"
+                             class="w-8 h-8 rounded object-cover flex-shrink-0 ${isBroken ? 'opacity-60' : ''}"
                              onerror="this.src='https://placehold.co/32x32/1f2937/666?text=${nftId}'">
                         <div class="flex-1 min-w-0 flex items-center gap-2">
-                            <span class="text-white text-sm font-medium">#${nftId}</span>
+                            <span class="text-white text-sm font-medium">#${nftId}${brokenBadge}</span>
                             <span class="text-${collectionColor}-400 text-[9px]">${collectionName}</span>
                         </div>
                         <span class="activity-event ${item.event_type}">${eventLabel}</span>
