@@ -419,6 +419,15 @@
             font-weight: 700;
             color: #fff;
         }
+        
+        /* TLA Lock image styling */
+        .tla-lock-image {
+            position: relative;
+        }
+        .tla-lock-image img {
+            filter: drop-shadow(0 0 4px rgba(168, 85, 247, 0.3));
+        }
+        
         .listing-column {
             min-height: 200px;
         }
@@ -7260,6 +7269,72 @@ est. APR 58.53 %"></textarea>
                     }
                 };
                 
+                // TLA Lock token logos (used for lock type identification)
+                const TLA_LOCK_TOKENS = {
+                    'arbLUNA': {
+                        logo: 'https://raw.githubusercontent.com/cosmos/chain-registry/master/terra2/images/arbluna.svg',
+                        name: 'arbLUNA',
+                        color: '#f97316' // orange
+                    },
+                    'ampLUNA': {
+                        logo: 'https://raw.githubusercontent.com/cosmos/chain-registry/master/terra2/images/ampluna.svg',
+                        name: 'ampLUNA',
+                        color: '#8b5cf6' // purple
+                    },
+                    'LUNA': {
+                        logo: 'https://raw.githubusercontent.com/cosmos/chain-registry/master/terra2/images/luna.svg',
+                        name: 'LUNA',
+                        color: '#fbbf24' // yellow
+                    },
+                    'bLUNA': {
+                        logo: 'https://raw.githubusercontent.com/defipatriot/token_logo/main/bLUNA.webp',
+                        name: 'bLUNA',
+                        color: '#06b6d4' // cyan
+                    }
+                };
+                
+                // Known token contracts for lock type detection
+                const TLA_TOKEN_CONTRACTS = {
+                    // arbLUNA (Eris Arb Protocol)
+                    'terra1se7rvuerys4kd2snt6vqswh9wugu49vhyzls8ymc02wl37g2p2ms5yz490': 'arbLUNA',
+                    // ampLUNA (Eris Protocol)  
+                    'terra1ecgazyd0waaj3g7l9cmy5gulhxkps2gmxu9ghducvuypjq68mq2s5lvsct': 'ampLUNA',
+                    // bLUNA (Backbone Labs)
+                    'terra17aj4ty4sz4yhgm08na8drc0v03v2jwr3waxcqrwhajj729zhl7zqnpc0ml': 'bLUNA',
+                    // Native LUNA
+                    'uluna': 'LUNA'
+                };
+                
+                // Detect lock type from Boost API data
+                function detectLockType(launch) {
+                    // Check from_id against known contracts
+                    if (launch.from_id && TLA_TOKEN_CONTRACTS[launch.from_id]) {
+                        return TLA_TOKEN_CONTRACTS[launch.from_id];
+                    }
+                    
+                    // Check for partial matches in from_id
+                    const fromId = launch.from_id?.toLowerCase() || '';
+                    if (fromId.includes('arb') || fromId.includes('se7rv')) return 'arbLUNA';
+                    if (fromId.includes('amp') || fromId.includes('ecgaz')) return 'ampLUNA';
+                    if (fromId.includes('bluna') || fromId.includes('17aj4')) return 'bLUNA';
+                    
+                    // Check name field
+                    const name = (launch.name || '').toLowerCase();
+                    if (name.includes('arbluna') || name.includes('arb')) return 'arbLUNA';
+                    if (name.includes('ampluna') || name.includes('amp')) return 'ampLUNA';
+                    if (name.includes('bluna')) return 'bLUNA';
+                    if (name.includes('luna')) return 'LUNA';
+                    
+                    // Default to arbLUNA (most common for TLA)
+                    return 'arbLUNA';
+                }
+                
+                // Get TLA Lock image URL with token logo
+                function getTlaLockImageUrl(lockType) {
+                    const token = TLA_LOCK_TOKENS[lockType] || TLA_LOCK_TOKENS['arbLUNA'];
+                    return token.logo;
+                }
+                
                 // Boost API config
                 const BOOST_API_URL = 'https://api.boostdao.io/graphql';
                 const BOOST_LAUNCH_CONTRACT = 'terra1kj7pasyahtugajx9qud02r5jqaf60mtm7g5v9utr94rmdfftx0vqspf4at';
@@ -8502,11 +8577,16 @@ est. APR 58.53 %"></textarea>
                                 let imageUrl;
                                 if (collectionKey === 'pixelions') {
                                     imageUrl = `https://nft-storage.b-cdn.net/ipfs/bafybeihgrne4vcqirlb26rs4y2gpaka32dqssidwvx2qui2kx5osc6oxie_${launch.from_nft_id}_160`;
+                                } else if (collectionKey === 'tla_locks') {
+                                    // For TLA Locks, use token-specific logo
+                                    const lockType = detectLockType(launch);
+                                    imageUrl = getTlaLockImageUrl(lockType);
                                 } else {
                                     imageUrl = getCollectionImageUrl(collectionKey, launch.from_nft_id);
                                 }
                                 
-                                listings.push({
+                                // Build base listing
+                                const listing = {
                                     marketplace: 'boost',
                                     collection: collectionKey,
                                     tokenId: launch.from_nft_id,
@@ -8516,8 +8596,31 @@ est. APR 58.53 %"></textarea>
                                     priceUsd: launch.to_usd || 0,
                                     imageUrl: imageUrl,
                                     isBroken: config.hasBroken && nftStatusData?.nfts?.find(n => n.id == launch.from_nft_id)?.broken || false,
-                                    url: `https://www.boostdao.io/ignite/permissionless-terra?launch_id=${launch.launch_id}`
-                                });
+                                    url: `https://www.boostdao.io/ignite/permissionless-terra?launch_id=${launch.launch_id}`,
+                                    launchId: launch.launch_id
+                                };
+                                
+                                // Add TLA Lock specific metadata
+                                if (collectionKey === 'tla_locks') {
+                                    const lockType = detectLockType(launch);
+                                    listing.lockType = lockType;
+                                    listing.lockData = {
+                                        creator: launch.creator,
+                                        lockId: launch.from_nft_id,
+                                        fromAmount: (launch.from_amount || 0) / 1000000,
+                                        fromUsd: launch.from_usd || 0,
+                                        toAmount: (launch.to_amount || 0) / 1000000,
+                                        toUsd: launch.to_usd || 0,
+                                        discount: launch.discount || 0,
+                                        toId: launch.to_id,
+                                        fromId: launch.from_id,
+                                        launchType: launch.launch_type
+                                    };
+                                    // Build better name for TLA Locks
+                                    listing.name = `TLA Lock #${launch.from_nft_id}`;
+                                }
+                                
+                                listings.push(listing);
                             });
                             
                             // Store in cache
@@ -8623,14 +8726,15 @@ est. APR 58.53 %"></textarea>
                     };
                     
                     // Collection badge colors
-                    const getCollectionBadge = (key) => {
+                    const getCollectionBadge = (key, lockType = null) => {
                         switch(key) {
                             case 'alliance_dao': 
                                 return '<span class="text-[8px] bg-cyan-500/20 text-cyan-400 px-1 py-0.5 rounded font-bold">aDAO</span>';
                             case 'pixelions': 
                                 return '<span class="text-[8px] bg-orange-500/20 text-orange-400 px-1 py-0.5 rounded font-bold">pixeLions</span>';
                             case 'tla_locks': 
-                                return '<span class="text-[8px] bg-purple-500/20 text-purple-400 px-1 py-0.5 rounded font-bold">TLA Lock</span>';
+                                const tokenInfo = TLA_LOCK_TOKENS[lockType] || TLA_LOCK_TOKENS['arbLUNA'];
+                                return `<span class="text-[8px] bg-purple-500/20 text-purple-400 px-1 py-0.5 rounded font-bold">${lockType || 'TLA'}</span>`;
                             default: return '';
                         }
                     };
@@ -8640,9 +8744,9 @@ est. APR 58.53 %"></textarea>
                     const getBoostBadge = () => '<img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Boost%20Logo.png" class="w-4 h-4" alt="Boost" title="Boost Marketplace">';
                     
                     // Show ALL listings (container is scrollable)
-                    const html = allListings.map(listing => {
+                    const html = allListings.map((listing, idx) => {
                         const collectionConfig = BBL_COLLECTIONS[listing.collection];
-                        const collectionBadge = getCollectionBadge(listing.collection);
+                        const collectionBadge = getCollectionBadge(listing.collection, listing.lockType);
                         const mpBadge = listing.marketplace === 'bbl' ? getBblBadge() : getBoostBadge();
                         
                         const brokenBadge = listing.isBroken 
@@ -8658,6 +8762,14 @@ est. APR 58.53 %"></textarea>
                         }
                         if (listing.rank) {
                             statusLine += `<span class="text-purple-400 ${statusLine ? 'ml-2' : ''}">Rank #${listing.rank}</span>`;
+                        }
+                        
+                        // TLA Lock specific status line
+                        if (listing.collection === 'tla_locks' && listing.lockData) {
+                            const discountPct = (listing.lockData.discount * 100).toFixed(2);
+                            const discountColor = listing.lockData.discount > 0 ? 'text-green-400' : 'text-red-400';
+                            statusLine = `<span class="text-gray-400">${listing.lockData.fromAmount.toFixed(4)} ${listing.lockType}</span>`;
+                            statusLine += ` <span class="${discountColor} ml-1">${discountPct}% ${listing.lockData.discount > 0 ? 'discount' : 'premium'}</span>`;
                         }
                         
                         // Build display name
@@ -8682,18 +8794,46 @@ est. APR 58.53 %"></textarea>
                             }
                         }
                         
-                        return `
-                            <a href="${listing.url}" target="_blank" class="flex items-center gap-3 p-3 bg-gray-800/50 rounded-lg hover:bg-gray-700 transition-colors border border-gray-700/50">
+                        // TLA Lock image with lock overlay
+                        let imageHtml;
+                        if (listing.collection === 'tla_locks') {
+                            const tokenInfo = TLA_LOCK_TOKENS[listing.lockType] || TLA_LOCK_TOKENS['arbLUNA'];
+                            imageHtml = `
+                                <div class="relative flex-shrink-0 tla-lock-image">
+                                    <div class="w-12 h-12 rounded-lg bg-gradient-to-br from-gray-700 to-gray-800 flex items-center justify-center overflow-hidden border border-gray-600">
+                                        <img src="${listing.imageUrl}" alt="${listing.lockType}" class="w-8 h-8 object-contain"
+                                             onerror="this.src='https://www.theliquidityalliance.com/favicon.ico'">
+                                    </div>
+                                    <div class="absolute -bottom-1 -right-1 w-5 h-5 bg-gray-900 rounded-full flex items-center justify-center border border-purple-500/50">
+                                        <i class="fas fa-lock text-purple-400 text-[8px]"></i>
+                                    </div>
+                                </div>`;
+                        } else {
+                            imageHtml = `
                                 <div class="relative flex-shrink-0">
                                     ${brokenBadge}
                                     <img src="${listing.imageUrl}" alt="${listing.name}" class="w-12 h-12 rounded-lg object-cover"
                                          onerror="this.onerror=null; this.src='${fallbackUrl}'">
-                                </div>
+                                </div>`;
+                        }
+                        
+                        // Add Details button for TLA Locks
+                        const detailsButton = listing.collection === 'tla_locks' 
+                            ? `<button onclick="event.preventDefault(); event.stopPropagation(); showTlaLockDetails(${idx})" 
+                                       class="text-[10px] text-purple-400 hover:text-purple-300 ml-2 px-1.5 py-0.5 bg-purple-500/10 rounded hover:bg-purple-500/20 transition-colors">
+                                   <i class="fas fa-info-circle mr-0.5"></i>Details
+                               </button>`
+                            : '';
+                        
+                        return `
+                            <a href="${listing.url}" target="_blank" class="flex items-center gap-3 p-3 bg-gray-800/50 rounded-lg hover:bg-gray-700 transition-colors border border-gray-700/50" data-listing-idx="${idx}">
+                                ${imageHtml}
                                 <div class="flex-1 min-w-0">
                                     <div class="font-bold text-white text-sm flex items-center gap-1.5 flex-wrap">
                                         <span class="truncate">${displayName}</span>
                                         ${collectionBadge}
                                         ${mpBadge}
+                                        ${detailsButton}
                                     </div>
                                     ${statusLine ? `<div class="text-xs text-gray-400">${statusLine}</div>` : ''}
                                 </div>
@@ -8706,6 +8846,9 @@ est. APR 58.53 %"></textarea>
                     }).join('');
                     
                     container.innerHTML = html;
+                    
+                    // Store listings reference for details popup
+                    window.currentListings = allListings;
                 }
                 
                 // Setup listings collection filter buttons
@@ -8744,6 +8887,128 @@ est. APR 58.53 %"></textarea>
                         renderCombinedListings();
                     });
                 }
+                
+                // Show TLA Lock details popup
+                function showTlaLockDetails(listingIdx) {
+                    const listing = window.currentListings?.[listingIdx];
+                    if (!listing || listing.collection !== 'tla_locks' || !listing.lockData) {
+                        console.error('Invalid listing for TLA Lock details');
+                        return;
+                    }
+                    
+                    const lockData = listing.lockData;
+                    const tokenInfo = TLA_LOCK_TOKENS[listing.lockType] || TLA_LOCK_TOKENS['arbLUNA'];
+                    
+                    // Determine asking token name
+                    let askingTokenName = 'Token';
+                    if (lockData.toId === 'uluna') askingTokenName = 'LUNA';
+                    else if (lockData.toId?.includes('10aa3zdk')) askingTokenName = 'SOLID';
+                    else if (lockData.toId?.includes('roar')) askingTokenName = 'ROAR';
+                    
+                    // Calculate discount/premium display
+                    const discountPct = (lockData.discount * 100).toFixed(2);
+                    const isDiscount = lockData.discount > 0;
+                    const discountText = isDiscount ? `${discountPct}% Discount` : `${Math.abs(discountPct)}% Premium`;
+                    const discountColor = isDiscount ? 'text-green-400' : 'text-red-400';
+                    const discountBg = isDiscount ? 'bg-green-500/20' : 'bg-red-500/20';
+                    
+                    // Create modal
+                    const existingModal = document.getElementById('tla-lock-details-modal');
+                    if (existingModal) existingModal.remove();
+                    
+                    const modal = document.createElement('div');
+                    modal.id = 'tla-lock-details-modal';
+                    modal.className = 'fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70';
+                    modal.innerHTML = `
+                        <div class="bg-gray-900 rounded-xl border border-purple-500/30 max-w-md w-full overflow-hidden shadow-xl shadow-purple-500/10">
+                            <div class="p-4 border-b border-gray-700 bg-gradient-to-r from-purple-900/30 to-gray-900">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-12 h-12 rounded-lg bg-gradient-to-br from-gray-700 to-gray-800 flex items-center justify-center border border-purple-500/30 relative">
+                                            <img src="${tokenInfo.logo}" alt="${listing.lockType}" class="w-8 h-8 object-contain">
+                                            <div class="absolute -bottom-1 -right-1 w-5 h-5 bg-gray-900 rounded-full flex items-center justify-center border border-purple-500/50">
+                                                <i class="fas fa-lock text-purple-400 text-[8px]"></i>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <h3 class="text-lg font-bold text-white">TLA Lock #${lockData.lockId}</h3>
+                                            <span class="text-sm text-purple-400">${listing.lockType} Lock</span>
+                                        </div>
+                                    </div>
+                                    <button class="text-gray-400 hover:text-white text-2xl leading-none" id="close-tla-details">&times;</button>
+                                </div>
+                            </div>
+                            
+                            <div class="p-4 space-y-4">
+                                <!-- Lock Contents -->
+                                <div class="bg-gray-800/50 rounded-lg p-3 border border-gray-700">
+                                    <div class="text-xs text-gray-500 uppercase mb-2">Lock Contents</div>
+                                    <div class="flex items-center justify-between">
+                                        <div class="flex items-center gap-2">
+                                            <img src="${tokenInfo.logo}" class="w-6 h-6" alt="${listing.lockType}">
+                                            <span class="font-bold text-white">${lockData.fromAmount.toFixed(6)} ${listing.lockType}</span>
+                                        </div>
+                                        <span class="text-green-400">$${lockData.fromUsd.toFixed(4)}</span>
+                                    </div>
+                                </div>
+                                
+                                <!-- Asking Price -->
+                                <div class="bg-gray-800/50 rounded-lg p-3 border border-gray-700">
+                                    <div class="text-xs text-gray-500 uppercase mb-2">Asking Price</div>
+                                    <div class="flex items-center justify-between">
+                                        <span class="font-bold text-yellow-400">${lockData.toAmount.toFixed(6)} ${askingTokenName}</span>
+                                        <span class="text-green-400">$${lockData.toUsd.toFixed(4)}</span>
+                                    </div>
+                                </div>
+                                
+                                <!-- Discount/Premium Badge -->
+                                <div class="flex justify-center">
+                                    <span class="px-4 py-2 ${discountBg} ${discountColor} rounded-full font-bold text-sm">
+                                        <i class="fas fa-${isDiscount ? 'arrow-down' : 'arrow-up'} mr-1"></i>
+                                        ${discountText}
+                                    </span>
+                                </div>
+                                
+                                <!-- Seller Info -->
+                                <div class="bg-gray-800/50 rounded-lg p-3 border border-gray-700">
+                                    <div class="text-xs text-gray-500 uppercase mb-2">Seller</div>
+                                    <div class="flex items-center gap-2">
+                                        <i class="fas fa-user-circle text-gray-400"></i>
+                                        <span class="font-mono text-xs text-gray-300 break-all">${lockData.creator}</span>
+                                    </div>
+                                    <a href="https://finder.terra.money/mainnet/address/${lockData.creator}" target="_blank" 
+                                       class="text-xs text-cyan-400 hover:text-cyan-300 mt-2 inline-block">
+                                        <i class="fas fa-external-link-alt mr-1"></i>View on Terra Finder
+                                    </a>
+                                </div>
+                                
+                                <!-- Launch ID -->
+                                <div class="text-xs text-gray-500 text-center">
+                                    Launch ID: ${listing.launchId}
+                                </div>
+                            </div>
+                            
+                            <div class="p-4 border-t border-gray-700 flex gap-3">
+                                <a href="${listing.url}" target="_blank" 
+                                   class="flex-1 bg-gradient-to-r from-purple-600 to-purple-500 text-white text-center py-2 px-4 rounded-lg font-semibold hover:from-purple-500 hover:to-purple-400 transition-all">
+                                    <i class="fas fa-shopping-cart mr-2"></i>Buy on Boost
+                                </a>
+                                <button onclick="document.getElementById('tla-lock-details-modal').remove()" 
+                                        class="px-4 py-2 bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600 transition-colors">
+                                    Close
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                    
+                    document.body.appendChild(modal);
+                    
+                    // Close handlers
+                    document.getElementById('close-tla-details').addEventListener('click', () => modal.remove());
+                    modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+                }
+                // Make showTlaLockDetails globally accessible for onclick handlers
+                window.showTlaLockDetails = showTlaLockDetails;
                 
                 // ===== END COMBINED LISTINGS =====
                 
