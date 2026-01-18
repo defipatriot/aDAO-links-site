@@ -1045,12 +1045,25 @@
                         <span class="text-gray-600">Sales data loads when you scroll here</span>
                     </div>
                 </div>
-                <div class="text-center mt-4">
-                    <button id="load-more-sales" class="text-xs text-cyan-400 hover:text-cyan-300 hidden">
-                        <i class="fas fa-chevron-down mr-1"></i> Show More Sales
+                
+                <!-- Button row: Chart (left) | Show More (center) | Top 10 (right) -->
+                <div class="flex items-center justify-between mt-4 gap-4">
+                    <button id="sales-chart-btn-grid" class="flex-1 max-w-[200px] h-12 flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600/20 to-pink-600/20 border border-purple-500/30 rounded-lg hover:border-purple-400/50 hover:bg-purple-600/30 transition-all cursor-pointer">
+                        <i class="fas fa-chart-line text-purple-400"></i>
+                        <span class="text-purple-400 font-bold text-sm">Sales Chart</span>
+                    </button>
+                    
+                    <button id="load-more-sales" class="text-sm text-cyan-400 hover:text-cyan-300 hidden px-4">
+                        <i class="fas fa-chevron-down mr-1"></i> Show More <span id="load-more-count"></span>
+                    </button>
+                    
+                    <button id="top10-sales-btn-grid" class="flex-1 max-w-[200px] h-12 flex items-center justify-center gap-2 bg-gradient-to-r from-yellow-600/20 to-orange-600/20 border border-yellow-500/30 rounded-lg hover:border-yellow-400/50 hover:bg-yellow-600/30 transition-all cursor-pointer">
+                        <i class="fas fa-trophy text-yellow-400"></i>
+                        <span class="text-yellow-400 font-bold text-sm">Top 10 Sales</span>
                     </button>
                 </div>
-                <div class="text-[10px] text-gray-600 mt-2 text-center">
+                
+                <div class="text-[10px] text-gray-600 mt-3 text-center">
                     *"Now Broken" = NFT is currently broken; may not have been broken at time of sale
                 </div>
             </div>
@@ -8764,12 +8777,11 @@ est. APR 58.53 %"></textarea>
                             statusLine += `<span class="text-purple-400 ${statusLine ? 'ml-2' : ''}">Rank #${listing.rank}</span>`;
                         }
                         
-                        // TLA Lock specific status line
+                        // TLA Lock specific status line (simpler - just show discount)
                         if (listing.collection === 'tla_locks' && listing.lockData) {
                             const discountPct = (listing.lockData.discount * 100).toFixed(2);
                             const discountColor = listing.lockData.discount > 0 ? 'text-green-400' : 'text-red-400';
-                            statusLine = `<span class="text-gray-400">${listing.lockData.fromAmount.toFixed(4)} ${listing.lockType}</span>`;
-                            statusLine += ` <span class="${discountColor} ml-1">${discountPct}% ${listing.lockData.discount > 0 ? 'discount' : 'premium'}</span>`;
+                            statusLine = `<span class="${discountColor}">${listing.lockData.discount > 0 ? '+' : ''}${discountPct}% ${listing.lockData.discount > 0 ? 'discount' : 'premium'}</span>`;
                         }
                         
                         // Build display name
@@ -8794,37 +8806,60 @@ est. APR 58.53 %"></textarea>
                             }
                         }
                         
-                        // TLA Lock image with lock overlay
-                        let imageHtml;
-                        if (listing.collection === 'tla_locks') {
-                            const tokenInfo = TLA_LOCK_TOKENS[listing.lockType] || TLA_LOCK_TOKENS['arbLUNA'];
-                            imageHtml = `
-                                <div class="relative flex-shrink-0 tla-lock-image">
-                                    <div class="w-12 h-12 rounded-lg bg-gradient-to-br from-gray-700 to-gray-800 flex items-center justify-center overflow-hidden border border-gray-600">
-                                        <img src="${listing.imageUrl}" alt="${listing.lockType}" class="w-8 h-8 object-contain"
-                                             onerror="this.src='https://www.theliquidityalliance.com/favicon.ico'">
-                                    </div>
-                                    <div class="absolute -bottom-1 -right-1 w-5 h-5 bg-gray-900 rounded-full flex items-center justify-center border border-purple-500/50">
-                                        <i class="fas fa-lock text-purple-400 text-[8px]"></i>
-                                    </div>
-                                </div>`;
-                        } else {
-                            imageHtml = `
-                                <div class="relative flex-shrink-0">
-                                    ${brokenBadge}
-                                    <img src="${listing.imageUrl}" alt="${listing.name}" class="w-12 h-12 rounded-lg object-cover"
-                                         onerror="this.onerror=null; this.src='${fallbackUrl}'">
-                                </div>`;
-                        }
+                        // Standard NFT image (aDAO, pixeLions)
+                        let imageHtml = `
+                            <div class="relative flex-shrink-0">
+                                ${brokenBadge}
+                                <img src="${listing.imageUrl}" alt="${listing.name}" class="w-12 h-12 rounded-lg object-cover"
+                                     onerror="this.onerror=null; this.src='${fallbackUrl}'">
+                            </div>`;
                         
-                        // Add Details button for TLA Locks
+                        // Add Details button for TLA Locks (will be positioned in price area)
                         const detailsButton = listing.collection === 'tla_locks' 
                             ? `<button onclick="event.preventDefault(); event.stopPropagation(); showTlaLockDetails(${idx})" 
-                                       class="text-[10px] text-purple-400 hover:text-purple-300 ml-2 px-1.5 py-0.5 bg-purple-500/10 rounded hover:bg-purple-500/20 transition-colors">
-                                   <i class="fas fa-info-circle mr-0.5"></i>Details
+                                       class="text-[9px] text-purple-400 hover:text-purple-300 px-1.5 py-0.5 bg-purple-500/10 rounded hover:bg-purple-500/20 transition-colors border border-purple-500/30">
+                                   <i class="fas fa-info-circle"></i>
                                </button>`
                             : '';
                         
+                        // TLA Lock cards have a different layout
+                        if (listing.collection === 'tla_locks') {
+                            const tokenInfo = TLA_LOCK_TOKENS[listing.lockType] || TLA_LOCK_TOKENS['arbLUNA'];
+                            const discountPct = (listing.lockData?.discount * 100 || 0).toFixed(2);
+                            const isDiscount = listing.lockData?.discount > 0;
+                            const discountColor = isDiscount ? 'text-green-400' : 'text-red-400';
+                            
+                            return `
+                                <a href="${listing.url}" target="_blank" class="flex items-center gap-3 p-3 bg-gray-800/50 rounded-lg hover:bg-gray-700 transition-colors border border-purple-500/20 hover:border-purple-500/40" data-listing-idx="${idx}">
+                                    <div class="relative flex-shrink-0 tla-lock-image">
+                                        <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-gray-700 to-gray-800 flex items-center justify-center overflow-hidden border border-gray-600">
+                                            <img src="${listing.imageUrl}" alt="${listing.lockType}" class="w-6 h-6 object-contain"
+                                                 onerror="this.src='https://www.theliquidityalliance.com/favicon.ico'">
+                                        </div>
+                                        <div class="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-gray-900 rounded-full flex items-center justify-center border border-purple-500/50">
+                                            <i class="fas fa-lock text-purple-400 text-[6px]"></i>
+                                        </div>
+                                    </div>
+                                    <div class="flex-1 min-w-0">
+                                        <div class="font-bold text-white text-sm flex items-center gap-1.5">
+                                            <span class="truncate">${displayName}</span>
+                                            ${collectionBadge}
+                                        </div>
+                                        <div class="text-xs text-gray-400">${listing.lockData?.fromAmount?.toFixed(4) || '?'} ${listing.lockType}</div>
+                                    </div>
+                                    <div class="text-right flex-shrink-0 flex flex-col items-end gap-1">
+                                        <div class="flex items-center gap-1.5">
+                                            <span class="text-green-400 font-bold text-sm">$${listing.priceUsd.toFixed(2)}</span>
+                                            ${detailsButton}
+                                        </div>
+                                        <div class="text-[10px] text-yellow-400">${listing.price.toFixed(3)} ${listing.priceToken}</div>
+                                        <div class="text-[10px] ${discountColor}">${isDiscount ? '+' : ''}${discountPct}%</div>
+                                    </div>
+                                </a>
+                            `;
+                        }
+                        
+                        // Standard listing card (aDAO, pixeLions)
                         return `
                             <a href="${listing.url}" target="_blank" class="flex items-center gap-3 p-3 bg-gray-800/50 rounded-lg hover:bg-gray-700 transition-colors border border-gray-700/50" data-listing-idx="${idx}">
                                 ${imageHtml}
@@ -8833,7 +8868,6 @@ est. APR 58.53 %"></textarea>
                                         <span class="truncate">${displayName}</span>
                                         ${collectionBadge}
                                         ${mpBadge}
-                                        ${detailsButton}
                                     </div>
                                     ${statusLine ? `<div class="text-xs text-gray-400">${statusLine}</div>` : ''}
                                 </div>
@@ -9083,6 +9117,14 @@ est. APR 58.53 %"></textarea>
                         renderRecentSales();
                         setupTop10Modal();
                         
+                        // Setup click handlers for the static button row
+                        document.getElementById('top10-sales-btn-grid')?.addEventListener('click', () => {
+                            document.getElementById('top10-sales-btn')?.click();
+                        });
+                        document.getElementById('sales-chart-btn-grid')?.addEventListener('click', () => {
+                            document.getElementById('sales-chart-btn')?.click();
+                        });
+                        
                         console.log(`Loaded sales: ${allTimeSalesData.sales.bbl.length} BBL + ${allTimeSalesData.sales.boost.length} Boost = ${allTimeSalesData.sales.bbl.length + allTimeSalesData.sales.boost.length} total records`);
                         console.log(`All-time volume: ${allTimeSalesData.cumulative_totals.bbl?.total_volume_bluna?.toFixed(2)} bLUNA`);
                         console.log(`DEBUG: Sales history loaded in ${((performance.now() - salesStartTime) / 1000).toFixed(2)}s`);
@@ -9219,37 +9261,12 @@ est. APR 58.53 %"></textarea>
                         container.appendChild(createSaleRow(sale, sale.marketplace));
                     });
                     
-                    // Add Top 10 and Chart buttons as grid items
-                    const top10Btn = document.createElement('div');
-                    top10Btn.innerHTML = `
-                        <button id="top10-sales-btn-grid" class="w-full h-full min-h-[80px] flex items-center justify-center gap-2 bg-gradient-to-r from-yellow-600/20 to-orange-600/20 border border-yellow-500/30 rounded-lg hover:border-yellow-400/50 transition-all cursor-pointer">
-                            <i class="fas fa-trophy text-yellow-400 text-xl"></i>
-                            <span class="text-yellow-400 font-bold">Top 10 All-Time Sales</span>
-                            <i class="fas fa-chevron-right text-yellow-400 text-sm"></i>
-                        </button>
-                    `;
-                    container.appendChild(top10Btn);
-                    
-                    const chartBtn = document.createElement('div');
-                    chartBtn.innerHTML = `
-                        <button id="sales-chart-btn-grid" class="w-full h-full min-h-[80px] flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600/20 to-pink-600/20 border border-purple-500/30 rounded-lg hover:border-purple-400/50 transition-all cursor-pointer">
-                            <i class="fas fa-chart-line text-purple-400 text-xl"></i>
-                            <span class="text-purple-400 font-bold">Sales History Chart</span>
-                        </button>
-                    `;
-                    container.appendChild(chartBtn);
-                    
-                    // Add click handlers for grid buttons
-                    document.getElementById('top10-sales-btn-grid')?.addEventListener('click', () => {
-                        document.getElementById('top10-sales-btn')?.click();
-                    });
-                    document.getElementById('sales-chart-btn-grid')?.addEventListener('click', () => {
-                        document.getElementById('sales-chart-btn')?.click();
-                    });
-                    
+                    // Update Show More button
                     if (allSales.length > displayedSalesCount) {
                         loadMoreBtn.classList.remove('hidden');
-                        loadMoreBtn.textContent = `Show More (${allSales.length - displayedSalesCount} remaining)`;
+                        const remaining = allSales.length - displayedSalesCount;
+                        const countSpan = document.getElementById('load-more-count');
+                        if (countSpan) countSpan.textContent = `(${remaining} remaining)`;
                     } else {
                         loadMoreBtn.classList.add('hidden');
                     }
