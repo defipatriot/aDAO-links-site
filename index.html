@@ -8006,13 +8006,10 @@ est. APR 58.53 %"></textarea>
                             };
                             
                             const proxyUrl = CORS_PROXY + encodeURIComponent(BOOST_API_URL);
-                            const requestBody = JSON.stringify(query);
-                            console.log('Boost API request body:', requestBody.slice(0, 800));
-                            
                             const response = await fetch(proxyUrl, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: requestBody
+                                body: JSON.stringify(query)
                             });
                             
                             if (response.status === 429) {
@@ -8025,32 +8022,13 @@ est. APR 58.53 %"></textarea>
                                 throw new Error('Fetch failed');
                             }
                             
-                            const responseText = await response.text();
-                            console.log('Boost API raw text (first 500 chars):', responseText.slice(0, 500));
-                            
-                            let data;
-                            try {
-                                data = JSON.parse(responseText);
-                            } catch (e) {
-                                console.error('Failed to parse Boost API response:', e);
-                                console.log('Full response text:', responseText);
-                                throw e;
-                            }
-                            
-                            console.log('Boost API parsed response:', JSON.stringify(data).slice(0, 500));
-                            
+                            const data = await response.json();
                             const launches = data.data?.launches || [];
                             
                             // Get total count from first page
                             if (totalCount === null) {
                                 totalCount = data.data?.aggregateLaunch?._count?._all || 0;
                                 console.log(`Total Boost sales for collection: ${totalCount}`);
-                                
-                                // Debug: log what we got
-                                if (totalCount === 0) {
-                                    console.log('DEBUG: Query returned 0 results. Collection:', collectionContract);
-                                    console.log('DEBUG: Full response data:', data);
-                                }
                             }
                             
                             // No more results - stop
@@ -8559,17 +8537,31 @@ est. APR 58.53 %"></textarea>
                         document.getElementById('boost-floor-usd').textContent = boostData.floorUsd > 0 ? `($${boostData.floorUsd.toFixed(2)})` : '';
                         document.getElementById('boost-listed-count').textContent = boostData.count || 0;
                         
-                        // Volume/sales only for aDAO
+                        // Volume/sales - use live data if available for pixeLions/TLA, JSON for aDAO
                         if (collectionKey === 'alliance_dao') {
                             // These come from our tracked sales data, not Boost API
                             // Will be populated by loadSalesHistory()
                         } else {
-                            document.getElementById('boost-volume-usd').textContent = 'N/A';
-                            document.getElementById('boost-total-sales').textContent = 'N/A';
+                            // For pixeLions/TLA, show "Load data" or update when live data loads
+                            document.getElementById('boost-volume-usd').textContent = '--';
+                            document.getElementById('boost-total-sales').textContent = 'Click tab to load';
                         }
                         
                         document.getElementById('boost-data-source').innerHTML = '<i class="fas fa-bolt text-yellow-400 mr-1"></i>Live from Boost';
                     }
+                }
+                
+                // Update Boost tile with live sales data
+                function updateBoostTileWithLiveData(cacheKey) {
+                    // Use window global since this may be called before local variable is declared
+                    const cache = window.liveBoostSalesCache?.[cacheKey];
+                    if (!cache) return;
+                    
+                    const volEl = document.getElementById('boost-volume-usd');
+                    const salesEl = document.getElementById('boost-total-sales');
+                    
+                    if (volEl) volEl.textContent = `$${cache.totalVolume.toFixed(2)}`;
+                    if (salesEl) salesEl.textContent = `${cache.totalCount} sales`;
                 }
                 
                 // Fetch BBL stats for specific collection
@@ -9640,7 +9632,8 @@ est. APR 58.53 %"></textarea>
                     // Get appropriate image URL
                     let imageUrl;
                     if (collection === 'pixelions') {
-                        imageUrl = `https://cloudflare-ipfs.com/ipfs/bafybeigfixpqfxcppmnsdumnn5j5vsb6q55s5hxuuuqvj5c2awjcqq5s3m/${sale.nft_id}.png`;
+                        // Use deving.zone CDN (same as BBL listing cards)
+                        imageUrl = `https://www.deving.zone/pixelions/images/${sale.nft_id}.png`;
                     } else if (collection === 'tla_locks') {
                         // TLA Lock - use token logo
                         const tokenInfo = TLA_LOCK_TOKENS[sale.lockType] || TLA_LOCK_TOKENS['arbLUNA'];
@@ -9705,6 +9698,7 @@ est. APR 58.53 %"></textarea>
                 // Setup filter buttons
                 let boostSubFilter = 'adao'; // 'adao', 'pixelions', 'tla'
                 let liveBoostSalesCache = {}; // Cache for live Boost sales by collection
+                window.liveBoostSalesCache = liveBoostSalesCache; // Make available globally for updateBoostTileWithLiveData
                 
                 function setupFilterButtons() {
                     const allBtn = document.getElementById('sales-filter-all');
@@ -9854,9 +9848,15 @@ est. APR 58.53 %"></textarea>
                             };
                             
                             boostLiveStats.innerHTML = `<i class="fas fa-bolt text-yellow-400"></i> ${result.totalCount} sales | $${totalVolume.toFixed(2)} volume`;
+                            
+                            // Also update the Boost tile with live data
+                            updateBoostTileWithLiveData(cacheKey);
                         } else {
                             liveBoostSalesCache[cacheKey] = { sales: [], totalCount: 0, totalVolume: 0 };
                             boostLiveStats.innerHTML = `<i class="fas fa-info-circle text-gray-500"></i> No sales found`;
+                            
+                            // Update tile to show 0
+                            updateBoostTileWithLiveData(cacheKey);
                         }
                     } catch (err) {
                         console.error(`Failed to load ${cacheKey} sales:`, err);
