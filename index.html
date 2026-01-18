@@ -912,11 +912,8 @@
                             </div>
                         </div>
                         <div class="flex justify-between items-center mt-2">
-                            <span class="text-gray-400 text-sm">Last Sale</span>
-                            <div class="text-right">
-                                <span id="bbl-last-sale" class="text-gray-300 font-mono">--</span>
-                                <span class="text-gray-500 text-xs ml-1">bLUNA</span>
-                            </div>
+                            <span class="text-gray-400 text-sm">Total Sales</span>
+                            <span id="bbl-total-sales" class="text-gray-400 text-sm">--</span>
                         </div>
                         <div class="flex justify-between items-center mt-2 pt-2 border-t border-gray-700">
                             <span class="text-gray-400 text-sm">Currently Listed</span>
@@ -7654,10 +7651,11 @@ est. APR 58.53 %"></textarea>
                             }
                         }
                         
-                        // Update last sale
-                        const lastSaleEl = document.getElementById('bbl-last-sale');
-                        if (lastSaleEl && data.last_sale_amount) {
-                            lastSaleEl.textContent = data.last_sale_amount.toFixed(2);
+                        // Update total sales from JSON data
+                        const totalSalesEl = document.getElementById('bbl-total-sales');
+                        if (totalSalesEl) {
+                            const bblSalesCount = salesData?.cumulative_totals?.bbl?.total_sales || allTimeSalesData?.cumulative_totals?.bbl?.total_sales || 0;
+                            totalSalesEl.textContent = bblSalesCount > 0 ? `${bblSalesCount} sales` : '--';
                         }
                         
                         // Fetch listing count (separate API call)
@@ -8566,15 +8564,18 @@ est. APR 58.53 %"></textarea>
                         document.getElementById('bbl-floor-bluna').textContent = bblData.floor > 0 ? bblData.floor.toLocaleString() : '--';
                         document.getElementById('bbl-floor-usd').textContent = bblData.floor > 0 && blunaPrice > 0 ? `($${(bblData.floor * blunaPrice).toFixed(2)})` : '';
                         document.getElementById('bbl-listed-count').textContent = bblData.count || 0;
-                        document.getElementById('bbl-last-sale').textContent = bblData.lastSale > 0 ? bblData.lastSale.toFixed(2) : '--';
                         
-                        // Volume only available for aDAO (from our tracked data)
+                        // Volume and total sales only available for aDAO (from our tracked data)
                         if (collectionKey === 'alliance_dao') {
                             document.getElementById('bbl-volume-bluna').textContent = bblData.volume > 0 ? Math.round(bblData.volume).toLocaleString() : '--';
                             document.getElementById('bbl-volume-usd').textContent = bblData.volume > 0 && blunaPrice > 0 ? `($${Math.round(bblData.volume * blunaPrice).toLocaleString()})` : '';
+                            // Total sales from JSON data
+                            const bblSalesCount = salesData?.cumulative_totals?.bbl?.total_sales || allTimeSalesData?.cumulative_totals?.bbl?.total_sales || 0;
+                            document.getElementById('bbl-total-sales').textContent = bblSalesCount > 0 ? `${bblSalesCount} sales` : '--';
                         } else {
                             document.getElementById('bbl-volume-bluna').textContent = 'N/A';
                             document.getElementById('bbl-volume-usd').textContent = '';
+                            document.getElementById('bbl-total-sales').textContent = 'N/A';
                         }
                         
                         document.getElementById('bbl-data-source').innerHTML = '<i class="fas fa-bolt text-yellow-400 mr-1"></i>Live from BBL';
@@ -8943,9 +8944,11 @@ est. APR 58.53 %"></textarea>
                             }
                         }
                         
-                        const lastSaleEl = document.getElementById('bbl-last-sale');
-                        if (lastSaleEl && data.last_sale_amount) {
-                            lastSaleEl.textContent = data.last_sale_amount.toFixed(2);
+                        // Update total sales from JSON data
+                        const totalSalesEl = document.getElementById('bbl-total-sales');
+                        if (totalSalesEl) {
+                            const bblSalesCount = salesData?.cumulative_totals?.bbl?.total_sales || allTimeSalesData?.cumulative_totals?.bbl?.total_sales || 0;
+                            totalSalesEl.textContent = bblSalesCount > 0 ? `${bblSalesCount} sales` : '--';
                         }
                         
                         // Fetch listing count (separate API call)
