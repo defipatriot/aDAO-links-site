@@ -8564,6 +8564,20 @@ est. APR 58.53 %"></textarea>
                     if (salesEl) salesEl.textContent = `${cache.totalCount} sales`;
                 }
                 
+                // Update Boost tile with aDAO JSON data
+                function updateBoostTileWithAdaoData() {
+                    if (!salesData?.cumulative_totals?.boost) return;
+                    
+                    const volEl = document.getElementById('boost-volume-usd');
+                    const salesEl = document.getElementById('boost-total-sales');
+                    
+                    const boostVolume = salesData.cumulative_totals.boost.total_volume_usd || 0;
+                    const boostSales = salesData.cumulative_totals.boost.total_sales || 0;
+                    
+                    if (volEl) volEl.textContent = `$${boostVolume.toFixed(2)}`;
+                    if (salesEl) salesEl.textContent = `${boostSales} sales`;
+                }
+                
                 // Fetch BBL stats for specific collection
                 async function fetchBblCollectionStatsFor(contract) {
                     try {
@@ -9574,6 +9588,12 @@ est. APR 58.53 %"></textarea>
                         }
                         // Update stats display
                         updateBoostLiveStatsDisplay();
+                        // Also update tile based on current sub-filter
+                        if (boostSubFilter === 'adao') {
+                            updateBoostTileWithAdaoData();
+                        } else {
+                            updateBoostTileWithLiveData(boostSubFilter);
+                        }
                     }
                     
                     // Sort by timestamp (JSON data) or launch_id (live data)
@@ -9755,6 +9775,9 @@ est. APR 58.53 %"></textarea>
                         displayedSalesCount = 12; 
                         setActive(boostBtn);
                         setSubActive(subAdao);
+                        // Update tile with aDAO JSON data
+                        updateBoostTileWithAdaoData();
+                        updateBoostLiveStatsDisplay();
                         renderRecentSales(); 
                     });
                     
@@ -9763,6 +9786,9 @@ est. APR 58.53 %"></textarea>
                         boostSubFilter = 'adao';
                         displayedSalesCount = 12;
                         setSubActive(subAdao);
+                        // Update tile with aDAO JSON data
+                        updateBoostTileWithAdaoData();
+                        updateBoostLiveStatsDisplay();
                         renderRecentSales();
                     });
                     
@@ -9774,6 +9800,10 @@ est. APR 58.53 %"></textarea>
                         if (!liveBoostSalesCache.pixelions) {
                             boostLiveStats.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading pixeLions sales...';
                             await loadLiveBoostSalesFor('pixelions', PIXELIONS_CONTRACT);
+                        } else {
+                            // Data already cached, just update displays
+                            updateBoostLiveStatsDisplay();
+                            updateBoostTileWithLiveData('pixelions');
                         }
                         renderRecentSales();
                     });
@@ -9786,6 +9816,10 @@ est. APR 58.53 %"></textarea>
                         if (!liveBoostSalesCache.tla) {
                             boostLiveStats.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading TLA Lock sales...';
                             await loadLiveBoostSalesFor('tla', TLA_LOCKS_CONTRACT);
+                        } else {
+                            // Data already cached, just update displays
+                            updateBoostLiveStatsDisplay();
+                            updateBoostTileWithLiveData('tla');
                         }
                         renderRecentSales();
                     });
