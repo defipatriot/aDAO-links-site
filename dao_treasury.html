@@ -890,18 +890,47 @@
                     const response = await fetch(url);
                     if (response.ok) {
                         const data = await response.json();
-                        const treasury = data.dashboard?.treasury;
+                        const dashboard = data.dashboard;
+                        const treasury = dashboard?.treasury;
+                        
                         if (treasury) {
+                            // Build staked positions total from alliances + TLA deposits
+                            let stakedTotal = 0;
+                            const prices = data.token_prices || {};
+                            
+                            // TLA Deposits
+                            if (dashboard.tla_deposits?.total_usd) {
+                                stakedTotal += dashboard.tla_deposits.total_usd;
+                            }
+                            
+                            // Alliance positions
+                            const lionDao = dashboard.alliances?.lion_dao;
+                            if (lionDao) {
+                                // LUNA staking
+                                if (lionDao.chain_staking?.total_staked_luna) {
+                                    const lunaPrice = prices.LUNA?.price || prices.LUNA || 0;
+                                    stakedTotal += lionDao.chain_staking.total_staked_luna * lunaPrice;
+                                }
+                                // ROAR staking
+                                if (lionDao.roar_dao_stake?.staked_roar) {
+                                    const roarPrice = prices.ROAR?.price || prices.ROAR || 0;
+                                    stakedTotal += lionDao.roar_dao_stake.staked_roar * roarPrice;
+                                }
+                            }
+                            
                             snapshots.push({
                                 epoch: data.meta?.epoch || epoch,
                                 timestamp: data.meta?.generated_at,
                                 treasuryAssets: treasury.tokens || [],
-                                councilAssets: treasury.council?.tokens || [],
+                                councilAssets: [], // Not available in current JSON structure
+                                stakedTotal_USD: stakedTotal,
                                 treasuryTotal_USD: treasury.total_usd,
-                                councilTotal_USD: treasury.council?.total_usd,
-                                prices: data.token_prices || {}
+                                councilTotal_USD: 0,
+                                prices: prices,
+                                // Store TLA deposits for individual token tracking
+                                tlaDeposits: dashboard.tla_deposits?.tokens || []
                             });
-                            console.log(`Loaded historical epoch ${epoch}: ${treasury.tokens?.length || 0} treasury tokens`);
+                            console.log(`Loaded historical epoch ${epoch}: ${treasury.tokens?.length || 0} treasury tokens, staked: $${stakedTotal.toFixed(0)}`);
                         }
                     }
                 } catch (e) {
@@ -1535,31 +1564,115 @@
                 return;
             }
             
-            // Extract treasury data from TLA
-            const treasury = tlaData.dashboard?.treasury;
+            // Extract token prices
             tokenPrices = tlaData.token_prices || {};
             
+            // Extract DAO Treasury tokens from dashboard.treasury.tokens
+            const treasury = tlaData.dashboard?.treasury;
             if (treasury) {
                 daoAssets = treasury.tokens || [];
-                councilAssets = treasury.council?.tokens || [];
-                console.log(`Loaded ${daoAssets.length} DAO tokens, ${councilAssets.length} Council tokens`);
+                console.log(`Loaded ${daoAssets.length} DAO Treasury tokens`);
             }
             
-            // Extract staked positions from TLA alliance data
-            const alliance = treasury?.alliance;
-            if (alliance?.positions) {
-                stakedPositions = alliance.positions.map(pos => ({
-                    name: pos.name,
-                    partner: pos.partner,
-                    proposal: pos.proposal,
-                    staked: pos.staked,
-                    rewards: pos.rewards || pos.unclaimed,
-                    apr: pos.apr,
-                    vp_percent: pos.vp_percent,
-                    usd: pos.staked?.usd || 0
-                }));
-                console.log(`Loaded ${stakedPositions.length} staked positions`);
+            // Extract Council Treasury - currently only has address in JSON, no token balances
+            // Council assets would need to be fetched live or added to TLA export
+            const councilTreasury = tlaData.dashboard?.council_treasury;
+            councilAssets = []; // No token data in current JSON structure
+            console.log('Council Treasury address:', councilTreasury?.address || 'Not found');
+            
+            // Build staked positions from multiple sources in the JSON:
+            // 1. dashboard.alliances.lion_dao - Alliance partnerships
+            // 2. dashboard.tla_deposits - TLA locked positions
+            stakedPositions = [];
+            
+            const alliances = tlaData.dashboard?.alliances;
+            const lionDao = alliances?.lion_dao;
+            
+            if (lionDao) {
+                // 1. Chain Staking (LUNA staked to validators)
+                if (lionDao.chain_staking?.validators) {
+                    for (const validator of lionDao.chain_staking.validators) {
+                        const lunaPrice = tokenPrices.LUNA?.price || tokenPrices.LUNA || 0;
+                        const stakedLuna = validator.staked_luna || 0;
+                        const pendingLuna = validator.unclaimed_rewards_luna || 0;
+                        
+                        stakedPositions.push({
+                            name: `${validator.name} Staking`,
+                            partner: 'Lion DAO',
+                            proposal: validator.prop_id,
+                            staked: {
+                                amount: stakedLuna,
+                                token: 'LUNA'
+                            },
+                            rewards: pendingLuna > 0 ? {
+                                amount: pendingLuna,
+                                token: 'LUNA'
+                            } : null,
+                            apr: lionDao.chain_staking.staking_apr_pct || 0,
+                            usd: stakedLuna * lunaPrice
+                        });
+                    }
+                }
+                
+                // 2. ROAR DAO Stake
+                if (lionDao.roar_dao_stake) {
+                    const roarStake = lionDao.roar_dao_stake;
+                    const roarPrice = tokenPrices.ROAR?.price || tokenPrices.ROAR || 0;
+                    const stakedRoar = roarStake.staked_roar || 0;
+                    
+                    stakedPositions.push({
+                        name: 'ROAR DAO Stake',
+                        partner: roarStake.dao_name || 'Lion DAO',
+                        proposal: roarStake.prop_id,
+                        staked: {
+                            amount: stakedRoar,
+                            token: 'ROAR'
+                        },
+                        vp_percent: roarStake.voting_power_pct || 0,
+                        usd: stakedRoar * roarPrice
+                    });
+                }
+                
+                // 3. pixeLions DAO Stake (NFTs)
+                if (lionDao.pixelions_dao_stake) {
+                    const nftStake = lionDao.pixelions_dao_stake;
+                    // NFTs don't have a direct USD value, estimate based on floor or skip
+                    stakedPositions.push({
+                        name: 'pixeLions DAO Stake',
+                        partner: nftStake.dao_name || 'pixeLions DAO',
+                        proposal: nftStake.prop_id,
+                        staked: {
+                            amount: nftStake.staked_nfts || 0,
+                            token: 'NFT'
+                        },
+                        vp_percent: nftStake.voting_power_pct || 0,
+                        usd: 0 // NFTs - no direct price, could estimate from floor
+                    });
+                }
             }
+            
+            // 4. TLA Deposits (locked positions)
+            const tlaDeposits = tlaData.dashboard?.tla_deposits;
+            if (tlaDeposits?.tokens && tlaDeposits.tokens.length > 0) {
+                // Group all TLA deposits as one position with total USD
+                const tlaTotal = tlaDeposits.total_usd || 0;
+                const tokenList = tlaDeposits.tokens.map(t => t.symbol || t.token).join(', ');
+                
+                stakedPositions.push({
+                    name: 'TLA Deposits',
+                    partner: 'Eris Protocol',
+                    staked: {
+                        amount: tlaDeposits.vp || 0,
+                        token: 'VP'
+                    },
+                    apr: tlaDeposits.apr || 0,
+                    usd: tlaTotal,
+                    // Store individual tokens for potential detailed view
+                    _tokens: tlaDeposits.tokens
+                });
+            }
+            
+            console.log(`Built ${stakedPositions.length} staked positions from alliances + TLA deposits`);
             
             // Fetch historical snapshots for charts
             await fetchHistoricalSnapshots();
@@ -1588,10 +1701,11 @@
             await fetchDaoProps();
             renderDaoEvents();
             
-            // Auto-select ampLUNA from DAO Treasury to show chart by default
-            if (daoAssets.length > 0) {
-                // Find ampLUNA or use first token
-                const defaultToken = daoAssets.find(a => (a.token || a.name) === 'ampLUNA') || daoAssets[0];
+            // Auto-select first staked position or DAO token for chart
+            if (stakedPositions.length > 0) {
+                selectStakedPosition(stakedPositions[0].name);
+            } else if (daoAssets.length > 0) {
+                const defaultToken = daoAssets.find(a => (a.token || a.name) === 'Astro') || daoAssets[0];
                 const tokenName = defaultToken.token || defaultToken.name;
                 selectToken(tokenName, 'dao');
             }
