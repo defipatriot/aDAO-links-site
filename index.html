@@ -892,6 +892,9 @@
                     <div class="marketplace-header">
                         <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Boost%20Logo.png" alt="Boost" onerror="this.style.display='none'">
                         <h3>Boost Marketplace</h3>
+                        <span id="boost-live-indicator" class="hidden ml-2 text-[10px] bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full">
+                            <i class="fas fa-circle text-[6px] mr-1 animate-pulse"></i>LIVE
+                        </span>
                         <a href="https://www.boostdao.io/ignite/permissionless-terra" target="_blank" class="text-xs text-gray-500 hover:text-cyan-400 ml-auto">
                             <i class="fas fa-external-link-alt mr-1"></i>View
                         </a>
@@ -900,6 +903,14 @@
                     <!-- Stats -->
                     <div class="bg-gray-800/50 rounded-lg p-3">
                         <div class="flex justify-between items-center">
+                            <span class="text-gray-400 text-sm">Floor Price</span>
+                            <div class="text-right">
+                                <span id="boost-floor-luna" class="text-yellow-400 font-mono font-bold">--</span>
+                                <span class="text-gray-500 text-xs ml-1">LUNA</span>
+                                <span id="boost-floor-usd" class="text-green-400 text-xs ml-2">--</span>
+                            </div>
+                        </div>
+                        <div class="flex justify-between items-center mt-2">
                             <span class="text-gray-400 text-sm">All-Time Volume</span>
                             <div class="text-right">
                                 <span id="boost-volume-usd" class="text-green-400 font-mono font-bold">--</span>
@@ -912,11 +923,14 @@
                         </div>
                         <div class="flex justify-between items-center mt-2 pt-2 border-t border-gray-700">
                             <span class="text-gray-400 text-sm">Currently Listed</span>
-                            <span id="boost-listed-count" class="text-gray-400 text-sm">-- NFTs</span>
+                            <button id="boost-listed-btn" class="text-cyan-400 text-sm hover:text-cyan-300 cursor-pointer font-bold">
+                                <span id="boost-listed-count">--</span> NFTs <i class="fas fa-chevron-right text-xs ml-1"></i>
+                            </button>
                         </div>
                     </div>
-                    <div class="text-[10px] text-gray-600 mt-2 text-center">
-                        <i class="fas fa-database mr-1"></i>Listings from deving.zone (updated every 6 hours)
+                    <div id="boost-data-source" class="text-[10px] text-gray-600 mt-2 text-center">
+                        <i class="fas fa-spinner fa-spin mr-1"></i>Loading live data...
+                    </div>
                     </div>
                 </div>
             </div>
@@ -7147,6 +7161,10 @@ est. APR 58.53 %"></textarea>
                     }
                 };
                 
+                // Boost API config
+                const BOOST_API_URL = 'https://api.boostdao.io/graphql';
+                const BOOST_LAUNCH_CONTRACT = 'terra1kj7pasyahtugajx9qud02r5jqaf60mtm7g5v9utr94rmdfftx0vqspf4at';
+                
                 // Fetch with CORS proxy fallback
                 async function fetchWithCorsProxy(url) {
                     try {
@@ -7227,8 +7245,11 @@ est. APR 58.53 %"></textarea>
                         }
                     });
                     
-                    // Update Boost count (still from deving.zone)
-                    document.getElementById('boost-listed-count').textContent = `${boostCount} NFTs`;
+                    // Update Boost count only if live data hasn't loaded yet
+                    const boostLiveIndicator = document.getElementById('boost-live-indicator');
+                    if (!boostLiveIndicator || boostLiveIndicator.classList.contains('hidden')) {
+                        document.getElementById('boost-listed-count').textContent = boostCount;
+                    }
                     
                     // Setup BBL listed button
                     setupBblListedModal();
@@ -7563,6 +7584,344 @@ est. APR 58.53 %"></textarea>
                     container.innerHTML = `<div class="space-y-2">${listHtml}</div>`;
                 }
                 
+                // ===== BOOST MARKETPLACE FUNCTIONS =====
+                let boostListingsData = null;
+                
+                // Fetch Boost listings via GraphQL
+                async function fetchBoostListings() {
+                    try {
+                        const query = {
+                            operationName: "Launches",
+                            variables: {
+                                where: {
+                                    launch_contract: { equals: BOOST_LAUNCH_CONTRACT },
+                                    AND: [],
+                                    done: { equals: false },
+                                    cancelled: { equals: false },
+                                    real_collection_id: { equals: BBL_CONTRACT },
+                                    discount: { gte: -0.001 },
+                                    active: { equals: true },
+                                    whitelist: { none: {} }
+                                },
+                                orderBy: [
+                                    { discount: { sort: "desc", nulls: "last" } },
+                                    { to_usd: { sort: "asc", nulls: "last" } }
+                                ],
+                                skip: 0,
+                                take: 50
+                            },
+                            query: `query Launches($where: View_launch_preparedWhereInput, $orderBy: [View_launch_preparedOrderByWithRelationInput!], $take: Int, $skip: Int) {
+                                launches: view_launch_prepareds(where: $where, orderBy: $orderBy, take: $take, skip: $skip) {
+                                    creator
+                                    done
+                                    launch_id
+                                    cancelled
+                                    to_id
+                                    from_id
+                                    name
+                                    setup_msg
+                                    from_collection_id
+                                    from_nft_id
+                                    launch_type
+                                    from_amount
+                                    to_amount
+                                    from_usd
+                                    to_usd
+                                    discount
+                                    real_collection_id
+                                    __typename
+                                }
+                                aggregateLaunch: aggregateView_launch_prepared(where: $where) {
+                                    _count { _all __typename }
+                                    __typename
+                                }
+                            }`
+                        };
+                        
+                        const proxyUrl = CORS_PROXY + encodeURIComponent(BOOST_API_URL);
+                        const response = await fetch(proxyUrl, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(query)
+                        });
+                        
+                        if (response.status === 429) {
+                            const error = new Error('Rate limit exceeded');
+                            error.code = 'RATE_LIMITED';
+                            throw error;
+                        }
+                        
+                        if (!response.ok) throw new Error('Fetch failed');
+                        
+                        const data = await response.json();
+                        return data.data;
+                    } catch (err) {
+                        console.error('Boost listings error:', err);
+                        return { error: true, code: err.code || 'FETCH_ERROR' };
+                    }
+                }
+                
+                // Update Boost stats from live data
+                async function fetchBoostStats() {
+                    try {
+                        const data = await fetchBoostListings();
+                        
+                        if (data.error) {
+                            const dataSource = document.getElementById('boost-data-source');
+                            if (data.code === 'RATE_LIMITED') {
+                                if (dataSource) dataSource.innerHTML = '<i class="fas fa-clock text-orange-400 mr-1"></i>Rate limited - try again in 1 min';
+                            } else {
+                                if (dataSource) dataSource.innerHTML = '<i class="fas fa-exclamation-triangle text-yellow-500 mr-1"></i>API unavailable';
+                            }
+                            return null;
+                        }
+                        
+                        boostListingsData = data;
+                        const launches = data.launches || [];
+                        const totalCount = data.aggregateLaunch?._count?._all || launches.length;
+                        
+                        // Get LUNA price
+                        const lunaPrice = window.tokenPrices?.LUNA || 0;
+                        
+                        // Find floor price (lowest to_usd for LUNA listings)
+                        const lunaListings = launches.filter(l => l.to_id === 'uluna');
+                        let floorLuna = 0;
+                        let floorUsd = 0;
+                        
+                        if (lunaListings.length > 0) {
+                            // Sort by USD price to find floor
+                            const sorted = lunaListings.sort((a, b) => (a.to_usd || 0) - (b.to_usd || 0));
+                            floorLuna = (sorted[0].to_amount || 0) / 1000000; // Convert from uluna
+                            floorUsd = sorted[0].to_usd || 0;
+                        }
+                        
+                        // Update UI
+                        const floorLunaEl = document.getElementById('boost-floor-luna');
+                        const floorUsdEl = document.getElementById('boost-floor-usd');
+                        const listedCountEl = document.getElementById('boost-listed-count');
+                        const liveIndicator = document.getElementById('boost-live-indicator');
+                        const dataSource = document.getElementById('boost-data-source');
+                        
+                        if (floorLunaEl) {
+                            if (floorLuna > 0) {
+                                floorLunaEl.textContent = floorLuna.toLocaleString();
+                            } else {
+                                floorLunaEl.textContent = '--';
+                                floorLunaEl.nextElementSibling.textContent = ''; // Hide "LUNA" label
+                            }
+                        }
+                        
+                        if (floorUsdEl) {
+                            if (floorUsd > 0) {
+                                floorUsdEl.textContent = `($${floorUsd.toFixed(2)})`;
+                            } else if (launches.length > 0) {
+                                // Show lowest USD from any token type
+                                const lowestUsd = Math.min(...launches.map(l => l.to_usd || Infinity));
+                                if (lowestUsd < Infinity) {
+                                    floorUsdEl.textContent = `(~$${lowestUsd.toFixed(2)}+)`;
+                                }
+                            }
+                        }
+                        
+                        if (listedCountEl) listedCountEl.textContent = totalCount;
+                        if (liveIndicator) liveIndicator.classList.remove('hidden');
+                        if (dataSource) dataSource.innerHTML = '<i class="fas fa-bolt text-yellow-400 mr-1"></i>Live from Boost';
+                        
+                        // Setup click handler for listings modal
+                        setupBoostListedModal();
+                        
+                        return data;
+                    } catch (err) {
+                        console.error('Boost stats error:', err);
+                        const dataSource = document.getElementById('boost-data-source');
+                        if (dataSource) dataSource.innerHTML = '<i class="fas fa-exclamation-triangle text-yellow-500 mr-1"></i>API unavailable';
+                        return null;
+                    }
+                }
+                
+                // Setup Boost listings modal
+                function setupBoostListedModal() {
+                    const btn = document.getElementById('boost-listed-btn');
+                    if (!btn || btn.dataset.initialized) return;
+                    btn.dataset.initialized = 'true';
+                    
+                    btn.addEventListener('click', () => {
+                        showBoostListedModal();
+                    });
+                }
+                
+                // Show Boost listings modal
+                async function showBoostListedModal() {
+                    const existingModal = document.getElementById('boost-listed-modal');
+                    if (existingModal) existingModal.remove();
+                    
+                    const modal = document.createElement('div');
+                    modal.id = 'boost-listed-modal';
+                    modal.className = 'fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70';
+                    modal.innerHTML = `
+                        <div class="bg-gray-900 rounded-xl border border-gray-700 max-w-2xl w-full max-h-[85vh] overflow-hidden">
+                            <div class="p-4 border-b border-gray-700">
+                                <div class="flex items-center justify-between">
+                                    <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                                        <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Boost%20Logo.png" class="w-6 h-6" onerror="this.style.display='none'">
+                                        Boost Marketplace Listings
+                                    </h3>
+                                    <button class="text-gray-400 hover:text-white text-2xl leading-none" id="close-boost-modal">&times;</button>
+                                </div>
+                            </div>
+                            <div id="boost-listings-summary" class="p-3 bg-gray-800/50 flex gap-4 text-sm">
+                                <span class="text-gray-400"><i class="fas fa-spinner fa-spin mr-1"></i>Loading...</span>
+                            </div>
+                            <div id="boost-listings-container" class="p-4 overflow-y-auto max-h-[55vh]">
+                                <div class="text-center py-8 text-gray-500">
+                                    <i class="fas fa-spinner fa-spin text-2xl mb-2"></i>
+                                    <p>Fetching live listings...</p>
+                                </div>
+                            </div>
+                            <div class="p-3 border-t border-gray-700 text-center">
+                                <a href="https://www.boostdao.io/ignite/permissionless-terra" target="_blank" 
+                                   class="text-cyan-400 hover:text-cyan-300 text-sm">
+                                    <i class="fas fa-external-link-alt mr-1"></i>View all on Boost
+                                </a>
+                            </div>
+                        </div>
+                    `;
+                    
+                    document.body.appendChild(modal);
+                    
+                    // Close handlers
+                    document.getElementById('close-boost-modal').addEventListener('click', () => modal.remove());
+                    modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+                    
+                    // Load listings
+                    await loadBoostListings();
+                }
+                
+                // Load and render Boost listings
+                async function loadBoostListings() {
+                    const container = document.getElementById('boost-listings-container');
+                    const summary = document.getElementById('boost-listings-summary');
+                    
+                    // Use cached data or fetch fresh
+                    let data = boostListingsData;
+                    if (!data || data.error) {
+                        data = await fetchBoostListings();
+                    }
+                    
+                    if (!data || data.error || !data.launches) {
+                        let errorMsg = 'Failed to load listings';
+                        if (data?.code === 'RATE_LIMITED') {
+                            errorMsg = 'Rate limited - try again in 1 minute';
+                        }
+                        container.innerHTML = `
+                            <div class="text-center py-8 text-orange-400">
+                                <i class="fas fa-clock text-2xl mb-2"></i>
+                                <p>${errorMsg}</p>
+                            </div>
+                        `;
+                        return;
+                    }
+                    
+                    const launches = data.launches;
+                    const totalCount = data.aggregateLaunch?._count?._all || launches.length;
+                    const lunaPrice = window.tokenPrices?.LUNA || 0;
+                    
+                    // Count by token type
+                    const lunaCount = launches.filter(l => l.to_id === 'uluna').length;
+                    const otherCount = launches.length - lunaCount;
+                    
+                    // Find floor
+                    const lunaListings = launches.filter(l => l.to_id === 'uluna');
+                    const floorLuna = lunaListings.length > 0 
+                        ? Math.min(...lunaListings.map(l => (l.to_amount || 0) / 1000000))
+                        : 0;
+                    const floorUsd = floorLuna * lunaPrice;
+                    
+                    // Update summary
+                    if (summary) {
+                        summary.innerHTML = `
+                            <span class="text-yellow-400"><i class="fas fa-tag mr-1"></i>Floor: <span class="font-bold">${floorLuna > 0 ? floorLuna.toLocaleString() + ' LUNA' : 'N/A'}</span>${floorUsd > 0 ? ` ($${floorUsd.toFixed(2)})` : ''}</span>
+                            <span class="text-gray-400">|</span>
+                            <span class="text-cyan-400"><span class="font-bold">${totalCount}</span> Listed</span>
+                            <span class="text-gray-400">|</span>
+                            <span class="text-green-400"><span class="font-bold">${lunaCount}</span> in LUNA</span>
+                            <span class="text-purple-400"><span class="font-bold">${otherCount}</span> other</span>
+                        `;
+                    }
+                    
+                    if (launches.length === 0) {
+                        container.innerHTML = `
+                            <div class="text-center py-8 text-gray-500">
+                                <i class="fas fa-inbox text-2xl mb-2"></i>
+                                <p>No listings found</p>
+                            </div>
+                        `;
+                        return;
+                    }
+                    
+                    // Render listings
+                    const listHtml = launches.map(launch => {
+                        const tokenId = launch.from_nft_id;
+                        const priceRaw = launch.to_amount || 0;
+                        const priceUsd = launch.to_usd || 0;
+                        const isLuna = launch.to_id === 'uluna';
+                        
+                        let priceDisplay = '';
+                        let tokenLabel = '';
+                        
+                        if (isLuna) {
+                            priceDisplay = (priceRaw / 1000000).toLocaleString();
+                            tokenLabel = 'LUNA';
+                        } else {
+                            // Other tokens (SOLID, ROAR, etc.)
+                            priceDisplay = (priceRaw / 1000000).toLocaleString();
+                            // Try to identify token
+                            if (launch.to_id?.includes('solid') || launch.to_id?.includes('10aa3zdk')) {
+                                tokenLabel = 'SOLID';
+                            } else if (launch.to_id?.includes('roar')) {
+                                tokenLabel = 'ROAR';
+                            } else {
+                                tokenLabel = 'Token';
+                            }
+                        }
+                        
+                        const imageUrl = `https://imagedelivery.net/pxvhBICFftM3V9H5aDLhkQ/${tokenId}.png/public`;
+                        const nftUrl = `https://www.boostdao.io/ignite/permissionless-terra?launch_id=${launch.launch_id}`;
+                        
+                        // Check if broken from nftStatusData
+                        const nftInfo = nftStatusData?.nfts?.find(n => n.id == tokenId);
+                        const isBroken = nftInfo?.broken || false;
+                        const brokenBadge = isBroken 
+                            ? '<span class="absolute top-1 left-1 bg-red-500 text-white text-[7px] px-1 py-0.5 rounded font-bold">BROKEN</span>'
+                            : '';
+                        
+                        return `
+                            <a href="${nftUrl}" target="_blank" class="flex items-center gap-3 p-3 bg-gray-800/50 rounded-lg hover:bg-gray-700 transition-colors border border-gray-700/50">
+                                <div class="relative flex-shrink-0">
+                                    ${brokenBadge}
+                                    <img src="${imageUrl}" alt="#${tokenId}" class="w-14 h-14 rounded-lg object-cover"
+                                         onerror="this.src='https://placehold.co/56x56/1f2937/666?text=${tokenId}'">
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <div class="font-bold text-white">Alliance DAO #${tokenId}</div>
+                                    <div class="text-xs text-gray-400">
+                                        ${isBroken ? '<span class="text-red-400">Broken</span>' : '<span class="text-green-400">Unbroken</span>'}
+                                    </div>
+                                </div>
+                                <div class="text-right flex-shrink-0">
+                                    <div class="text-yellow-400 font-bold">${priceDisplay} ${tokenLabel}</div>
+                                    ${priceUsd > 0 ? `<div class="text-xs text-green-400">$${priceUsd.toFixed(2)}</div>` : ''}
+                                </div>
+                                <i class="fas fa-external-link-alt text-gray-500 text-xs"></i>
+                            </a>
+                        `;
+                    }).join('');
+                    
+                    container.innerHTML = `<div class="space-y-2">${listHtml}</div>`;
+                }
+                
+                // ===== END BOOST FUNCTIONS =====
+                
                 // Store all-time sales for chart (combined from all years)
                 let allTimeSalesData = null;
                 
@@ -7879,6 +8238,7 @@ est. APR 58.53 %"></textarea>
                 loadNftStatus();      // Load deving.zone for listing counts
                 loadSalesHistory();   // Load sales history for volume/sales
                 fetchBblCollectionStats(); // Load live BBL stats (floor, volume)
+                fetchBoostStats();    // Load live Boost stats (floor, listings)
                 
                 // Sales Chart button handler
                 const salesChartBtn = document.getElementById('sales-chart-btn');
