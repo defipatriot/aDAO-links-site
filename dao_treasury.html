@@ -147,10 +147,20 @@
         
         <!-- Value Change Breakdown -->
         <div id="value-breakdown" class="stat-card rounded-xl p-4 mb-8 hidden">
-            <div class="flex items-center gap-2 mb-3">
-                <i class="fas fa-book-open text-cyan-400"></i>
-                <span class="text-sm font-medium text-white">What Changed Since Last Epoch</span>
-                <span id="epoch-compare-badge" class="text-xs text-gray-500 ml-2">--</span>
+            <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-book-open text-cyan-400"></i>
+                    <span class="text-sm font-medium text-white">What Changed</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <select id="epoch-start-select" class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white">
+                        <option value="">Loading...</option>
+                    </select>
+                    <span class="text-gray-500 text-xs">→</span>
+                    <select id="epoch-end-select" class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white">
+                        <option value="">Loading...</option>
+                    </select>
+                </div>
             </div>
             
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -186,10 +196,10 @@
                     </div>
                 </div>
                 
-                <!-- Right: Token Price Changes -->
+                <!-- Right: Token Changes -->
                 <div class="bg-gray-800/20 rounded-lg p-3">
-                    <p class="text-xs font-medium text-white mb-2"><i class="fas fa-chart-bar text-yellow-400 mr-1"></i>Token Price Changes</p>
-                    <div id="price-changes-list" class="space-y-1 text-xs max-h-48 overflow-y-auto">
+                    <p class="text-xs font-medium text-white mb-2"><i class="fas fa-chart-bar text-yellow-400 mr-1"></i>Token Changes <span class="text-gray-500 text-[10px]">(price | amt | value)</span></p>
+                    <div id="price-changes-list" class="space-y-0.5 text-xs max-h-48 overflow-y-auto">
                         <div class="text-gray-500">Loading...</div>
                     </div>
                 </div>
@@ -203,6 +213,7 @@
             <div class="flex items-center justify-between mb-4">
                 <h2 class="text-lg font-bold text-white">
                     <i class="fas fa-chart-line text-green-400 mr-2"></i>Balance History
+                    <span id="chart-epoch-count" class="text-xs text-gray-500 font-normal ml-2"></span>
                 </h2>
                 <div id="chart-token-badge" class="text-sm text-gray-400 hidden">
                     Showing: <span id="chart-token-name" class="text-cyan-400 font-medium">--</span>
@@ -293,7 +304,7 @@
                         <h2 class="text-lg font-bold text-white">
                             <i class="fas fa-users text-yellow-400 mr-2"></i>Council Treasury
                         </h2>
-                        <a href="https://chainsco.pe/terra2/address/terra1gxtsq5vtv48fza4qn49p0mp2tkj8nkzlglqnfm3ty6jwzatjslkqpflyct/balances" 
+                        <a href="https://chainsco.pe/terra2/address/terra1yqv0af22675wlcmgflxk4ve07vt8qlm999gk0cuw5l64r5xxgadsyg8ywv/balances" 
                            target="_blank" rel="noopener noreferrer"
                            class="text-xs text-gray-500 hover:text-cyan-400 transition-colors">
                             View on Chainscope <i class="fas fa-external-link-alt ml-1"></i>
@@ -362,7 +373,7 @@
     <script>
         // ==================== Configuration ====================
         const DAO_TREASURY_ADDRESS = 'terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm';
-        const COUNCIL_TREASURY_ADDRESS = 'terra1gxtsq5vtv48fza4qn49p0mp2tkj8nkzlglqnfm3ty6jwzatjslkqpflyct';
+        const COUNCIL_TREASURY_ADDRESS = 'terra1yqv0af22675wlcmgflxk4ve07vt8qlm999gk0cuw5l64r5xxgadsyg8ywv';
         const TLA_DATA_BASE_URL = 'https://raw.githubusercontent.com/defipatriot/tla_json_storage/main';
         const PROPS_URL = 'https://raw.githubusercontent.com/defipatriot/adao_json_storage/main/adao_props.json';
         
@@ -392,17 +403,102 @@
             'default': '#888888'
         };
         
+        // Token denomination map for blockchain queries
+        const denomMap = {
+            'uluna': { name: 'LUNA', geckoId: 'terra-luna-2', decimals: 6 },
+            'ibc/8D8A7F7253615E5F76CB6252A1E1BD921D5EDB7BBAAF8913FB1C77FF125D9995': { name: 'ASTRO', geckoId: 'astroport-fi', decimals: 6 },
+            'ibc/2C962DAB9F57FE0921435426AE75196009FAA1981BF86991203C8411F8980FDB': { name: 'USDC', geckoId: 'usd-coin', decimals: 6 },
+            'ibc/88386AC48152D48B34B082648DF836F975506F0B57DBBFC10A54213B1BF484CB': { name: 'wBTC', geckoId: 'wrapped-bitcoin', decimals: 8 },
+            'terra1ecgazyd0waaj3g7l9cmy5gulhxkps2gmxu9ghducvuypjq68mq2s5lvsct': { name: 'ampLUNA', geckoId: 'eris-amplified-luna', decimals: 6 },
+            'terra17jnhankdf4jtr2g53v635q5k70g7g64x2s9w2s': { name: 'arbLUNA', geckoId: 'staked-luna-slinky', decimals: 6 },
+            'terra1t4p3u8khpd7f8qzurwyafxt648dya6mp6vur3vaapswt6m24gkuqrfdhar': { name: 'CAPA', geckoId: 'capapult', decimals: 6 },
+            'terra10aa3zdkrc7jwuf8ekl3zq7e7m42vmzqehcmu74e4egc7xkm5kr2s0muyst': { name: 'SOLID', geckoId: 'solid-2', decimals: 6 },
+            'terra1lxx40s29qvkrcj8fsa3yzyehy7w50umdvvnls2r830rys6lu2zns63eelv': { name: 'ROAR', geckoId: 'lion-dao', decimals: 6 },
+            'terra17aj4ty4sz4yhgm08na8drc0v03v2jwr3waxcqrwhajj729zhl7zqnpc0ml': { name: 'bLUNA', geckoId: 'backbone-labs-staked-luna', decimals: 6 }
+        };
+        
         // State
         let daoAssets = [];
         let councilAssets = [];
         let stakedPositions = [];
         let tokenPrices = {};
+        let geckoIdPrices = {}; // Prices by CoinGecko ID
         let historicalSnapshots = [];
         let balanceChart = null;
         let selectedToken = null;
         let currentTlaData = null;
         let currentView = 'treasury'; // 'treasury', 'staked', 'council', 'total'
         let daoProps = {}; // DAO proposals with treasury impact
+        
+        // Normalize token names for comparison (handles case differences and variations)
+        function normalizeTokenName(name) {
+            if (!name) return '';
+            const upper = name.toUpperCase().trim();
+            // Handle common variations
+            const aliases = {
+                'WBTC.ATOM': 'WBTC',
+                'WBTC.AXL': 'WBTC',
+                'WBTC.OSMO': 'WBTC',
+                'AMPLUNA': 'AMPLUNA',
+                'BLUNA': 'BLUNA',
+                'ARBLUNA': 'ARBLUNA',
+                'ASTRO': 'ASTRO',
+                'SOLID': 'SOLID',
+                'CAPA': 'CAPA',
+                'ROAR': 'ROAR',
+                'USDC': 'USDC',
+                'USDT': 'USDT',
+                'LUNA': 'LUNA'
+            };
+            return aliases[upper] || upper;
+        }
+        
+        // Selected epoch range for "What Changed" comparison
+        let selectedStartEpoch = null;
+        let selectedEndEpoch = 'live'; // 'live' or epoch number
+        
+        // Populate epoch selector dropdowns
+        function populateEpochSelectors() {
+            const startSelect = document.getElementById('epoch-start-select');
+            const endSelect = document.getElementById('epoch-end-select');
+            
+            if (!startSelect || !endSelect || historicalSnapshots.length === 0) return;
+            
+            // Build options from available epochs (only epochs we actually have data for)
+            const epochs = historicalSnapshots.map(s => s.epoch).sort((a, b) => b - a); // Newest first
+            
+            console.log('Available epochs for selector:', epochs);
+            
+            // Start epoch options (all historical epochs)
+            let startHtml = '';
+            epochs.forEach((epoch, idx) => {
+                const selected = idx === 1 ? 'selected' : ''; // Default to second-to-last
+                startHtml += `<option value="${epoch}" ${selected}>E${epoch}</option>`;
+            });
+            startSelect.innerHTML = startHtml;
+            
+            // End epoch options - "Live" first (default), then historical epochs
+            let endHtml = '<option value="live" selected>🟢 Live</option>';
+            epochs.forEach(epoch => {
+                endHtml += `<option value="${epoch}">E${epoch}</option>`;
+            });
+            endSelect.innerHTML = endHtml;
+            
+            // Set initial values
+            selectedStartEpoch = epochs.length > 1 ? epochs[1] : epochs[0]; // Second-to-last epoch
+            selectedEndEpoch = 'live'; // Default to Live
+            
+            // Add change listeners
+            startSelect.addEventListener('change', (e) => {
+                selectedStartEpoch = parseInt(e.target.value);
+                renderValueBreakdown();
+            });
+            
+            endSelect.addEventListener('change', (e) => {
+                selectedEndEpoch = e.target.value === 'live' ? 'live' : parseInt(e.target.value);
+                renderValueBreakdown();
+            });
+        }
         
         // Epoch date boundaries (for mapping props to epochs)
         const EPOCH_DATES = {
@@ -565,85 +661,196 @@
         
         // ==================== View Switching ====================
         
-        // Calculate value change breakdown between two epochs
+        // Calculate value change breakdown between selected epochs
         function calcValueBreakdown() {
-            if (historicalSnapshots.length < 2) return null;
+            if (historicalSnapshots.length < 1) return null;
             
-            // Get last two snapshots
-            const current = historicalSnapshots[historicalSnapshots.length - 1];
-            const previous = historicalSnapshots[historicalSnapshots.length - 2];
+            // Find start epoch snapshot
+            const startSnapshot = historicalSnapshots.find(s => s.epoch === selectedStartEpoch);
+            if (!startSnapshot) {
+                console.warn(`Start epoch ${selectedStartEpoch} not found in snapshots`);
+                return null;
+            }
             
-            if (!current || !previous) return null;
+            // Determine end data - either from a snapshot or live data
+            let endAssets, endCouncilAssets, endLabel;
             
-            // Get current prices
-            const currentPrices = tokenPrices;
+            if (selectedEndEpoch === 'live') {
+                // Use live fetched data
+                endAssets = daoAssets;
+                endCouncilAssets = councilAssets;
+                endLabel = 'Live';
+            } else {
+                // Find end epoch snapshot
+                const endSnapshot = historicalSnapshots.find(s => s.epoch === selectedEndEpoch);
+                if (!endSnapshot) {
+                    // End epoch not found - fall back to using live data
+                    console.warn(`End epoch ${selectedEndEpoch} not found, using Live data`);
+                    endAssets = daoAssets;
+                    endCouncilAssets = councilAssets;
+                    endLabel = 'Live (E' + selectedEndEpoch + ' unavailable)';
+                    // Update the dropdown to show Live
+                    const endSelect = document.getElementById('epoch-end-select');
+                    if (endSelect) endSelect.value = 'live';
+                    selectedEndEpoch = 'live';
+                } else {
+                    endAssets = endSnapshot.treasuryAssets || [];
+                    endCouncilAssets = endSnapshot.councilAssets || [];
+                    endLabel = `E${selectedEndEpoch}`;
+                }
+            }
             
-            // Build maps of old assets
+            // Build maps of old (start) assets using NORMALIZED names for matching
             const oldTreasury = {};
-            (previous.treasuryAssets || []).forEach(a => {
+            let oldTotalUsd = 0;
+            (startSnapshot.treasuryAssets || []).forEach(a => {
                 const name = a.token || a.name;
-                oldTreasury[name] = { amount: a.amount || 0, price: a.price || 0 };
+                const normalizedName = normalizeTokenName(name);
+                oldTreasury[normalizedName] = { 
+                    originalName: name,
+                    amount: a.amount || 0, 
+                    price: a.price || 0, 
+                    usd: a.usd || 0 
+                };
+                oldTotalUsd += a.usd || 0;
             });
             
             const oldCouncil = {};
-            (previous.councilAssets || []).forEach(a => {
+            (startSnapshot.councilAssets || []).forEach(a => {
                 const name = a.token || a.name;
-                oldCouncil[name] = { amount: a.amount || 0, price: a.price || 0 };
+                const normalizedName = normalizeTokenName(name);
+                oldCouncil[normalizedName] = { 
+                    originalName: name,
+                    amount: a.amount || 0, 
+                    price: a.price || 0, 
+                    usd: a.usd || 0 
+                };
+                oldTotalUsd += a.usd || 0;
             });
             
             let priceImpact = 0;
             let positionChange = 0;
-            const priceChanges = [];
+            let newTotalUsd = 0;
+            const tokenChanges = []; // Detailed per-token changes
             
-            // Calculate for DAO Treasury
-            daoAssets.forEach(asset => {
+            // Calculate for DAO Treasury (using end assets - either live or snapshot)
+            endAssets.forEach(asset => {
                 const name = asset.token || asset.name;
-                const oldAsset = oldTreasury[name];
-                if (!oldAsset) return;
+                const normalizedName = normalizeTokenName(name);
+                const oldAsset = oldTreasury[normalizedName];
                 
-                const oldPrice = oldAsset.price;
                 const newPrice = asset.price || 0;
-                const oldAmount = oldAsset.amount;
                 const newAmount = asset.amount || 0;
+                const newUsd = asset.usd || 0;
+                newTotalUsd += newUsd;
                 
-                if (oldPrice > 0 && newPrice > 0) {
-                    priceImpact += oldAmount * (newPrice - oldPrice);
-                    positionChange += (newAmount - oldAmount) * newPrice;
+                if (oldAsset && oldAsset.price > 0 && newPrice > 0) {
+                    const oldPrice = oldAsset.price;
+                    const oldAmount = oldAsset.amount;
+                    const oldUsd = oldAsset.usd || (oldAmount * oldPrice);
                     
-                    const pctChange = ((newPrice - oldPrice) / oldPrice) * 100;
-                    if (Math.abs(pctChange) > 0.1) {
-                        priceChanges.push({ name, oldPrice, newPrice, pctChange });
+                    // Price impact: change in value due to price change (holding amount constant)
+                    const thisTokenPriceImpact = oldAmount * (newPrice - oldPrice);
+                    priceImpact += thisTokenPriceImpact;
+                    
+                    // Position change: change in value due to amount change (at new price)
+                    const thisTokenPositionChange = (newAmount - oldAmount) * newPrice;
+                    positionChange += thisTokenPositionChange;
+                    
+                    // Calculate percentages
+                    const pricePctChange = ((newPrice - oldPrice) / oldPrice) * 100;
+                    const amountPctChange = oldAmount > 0 ? ((newAmount - oldAmount) / oldAmount) * 100 : 0;
+                    const valuePctChange = oldUsd > 0 ? ((newUsd - oldUsd) / oldUsd) * 100 : 0;
+                    
+                    // Only track if there's a meaningful change
+                    if (Math.abs(pricePctChange) > 0.1 || Math.abs(amountPctChange) > 0.1) {
+                        tokenChanges.push({
+                            name,
+                            // Price changes
+                            oldPrice,
+                            newPrice,
+                            pricePctChange,
+                            priceUsdImpact: thisTokenPriceImpact,
+                            // Amount changes
+                            oldAmount,
+                            newAmount,
+                            amountChange: newAmount - oldAmount,
+                            amountPctChange,
+                            amountUsdImpact: thisTokenPositionChange,
+                            // Total value changes
+                            oldUsd,
+                            newUsd,
+                            valueChange: newUsd - oldUsd,
+                            valuePctChange
+                        });
                     }
                 }
             });
             
-            // Calculate for Council Treasury
-            councilAssets.forEach(asset => {
+            // Calculate for Council Treasury (using end council assets)
+            endCouncilAssets.forEach(asset => {
                 const name = asset.token || asset.name;
-                const oldAsset = oldCouncil[name];
-                if (!oldAsset) return;
+                const normalizedName = normalizeTokenName(name);
+                const oldAsset = oldCouncil[normalizedName];
                 
-                const oldPrice = oldAsset.price;
                 const newPrice = asset.price || 0;
-                const oldAmount = oldAsset.amount;
                 const newAmount = asset.amount || 0;
+                const newUsd = asset.usd || 0;
+                newTotalUsd += newUsd;
                 
-                if (oldPrice > 0 && newPrice > 0) {
+                if (oldAsset && oldAsset.price > 0 && newPrice > 0) {
+                    const oldPrice = oldAsset.price;
+                    const oldAmount = oldAsset.amount;
+                    
                     priceImpact += oldAmount * (newPrice - oldPrice);
                     positionChange += (newAmount - oldAmount) * newPrice;
                 }
             });
             
-            // Sort price changes by absolute change
-            priceChanges.sort((a, b) => Math.abs(b.pctChange) - Math.abs(a.pctChange));
+            // Check for tokens that were in START but not in END (tokens that "disappeared")
+            // This catches cases where Live fetch is missing tokens that snapshots have
+            const endNormalizedNames = new Set();
+            endAssets.forEach(a => endNormalizedNames.add(normalizeTokenName(a.token || a.name)));
+            endCouncilAssets.forEach(a => endNormalizedNames.add(normalizeTokenName(a.token || a.name)));
+            
+            let missingTokensValue = 0;
+            const missingTokens = [];
+            
+            Object.entries(oldTreasury).forEach(([normalizedName, oldAsset]) => {
+                if (!endNormalizedNames.has(normalizedName) && oldAsset.usd > 1) {
+                    // This token was in start but not in end
+                    missingTokensValue += oldAsset.usd;
+                    missingTokens.push({
+                        name: oldAsset.originalName,
+                        oldUsd: oldAsset.usd,
+                        missing: true
+                    });
+                }
+            });
+            
+            // Sort by absolute value change
+            tokenChanges.sort((a, b) => Math.abs(b.valueChange) - Math.abs(a.valueChange));
+            
+            // Calculate total percentages
+            const netChange = priceImpact + positionChange;
+            const totalPctChange = oldTotalUsd > 0 ? (netChange / oldTotalUsd) * 100 : 0;
+            const pricePctImpact = oldTotalUsd > 0 ? (priceImpact / oldTotalUsd) * 100 : 0;
+            const positionPctImpact = oldTotalUsd > 0 ? (positionChange / oldTotalUsd) * 100 : 0;
             
             return {
                 priceImpact,
+                pricePctImpact,
                 positionChange,
-                netChange: priceImpact + positionChange,
-                priceChanges,
-                currentEpoch: current.epoch,
-                previousEpoch: previous.epoch
+                positionPctImpact,
+                netChange,
+                totalPctChange,
+                oldTotalUsd,
+                newTotalUsd,
+                tokenChanges,
+                missingTokens,
+                missingTokensValue,
+                startEpoch: selectedStartEpoch,
+                endEpoch: endLabel
             };
         }
         
@@ -653,28 +860,31 @@
             
             document.getElementById('value-breakdown').classList.remove('hidden');
             
-            // Update epoch badge
-            document.getElementById('epoch-compare-badge').textContent = `E${breakdown.previousEpoch} → E${breakdown.currentEpoch}`;
-            
-            // Market movement
+            // Market movement (price impact)
             const marketEl = document.getElementById('market-value');
             const marketIcon = document.getElementById('market-icon');
-            marketEl.textContent = (breakdown.priceImpact >= 0 ? '+' : '') + '$' + Math.abs(breakdown.priceImpact).toLocaleString(undefined, {maximumFractionDigits: 0});
+            const priceUsd = (breakdown.priceImpact >= 0 ? '+' : '-') + '$' + Math.abs(breakdown.priceImpact).toLocaleString(undefined, {maximumFractionDigits: 0});
+            const pricePct = (breakdown.pricePctImpact >= 0 ? '+' : '') + breakdown.pricePctImpact.toFixed(1) + '%';
+            marketEl.innerHTML = `${priceUsd} <span class="text-sm opacity-70">(${pricePct})</span>`;
             marketEl.className = `text-xl font-mono font-bold ${breakdown.priceImpact >= 0 ? 'text-green-400' : 'text-red-400'}`;
             marketIcon.textContent = breakdown.priceImpact >= 0 ? '📈' : '📉';
             document.getElementById('market-explain').textContent = breakdown.priceImpact >= 0 ? 'Token prices went up' : 'Token prices went down';
             
-            // Position growth
+            // Position growth (amount change)
             const growthEl = document.getElementById('growth-value');
             const growthIcon = document.getElementById('growth-icon');
-            growthEl.textContent = (breakdown.positionChange >= 0 ? '+' : '') + '$' + Math.abs(breakdown.positionChange).toLocaleString(undefined, {maximumFractionDigits: 0});
+            const posUsd = (breakdown.positionChange >= 0 ? '+' : '-') + '$' + Math.abs(breakdown.positionChange).toLocaleString(undefined, {maximumFractionDigits: 0});
+            const posPct = (breakdown.positionPctImpact >= 0 ? '+' : '') + breakdown.positionPctImpact.toFixed(1) + '%';
+            growthEl.innerHTML = `${posUsd} <span class="text-sm opacity-70">(${posPct})</span>`;
             growthEl.className = `text-xl font-mono font-bold ${breakdown.positionChange >= 0 ? 'text-green-400' : 'text-red-400'}`;
             growthIcon.textContent = breakdown.positionChange >= 0 ? '🌱' : '🍂';
             document.getElementById('growth-explain').textContent = breakdown.positionChange >= 0 ? 'Token amounts increased' : 'Token amounts decreased';
             
             // Net result
             const netEl = document.getElementById('net-value');
-            netEl.textContent = (breakdown.netChange >= 0 ? '+' : '') + '$' + Math.abs(breakdown.netChange).toLocaleString(undefined, {maximumFractionDigits: 0});
+            const netUsd = (breakdown.netChange >= 0 ? '+' : '-') + '$' + Math.abs(breakdown.netChange).toLocaleString(undefined, {maximumFractionDigits: 0});
+            const netPct = (breakdown.totalPctChange >= 0 ? '+' : '') + breakdown.totalPctChange.toFixed(1) + '%';
+            netEl.innerHTML = `${netUsd} <span class="text-sm opacity-70">(${netPct})</span>`;
             netEl.className = `text-xl font-mono font-bold ${breakdown.netChange >= 0 ? 'text-green-400' : 'text-red-400'}`;
             
             // Explanation
@@ -689,25 +899,71 @@
                 netExplain.textContent = 'Both positions and prices down';
             }
             
-            // Price changes list
+            // Token changes list - now shows price %, amount change, and value change
             const priceListEl = document.getElementById('price-changes-list');
-            if (breakdown.priceChanges.length > 0) {
+            if (breakdown.tokenChanges.length > 0) {
                 let html = '';
-                breakdown.priceChanges.slice(0, 8).forEach(p => {
-                    const color = TOKEN_COLORS[p.name] || TOKEN_COLORS.default;
-                    const pctDisplay = (p.pctChange >= 0 ? '+' : '') + p.pctChange.toFixed(1) + '%';
-                    const pctColor = p.pctChange >= 0 ? 'text-green-400' : 'text-red-400';
-                    html += `<div class="flex items-center justify-between py-1 border-b border-gray-800/50">
+                breakdown.tokenChanges.slice(0, 8).forEach(t => {
+                    const color = TOKEN_COLORS[t.name] || TOKEN_COLORS.default;
+                    
+                    // Price change display
+                    const pricePctDisplay = (t.pricePctChange >= 0 ? '+' : '') + t.pricePctChange.toFixed(1) + '%';
+                    const pricePctColor = t.pricePctChange >= 0 ? 'text-green-400' : 'text-red-400';
+                    
+                    // Amount change display
+                    let amountDisplay = '';
+                    if (Math.abs(t.amountChange) > 0.01) {
+                        const amtSign = t.amountChange >= 0 ? '+' : '';
+                        const amtVal = Math.abs(t.amountChange) >= 1000000 
+                            ? (t.amountChange / 1000000).toFixed(2) + 'M'
+                            : Math.abs(t.amountChange) >= 1000
+                                ? (t.amountChange / 1000).toFixed(1) + 'K'
+                                : t.amountChange.toFixed(2);
+                        amountDisplay = `<span class="${t.amountChange >= 0 ? 'text-blue-400' : 'text-orange-400'} text-[10px]">${amtSign}${amtVal}</span>`;
+                    }
+                    
+                    // Value change display
+                    const valueUsdDisplay = (t.valueChange >= 0 ? '+' : '-') + '$' + Math.abs(t.valueChange).toLocaleString(undefined, {maximumFractionDigits: 0});
+                    const valueColor = t.valueChange >= 0 ? 'text-green-400' : 'text-red-400';
+                    
+                    html += `<div class="flex items-center justify-between py-1.5 border-b border-gray-800/50">
                         <div class="flex items-center gap-1.5">
                             <div class="w-2 h-2 rounded-full" style="background:${color}"></div>
-                            <span class="text-gray-300">${p.name}</span>
+                            <span class="text-gray-300 text-sm">${t.name}</span>
+                            ${amountDisplay}
                         </div>
-                        <span class="${pctColor}">${pctDisplay}</span>
+                        <div class="flex items-center gap-2">
+                            <span class="${pricePctColor} text-xs">${pricePctDisplay}</span>
+                            <span class="${valueColor} text-sm font-mono">${valueUsdDisplay}</span>
+                        </div>
                     </div>`;
                 });
+                
+                // Show warning if tokens are missing from end data
+                if (breakdown.missingTokens && breakdown.missingTokens.length > 0) {
+                    html += `<div class="mt-2 pt-2 border-t border-yellow-800/50">
+                        <div class="text-yellow-500 text-[10px] mb-1">
+                            ⚠️ ${breakdown.missingTokens.length} tokens not in end data (~$${breakdown.missingTokensValue.toLocaleString(undefined, {maximumFractionDigits: 0})}):
+                        </div>`;
+                    breakdown.missingTokens.forEach(t => {
+                        html += `<div class="text-gray-500 text-[10px] pl-2">• ${t.name} ($${t.oldUsd.toLocaleString(undefined, {maximumFractionDigits: 0})})</div>`;
+                    });
+                    html += `</div>`;
+                }
+                
+                priceListEl.innerHTML = html;
+            } else if (breakdown.missingTokens && breakdown.missingTokens.length > 0) {
+                // No token changes but there are missing tokens
+                let html = `<div class="text-yellow-500 text-xs mb-2">
+                    ⚠️ ${breakdown.missingTokens.length} tokens not found in end data (~$${breakdown.missingTokensValue.toLocaleString(undefined, {maximumFractionDigits: 0})}):
+                </div>`;
+                breakdown.missingTokens.forEach(t => {
+                    html += `<div class="text-gray-500 text-xs pl-2">• ${t.name} ($${t.oldUsd.toLocaleString(undefined, {maximumFractionDigits: 0})})</div>`;
+                });
+                html += `<div class="text-gray-600 text-[10px] mt-2">Try comparing two historical epochs (E165 → E166) for complete data.</div>`;
                 priceListEl.innerHTML = html;
             } else {
-                priceListEl.innerHTML = '<div class="text-gray-500">No significant price changes</div>';
+                priceListEl.innerHTML = '<div class="text-gray-500">No significant changes</div>';
             }
         }
         
@@ -876,6 +1132,98 @@
             return null;
         }
         
+        // Fetch LIVE treasury data from blockchain (like main dashboard does)
+        async function fetchLiveTreasuryData(walletAddress) {
+            console.log(`Fetching live treasury for ${walletAddress}...`);
+            const assets = [];
+            
+            try {
+                // 1. Get CoinGecko prices
+                const geckoIds = new Set(['terra-luna-2', 'eris-amplified-luna', 'backbone-labs-staked-luna']);
+                Object.values(denomMap).forEach(token => {
+                    if (token.geckoId) geckoIds.add(token.geckoId);
+                });
+                const priceUrl = `https://api.coingecko.com/api/v3/simple/price?ids=${Array.from(geckoIds).join(',')}&vs_currencies=usd`;
+                const priceResponse = await fetch(priceUrl);
+                if (priceResponse.ok) {
+                    geckoIdPrices = await priceResponse.json();
+                    console.log('Loaded CoinGecko prices:', Object.keys(geckoIdPrices));
+                }
+                
+                // 2. Fetch native token balances (LUNA, IBC tokens)
+                const nativeUrl = `https://terra.publicnode.com/cosmos/bank/v1beta1/balances/${walletAddress}`;
+                const nativeResponse = await fetch(nativeUrl);
+                if (nativeResponse.ok) {
+                    const nativeData = await nativeResponse.json();
+                    if (nativeData.balances) {
+                        nativeData.balances.forEach(balance => {
+                            const tokenInfo = denomMap[balance.denom];
+                            if (tokenInfo) {
+                                const amount = Number(balance.amount) / Math.pow(10, tokenInfo.decimals || 6);
+                                const price = geckoIdPrices[tokenInfo.geckoId]?.usd || 0;
+                                if (amount > 0) {
+                                    assets.push({
+                                        token: tokenInfo.name,
+                                        amount: amount,
+                                        price: price,
+                                        usd: amount * price,
+                                        geckoId: tokenInfo.geckoId
+                                    });
+                                    console.log(`Found native ${tokenInfo.name}: ${amount} @ $${price}`);
+                                }
+                            }
+                        });
+                    }
+                }
+                
+                // 3. Fetch CW20 token balances
+                const queryMsg = btoa(JSON.stringify({ balance: { address: walletAddress } }));
+                
+                for (const [denom, tokenInfo] of Object.entries(denomMap)) {
+                    if (denom.startsWith('terra1')) {
+                        try {
+                            const url = `https://terra.publicnode.com/cosmwasm/wasm/v1/contract/${denom}/smart/${queryMsg}`;
+                            const response = await fetch(url);
+                            if (response.ok) {
+                                const data = await response.json();
+                                // Handle different response formats
+                                let balanceStr = null;
+                                if (data?.data?.balance) {
+                                    balanceStr = data.data.balance;
+                                } else if (data?.balance) {
+                                    balanceStr = data.balance;
+                                }
+                                
+                                if (balanceStr && balanceStr !== '0') {
+                                    const amount = Number(balanceStr) / Math.pow(10, tokenInfo.decimals || 6);
+                                    const price = geckoIdPrices[tokenInfo.geckoId]?.usd || 0;
+                                    if (amount > 0) {
+                                        assets.push({
+                                            token: tokenInfo.name,
+                                            amount: amount,
+                                            price: price,
+                                            usd: amount * price,
+                                            geckoId: tokenInfo.geckoId
+                                        });
+                                        console.log(`Found CW20 ${tokenInfo.name}: ${amount} @ $${price}`);
+                                    }
+                                }
+                            }
+                        } catch (e) {
+                            console.warn(`Failed to fetch ${tokenInfo.name}:`, e.message);
+                        }
+                    }
+                }
+                
+                console.log(`Fetched ${assets.length} live treasury assets, total: $${assets.reduce((s,a) => s + a.usd, 0).toFixed(2)}`);
+                return assets;
+                
+            } catch (e) {
+                console.error('Error fetching live treasury:', e);
+                return assets;
+            }
+        }
+        
         async function fetchHistoricalSnapshots() {
             // Fetch TLA data files for historical treasury data
             const snapshots = [];
@@ -894,43 +1242,60 @@
                         const treasury = dashboard?.treasury;
                         
                         if (treasury) {
-                            // Build staked positions total from alliances + TLA deposits
-                            let stakedTotal = 0;
                             const prices = data.token_prices || {};
                             
-                            // TLA Deposits
-                            if (dashboard.tla_deposits?.total_usd) {
-                                stakedTotal += dashboard.tla_deposits.total_usd;
-                            }
-                            
-                            // Alliance positions
+                            // Track alliance positions separately for charts
                             const lionDao = dashboard.alliances?.lion_dao;
+                            let stakedTotal = 0;
+                            
+                            // Alliance data for historical charts
+                            const allianceData = {
+                                luna_staked: 0,
+                                luna_rewards: 0,
+                                staking_apr: 0,
+                                roar_staked: 0,
+                                roar_vp: 0,
+                                pixelions_staked: 0,
+                                pixelions_vp: 0
+                            };
+                            
                             if (lionDao) {
                                 // LUNA staking
-                                if (lionDao.chain_staking?.total_staked_luna) {
+                                if (lionDao.chain_staking) {
+                                    allianceData.luna_staked = lionDao.chain_staking.total_staked_luna || 0;
+                                    allianceData.luna_rewards = lionDao.chain_staking.total_unclaimed_luna || 0;
+                                    allianceData.staking_apr = lionDao.chain_staking.staking_apr_pct || 0;
                                     const lunaPrice = prices.LUNA?.price || prices.LUNA || 0;
-                                    stakedTotal += lionDao.chain_staking.total_staked_luna * lunaPrice;
+                                    stakedTotal += allianceData.luna_staked * lunaPrice;
                                 }
                                 // ROAR staking
-                                if (lionDao.roar_dao_stake?.staked_roar) {
+                                if (lionDao.roar_dao_stake) {
+                                    allianceData.roar_staked = lionDao.roar_dao_stake.staked_roar || 0;
+                                    allianceData.roar_vp = lionDao.roar_dao_stake.voting_power_pct || 0;
                                     const roarPrice = prices.ROAR?.price || prices.ROAR || 0;
-                                    stakedTotal += lionDao.roar_dao_stake.staked_roar * roarPrice;
+                                    stakedTotal += allianceData.roar_staked * roarPrice;
+                                }
+                                // pixeLions staking
+                                if (lionDao.pixelions_dao_stake) {
+                                    allianceData.pixelions_staked = lionDao.pixelions_dao_stake.staked_nfts || 0;
+                                    allianceData.pixelions_vp = lionDao.pixelions_dao_stake.voting_power_pct || 0;
                                 }
                             }
+                            
+                            // NOTE: TLA Deposits NOT included in stakedTotal - they have their own tab
                             
                             snapshots.push({
                                 epoch: data.meta?.epoch || epoch,
                                 timestamp: data.meta?.generated_at,
                                 treasuryAssets: treasury.tokens || [],
-                                councilAssets: [], // Not available in current JSON structure
+                                councilAssets: [],
                                 stakedTotal_USD: stakedTotal,
                                 treasuryTotal_USD: treasury.total_usd,
                                 councilTotal_USD: 0,
                                 prices: prices,
-                                // Store TLA deposits for individual token tracking
-                                tlaDeposits: dashboard.tla_deposits?.tokens || []
+                                alliance: allianceData // Store alliance data for charts
                             });
-                            console.log(`Loaded historical epoch ${epoch}: ${treasury.tokens?.length || 0} treasury tokens, staked: $${stakedTotal.toFixed(0)}`);
+                            console.log(`Loaded historical epoch ${epoch}: alliance staked $${stakedTotal.toFixed(0)}`);
                         }
                     }
                 } catch (e) {
@@ -958,7 +1323,11 @@
             const prevSnapshot = historicalSnapshots.length >= 2 ? historicalSnapshots[historicalSnapshots.length - 2] : null;
             const prevAssets = prevSnapshot ? (walletType === 'dao' ? prevSnapshot.treasuryAssets : prevSnapshot.councilAssets) : [];
             const prevAssetMap = {};
-            prevAssets.forEach(a => { prevAssetMap[a.token || a.name] = a; });
+            // Build map using NORMALIZED names for matching
+            prevAssets.forEach(a => { 
+                const normalizedName = normalizeTokenName(a.token || a.name);
+                prevAssetMap[normalizedName] = a; 
+            });
             
             // Assets from TLA data already have: token, amount, price, usd
             // Sort by USD value descending
@@ -979,6 +1348,7 @@
             
             for (const asset of sortedAssets) {
                 const tokenName = asset.token || asset.name || 'Unknown';
+                const normalizedName = normalizeTokenName(tokenName);
                 const amount = asset.amount || 0;
                 const usdValue = asset.usd || 0;
                 totalUsd += usdValue;
@@ -1000,9 +1370,9 @@
                     amountDisplay = amount.toLocaleString(undefined, { maximumFractionDigits: 2 });
                 }
                 
-                // Calculate price change from previous epoch
+                // Calculate price change from previous epoch using NORMALIZED name for lookup
                 let priceChangeHtml = '';
-                const prevAsset = prevAssetMap[tokenName];
+                const prevAsset = prevAssetMap[normalizedName];
                 if (prevAsset && prevAsset.price > 0 && asset.price > 0) {
                     const pricePct = ((asset.price - prevAsset.price) / prevAsset.price) * 100;
                     if (Math.abs(pricePct) > 0.1) {
@@ -1204,40 +1574,264 @@
             if (!position) {
                 chartWrapper.classList.add('hidden');
                 noHistoryMsg.classList.remove('hidden');
+                noHistoryMsg.innerHTML = '<p class="text-gray-500">Position not found</p>';
                 return;
             }
             
-            // For now, show position details - historical data would need to be tracked
-            chartWrapper.classList.add('hidden');
-            noHistoryMsg.innerHTML = `
-                <div class="text-center">
-                    <i class="fas fa-lock text-4xl mb-3 text-yellow-500"></i>
-                    <p class="text-lg font-bold text-white mb-2">${position.name}</p>
-                    <p class="text-gray-400 mb-4">Partner: ${position.partner}</p>
-                    ${position.staked ? `
-                        <div class="bg-gray-800/50 rounded-lg p-4 inline-block">
-                            <p class="text-xs text-gray-500">Staked Amount</p>
-                            <p class="text-xl font-bold text-yellow-400">${position.staked.amount.toLocaleString()} ${position.staked.token}</p>
-                            ${position.staked.usd ? `<p class="text-sm text-gray-400">≈ $${position.staked.usd.toLocaleString()}</p>` : ''}
-                        </div>
-                    ` : ''}
-                    ${position.rewards ? `
-                        <div class="bg-gray-800/50 rounded-lg p-4 inline-block ml-2">
-                            <p class="text-xs text-gray-500">Unclaimed Rewards</p>
-                            <p class="text-xl font-bold text-green-400">+${position.rewards.amount.toLocaleString()} ${position.rewards.token || ''}</p>
-                        </div>
-                    ` : ''}
-                    ${position.apr ? `<p class="text-sm text-green-400 mt-3">APR: ${position.apr}%</p>` : ''}
-                    ${position.vp_percent ? `<p class="text-sm text-yellow-400 mt-2">Voting Power: ${position.vp_percent}%</p>` : ''}
-                </div>
-            `;
-            noHistoryMsg.classList.remove('hidden');
+            // Build historical data based on position type
+            const dataPoints = [];
+            let chartLabel = '';
+            let chartColor = '#eab308'; // Yellow for staked
+            let yAxisLabel = '';
             
-            // Update stats to show position info
-            document.getElementById('stat-current').textContent = position.staked ? position.staked.amount.toLocaleString() : '--';
-            document.getElementById('stat-change').textContent = position.rewards ? `+${position.rewards.amount.toLocaleString()}` : '--';
-            document.getElementById('stat-change').className = 'text-lg font-bold text-green-400';
-            document.getElementById('stat-avg').textContent = position.apr ? `${position.apr}% APR` : '--';
+            // Map position name to alliance data field
+            if (positionName.includes('Lion DAO Staking') || positionName.includes('Staking')) {
+                // LUNA staking - show staked amount over time
+                chartLabel = 'LUNA Staked';
+                yAxisLabel = 'LUNA';
+                chartColor = '#ffd83d';
+                
+                historicalSnapshots.forEach(snapshot => {
+                    if (snapshot.alliance && snapshot.timestamp) {
+                        dataPoints.push({
+                            x: new Date(snapshot.timestamp),
+                            y: snapshot.alliance.luna_staked || 0,
+                            epoch: snapshot.epoch,
+                            apr: snapshot.alliance.staking_apr || 0,
+                            rewards: snapshot.alliance.luna_rewards || 0
+                        });
+                    }
+                });
+                
+                // Add current data
+                if (position.staked?.amount) {
+                    dataPoints.push({
+                        x: new Date(),
+                        y: position.staked.amount,
+                        epoch: 'Live',
+                        apr: position.apr || 0,
+                        rewards: position.rewards?.amount || 0
+                    });
+                }
+            } else if (positionName.includes('ROAR')) {
+                // ROAR staking - show staked amount and VP over time
+                chartLabel = 'ROAR Staked';
+                yAxisLabel = 'ROAR';
+                chartColor = '#f59e0b';
+                
+                historicalSnapshots.forEach(snapshot => {
+                    if (snapshot.alliance && snapshot.timestamp) {
+                        dataPoints.push({
+                            x: new Date(snapshot.timestamp),
+                            y: snapshot.alliance.roar_staked || 0,
+                            epoch: snapshot.epoch,
+                            vp: snapshot.alliance.roar_vp || 0
+                        });
+                    }
+                });
+                
+                // Add current data
+                if (position.staked?.amount) {
+                    dataPoints.push({
+                        x: new Date(),
+                        y: position.staked.amount,
+                        epoch: 'Live',
+                        vp: position.vp_percent || 0
+                    });
+                }
+            } else if (positionName.includes('pixeLions')) {
+                // pixeLions - show NFT count and VP over time
+                chartLabel = 'NFTs Staked';
+                yAxisLabel = 'NFTs';
+                chartColor = '#a855f7';
+                
+                historicalSnapshots.forEach(snapshot => {
+                    if (snapshot.alliance && snapshot.timestamp) {
+                        dataPoints.push({
+                            x: new Date(snapshot.timestamp),
+                            y: snapshot.alliance.pixelions_staked || 0,
+                            epoch: snapshot.epoch,
+                            vp: snapshot.alliance.pixelions_vp || 0
+                        });
+                    }
+                });
+                
+                // Add current data
+                if (position.staked?.amount) {
+                    dataPoints.push({
+                        x: new Date(),
+                        y: position.staked.amount,
+                        epoch: 'Live',
+                        vp: position.vp_percent || 0
+                    });
+                }
+            }
+            
+            // If no historical data, show static info card
+            if (dataPoints.length < 2) {
+                chartWrapper.classList.add('hidden');
+                noHistoryMsg.innerHTML = `
+                    <div class="text-center">
+                        <i class="fas fa-lock text-4xl mb-3 text-yellow-500"></i>
+                        <p class="text-lg font-bold text-white mb-2">${position.name}</p>
+                        <p class="text-gray-400 mb-4">Partner: ${position.partner}</p>
+                        ${position.staked ? `
+                            <div class="bg-gray-800/50 rounded-lg p-4 inline-block">
+                                <p class="text-xs text-gray-500">Staked Amount</p>
+                                <p class="text-xl font-bold text-yellow-400">${position.staked.amount.toLocaleString()} ${position.staked.token}</p>
+                            </div>
+                        ` : ''}
+                        ${position.rewards ? `
+                            <div class="bg-gray-800/50 rounded-lg p-4 inline-block ml-2">
+                                <p class="text-xs text-gray-500">Unclaimed Rewards</p>
+                                <p class="text-xl font-bold text-green-400">+${position.rewards.amount.toLocaleString()} ${position.rewards.token || ''}</p>
+                            </div>
+                        ` : ''}
+                        ${position.apr ? `<p class="text-sm text-green-400 mt-3">APR: ${position.apr}%</p>` : ''}
+                        ${position.vp_percent ? `<p class="text-sm text-yellow-400 mt-2">Voting Power: ${position.vp_percent}%</p>` : ''}
+                        <p class="text-xs text-gray-600 mt-4">Historical data not yet available</p>
+                    </div>
+                `;
+                noHistoryMsg.classList.remove('hidden');
+                
+                // Update stats
+                document.getElementById('stat-current').textContent = position.staked ? position.staked.amount.toLocaleString() : '--';
+                document.getElementById('stat-change').textContent = position.rewards ? `+${position.rewards.amount.toLocaleString()}` : (position.vp_percent ? `${position.vp_percent}% VP` : '--');
+                document.getElementById('stat-change').className = 'text-lg font-bold text-green-400';
+                document.getElementById('stat-avg').textContent = position.apr ? `${position.apr}% APR` : '--';
+                return;
+            }
+            
+            // Show chart
+            chartWrapper.classList.remove('hidden');
+            noHistoryMsg.classList.add('hidden');
+            
+            // Calculate stats
+            const currentValue = dataPoints[dataPoints.length - 1].y;
+            const oldestValue = dataPoints[0].y;
+            const change = currentValue - oldestValue;
+            const changePercent = oldestValue > 0 ? (change / oldestValue * 100) : 0;
+            
+            // Update stats display
+            document.getElementById('stat-current').textContent = currentValue.toLocaleString(undefined, { maximumFractionDigits: 2 });
+            
+            const changeEl = document.getElementById('stat-change');
+            if (change !== 0) {
+                changeEl.textContent = `${change >= 0 ? '+' : ''}${change.toLocaleString(undefined, { maximumFractionDigits: 2 })} (${changePercent.toFixed(1)}%)`;
+                changeEl.className = `text-lg font-bold ${change >= 0 ? 'text-green-400' : 'text-red-400'}`;
+            } else {
+                changeEl.textContent = 'No change';
+                changeEl.className = 'text-lg font-bold text-gray-500';
+            }
+            
+            // Show APR or VP in avg field
+            const latestData = dataPoints[dataPoints.length - 1];
+            if (latestData.apr) {
+                document.getElementById('stat-avg').textContent = `${latestData.apr}% APR`;
+            } else if (latestData.vp !== undefined) {
+                document.getElementById('stat-avg').textContent = `${latestData.vp}% VP`;
+            } else {
+                document.getElementById('stat-avg').textContent = '--';
+            }
+            
+            // Render chart
+            const ctx = document.getElementById('balance-chart').getContext('2d');
+            
+            if (balanceChart) {
+                balanceChart.destroy();
+            }
+            
+            balanceChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    datasets: [{
+                        label: chartLabel,
+                        data: dataPoints,
+                        borderColor: chartColor,
+                        backgroundColor: chartColor + '20',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 4,
+                        pointHoverRadius: 6,
+                        pointBackgroundColor: chartColor,
+                        pointBorderColor: '#1a1a1a',
+                        pointBorderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(26, 26, 26, 0.95)',
+                            borderColor: chartColor,
+                            borderWidth: 1,
+                            titleColor: '#fff',
+                            bodyColor: '#ccc',
+                            padding: 12,
+                            callbacks: {
+                                title: function(items) {
+                                    const item = items[0];
+                                    const epoch = item.raw.epoch;
+                                    const date = new Date(item.raw.x).toLocaleDateString();
+                                    return epoch === 'Live' ? `Live (${date})` : `Epoch ${epoch} (${date})`;
+                                },
+                                label: function(context) {
+                                    let label = `${chartLabel}: ${context.raw.y.toLocaleString()} ${yAxisLabel}`;
+                                    if (context.raw.apr) {
+                                        label += ` | APR: ${context.raw.apr}%`;
+                                    }
+                                    if (context.raw.vp !== undefined) {
+                                        label += ` | VP: ${context.raw.vp}%`;
+                                    }
+                                    if (context.raw.rewards) {
+                                        label += ` | Rewards: +${context.raw.rewards.toLocaleString()}`;
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                unit: 'week',
+                                displayFormats: {
+                                    week: 'MMM d'
+                                }
+                            },
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.05)'
+                            },
+                            ticks: {
+                                color: '#888'
+                            }
+                        },
+                        y: {
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.05)'
+                            },
+                            ticks: {
+                                color: '#888',
+                                callback: function(value) {
+                                    if (value >= 1000000000) return (value/1000000000).toFixed(1) + 'B';
+                                    if (value >= 1000000) return (value/1000000).toFixed(1) + 'M';
+                                    if (value >= 1000) return (value/1000).toFixed(1) + 'K';
+                                    return value.toLocaleString();
+                                }
+                            }
+                        }
+                    }
+                }
+            });
         }
         
         function renderTotalChart() {
@@ -1390,17 +1984,19 @@
         function renderBalanceChart(tokenName, walletType) {
             const chartWrapper = document.getElementById('chart-wrapper');
             const noHistoryMsg = document.getElementById('no-history-msg');
+            const epochCountEl = document.getElementById('chart-epoch-count');
             
             console.log(`Rendering chart for ${tokenName} (${walletType}), ${historicalSnapshots.length} snapshots available`);
             
             // Build historical data for this token
             const dataPoints = [];
+            const normalizedSearchName = normalizeTokenName(tokenName);
             
             for (const snapshot of historicalSnapshots) {
                 const assets = walletType === 'dao' ? snapshot.treasuryAssets : snapshot.councilAssets;
                 if (assets && assets.length > 0) {
-                    // TLA data uses 'token' field, not 'name'
-                    const tokenData = assets.find(a => (a.token || a.name) === tokenName);
+                    // Use normalized name for comparison to handle case/variation differences
+                    const tokenData = assets.find(a => normalizeTokenName(a.token || a.name) === normalizedSearchName);
                     if (tokenData) {
                         dataPoints.push({
                             x: new Date(snapshot.timestamp),
@@ -1424,10 +2020,17 @@
             
             console.log(`Found ${dataPoints.length} data points for ${tokenName}`);
             
+            // Update epoch count display
+            const epochCount = dataPoints.filter(d => d.epoch !== 'Live').length;
+            if (epochCountEl) {
+                epochCountEl.textContent = `(${epochCount} epochs${dataPoints.some(d => d.epoch === 'Live') ? ' + Live' : ''})`;
+            }
+            
             if (dataPoints.length < 1) {
                 // No data at all
                 chartWrapper.classList.add('hidden');
                 noHistoryMsg.classList.remove('hidden');
+                if (epochCountEl) epochCountEl.textContent = '';
                 return;
             }
             
@@ -1510,7 +2113,19 @@
                                     return epoch === 'Live' ? `Live (${date})` : `Epoch ${epoch} (${date})`;
                                 },
                                 label: function(context) {
-                                    return `${tokenName}: ${context.raw.y.toLocaleString(undefined, { maximumFractionDigits: 4 })}`;
+                                    const value = context.raw.y;
+                                    const idx = context.dataIndex;
+                                    let label = `${tokenName}: ${value.toLocaleString(undefined, { maximumFractionDigits: 4 })}`;
+                                    
+                                    // Show change from previous point
+                                    if (idx > 0) {
+                                        const prevValue = dataPoints[idx - 1].y;
+                                        const diff = value - prevValue;
+                                        const pctDiff = prevValue > 0 ? ((diff / prevValue) * 100) : 0;
+                                        const sign = diff >= 0 ? '+' : '';
+                                        label += ` (${sign}${diff.toLocaleString(undefined, { maximumFractionDigits: 2 })} | ${sign}${pctDiff.toFixed(1)}%)`;
+                                    }
+                                    return label;
                                 }
                             }
                         }
@@ -1554,7 +2169,7 @@
         async function init() {
             console.log('Initializing DAO Treasury page...');
             
-            // Fetch current TLA data (has treasury balances and prices)
+            // Fetch current TLA data (for staked positions and token prices)
             const tlaData = await fetchCurrentTlaData();
             
             if (!tlaData) {
@@ -1564,35 +2179,33 @@
                 return;
             }
             
-            // Extract token prices
+            // Extract token prices from TLA data
             tokenPrices = tlaData.token_prices || {};
             
-            // Extract DAO Treasury tokens from dashboard.treasury.tokens
-            const treasury = tlaData.dashboard?.treasury;
-            if (treasury) {
-                daoAssets = treasury.tokens || [];
-                console.log(`Loaded ${daoAssets.length} DAO Treasury tokens`);
-            }
+            // Fetch LIVE DAO Treasury data from blockchain (not from JSON)
+            console.log('Fetching LIVE treasury data from blockchain...');
+            daoAssets = await fetchLiveTreasuryData(DAO_TREASURY_ADDRESS);
+            console.log(`Loaded ${daoAssets.length} LIVE DAO Treasury tokens`);
             
-            // Extract Council Treasury - currently only has address in JSON, no token balances
-            // Council assets would need to be fetched live or added to TLA export
-            const councilTreasury = tlaData.dashboard?.council_treasury;
-            councilAssets = []; // No token data in current JSON structure
-            console.log('Council Treasury address:', councilTreasury?.address || 'Not found');
+            // Fetch LIVE Council Treasury data from blockchain
+            councilAssets = await fetchLiveTreasuryData(COUNCIL_TREASURY_ADDRESS);
+            console.log(`Loaded ${councilAssets.length} LIVE Council Treasury tokens`);
             
-            // Build staked positions from multiple sources in the JSON:
-            // 1. dashboard.alliances.lion_dao - Alliance partnerships
-            // 2. dashboard.tla_deposits - TLA locked positions
+            // Build staked positions from Alliance partnerships ONLY (not TLA Deposits)
+            // TLA Deposits are shown in the TLA Deposits tab, not here
             stakedPositions = [];
             
             const alliances = tlaData.dashboard?.alliances;
             const lionDao = alliances?.lion_dao;
             
             if (lionDao) {
+                // Use live CoinGecko prices if available, fall back to TLA prices
+                const lunaPrice = geckoIdPrices['terra-luna-2']?.usd || tokenPrices.LUNA?.price || tokenPrices.LUNA || 0;
+                const roarPrice = geckoIdPrices['lion-dao']?.usd || tokenPrices.ROAR?.price || tokenPrices.ROAR || 0;
+                
                 // 1. Chain Staking (LUNA staked to validators)
                 if (lionDao.chain_staking?.validators) {
                     for (const validator of lionDao.chain_staking.validators) {
-                        const lunaPrice = tokenPrices.LUNA?.price || tokenPrices.LUNA || 0;
                         const stakedLuna = validator.staked_luna || 0;
                         const pendingLuna = validator.unclaimed_rewards_luna || 0;
                         
@@ -1617,7 +2230,6 @@
                 // 2. ROAR DAO Stake
                 if (lionDao.roar_dao_stake) {
                     const roarStake = lionDao.roar_dao_stake;
-                    const roarPrice = tokenPrices.ROAR?.price || tokenPrices.ROAR || 0;
                     const stakedRoar = roarStake.staked_roar || 0;
                     
                     stakedPositions.push({
@@ -1651,28 +2263,9 @@
                 }
             }
             
-            // 4. TLA Deposits (locked positions)
-            const tlaDeposits = tlaData.dashboard?.tla_deposits;
-            if (tlaDeposits?.tokens && tlaDeposits.tokens.length > 0) {
-                // Group all TLA deposits as one position with total USD
-                const tlaTotal = tlaDeposits.total_usd || 0;
-                const tokenList = tlaDeposits.tokens.map(t => t.symbol || t.token).join(', ');
-                
-                stakedPositions.push({
-                    name: 'TLA Deposits',
-                    partner: 'Eris Protocol',
-                    staked: {
-                        amount: tlaDeposits.vp || 0,
-                        token: 'VP'
-                    },
-                    apr: tlaDeposits.apr || 0,
-                    usd: tlaTotal,
-                    // Store individual tokens for potential detailed view
-                    _tokens: tlaDeposits.tokens
-                });
-            }
+            // NOTE: TLA Deposits are NOT included here - they have their own dedicated tab
             
-            console.log(`Built ${stakedPositions.length} staked positions from alliances + TLA deposits`);
+            console.log(`Built ${stakedPositions.length} staked positions from alliances`);
             
             // Fetch historical snapshots for charts
             await fetchHistoricalSnapshots();
@@ -1694,6 +2287,9 @@
             const combinedTotal = daoTotal + stakedTotal + councilTotal;
             document.getElementById('combined-total').textContent = '$' + combinedTotal.toLocaleString(undefined, { maximumFractionDigits: 0 });
             
+            // Populate epoch range selectors for "What Changed" section
+            populateEpochSelectors();
+            
             // Render value breakdown (price vs position change)
             renderValueBreakdown();
             
@@ -1701,13 +2297,14 @@
             await fetchDaoProps();
             renderDaoEvents();
             
-            // Auto-select first staked position or DAO token for chart
-            if (stakedPositions.length > 0) {
-                selectStakedPosition(stakedPositions[0].name);
-            } else if (daoAssets.length > 0) {
-                const defaultToken = daoAssets.find(a => (a.token || a.name) === 'Astro') || daoAssets[0];
+            // Auto-select ampLUNA from DAO Treasury for chart (default view)
+            if (daoAssets.length > 0) {
+                // Find ampLUNA or fall back to first token
+                const defaultToken = daoAssets.find(a => (a.token || a.name) === 'ampLUNA') || daoAssets[0];
                 const tokenName = defaultToken.token || defaultToken.name;
                 selectToken(tokenName, 'dao');
+            } else if (stakedPositions.length > 0) {
+                selectStakedPosition(stakedPositions[0].name);
             }
             
             console.log('Treasury page initialized');
