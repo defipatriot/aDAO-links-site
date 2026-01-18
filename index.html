@@ -7133,7 +7133,7 @@ est. APR 58.53 %"></textarea>
                 
                 // BBL API endpoints
                 const BBL_API_BASE = 'https://warlock.backbonelabs.io/api/v1/dapps/necropolis';
-                const CORS_PROXY = 'https://corsproxy.io/?'; // CORS proxy for BBL API
+                const CORS_PROXY = 'https://bbl-proxy.defipatriot.workers.dev/?url='; // Your own Cloudflare Worker proxy
                 const BBL_COLLECTIONS = {
                     'alliance_dao': {
                         name: 'Alliance DAO',
@@ -7160,7 +7160,23 @@ est. APR 58.53 %"></textarea>
                     // Try with CORS proxy
                     const proxyUrl = CORS_PROXY + encodeURIComponent(url);
                     const proxyResponse = await fetch(proxyUrl);
-                    if (!proxyResponse.ok) throw new Error('Proxy fetch failed');
+                    
+                    // Handle rate limiting
+                    if (proxyResponse.status === 429) {
+                        const errorData = await proxyResponse.json().catch(() => ({}));
+                        const error = new Error('Rate limit exceeded');
+                        error.code = 'RATE_LIMITED';
+                        error.retryAfter = errorData.retryAfter || 60;
+                        throw error;
+                    }
+                    
+                    if (!proxyResponse.ok) {
+                        const errorData = await proxyResponse.json().catch(() => ({}));
+                        const error = new Error(errorData.error || 'Proxy fetch failed');
+                        error.code = errorData.code || 'FETCH_ERROR';
+                        throw error;
+                    }
+                    
                     return proxyResponse;
                 }
                 
@@ -7237,8 +7253,14 @@ est. APR 58.53 %"></textarea>
                             document.getElementById('bbl-listed-count').textContent = data.pagination.totalResults;
                         }
                     } catch (err) {
-                        // Fallback to deving.zone count already set
-                        document.getElementById('bbl-listed-count').textContent = bblListedNfts.length || '--';
+                        // Fallback to deving.zone count, show rate limit indicator if needed
+                        const countEl = document.getElementById('bbl-listed-count');
+                        if (err.code === 'RATE_LIMITED') {
+                            countEl.textContent = bblListedNfts.length || '--';
+                            countEl.title = 'Rate limited - showing cached count';
+                        } else {
+                            countEl.textContent = bblListedNfts.length || '--';
+                        }
                     }
                 }
                 
@@ -7292,13 +7314,18 @@ est. APR 58.53 %"></textarea>
                         const liveIndicator = document.getElementById('bbl-live-indicator');
                         const dataSource = document.getElementById('bbl-data-source');
                         if (liveIndicator) liveIndicator.classList.remove('hidden');
-                        if (dataSource) dataSource.innerHTML = '<i class="fas fa-bolt text-yellow-400 mr-1"></i>Live from BBL API';
+                        if (dataSource) dataSource.innerHTML = '<i class="fas fa-bolt text-yellow-400 mr-1"></i>Live from BBL';
                         
                         return data;
                     } catch (err) {
                         console.error('BBL collection stats error:', err);
                         const dataSource = document.getElementById('bbl-data-source');
-                        if (dataSource) dataSource.innerHTML = '<i class="fas fa-exclamation-triangle text-yellow-500 mr-1"></i>Using cached data (API unavailable)';
+                        
+                        if (err.code === 'RATE_LIMITED') {
+                            if (dataSource) dataSource.innerHTML = '<i class="fas fa-clock text-orange-400 mr-1"></i>Rate limited - try again in 1 min';
+                        } else {
+                            if (dataSource) dataSource.innerHTML = '<i class="fas fa-exclamation-triangle text-yellow-500 mr-1"></i>API unavailable';
+                        }
                         return null;
                     }
                 }
@@ -7311,7 +7338,8 @@ est. APR 58.53 %"></textarea>
                         return await response.json();
                     } catch (err) {
                         console.error('BBL listings error:', err);
-                        return null;
+                        // Return error object so caller can handle specific errors
+                        return { error: true, code: err.code || 'FETCH_ERROR', message: err.message };
                     }
                 }
                 
@@ -7432,11 +7460,22 @@ est. APR 58.53 %"></textarea>
                     // Fetch listings
                     const data = await fetchBblListings(collection.contract, 50);
                     
-                    if (!data || !data.nfts) {
+                    if (!data || data.error || !data.nfts) {
+                        let errorMsg = 'Failed to load listings';
+                        let errorIcon = 'fa-exclamation-triangle';
+                        let errorColor = 'text-red-400';
+                        
+                        if (data?.code === 'RATE_LIMITED') {
+                            errorMsg = 'Rate limited - too many requests. Try again in 1 minute.';
+                            errorIcon = 'fa-clock';
+                            errorColor = 'text-orange-400';
+                        }
+                        
                         container.innerHTML = `
-                            <div class="text-center py-8 text-red-400">
-                                <i class="fas fa-exclamation-triangle text-2xl mb-2"></i>
-                                <p>Failed to load listings</p>
+                            <div class="text-center py-8 ${errorColor}">
+                                <i class="fas ${errorIcon} text-2xl mb-2"></i>
+                                <p>${errorMsg}</p>
+                                <p class="text-xs text-gray-500 mt-2">Data is cached for 2-5 minutes to protect the API</p>
                             </div>
                         `;
                         return;
