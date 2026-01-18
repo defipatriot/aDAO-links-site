@@ -1009,16 +1009,11 @@
                 <div class="text-xs text-gray-500 mb-3">
                     <i class="fas fa-sort-amount-up mr-1"></i>Sorted by USD price (lowest first) • Click collection to hide/show
                 </div>
-                <div id="combined-listings-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div id="combined-listings-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[600px] overflow-y-auto pr-2" style="scrollbar-width: thin; scrollbar-color: #4b5563 #1f2937;">
                     <div class="text-gray-500 text-sm text-center py-8 col-span-full">
                         <i class="fas fa-spinner fa-spin text-gray-600"></i> 
                         <span class="text-gray-600">Loading listings from all collections...</span>
                     </div>
-                </div>
-                <div class="text-center mt-4">
-                    <button id="load-more-listings" class="text-xs text-cyan-400 hover:text-cyan-300 hidden">
-                        <i class="fas fa-chevron-down mr-1"></i> Show More Listings
-                    </button>
                 </div>
             </div>
             
@@ -7427,6 +7422,17 @@ est. APR 58.53 %"></textarea>
                             lastSaleEl.textContent = data.last_sale_amount.toFixed(2);
                         }
                         
+                        // Fetch listing count (separate API call)
+                        try {
+                            const listingsUrl = `${BBL_API_BASE}/nfts?nftContract=${BBL_CONTRACT}&page=1&perPage=1&types=buy_now`;
+                            const listingsResponse = await fetchWithCorsProxy(listingsUrl);
+                            const listingsData = await listingsResponse.json();
+                            const listedCount = listingsData.pagination?.totalResults || 0;
+                            document.getElementById('bbl-listed-count').textContent = listedCount;
+                        } catch (e) {
+                            console.error('BBL listings count error:', e);
+                        }
+                        
                         // Update live indicator and source
                         const liveIndicator = document.getElementById('bbl-live-indicator');
                         const dataSource = document.getElementById('bbl-data-source');
@@ -8457,13 +8463,8 @@ est. APR 58.53 %"></textarea>
                                 <p>No listings found</p>
                             </div>
                         `;
-                        loadMoreBtn?.classList.add('hidden');
                         return;
                     }
-                    
-                    // Show subset
-                    const toShow = allListings.slice(0, displayedListingsCount);
-                    const remaining = allListings.length - displayedListingsCount;
                     
                     // Get collection short name for display
                     const getCollectionShortName = (key) => {
@@ -8488,12 +8489,15 @@ est. APR 58.53 %"></textarea>
                         }
                     };
                     
-                    const html = toShow.map(listing => {
+                    // Marketplace logo badges
+                    const getBblBadge = () => '<img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/BBL%20No%20Background.png" class="w-4 h-4" alt="BBL" title="BBL Marketplace">';
+                    const getBoostBadge = () => '<img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Boost%20Logo.png" class="w-4 h-4" alt="Boost" title="Boost Marketplace">';
+                    
+                    // Show ALL listings (container is scrollable)
+                    const html = allListings.map(listing => {
                         const collectionConfig = BBL_COLLECTIONS[listing.collection];
                         const collectionBadge = getCollectionBadge(listing.collection);
-                        const mpBadge = listing.marketplace === 'bbl'
-                            ? '<span class="text-[8px] bg-gray-600/50 text-gray-300 px-1 py-0.5 rounded">BBL</span>'
-                            : '<span class="text-[8px] bg-gray-600/50 text-gray-300 px-1 py-0.5 rounded">Boost</span>';
+                        const mpBadge = listing.marketplace === 'bbl' ? getBblBadge() : getBoostBadge();
                         
                         const brokenBadge = listing.isBroken 
                             ? '<span class="absolute top-1 left-1 bg-red-500 text-white text-[7px] px-1 py-0.5 rounded font-bold">BROKEN</span>'
@@ -8544,14 +8548,6 @@ est. APR 58.53 %"></textarea>
                     }).join('');
                     
                     container.innerHTML = html;
-                    
-                    // Show/hide load more
-                    if (remaining > 0) {
-                        loadMoreBtn?.classList.remove('hidden');
-                        loadMoreBtn.innerHTML = `<i class="fas fa-chevron-down mr-1"></i> Show More (${remaining} remaining)`;
-                    } else {
-                        loadMoreBtn?.classList.add('hidden');
-                    }
                 }
                 
                 // Setup listings collection filter buttons
