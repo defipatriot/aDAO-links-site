@@ -8308,7 +8308,7 @@ est. APR 58.53 %"></textarea>
                                         price: price,
                                         priceToken: 'bLUNA',
                                         priceUsd: priceUsd,
-                                        imageUrl: nft.cf_url || getCollectionImageUrl(selectedCollection, nft.nft_token_id),
+                                        imageUrl: nft.cf_url || convertIpfsToHttp(nft.image_url) || getCollectionImageUrl(selectedCollection, nft.nft_token_id),
                                         isBroken: collectionConfig.hasBroken ? (nft.special_trait === 'BROKEN') : false,
                                         rank: nft.rank,
                                         url: `https://app.backbonelabs.io/nfts/marketplace/collections/${contract}/${nft.nft_token_id}`
@@ -8369,6 +8369,16 @@ est. APR 58.53 %"></textarea>
                     // Render combined listings
                     displayedListingsCount = 12;
                     renderCombinedListings();
+                }
+                
+                // Convert IPFS URL to HTTP gateway URL
+                function convertIpfsToHttp(ipfsUrl) {
+                    if (!ipfsUrl) return null;
+                    if (ipfsUrl.startsWith('ipfs://')) {
+                        // Convert ipfs://bafybeihgrne.../1851.png to https://ipfs.io/ipfs/bafybeihgrne.../1851.png
+                        return ipfsUrl.replace('ipfs://', 'https://ipfs.io/ipfs/');
+                    }
+                    return ipfsUrl; // Return as-is if not IPFS
                 }
                 
                 // Get image URL for a specific collection and token ID
@@ -8440,8 +8450,6 @@ est. APR 58.53 %"></textarea>
                             ? '<span class="absolute top-1 left-1 bg-red-500 text-white text-[7px] px-1 py-0.5 rounded font-bold">BROKEN</span>'
                             : '';
                         
-                        const collectionShortName = getCollectionShortName(selectedCollection);
-                        
                         // Build status line based on collection type
                         let statusLine = '';
                         if (collectionConfig.hasBroken) {
@@ -8454,9 +8462,15 @@ est. APR 58.53 %"></textarea>
                         }
                         
                         // For TLA Locks, the name already includes the full description
-                        const displayName = selectedCollection === 'tla_locks' 
-                            ? listing.name 
-                            : `${collectionShortName} ${listing.name}`;
+                        // For other collections, BBL API includes collection name, Boost doesn't
+                        let displayName = listing.name;
+                        if (listing.marketplace === 'boost' && selectedCollection !== 'tla_locks') {
+                            // Boost only has "#123" style names, add collection prefix
+                            const collectionShortName = getCollectionShortName(selectedCollection);
+                            if (!listing.name.toLowerCase().includes(collectionShortName.toLowerCase())) {
+                                displayName = `${collectionShortName} ${listing.name}`;
+                            }
+                        }
                         
                         return `
                             <a href="${listing.url}" target="_blank" class="flex items-center gap-3 p-3 bg-gray-800/50 rounded-lg hover:bg-gray-700 transition-colors border border-gray-700/50">
