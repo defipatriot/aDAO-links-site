@@ -1046,8 +1046,8 @@
                 </div>
             </div>
             
-            <!-- Top 10 All Time Sales -->
-            <div class="text-center flex justify-center gap-4 flex-wrap">
+            <!-- Top 10 All Time Sales (hidden - buttons now in grid) -->
+            <div class="hidden">
                 <button id="top10-sales-btn" class="top10-btn">
                     <i class="fas fa-trophy"></i>
                     Top 10 All-Time Sales
@@ -8434,7 +8434,8 @@ est. APR 58.53 %"></textarea>
                                 
                                 let imageUrl;
                                 if (collectionKey === 'pixelions') {
-                                    imageUrl = getCollectionImageUrl(collectionKey, nft.nft_token_id);
+                                    // BBL pixeLions: use realityflux gateway (more reliable for BBL)
+                                    imageUrl = `https://ipfs.realityflux.io/ipfs/bafybeihgrne4vcqirlb26rs4y2gpaka32dqssidwvx2qui2kx5osc6oxie/${nft.nft_token_id}.png?pinataGatewayToken=B9zzwsO_1qJRcH8Ki5NU0senaMF1a_De5Ib-PVeu9KUcY6Z0QhLgLkHq018_lF7e`;
                                 } else {
                                     imageUrl = nft.cf_url || convertIpfsToHttp(nft.image_url) || getCollectionImageUrl(collectionKey, nft.nft_token_id);
                                 }
@@ -8497,6 +8498,14 @@ est. APR 58.53 %"></textarea>
                                     nftName = launch.name;
                                 }
                                 
+                                // For Boost pixeLions, use b-cdn (different from BBL)
+                                let imageUrl;
+                                if (collectionKey === 'pixelions') {
+                                    imageUrl = `https://nft-storage.b-cdn.net/ipfs/bafybeihgrne4vcqirlb26rs4y2gpaka32dqssidwvx2qui2kx5osc6oxie_${launch.from_nft_id}_160`;
+                                } else {
+                                    imageUrl = getCollectionImageUrl(collectionKey, launch.from_nft_id);
+                                }
+                                
                                 listings.push({
                                     marketplace: 'boost',
                                     collection: collectionKey,
@@ -8505,7 +8514,7 @@ est. APR 58.53 %"></textarea>
                                     price: priceRaw / 1000000,
                                     priceToken: priceToken,
                                     priceUsd: launch.to_usd || 0,
-                                    imageUrl: getCollectionImageUrl(collectionKey, launch.from_nft_id),
+                                    imageUrl: imageUrl,
                                     isBroken: config.hasBroken && nftStatusData?.nfts?.find(n => n.id == launch.from_nft_id)?.broken || false,
                                     url: `https://www.boostdao.io/ignite/permissionless-terra?launch_id=${launch.launch_id}`
                                 });
@@ -8661,11 +8670,16 @@ est. APR 58.53 %"></textarea>
                             }
                         }
                         
-                        // Build fallback image URL for pixeLions
+                        // Build fallback image URL for pixeLions (opposite CDN of primary)
                         let fallbackUrl = `https://placehold.co/48x48/1f2937/666?text=${listing.tokenId}`;
                         if (listing.collection === 'pixelions') {
-                            // Try b-cdn as fallback for pixeLions
-                            fallbackUrl = `https://nft-storage.b-cdn.net/ipfs/bafybeihgrne4vcqirlb26rs4y2gpaka32dqssidwvx2qui2kx5osc6oxie_${listing.tokenId}_160`;
+                            if (listing.marketplace === 'bbl') {
+                                // BBL primary is realityflux, fallback to b-cdn
+                                fallbackUrl = `https://nft-storage.b-cdn.net/ipfs/bafybeihgrne4vcqirlb26rs4y2gpaka32dqssidwvx2qui2kx5osc6oxie_${listing.tokenId}_160`;
+                            } else {
+                                // Boost primary is b-cdn, fallback to realityflux
+                                fallbackUrl = `https://ipfs.realityflux.io/ipfs/bafybeihgrne4vcqirlb26rs4y2gpaka32dqssidwvx2qui2kx5osc6oxie/${listing.tokenId}.png?pinataGatewayToken=B9zzwsO_1qJRcH8Ki5NU0senaMF1a_De5Ib-PVeu9KUcY6Z0QhLgLkHq018_lF7e`;
+                            }
                         }
                         
                         return `
@@ -8938,6 +8952,34 @@ est. APR 58.53 %"></textarea>
                     
                     allSales.slice(0, displayedSalesCount).forEach(sale => {
                         container.appendChild(createSaleRow(sale, sale.marketplace));
+                    });
+                    
+                    // Add Top 10 and Chart buttons as grid items
+                    const top10Btn = document.createElement('div');
+                    top10Btn.innerHTML = `
+                        <button id="top10-sales-btn-grid" class="w-full h-full min-h-[80px] flex items-center justify-center gap-2 bg-gradient-to-r from-yellow-600/20 to-orange-600/20 border border-yellow-500/30 rounded-lg hover:border-yellow-400/50 transition-all cursor-pointer">
+                            <i class="fas fa-trophy text-yellow-400 text-xl"></i>
+                            <span class="text-yellow-400 font-bold">Top 10 All-Time Sales</span>
+                            <i class="fas fa-chevron-right text-yellow-400 text-sm"></i>
+                        </button>
+                    `;
+                    container.appendChild(top10Btn);
+                    
+                    const chartBtn = document.createElement('div');
+                    chartBtn.innerHTML = `
+                        <button id="sales-chart-btn-grid" class="w-full h-full min-h-[80px] flex items-center justify-center gap-2 bg-gradient-to-r from-purple-600/20 to-pink-600/20 border border-purple-500/30 rounded-lg hover:border-purple-400/50 transition-all cursor-pointer">
+                            <i class="fas fa-chart-line text-purple-400 text-xl"></i>
+                            <span class="text-purple-400 font-bold">Sales History Chart</span>
+                        </button>
+                    `;
+                    container.appendChild(chartBtn);
+                    
+                    // Add click handlers for grid buttons
+                    document.getElementById('top10-sales-btn-grid')?.addEventListener('click', () => {
+                        document.getElementById('top10-sales-btn')?.click();
+                    });
+                    document.getElementById('sales-chart-btn-grid')?.addEventListener('click', () => {
+                        document.getElementById('sales-chart-btn')?.click();
                     });
                     
                     if (allSales.length > displayedSalesCount) {
