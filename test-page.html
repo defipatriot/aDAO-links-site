@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test Page | Alliance DAO Dev</title>
+  
+  <!-- ╔══════════════════════════════════════════════════════════════════╗
+       ║  VISIBILITY TOGGLE                                               ║
+       ║  Set SHOW_TEST_PAGE to false to hide this page from public view  ║
+       ╚══════════════════════════════════════════════════════════════════╝ -->
+  <script>
+    const SHOW_TEST_PAGE = true;  // ← Change to false to disable/hide this page
+  </script>
+  <!-- ══════════════════════════════════════════════════════════════════ -->
+  
+  <link rel="icon" type="image/x-icon" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/favicon.ico">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --bg-primary: #0f1117;
+      --bg-secondary: #161b22;
+      --glass-bg: rgba(22, 27, 34, 0.8);
+      --glass-border: rgba(48, 54, 61, 0.8);
+      --accent: #06b6d4;
+    }
+    
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg-primary);
+      color: #e6edf3;
+      min-height: 100vh;
+    }
+    
+    .glass-card {
+      background: var(--glass-bg);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--glass-border);
+      border-radius: 16px;
+    }
+    
+    .stat-box {
+      text-align: center;
+      padding: 20px 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+    
+    .pool-card {
+      background: rgba(15, 17, 23, 0.6);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      padding: 16px;
+      transition: all 0.3s ease;
+    }
+    
+    .pool-card:hover {
+      background: rgba(20, 24, 32, 0.8);
+      border-color: rgba(6, 182, 212, 0.3);
+      transform: translateY(-2px);
+    }
+    
+    .log-entry { padding: 2px 0; font-size: 12px; }
+    .log-info { color: #94a3b8; }
+    .log-success { color: #10b981; }
+    .log-error { color: #ef4444; }
+    .log-warn { color: #f59e0b; }
+    
+    .bucket-stable { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+    .bucket-project { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+    .bucket-bluechip { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+    .bucket-single { background: rgba(168, 85, 247, 0.2); color: #c084fc; }
+    
+    .loading { animation: pulse 1.5s infinite; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    
+    .dev-banner {
+      background: linear-gradient(90deg, #f59e0b22, #ef444422);
+      border: 1px solid #f59e0b44;
+      color: #fbbf24;
+    }
+    
+    .disabled-page {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0f1117;
+      color: #666;
+      text-align: center;
+      padding: 20px;
+    }
+  </style>
+</head>
+<body>
+  
+  <script>
+    // Handle visibility toggle
+    if (!SHOW_TEST_PAGE) {
+      document.body.innerHTML = `
+        <div class="disabled-page">
+          <div>
+            <div style="font-size:64px;margin-bottom:24px;opacity:0.5;">🔒</div>
+            <h1 style="font-size:24px;color:#444;margin-bottom:12px;font-weight:600;">Test Page Disabled</h1>
+            <p style="color:#666;margin-bottom:24px;">This page is currently hidden from public view.</p>
+            <a href="index.html" style="color:#06b6d4;text-decoration:none;">← Back to Dashboard</a>
+          </div>
+        </div>
+      `;
+      document.body.className = '';
+    }
+  </script>
+  
+  <div id="main-content" class="p-4 md:p-6">
+    
+    <!-- Dev Banner -->
+    <div class="dev-banner rounded-lg px-4 py-2 mb-4 flex items-center justify-between max-w-7xl mx-auto">
+      <div class="flex items-center gap-2">
+        <span class="text-lg">🧪</span>
+        <span class="font-semibold">Development Test Page</span>
+        <span class="text-sm opacity-75 hidden md:inline">- For testing new features</span>
+      </div>
+      <a href="index.html" class="text-cyan-400 hover:text-cyan-300 text-sm">← Back to Dashboard</a>
+    </div>
+    
+    <div class="max-w-7xl mx-auto">
+      
+      <!-- Header -->
+      <header class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+        <div>
+          <h1 class="text-2xl md:text-3xl font-bold text-cyan-400 flex items-center gap-3">
+            <span class="text-3xl">⚗️</span>
+            TLA Live Data Fetcher
+          </h1>
+          <p class="text-gray-400 text-sm mt-1">Browser-based live data fetcher - No backend required</p>
+        </div>
+        
+        <div class="flex gap-3">
+          <button onclick="fetchLiveData()" id="fetch-btn" class="bg-cyan-600 hover:bg-cyan-500 text-white px-6 py-2.5 rounded-lg font-medium flex items-center gap-2 transition-all">
+            <span id="fetch-icon">🔄</span>
+            Fetch Live Data
+          </button>
+          <button onclick="exportJSON()" id="export-btn" class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2.5 rounded-lg font-medium flex items-center gap-2 transition-all" disabled>
+            📥 Export JSON
+          </button>
+        </div>
+      </header>
+      
+      <!-- Summary Stats -->
+      <div class="glass-card mb-6 grid grid-cols-2 md:grid-cols-5 divide-x divide-gray-700/50">
+        <div class="stat-box">
+          <div class="text-gray-400 text-xs uppercase tracking-wide">Total VP</div>
+          <div id="stat-vp" class="text-xl font-bold text-white">--</div>
+        </div>
+        <div class="stat-box">
+          <div class="text-gray-400 text-xs uppercase tracking-wide">TLA Staked</div>
+          <div id="stat-staked" class="text-xl font-bold text-cyan-400">--</div>
+        </div>
+        <div class="stat-box">
+          <div class="text-gray-400 text-xs uppercase tracking-wide">Yearly Rewards</div>
+          <div id="stat-rewards" class="text-xl font-bold text-green-400">--</div>
+        </div>
+        <div class="stat-box">
+          <div class="text-gray-400 text-xs uppercase tracking-wide">Active Pools</div>
+          <div id="stat-active" class="text-xl font-bold text-purple-400">--</div>
+        </div>
+        <div class="stat-box">
+          <div class="text-gray-400 text-xs uppercase tracking-wide">At Risk</div>
+          <div id="stat-risk" class="text-xl font-bold text-red-400">--</div>
+        </div>
+      </div>
+      
+      <!-- Log Panel -->
+      <div class="glass-card mb-6 p-4">
+        <div class="flex justify-between items-center mb-2">
+          <h3 class="text-sm font-semibold text-gray-300">📋 Fetch Log</h3>
+          <button onclick="clearLog()" class="text-xs text-gray-500 hover:text-gray-300">Clear</button>
+        </div>
+        <div id="log-panel" class="h-40 overflow-y-auto font-mono text-xs bg-black/30 rounded-lg p-3">
+          <div class="text-gray-500">Click "Fetch Live Data" to begin...</div>
+        </div>
+      </div>
+      
+      <!-- Pools Grid -->
+      <div class="mb-4 flex justify-between items-center">
+        <h3 class="text-lg font-semibold text-white">Pools</h3>
+        <div class="flex gap-2">
+          <select id="bucket-filter" onchange="renderPools()" class="bg-gray-800 text-white text-sm rounded-lg px-3 py-1.5 border border-gray-700">
+            <option value="all">All Buckets</option>
+            <option value="stable">Stable</option>
+            <option value="project">Project</option>
+            <option value="bluechip">Bluechip</option>
+            <option value="single">Single</option>
+          </select>
+          <select id="status-filter" onchange="renderPools()" class="bg-gray-800 text-white text-sm rounded-lg px-3 py-1.5 border border-gray-700">
+            <option value="all">All Status</option>
+            <option value="active">Active Only</option>
+            <option value="inactive">Inactive</option>
+          </select>
+        </div>
+      </div>
+      
+      <div id="pools-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div class="col-span-full text-center text-gray-500 py-12">
+          <div class="text-4xl mb-4">📊</div>
+          <p>No data yet. Click "Fetch Live Data" to load pools.</p>
+        </div>
+      </div>
+      
+      <!-- Footer -->
+      <footer class="mt-8 pt-6 border-t border-gray-800 text-center text-gray-500 text-xs">
+        <p>Data sources: Eris Protocol, Astroport, SkeletonSwap | Alliance DAO Dev Tools</p>
+        <p class="mt-1">
+          <a href="index.html" class="text-cyan-500 hover:text-cyan-400">Dashboard</a>
+          •
+          <a href="https://www.erisprotocol.com/terra/liquidity-hub" target="_blank" class="text-cyan-500 hover:text-cyan-400">Eris TLA</a>
+        </p>
+      </footer>
+    </div>
+  </div>
+  
+  <script>
+    // ============================================================
+    // TLA LIVE BROWSER FETCHER
+    // Fetches all data directly in browser - no backend required
+    // ============================================================
+    
+    // Configuration
+    const CONFIG = {
+      lcd: 'https://terra-lcd.publicnode.com',
+      erisLcd: 'https://phoenix-lcd.erisprotocol.com',
+      contracts: {
+        gauge: 'terra1ewlkfzd5fupamher0ehnrp8xyepjqvceku07ma5dyud36j35885s0p96z7',
+        staking: {
+          stable: 'terra19cs0qcqpa9vfzm3e7wq70gq56ts6xw0n3eprme7p60uzm4vw0y2szdt9gm',
+          project: 'terra1mxdwq34m0hnn2gp8llcjf26g73pvek09shxyxgqhdgxm8xh9ckrs28rq9w',
+          bluechip: 'terra14cm3c0q76vp6q98t5l44e6kd8ls7ug9uprr0xl5sl0zz2r7e3qksxwmjne',
+          single: 'terra13esa8737nv9g4r9fqqgf7zrucyzsgxakrfx0cjf2svy0sy2c0h7sks3kap'
+        }
+      },
+      buckets: ['stable', 'project', 'bluechip', 'single']
+    };
+    
+    let fetchedData = null;
+    
+    // Utility functions
+    const fmt$ = (n) => n >= 1e6 ? `$${(n/1e6).toFixed(2)}M` : n >= 1e3 ? `$${(n/1e3).toFixed(1)}K` : `$${n.toFixed(0)}`;
+    const fmtNum = (n) => n >= 1e6 ? `${(n/1e6).toFixed(2)}M` : n >= 1e3 ? `${(n/1e3).toFixed(1)}K` : n.toFixed(0);
+    const fmtPct = (n) => `${n.toFixed(2)}%`;
+    
+    // Logging
+    function log(msg, type = 'info') {
+      const panel = document.getElementById('log-panel');
+      const time = new Date().toLocaleTimeString();
+      const prefix = { info: '[INFO]', success: '[SUCCESS]', error: '[ERROR]', warn: '[WARN]' }[type] || '[INFO]';
+      
+      const entry = document.createElement('div');
+      entry.className = `log-entry log-${type}`;
+      entry.textContent = `${time} ${prefix} ${msg}`;
+      panel.appendChild(entry);
+      panel.scrollTop = panel.scrollHeight;
+      
+      console.log(`${prefix} ${msg}`);
+    }
+    
+    function clearLog() {
+      document.getElementById('log-panel').innerHTML = '<div class="text-gray-500">Log cleared.</div>';
+    }
+    
+    // LCD Query helper
+    async function queryContract(contract, query, useTerraLcd = true) {
+      const lcd = useTerraLcd ? CONFIG.lcd : CONFIG.erisLcd;
+      const encoded = btoa(JSON.stringify(query));
+      const url = `${lcd}/cosmwasm/wasm/v1/contract/${contract}/smart/${encoded}`;
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      return data.data;
+    }
+    
+    async function queryErisContract(contract, query) {
+      return queryContract(contract, query, false);
+    }
+    
+    // Fetch prices from Eris
+    async function fetchPrices() {
+      log('Fetching prices...');
+      
+      const endpoints = [
+        'https://backend.erisprotocol.com/api/prices/phoenix-1',
+        'https://backend.erisprotocol.com/prices',
+        'https://api.allorigins.win/raw?url=' + encodeURIComponent('https://backend.erisprotocol.com/api/prices/phoenix-1'),
+        'https://corsproxy.io/?' + encodeURIComponent('https://backend.erisprotocol.com/api/prices/phoenix-1')
+      ];
+      
+      for (const url of endpoints) {
+        try {
+          const isProxy = url.includes('allorigins') || url.includes('corsproxy');
+          log(`  Trying: ${isProxy ? 'proxy' : 'direct'}...`, 'info');
+          
+          const response = await fetch(url);
+          if (!response.ok) {
+            const text = await response.text();
+            if (text.includes('Cannot GET')) {
+              log(`  Got error response: ${text.slice(0, 50)}`, 'warn');
+              continue;
+            }
+            continue;
+          }
+          
+          const data = await response.json();
+          if (data && Object.keys(data).length > 0) {
+            log(`Got ${Object.keys(data).length} prices`, 'success');
+            return data;
+          }
+        } catch (e) {
+          log(`  Failed: ${e.message}`, 'warn');
+        }
+      }
+      
+      log('Could not fetch prices - USD values will be unavailable', 'error');
+      log('TIP: Host this file on Netlify/Vercel for CORS proxy to work', 'warn');
+      return {};
+    }
+    
+    // Fetch alliance weights
+    async function fetchAllianceWeights() {
+      log('Fetching alliance data...');
+      try {
+        const url = `${CONFIG.lcd}/terra/alliance/alliances`;
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        const bucketWeights = {};
+        for (const alliance of data.alliances || []) {
+          const denom = alliance.denom || '';
+          for (const bucket of CONFIG.buckets) {
+            if (denom.includes(`/${bucket}/`)) {
+              bucketWeights[bucket] = parseFloat(alliance.reward_weight || 0) * 100;
+            }
+          }
+        }
+        
+        log(`Alliance weights: Stable=${bucketWeights.stable}%, Project=${bucketWeights.project}%`, 'success');
+        return bucketWeights;
+      } catch (e) {
+        log(`Error fetching alliance: ${e.message}`, 'error');
+        return {};
+      }
+    }
+    
+    // Fetch staking data
+    async function fetchStakingData() {
+      log('Fetching staking data...');
+      const stakingData = {};
+      
+      for (const bucket of CONFIG.buckets) {
+        try {
+          const data = await queryErisContract(CONFIG.contracts.staking[bucket], {
+            total_staked_balances: {}
+          });
+          
+          for (const pool of data || []) {
+            const lpAddr = pool.asset?.info?.cw20 || pool.asset?.info?.native;
+            if (lpAddr) {
+              stakingData[lpAddr] = {
+                bucket,
+                staked_amount: parseInt(pool.asset?.amount || 0),
+                total_shares: parseInt(pool.total_shares || 0),
+                take_rate: parseFloat(pool.config?.yearly_take_rate || 0.1) * 100
+              };
+            }
+          }
+          log(`  ${bucket}: ${Object.keys(stakingData).filter(k => stakingData[k].bucket === bucket).length} pools`, 'success');
+        } catch (e) {
+          log(`  Error ${bucket}: ${e.message}`, 'error');
+        }
+      }
+      
+      log(`Staking data for ${Object.keys(stakingData).length} pools`, 'success');
+      return stakingData;
+    }
+    
+    // Fetch reward distributions
+    async function fetchRewardDistributions() {
+      log('Fetching reward distributions...');
+      const distributions = {};
+      
+      for (const bucket of CONFIG.buckets) {
+        try {
+          const data = await queryErisContract(CONFIG.contracts.staking[bucket], {
+            reward_distribution: {}
+          });
+          
+          distributions[bucket] = {};
+          for (const pd of data || []) {
+            const lpAddr = pd.asset?.cw20 || pd.asset?.native;
+            if (lpAddr) {
+              distributions[bucket][lpAddr] = {
+                distribution: parseFloat(pd.distribution),
+                distribution_pct: parseFloat(pd.distribution) * 100,
+                total_vp: parseInt(pd.total_vp)
+              };
+            }
+          }
+        } catch (e) {
+          log(`  Error ${bucket}: ${e.message}`, 'error');
+        }
+      }
+      
+      return distributions;
+    }
+    
+    // Fetch Astroport pools
+    async function fetchAstroportPools() {
+      log('Fetching Astroport pools...');
+      
+      const input = JSON.stringify({ json: { chainId: "phoenix-1" } });
+      const encodedInput = encodeURIComponent(input);
+      const baseUrl = `https://app.astroport.fi/api/trpc/pools.getAll?input=${encodedInput}`;
+      
+      const endpoints = [
+        { url: baseUrl, name: 'direct' },
+        { url: 'https://corsproxy.io/?' + encodeURIComponent(baseUrl), name: 'corsproxy' },
+        { url: 'https://api.allorigins.win/get?url=' + encodeURIComponent(baseUrl), name: 'allorigins' },
+      ];
+      
+      for (const endpoint of endpoints) {
+        try {
+          log(`  Trying Astro: ${endpoint.name}...`, 'info');
+          
+          const response = await fetch(endpoint.url);
+          if (!response.ok) continue;
+          
+          let data = await response.json();
+          
+          if (data.contents && typeof data.contents === 'string') {
+            data = JSON.parse(data.contents);
+          }
+          
+          let pools = data?.result?.data?.json || [];
+          if (!Array.isArray(pools) || pools.length === 0) continue;
+          
+          const poolMap = {};
+          for (const p of pools) {
+            const poolData = {
+              poolAddress: p.poolAddress,
+              name: p.name,
+              tvl: p.poolLiquidityUsd || 0,
+              volume24h: p.dayVolumeUsd || 0,
+              tradingApr: (p.tradingFees?.apr || 0) * 100,
+              poolType: p.poolType
+            };
+            
+            if (p.lpAddress) poolMap[p.lpAddress] = poolData;
+            if (p.poolAddress) poolMap[p.poolAddress] = poolData;
+          }
+          
+          log(`Got ${pools.length} Astroport pools via ${endpoint.name}`, 'success');
+          return poolMap;
+        } catch (e) {
+          log(`  Astro ${endpoint.name} failed: ${e.message}`, 'warn');
+        }
+      }
+      
+      log('Astroport unavailable', 'warn');
+      return {};
+    }
+    
+    // Fetch SkeletonSwap pools
+    async function fetchSkeletonPools() {
+      log('Fetching SkeletonSwap pools...');
+      
+      const directUrl = 'https://dex.warlock.backbonelabs.io/api/pools/phoenix-1';
+      
+      const endpoints = [
+        directUrl,
+        'https://corsproxy.io/?' + encodeURIComponent(directUrl),
+        'https://api.allorigins.win/raw?url=' + encodeURIComponent(directUrl),
+        'https://api.allorigins.win/get?url=' + encodeURIComponent(directUrl)
+      ];
+      
+      for (const url of endpoints) {
+        try {
+          const isProxy = !url.startsWith('https://dex.');
+          const proxyName = url.includes('corsproxy') ? 'corsproxy' : url.includes('allorigins') ? 'allorigins' : 'direct';
+          log(`  Trying SS: ${proxyName}...`, 'info');
+          
+          const response = await fetch(url);
+          if (!response.ok) continue;
+          
+          let data = await response.json();
+          
+          if (data.contents && typeof data.contents === 'string') {
+            data = JSON.parse(data.contents);
+          }
+          
+          const pools = data.pools || data;
+          if (!Array.isArray(pools) || pools.length === 0) continue;
+          
+          const poolMap = {};
+          for (const p of pools) {
+            const addr = p.pool_address;
+            if (addr) {
+              const poolData = {
+                name: p.pool_id,
+                tvl: p.tvl_usd || 0,
+                volume24h: p.volume_24h_usd || 0,
+                volume7d: p.volume_7d_usd || 0,
+                apr: p.apr_7d || 0
+              };
+              poolMap[addr] = poolData;
+              poolMap[`factory/${addr}/uLP`] = poolData;
+            }
+          }
+          
+          log(`Got ${pools.length} SkeletonSwap pools via ${proxyName}`, 'success');
+          return poolMap;
+        } catch (e) {
+          log(`  SS failed: ${e.message}`, 'warn');
+        }
+      }
+      
+      log('SkeletonSwap unavailable', 'warn');
+      return {};
+    }
+    
+    // Main fetch function
+    async function fetchLiveData() {
+      const btn = document.getElementById('fetch-btn');
+      const icon = document.getElementById('fetch-icon');
+      btn.disabled = true;
+      icon.textContent = '⏳';
+      
+      clearLog();
+      log('Starting live data fetch...');
+      const startTime = Date.now();
+      
+      try {
+        // Fetch all data in parallel
+        const [prices, allianceWeights, stakingData, distributions, astroPools, skelPools] = await Promise.all([
+          fetchPrices(),
+          fetchAllianceWeights(),
+          fetchStakingData(),
+          fetchRewardDistributions(),
+          fetchAstroportPools(),
+          fetchSkeletonPools()
+        ]);
+        
+        // Build pools from staking data
+        log('Processing pool data...');
+        const poolsToEnrich = [];
+        
+        for (const [lpAddr, staking] of Object.entries(stakingData)) {
+          const dist = distributions[staking.bucket]?.[lpAddr];
+          poolsToEnrich.push({
+            lp_address: lpAddr,
+            bucket: staking.bucket,
+            vp: dist?.total_vp || 0
+          });
+        }
+        
+        // Calculate total VP
+        let totalVP = 0;
+        const bucketVPs = {};
+        for (const pool of poolsToEnrich) {
+          if (!bucketVPs[pool.bucket]) bucketVPs[pool.bucket] = 0;
+          bucketVPs[pool.bucket] += pool.vp;
+        }
+        totalVP = Math.max(...Object.values(bucketVPs));
+        log(`Calculated total VP: ${fmtNum(totalVP)}`, 'info');
+        
+        // Estimate yearly rewards
+        let totalStakedUsd = 0;
+        for (const pool of poolsToEnrich) {
+          const priceData = prices[pool.lp_address];
+          const lpPrice = priceData ? parseFloat(priceData.price_usd) || 0 : 0;
+          const staking = stakingData[pool.lp_address];
+          if (lpPrice > 0 && staking) {
+            totalStakedUsd += (staking.staked_amount / 1e6) * lpPrice;
+          }
+        }
+        const yearlyRewards = totalStakedUsd > 0 ? totalStakedUsd * 0.5 : 0;
+        
+        // Calculate bucket weights
+        const totalWeight = Object.values(allianceWeights).reduce((a, b) => a + b, 0) || 25;
+        
+        // Enrich pools
+        const enrichedPools = poolsToEnrich.map(pool => {
+          const priceData = prices[pool.lp_address];
+          const lpPrice = priceData ? parseFloat(priceData.price_usd) || 0 : 0;
+          const name = priceData?.display?.replace(' LP', '') || pool.lp_address.slice(0, 12) + '...';
+          const staking = stakingData[pool.lp_address] || {};
+          const dist = distributions[pool.bucket]?.[pool.lp_address] || {};
+          const astro = astroPools[pool.lp_address] || {};
+          let skel = skelPools[pool.lp_address] || {};
+          
+          if (!skel.tvl && pool.lp_address.startsWith('factory/')) {
+            const match = pool.lp_address.match(/factory\/([^/]+)\/uLP/);
+            if (match) skel = skelPools[match[1]] || skel;
+          }
+          
+          const tlaStaked = staking.staked_amount || 0;
+          const tlaStakedUsd = lpPrice > 0 ? (tlaStaked / 1e6) * lpPrice : 0;
+          const depth = skel.tvl || astro.tvl || 0;
+          const tradingApr = skel.apr || astro.tradingApr || 0;
+          const distPct = dist.distribution_pct || 0;
+          const bucketWeight = allianceWeights[pool.bucket] || 5;
+          const bucketShare = bucketWeight / totalWeight;
+          const poolYearlyRewards = yearlyRewards * bucketShare * (distPct / 100);
+          const allianceApr = tlaStakedUsd > 0 ? (poolYearlyRewards / tlaStakedUsd) * 100 : 0;
+          const takeRate = staking.take_rate || 10;
+          const isActive = pool.vp >= totalVP * 0.01;
+          
+          let dex = 'Astroport';
+          if ((skel.tvl > 0 && !astro.tvl) || name.includes('(S)')) dex = 'SkeletonSwap';
+          
+          return {
+            name,
+            dex,
+            bucket: pool.bucket,
+            address: pool.lp_address,
+            pool_type: astro.poolType || 'xyk',
+            vp: pool.vp,
+            vp_pct: totalVP > 0 ? (pool.vp / totalVP) * 100 : 0,
+            is_active: isActive,
+            depth,
+            volume_24h: skel.volume24h || astro.volume24h || 0,
+            tla_staked: tlaStaked,
+            tla_staked_usd: tlaStakedUsd,
+            lp_price: lpPrice,
+            apr_trading: tradingApr,
+            apr_alliance: allianceApr,
+            apr_take_rate: takeRate,
+            apr_net: tradingApr + allianceApr - (isActive ? 0 : takeRate),
+            distribution_pct: distPct,
+            yearly_rewards_est: poolYearlyRewards
+          };
+        });
+        
+        // Sort by TLA staked
+        enrichedPools.sort((a, b) => b.tla_staked_usd - a.tla_staked_usd);
+        
+        // Build final data
+        fetchedData = {
+          meta: {
+            generated_at: new Date().toISOString(),
+            fetch_time_ms: Date.now() - startTime,
+            source: 'TLA Live Browser Fetcher'
+          },
+          summary: {
+            total_vp: totalVP,
+            total_tla_staked: totalStakedUsd,
+            rewards_per_year: yearlyRewards,
+            pool_count: enrichedPools.length,
+            active_pools: enrichedPools.filter(p => p.is_active).length,
+            at_risk_pools: enrichedPools.filter(p => !p.is_active).length
+          },
+          alliance_weights: allianceWeights,
+          pools: enrichedPools,
+          prices
+        };
+        
+        // Update UI
+        updateStats();
+        renderPools();
+        
+        document.getElementById('export-btn').disabled = false;
+        log(`Fetch complete in ${((Date.now() - startTime) / 1000).toFixed(1)}s`, 'success');
+        
+      } catch (e) {
+        log(`Fetch failed: ${e.message}`, 'error');
+        console.error(e);
+      } finally {
+        btn.disabled = false;
+        icon.textContent = '🔄';
+      }
+    }
+    
+    function updateStats() {
+      if (!fetchedData) return;
+      const s = fetchedData.summary;
+      document.getElementById('stat-vp').textContent = fmtNum(s.total_vp);
+      document.getElementById('stat-staked').textContent = fmt$(s.total_tla_staked);
+      document.getElementById('stat-rewards').textContent = fmt$(s.rewards_per_year);
+      document.getElementById('stat-active').textContent = s.active_pools;
+      document.getElementById('stat-risk').textContent = s.at_risk_pools;
+    }
+    
+    function renderPools() {
+      if (!fetchedData) return;
+      
+      const grid = document.getElementById('pools-grid');
+      const bucketFilter = document.getElementById('bucket-filter').value;
+      const statusFilter = document.getElementById('status-filter').value;
+      
+      let pools = fetchedData.pools.filter(p => {
+        if (bucketFilter !== 'all' && p.bucket !== bucketFilter) return false;
+        if (statusFilter === 'active' && !p.is_active) return false;
+        if (statusFilter === 'inactive' && p.is_active) return false;
+        return true;
+      });
+      
+      if (pools.length === 0) {
+        grid.innerHTML = '<div class="col-span-full text-center text-gray-500 py-12">No pools match filters</div>';
+        return;
+      }
+      
+      grid.innerHTML = pools.map(p => `
+        <div class="pool-card">
+          <div class="flex justify-between items-start mb-3">
+            <div>
+              <div class="font-semibold text-white">${p.name}</div>
+              <div class="text-xs text-gray-500">${p.dex} • ${p.pool_type}</div>
+            </div>
+            <span class="text-xs px-2 py-1 rounded bucket-${p.bucket}">${p.bucket}</span>
+          </div>
+          
+          <div class="grid grid-cols-2 gap-3 text-sm mb-3">
+            <div>
+              <div class="text-gray-500 text-xs">TLA Staked</div>
+              <div class="text-white font-medium">${p.tla_staked_usd > 0 ? fmt$(p.tla_staked_usd) : '--'}</div>
+            </div>
+            <div>
+              <div class="text-gray-500 text-xs">TVL/Depth</div>
+              <div class="text-white font-medium">${p.depth > 0 ? fmt$(p.depth) : '--'}</div>
+            </div>
+            <div>
+              <div class="text-gray-500 text-xs">VP Share</div>
+              <div class="text-white font-medium">${fmtPct(p.vp_pct)}</div>
+            </div>
+            <div>
+              <div class="text-gray-500 text-xs">Status</div>
+              <div class="${p.is_active ? 'text-green-400' : 'text-red-400'} font-medium">
+                ${p.is_active ? '✓ Active' : '⚠ At Risk'}
+              </div>
+            </div>
+          </div>
+          
+          <div class="border-t border-gray-700 pt-3">
+            <div class="flex justify-between text-xs">
+              <span class="text-gray-500">Trading APR</span>
+              <span class="text-cyan-400">${fmtPct(p.apr_trading)}</span>
+            </div>
+            <div class="flex justify-between text-xs">
+              <span class="text-gray-500">Alliance APR</span>
+              <span class="text-green-400">${fmtPct(p.apr_alliance)}</span>
+            </div>
+            <div class="flex justify-between text-sm font-semibold mt-1">
+              <span class="text-gray-400">Net APR</span>
+              <span class="${p.apr_net > 0 ? 'text-green-400' : 'text-red-400'}">${fmtPct(p.apr_net)}</span>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+    
+    function exportJSON() {
+      if (!fetchedData) return;
+      
+      const blob = new Blob([JSON.stringify(fetchedData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `tla-live-${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      
+      log('JSON exported', 'success');
+    }
+    
+    // Hide content if page is disabled
+    if (!SHOW_TEST_PAGE) {
+      document.getElementById('main-content').style.display = 'none';
+    }
+  </script>
+</body>
+</html>
