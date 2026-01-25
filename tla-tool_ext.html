@@ -3674,6 +3674,13 @@ function clearVotionLocks() {
 // ============================================
 const VOTION_API_BASE = 'https://backend.erisprotocol.com/votion/liquidity-alliance';
 
+// CORS proxies to try if direct fetch fails
+const CORS_PROXIES = [
+    '', // Try direct first
+    'https://api.allorigins.win/raw?url=',
+    'https://corsproxy.io/?'
+];
+
 const VOTION_LOCKUPS = [
     { id: 'arbluna-max', type: 'arbLUNA', duration: 'Max', multiplier: 10 },
     { id: 'ampluna-max', type: 'ampLUNA', duration: 'Max', multiplier: 10 },
@@ -3682,6 +3689,43 @@ const VOTION_LOCKUPS = [
     { id: 'arbluna-1', type: 'arbLUNA', duration: '1wk', multiplier: 1 },
     { id: 'ampluna-1', type: 'ampLUNA', duration: '1wk', multiplier: 1 },
 ];
+
+// Track which proxy works
+let workingProxy = null;
+
+async function fetchWithCorsRetry(url) {
+    // If we already found a working proxy, use it
+    if (workingProxy !== null) {
+        const proxyUrl = workingProxy + (workingProxy ? encodeURIComponent(url) : url);
+        const response = await fetch(proxyUrl, {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' }
+        });
+        if (response.ok) return response;
+        // If it fails, reset and try all proxies again
+        workingProxy = null;
+    }
+    
+    // Try each proxy
+    for (const proxy of CORS_PROXIES) {
+        try {
+            const proxyUrl = proxy + (proxy ? encodeURIComponent(url) : url);
+            console.log(`  Trying: ${proxy || 'direct'}...`);
+            const response = await fetch(proxyUrl, {
+                method: 'GET',
+                headers: { 'Accept': 'application/json' }
+            });
+            if (response.ok) {
+                workingProxy = proxy;
+                console.log(`  ✓ Success via ${proxy || 'direct'}`);
+                return response;
+            }
+        } catch (e) {
+            console.log(`  ✗ ${proxy || 'direct'} failed: ${e.message}`);
+        }
+    }
+    throw new Error('All fetch methods failed');
+}
 
 async function fetchVotionFromApi(lockupId) {
     const lockupConfig = VOTION_LOCKUPS.find(l => l.id === lockupId);
@@ -3693,14 +3737,7 @@ async function fetchVotionFromApi(lockupId) {
     const url = `${VOTION_API_BASE}/${lockupId}/optimization`;
     
     try {
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json'
-            }
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const response = await fetchWithCorsRetry(url);
         const data = await response.json();
         
         // Get ratios from store
