@@ -1240,6 +1240,9 @@
                 </div>
             </div>
             <div class="flex items-center gap-2">
+                <button onclick="fetchAllDashboardData()" id="btn-fetch-all-dashboard" class="text-[10px] bg-cyan-700 hover:bg-cyan-600 px-3 py-1.5 rounded font-bold" title="Fetch treasury + backing + unminted from chain">
+                    <i class="fas fa-bolt mr-1"></i> Fetch All Live
+                </button>
                 <button onclick="loadDashboardFromTool()" class="text-[10px] bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded">
                     <i class="fas fa-copy mr-1"></i> Load from Tool
                 </button>
@@ -1252,6 +1255,10 @@
             <div class="bg-gray-900/50 rounded-lg p-3 border border-yellow-900/30">
                 <h3 class="text-[11px] font-bold text-yellow-400 mb-2 flex items-center gap-2">
                     <i class="fas fa-coins"></i> DAO Treasury
+                    <button onclick="fetchLiveTreasury()" class="ml-auto text-[8px] bg-yellow-700 hover:bg-yellow-600 px-2 py-0.5 rounded" title="Fetch live balances from chain">
+                        <i class="fas fa-bolt mr-1"></i>Fetch Live
+                    </button>
+                    <span id="treas-fetch-status" class="text-[8px] text-gray-500"></span>
                 </h3>
                 <!-- Paste Area -->
                 <textarea id="dash-treas-paste" class="input-dark w-full h-16 text-[8px] mb-1" placeholder="Paste treasury table from Station...&#10;AssetAmountLive Value..."></textarea>
@@ -1312,6 +1319,10 @@
             <div class="bg-gray-900/50 rounded-lg p-3 border border-purple-900/30">
                 <h3 class="text-[11px] font-bold text-purple-400 mb-2 flex items-center gap-2">
                     <i class="fas fa-gem"></i> NFT Backing (per NFT)
+                    <button onclick="fetchLiveNftBacking(); fetchLiveNftStats();" class="ml-auto text-[8px] bg-purple-700 hover:bg-purple-600 px-2 py-0.5 rounded" title="Fetch live backing + unminted from chain">
+                        <i class="fas fa-bolt mr-1"></i>Fetch Live
+                    </button>
+                    <span id="backing-fetch-status" class="text-[8px] text-gray-500"></span>
                 </h3>
                 <div class="space-y-2 text-[9px]">
                     <div class="flex justify-between items-center">
@@ -1370,6 +1381,10 @@
                 </div>
             </div>
             <div class="flex items-center gap-2">
+                <button onclick="fetchAllNftData()" id="btn-fetch-all-nft" class="text-[9px] bg-purple-700 hover:bg-purple-600 px-3 py-1 rounded font-bold" title="Fetch all live NFT data">
+                    <i class="fas fa-bolt mr-1"></i> Fetch All Live
+                </button>
+                <span id="nft-fetch-status" class="text-[9px] text-gray-500"></span>
                 <a href="https://deving.zone/en/terra2/contracts/terra13ckenyqrq9aa2kzz3lnfv8el4squx2xmkwdzy9pvtv755d7uku3qamu6wv" target="_blank" class="text-[9px] text-purple-400 hover:text-purple-300 bg-purple-900/30 px-2 py-1 rounded border border-purple-900/50">
                     <i class="fas fa-external-link-alt mr-1"></i> Deving.zone
                 </a>
@@ -2059,6 +2074,342 @@ let unknownSections = {
     // Key = section name, Value = comment explaining why
     // e.g., { 'votePage': 'DAODAO connection failed', 'deposits': 'Popup wouldn\'t load' }
 };
+
+// ============================================
+// AUTO-FETCH CONFIGURATION
+// ============================================
+const DAO_TREASURY_WALLET = 'terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm';
+const NFT_COLLECTION_CONTRACT = 'terra1phr9fngjv7a8an4dhmhd0u0f98wazxfnzccqtyheq4zqrrp4fpuqw3apw9';
+const ERIS_HUB_CONTRACT = 'terra10788fkzah89xrdm27zkj5yvhj9x3494lxawzm5qq3vvxcqz2yzaqyd3enk';
+const DEVING_STATS_URL = 'https://deving.zone/en/nfts/alliance_daos.json';
+const TERRA_LCD = 'https://terra.publicnode.com';
+
+// Token denom mapping for treasury queries
+const TREASURY_DENOM_MAP = {
+    'uluna': { name: 'LUNA', geckoId: 'terra-luna-2', decimals: 6 },
+    'ibc/8D8A7F7253615E5F76CB6252A1E1BD921D5EDB7BBAAF8913FB1C77FF125D9995': { name: 'ASTRO', geckoId: 'astroport-fi', decimals: 6 },
+    'ibc/2C962DAB9F57FE0921435426AE75196009FAA1981BF86991203C8411F8980FDB': { name: 'USDC', geckoId: 'usd-coin', decimals: 6 },
+    'ibc/88386AC48152D48B34B082648DF836F975506F0B57DBBFC10A54213B1BF484CB': { name: 'wBTC', geckoId: 'wrapped-bitcoin', decimals: 8 },
+    'terra1ecgazyd0waaj3g7l9cmy5gulhxkps2gmxu9ghducvuypjq68mq2s5lvsct': { name: 'ampLUNA', geckoId: 'eris-amplified-luna', decimals: 6 },
+    'terra1t4p3u8khpd7f8qzurwyafxt648dya6mp6vur3vaapswt6m24gkuqrfdhar': { name: 'CAPA', geckoId: 'capapult', decimals: 6 },
+    'terra10aa3zdkrc7jwuf8ekl3zq7e7m42vmzqehcmu74e4egc7xkm5kr2s0muyst': { name: 'SOLID', geckoId: 'solid-2', decimals: 6 },
+    'terra1lxx40s29qvkrcj8fsa3yzyehy7w50umdvvnls2r830rys6lu2zns63eelv': { name: 'ROAR', geckoId: 'lion-dao', decimals: 6 },
+    'terra17aj4ty4sz4yhgm08na8drc0v03v2jwr3waxcqrwhajj729zhl7zqnpc0ml': { name: 'bLUNA', geckoId: 'backbone-labs-staked-luna', decimals: 6 }
+};
+
+// CoinGecko price cache
+let geckoIdPrices = {};
+let liveFetchedData = { lunaPrice: 0, ampRate: 0, backingLuna: 0, backingUsd: 0, unminted: 0 };
+
+// ============================================
+// AUTO-FETCH FUNCTIONS
+// ============================================
+
+// Fetch CoinGecko prices
+async function fetchGeckoPrices() {
+    const geckoIds = ['terra-luna-2', 'eris-amplified-luna', 'backbone-labs-staked-luna', 'astroport-fi', 'capapult', 'solid-2', 'lion-dao', 'wrapped-bitcoin', 'usd-coin'];
+    try {
+        const url = `https://api.coingecko.com/api/v3/simple/price?ids=${geckoIds.join(',')}&vs_currencies=usd`;
+        const resp = await fetch(url);
+        if (resp.ok) {
+            geckoIdPrices = await resp.json();
+            console.log('✓ Loaded CoinGecko prices:', Object.keys(geckoIdPrices));
+            
+            // Store in store.prices for getTokenPrice()
+            if (!store.prices) store.prices = {};
+            if (geckoIdPrices['terra-luna-2']?.usd) store.prices.LUNA = geckoIdPrices['terra-luna-2'].usd;
+            if (geckoIdPrices['eris-amplified-luna']?.usd) store.prices.ampLUNA = geckoIdPrices['eris-amplified-luna'].usd;
+            if (geckoIdPrices['backbone-labs-staked-luna']?.usd) store.prices.bLUNA = geckoIdPrices['backbone-labs-staked-luna'].usd;
+            if (geckoIdPrices['astroport-fi']?.usd) store.prices.ASTRO = geckoIdPrices['astroport-fi'].usd;
+            if (geckoIdPrices['capapult']?.usd) store.prices.CAPA = geckoIdPrices['capapult'].usd;
+            if (geckoIdPrices['solid-2']?.usd) store.prices.SOLID = geckoIdPrices['solid-2'].usd;
+            if (geckoIdPrices['lion-dao']?.usd) store.prices.ROAR = geckoIdPrices['lion-dao'].usd;
+            if (geckoIdPrices['wrapped-bitcoin']?.usd) store.prices.wBTC = geckoIdPrices['wrapped-bitcoin'].usd;
+            if (geckoIdPrices['usd-coin']?.usd) store.prices.USDC = geckoIdPrices['usd-coin'].usd;
+        }
+    } catch (e) {
+        console.warn('CoinGecko price fetch failed:', e);
+    }
+}
+
+// Fetch live treasury balance
+async function fetchLiveTreasury() {
+    const statusEl = $('treas-fetch-status');
+    if (statusEl) {
+        statusEl.textContent = 'Fetching...';
+        statusEl.className = 'text-[9px] text-yellow-400';
+    }
+    
+    try {
+        await fetchGeckoPrices();
+        const assets = [];
+        
+        // Fetch native token balances (LUNA, IBC tokens)
+        const nativeUrl = `${TERRA_LCD}/cosmos/bank/v1beta1/balances/${DAO_TREASURY_WALLET}`;
+        const nativeResp = await fetch(nativeUrl);
+        if (nativeResp.ok) {
+            const nativeData = await nativeResp.json();
+            if (nativeData.balances) {
+                nativeData.balances.forEach(balance => {
+                    const tokenInfo = TREASURY_DENOM_MAP[balance.denom];
+                    if (tokenInfo) {
+                        const amount = Number(balance.amount) / Math.pow(10, tokenInfo.decimals || 6);
+                        const price = geckoIdPrices[tokenInfo.geckoId]?.usd || 0;
+                        if (amount > 0.00001) {
+                            assets.push({ token: tokenInfo.name, amount, price, usd: amount * price });
+                        }
+                    }
+                });
+            }
+        }
+        
+        // Fetch CW20 token balances
+        const queryMsg = btoa(JSON.stringify({ balance: { address: DAO_TREASURY_WALLET } }));
+        for (const [denom, tokenInfo] of Object.entries(TREASURY_DENOM_MAP)) {
+            if (denom.startsWith('terra1')) {
+                try {
+                    const url = `${TERRA_LCD}/cosmwasm/wasm/v1/contract/${denom}/smart/${queryMsg}`;
+                    const resp = await fetch(url);
+                    if (resp.ok) {
+                        const data = await resp.json();
+                        let balanceStr = data?.data?.balance || data?.balance;
+                        if (balanceStr && balanceStr !== '0') {
+                            const amount = Number(balanceStr) / Math.pow(10, tokenInfo.decimals || 6);
+                            const price = geckoIdPrices[tokenInfo.geckoId]?.usd || 0;
+                            if (amount > 0.00001) {
+                                assets.push({ token: tokenInfo.name, amount, price, usd: amount * price });
+                            }
+                        }
+                    }
+                } catch (e) { /* skip failed token */ }
+            }
+        }
+        
+        assets.sort((a, b) => b.usd - a.usd);
+        dashboardTreasuryTokens = assets;
+        renderTreasuryTokens();
+        
+        if (statusEl) {
+            statusEl.textContent = `✓ ${assets.length} tokens`;
+            statusEl.className = 'text-[9px] text-green-400';
+        }
+        console.log('✓ Live treasury:', assets.length, 'tokens, total $' + assets.reduce((s, a) => s + a.usd, 0).toFixed(2));
+        return assets;
+    } catch (e) {
+        console.error('Treasury fetch error:', e);
+        if (statusEl) { statusEl.textContent = '✗ Error'; statusEl.className = 'text-[9px] text-red-400'; }
+        return [];
+    }
+}
+
+// Fetch live NFT backing per NFT
+async function fetchLiveNftBacking() {
+    const statusEl = $('backing-fetch-status');
+    if (statusEl) {
+        statusEl.textContent = 'Fetching...';
+        statusEl.className = 'text-[9px] text-yellow-400';
+    }
+    
+    try {
+        // Query NFT contract for rewards attribute (using token 9068)
+        const nftQuery = btoa(JSON.stringify({ all_nft_info: { token_id: "9068" } }));
+        const nftUrl = `${TERRA_LCD}/cosmwasm/wasm/v1/contract/${NFT_COLLECTION_CONTRACT}/smart/${nftQuery}`;
+        const nftResp = await fetch(nftUrl);
+        
+        let ampLunaBacking = 0;
+        if (nftResp.ok) {
+            const nftData = await nftResp.json();
+            const rewardsAttr = nftData?.data?.info?.extension?.attributes?.find(a => a.trait_type === 'rewards');
+            if (rewardsAttr?.value) {
+                ampLunaBacking = Number(rewardsAttr.value) / 1000000;
+            }
+        }
+        
+        // Get ampLUNA to LUNA exchange rate
+        const rateQuery = btoa(JSON.stringify({ exchange_rates: {} }));
+        const rateUrl = `${TERRA_LCD}/cosmwasm/wasm/v1/contract/${ERIS_HUB_CONTRACT}/smart/${rateQuery}`;
+        const rateResp = await fetch(rateUrl);
+        
+        let ampRate = 1.95;
+        if (rateResp.ok) {
+            const rateData = await rateResp.json();
+            const rate = parseFloat(rateData?.data?.exchange_rates?.[0]?.[1]);
+            if (!isNaN(rate)) ampRate = rate;
+        }
+        
+        await fetchGeckoPrices();
+        const lunaPrice = geckoIdPrices['terra-luna-2']?.usd || 0.10;
+        
+        // Calculate backing values
+        const backingLuna = ampLunaBacking * ampRate;
+        const backingUsd = backingLuna * lunaPrice;
+        
+        // Store for use by other functions
+        liveFetchedData.lunaPrice = lunaPrice;
+        liveFetchedData.ampRate = ampRate;
+        liveFetchedData.backingLuna = backingLuna;
+        liveFetchedData.backingUsd = backingUsd;
+        if (!store.prices) store.prices = {};
+        store.prices.ampRate = ampRate;
+        
+        // Update Dashboard backing inputs and displays
+        const dashAmpInput = $('dash-back-amp');
+        if (dashAmpInput) dashAmpInput.value = ampLunaBacking.toFixed(4);
+        setTxt('dash-back-luna-equiv', backingLuna.toFixed(4));
+        setTxt('dash-back-usd', '$' + backingUsd.toFixed(2));
+        
+        // Store in store
+        store.dashboard.backingAmpLuna = ampLunaBacking;
+        store.dashboard.backingLuna = backingLuna;
+        store.dashboard.backingUsd = backingUsd;
+        
+        // Update NFT Stats backing
+        const nftAmpInput = $('nft-back-amp-input');
+        if (nftAmpInput) nftAmpInput.value = ampLunaBacking.toFixed(4);
+        setTxt('nft-back-luna', backingLuna.toFixed(4));
+        setTxt('nft-back-usd', '$' + backingUsd.toFixed(2));
+        
+        // Update unminted if we have count
+        updateUnmintedFromLiveData();
+        
+        if (statusEl) {
+            statusEl.textContent = `✓ ${ampLunaBacking.toFixed(4)} amp`;
+            statusEl.className = 'text-[9px] text-green-400';
+        }
+        console.log(`✓ Live backing: ${ampLunaBacking.toFixed(4)} ampLUNA = ${backingLuna.toFixed(4)} LUNA = $${backingUsd.toFixed(2)}`);
+        return { ampLuna: ampLunaBacking, luna: backingLuna, usd: backingUsd, ampRate, lunaPrice };
+    } catch (e) {
+        console.error('Backing fetch error:', e);
+        if (statusEl) { statusEl.textContent = '✗ Error'; statusEl.className = 'text-[9px] text-red-400'; }
+        return null;
+    }
+}
+
+// Update unminted backing using live fetched data
+function updateUnmintedFromLiveData() {
+    const unmintedCount = liveFetchedData.unminted || parseInt($('dash-unminted-count')?.value) || 0;
+    if (unmintedCount > 0 && liveFetchedData.backingLuna > 0) {
+        const totalLuna = unmintedCount * liveFetchedData.backingLuna;
+        const totalUsd = unmintedCount * liveFetchedData.backingUsd;
+        const totalAmp = unmintedCount * (store.dashboard?.backingAmpLuna || 0);
+        
+        setTxt('dash-unminted-amp', totalAmp.toFixed(2));
+        setTxt('dash-unminted-luna', totalLuna.toFixed(2));
+        setTxt('dash-unminted-usd', '$' + totalUsd.toFixed(2));
+        
+        store.dashboard.unmintedCount = unmintedCount;
+        store.dashboard.unmintedBackingAmp = totalAmp;
+        store.dashboard.unmintedBackingLuna = totalLuna;
+        store.dashboard.unmintedBackingUsd = totalUsd;
+    }
+}
+
+// Fetch live NFT collection stats from deving.zone (includes minted count)
+async function fetchLiveNftStats() {
+    const statusEl = $('nft-fetch-status');
+    if (statusEl) {
+        statusEl.textContent = 'Fetching...';
+        statusEl.className = 'text-[9px] text-yellow-400';
+    }
+    
+    try {
+        const resp = await fetch(DEVING_STATS_URL);
+        if (!resp.ok) throw new Error('Deving.zone fetch failed');
+        
+        const data = await resp.json();
+        const { collection_stats, nfts } = data;
+        
+        // Calculate stats
+        const daodaoCount = nfts.filter(nft => nft.daodao === true).length;
+        const brokenCount = nfts.filter(nft => nft.broken).length;
+        const daoEnterpriseWallet = 'terra1nn7yrgjzj6zvle7ms9vlpg4cj3kaxjls4g6ugw';
+        const enterpriseCount = nfts.filter(nft => nft.enterprise === true && nft.owner !== daoEnterpriseWallet).length;
+        const daoMembers = collection_stats?.unique_stakers || 0;
+        
+        // Get minted count from collection_stats or count unique NFTs
+        const mintedCount = collection_stats?.total_supply || nfts.length || 4172;
+        const unmintedCount = 10000 - mintedCount;
+        liveFetchedData.unminted = unmintedCount;
+        
+        // Update NFT Stats inputs
+        const inputs = {
+            'nft-broken-input': brokenCount,
+            'nft-minted-input': mintedCount,
+            'nft-daodao-input': daodaoCount,
+            'nft-enterprise-input': enterpriseCount,
+            'nft-members-input': daoMembers
+        };
+        
+        for (const [id, value] of Object.entries(inputs)) {
+            const el = $(id);
+            if (el) el.value = value;
+        }
+        
+        // Update unminted display
+        setTxt('nft-unminted', unmintedCount.toLocaleString());
+        setTxt('nft-unbroken', (10000 - brokenCount).toLocaleString());
+        
+        // Update dashboard unminted
+        const dashUnmintedInput = $('dash-unminted-count');
+        if (dashUnmintedInput) dashUnmintedInput.value = unmintedCount;
+        
+        // Update unminted backing if we have backing data
+        updateUnmintedFromLiveData();
+        
+        if (statusEl) {
+            statusEl.textContent = `✓ Loaded`;
+            statusEl.className = 'text-[9px] text-green-400';
+        }
+        console.log(`✓ NFT Stats: ${daodaoCount} DAODAO, ${enterpriseCount} Enterprise, ${brokenCount} broken, ${daoMembers} members`);
+        return { daodaoCount, enterpriseCount, brokenCount, daoMembers, mintedCount, unmintedCount };
+    } catch (e) {
+        console.error('NFT stats fetch error:', e);
+        if (statusEl) { statusEl.textContent = '✗ Error'; statusEl.className = 'text-[9px] text-red-400'; }
+        return null;
+    }
+}
+
+// Fetch ALL live data for dashboard
+async function fetchAllDashboardData() {
+    const btn = $('btn-fetch-all-dashboard');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Fetching...';
+    }
+    
+    try {
+        // Run in sequence to ensure prices are available for backing calc
+        await fetchLiveTreasury();
+        await fetchLiveNftBacking();
+        await fetchLiveNftStats(); // This gets unminted count
+        console.log('✓ All dashboard data fetched');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-bolt mr-1"></i> Fetch All Live';
+        }
+    }
+}
+
+// Fetch ALL live data for NFT stats
+async function fetchAllNftData() {
+    const btn = $('btn-fetch-all-nft');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Fetching...';
+    }
+    
+    try {
+        await fetchLiveNftBacking();
+        await fetchLiveNftStats();
+        console.log('✓ All NFT data fetched');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-bolt mr-1"></i> Fetch All Live';
+        }
+    }
+}
 
 // Unified number parser: handles K/M suffixes, strips non-numeric
 function parseNum(s) {
