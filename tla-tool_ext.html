@@ -958,6 +958,18 @@ AMPLUNA-LUNA (55.44%): $ 150 = 1973.01 LUNA per epoch
 
 <!-- WS 3: ASTROPORT -->
 <div id="ws-astro" class="workspace">
+    <!-- Mode Switcher Tabs -->
+    <div class="flex gap-2 mb-4 border-b border-gray-800 pb-3">
+        <button onclick="switchAstroMode('legacy')" id="astro-tab-legacy" class="px-4 py-2 text-xs font-bold rounded-t border-b-2 border-yellow-500 text-yellow-400 bg-yellow-900/20">
+            📋 Legacy (Manual Paste)
+        </button>
+        <button onclick="switchAstroMode('auto')" id="astro-tab-auto" class="px-4 py-2 text-xs font-bold rounded-t border-b-2 border-transparent text-gray-500 hover:text-gray-300">
+            🤖 Auto (TLA Fetch)
+        </button>
+    </div>
+    
+    <!-- LEGACY MODE CONTAINER (existing manual system) -->
+    <div id="astro-legacy-container">
     <!-- Mode-specific content will be rendered here -->
     <div id="astro-staging-mode">
         <!-- STAGING MODE: 4-day 180d capture -->
@@ -1297,6 +1309,122 @@ AMPLUNA-LUNA (55.44%): $ 150 = 1973.01 LUNA per epoch
             <div id="astro-normal-lp-grid" class="grid grid-cols-4 gap-2 max-h-[300px] overflow-y-auto custom-scroll"></div>
         </div>
     </div>
+    </div><!-- END astro-legacy-container -->
+    
+    <!-- AUTO MODE CONTAINER (new TLA fetch system) -->
+    <div id="astro-auto-container" class="hidden">
+        <!-- Info Banner -->
+        <div class="bg-blue-900/20 border border-blue-700 rounded-lg p-4 mb-4">
+            <div class="flex items-center gap-3">
+                <div class="text-blue-400 text-xl">🤖</div>
+                <div class="flex-grow">
+                    <h3 class="text-blue-400 font-bold text-sm">Automated TLA Pool Fetcher</h3>
+                    <p class="text-blue-200/70 text-[10px]">Fetches whitelisted pools from TLA staking contracts, resolves pool names, and pulls liquidity/volume data from Astroport API.</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Step 1: Fetch TLA Whitelist -->
+        <div class="bg-[#161616] rounded border border-gray-800 p-4 mb-4">
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="text-sm font-bold text-white">Step 1: Fetch TLA Whitelisted Pools</h3>
+                <button onclick="fetchTLAWhitelist()" id="btn-fetch-tla" class="btn-action bg-blue-900/40 text-blue-300 border border-blue-700 px-4">
+                    <i class="fas fa-download mr-1"></i> Fetch from Chain
+                </button>
+            </div>
+            <div id="tla-fetch-status" class="text-[9px] text-gray-500 mb-3">Ready to fetch...</div>
+            
+            <!-- Bucket Summary -->
+            <div class="grid grid-cols-4 gap-2 mb-3">
+                <div class="bg-[#0D0D0D] rounded p-2 border border-yellow-900/50">
+                    <div class="text-[9px] text-yellow-400 font-bold uppercase">Stable</div>
+                    <div class="text-lg font-bold text-white"><span id="tla-stable-count">-</span></div>
+                </div>
+                <div class="bg-[#0D0D0D] rounded p-2 border border-orange-900/50">
+                    <div class="text-[9px] text-orange-400 font-bold uppercase">Project</div>
+                    <div class="text-lg font-bold text-white"><span id="tla-project-count">-</span></div>
+                </div>
+                <div class="bg-[#0D0D0D] rounded p-2 border border-blue-900/50">
+                    <div class="text-[9px] text-blue-400 font-bold uppercase">Bluechip</div>
+                    <div class="text-lg font-bold text-white"><span id="tla-bluechip-count">-</span></div>
+                </div>
+                <div class="bg-[#0D0D0D] rounded p-2 border border-purple-900/50">
+                    <div class="text-[9px] text-purple-400 font-bold uppercase">Single</div>
+                    <div class="text-lg font-bold text-white"><span id="tla-single-count">-</span></div>
+                </div>
+            </div>
+            
+            <!-- Pool List Preview -->
+            <div class="bg-[#0D0D0D] rounded border border-gray-800 p-2 max-h-[200px] overflow-y-auto custom-scroll">
+                <div class="grid grid-cols-12 gap-1 text-[9px] text-gray-500 uppercase font-bold px-2 py-1 border-b border-gray-800 mb-1">
+                    <div class="col-span-1">#</div>
+                    <div class="col-span-3">Pool Name</div>
+                    <div class="col-span-2">Bucket</div>
+                    <div class="col-span-3">Pool Contract</div>
+                    <div class="col-span-3">LP Token</div>
+                </div>
+                <div id="tla-pool-list" class="space-y-0 text-[9px]">
+                    <div class="text-gray-600 italic text-center py-4">Click "Fetch from Chain" to discover TLA whitelisted pools</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Step 2: Fetch Astroport Data -->
+        <div class="bg-[#161616] rounded border border-gray-800 p-4 mb-4">
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="text-sm font-bold text-white">Step 2: Fetch Liquidity & Volume Data</h3>
+                <div class="flex gap-2 items-center">
+                    <select id="astro-date-range" class="input-dark text-[10px] w-24">
+                        <option value="D7">7 Days</option>
+                        <option value="D30">30 Days</option>
+                        <option value="D90">90 Days</option>
+                    </select>
+                    <button onclick="fetchAstroData()" id="btn-fetch-astro" class="btn-action bg-cyan-900/40 text-cyan-300 border border-cyan-700 px-4" disabled>
+                        <i class="fas fa-chart-line mr-1"></i> Fetch Data
+                    </button>
+                </div>
+            </div>
+            <div id="astro-data-status" class="text-[9px] text-gray-500 mb-3">Fetch TLA pools first...</div>
+            
+            <!-- Progress Bar -->
+            <div class="w-full bg-gray-800 rounded-full h-2 mb-3 hidden" id="astro-progress-container">
+                <div id="astro-progress-bar" class="bg-cyan-500 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+            </div>
+            
+            <!-- Data Preview -->
+            <div class="bg-[#0D0D0D] rounded border border-gray-800 p-2 max-h-[300px] overflow-y-auto custom-scroll">
+                <div class="grid grid-cols-12 gap-1 text-[9px] text-gray-500 uppercase font-bold px-2 py-1 border-b border-gray-800 mb-1">
+                    <div class="col-span-3">Pool</div>
+                    <div class="col-span-2">Bucket</div>
+                    <div class="col-span-2 text-right">Avg Liq</div>
+                    <div class="col-span-2 text-right">Avg Vol</div>
+                    <div class="col-span-2 text-right">Epochs</div>
+                    <div class="col-span-1 text-right">Pts</div>
+                </div>
+                <div id="astro-data-list" class="space-y-0 text-[9px]">
+                    <div class="text-gray-600 italic text-center py-4">No data fetched yet</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Step 3: Export -->
+        <div class="bg-[#161616] rounded border border-gray-800 p-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h3 class="text-sm font-bold text-white">Step 3: Export Data</h3>
+                    <p class="text-[10px] text-gray-500">Download processed epoch averages or save to GitHub</p>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="exportAstroJSON()" class="btn-action bg-green-900/40 text-green-300 border border-green-700 px-4" disabled id="btn-export-astro">
+                        <i class="fas fa-download mr-1"></i> Export JSON
+                    </button>
+                    <button onclick="saveAstroToGitHub()" class="btn-action bg-purple-900/40 text-purple-300 border border-purple-700 px-4" disabled id="btn-save-astro-gh">
+                        <i class="fab fa-github mr-1"></i> Save to GitHub
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div><!-- END astro-auto-container -->
 </div>
 
 <!-- WS 4: WHITEWHALE -->
@@ -1307,19 +1435,26 @@ AMPLUNA-LUNA (55.44%): $ 150 = 1973.01 LUNA per epoch
                 <h3 class="text-green-400 font-bold text-xs">Skeleton Swap Data</h3>
                 <button onclick="clearPaste('wwPaste')" class="text-[9px] text-red-400 hover:text-red-300">Clear</button>
             </div>
-            <textarea id="wwPaste" class="input-dark h-64 font-mono text-[10px]" placeholder="Paste Skeleton Swap dashboard text..."></textarea>
-            <button onclick="parseWW()" class="btn-action bg-green-900/40 text-green-200 border border-green-900">Parse Skeleton Swap</button>
+            <textarea id="wwPaste" class="input-dark h-48 font-mono text-[10px]" placeholder="Paste Skeleton Swap dashboard text..."></textarea>
+            <div class="flex gap-2">
+                <button onclick="parseWW()" class="btn-action flex-1 bg-green-900/40 text-green-200 border border-green-900">Parse (Paste)</button>
+                <button onclick="fetchSkeletonSwapData()" class="btn-action flex-1 bg-blue-900/40 text-blue-200 border border-blue-900">
+                    <i class="fas fa-download mr-1"></i> Fetch from GitHub
+                </button>
+            </div>
+            <div id="ss-fetch-status" class="text-[9px] text-gray-500"></div>
         </div>
         <div class="preview-card flex flex-col">
             <div class="flex justify-between items-center mb-2 border-b border-gray-800 pb-2">
-                <h3 class="text-xs font-bold text-white">Parsed Skeleton Swap</h3>
-                <div class="text-[10px] text-gray-500">Items: <span id="ww-count" class="text-white font-mono">0</span></div>
+                <h3 class="text-xs font-bold text-white">Skeleton Swap Pools</h3>
+                <div class="text-[10px] text-gray-500">Pools: <span id="ww-count" class="text-white font-mono">0</span></div>
             </div>
             <div class="grid grid-cols-12 gap-1 text-[9px] text-gray-500 uppercase font-bold px-2 py-1 bg-gray-900 rounded-t">
-                <div class="col-span-5">Pool</div>
+                <div class="col-span-4">Pool</div>
+                <div class="col-span-2 text-right">TVL</div>
                 <div class="col-span-2 text-right">Volume</div>
                 <div class="col-span-2 text-right">Fees</div>
-                <div class="col-span-3 text-right">APR</div>
+                <div class="col-span-2 text-right">APR</div>
             </div>
             <div id="ww-list" class="max-h-[500px] overflow-y-auto text-xs bg-[#0D0D0D] p-2 border border-gray-800 rounded-b custom-scroll space-y-0"></div>
         </div>
@@ -6449,6 +6584,7 @@ function parseWW() {
             let volume = 0;
             let fees = 0;
             let apr = '-';
+            let tvl = 0;
             
             for (let k = 1; k <= 8 && i + k < lines.length; k++) {
                 let next = lines[i + k];
@@ -6465,26 +6601,796 @@ function parseWW() {
             }
             
             if (pool && (volume > 0 || fees > 0)) {
-                store.ww.push({ pool, volume, fees, apr });
+                store.ww.push({ pool, tvl, volume, fees, apr });
             }
         }
         i++;
     }
     
+    renderSkeletonSwapList();
+}
+
+function renderSkeletonSwapList() {
+    // Match pools to LP Registry and get bucket info
+    const matchedPools = store.ww.map(pool => {
+        // Use originalPool if it exists (from previous render), otherwise use pool
+        const ssName = pool.originalPool || pool.pool;
+        const match = findLpRegistryMatch(ssName);
+        return {
+            ...pool,
+            bucket: match?.bucket || 'unknown',
+            lpKey: match?.key || null,
+            registryName: match?.lp || ssName,
+            originalName: ssName  // Always preserve the original SS name
+        };
+    });
+    
+    // Update store.ww with matched data (for export)
+    store.ww = matchedPools.map(p => ({
+        pool: p.lpKey ? p.registryName : p.originalName,  // Use LP Registry name if matched
+        originalPool: p.originalName,  // Always keep original SS name
+        tvl: p.tvl,
+        volume: p.volume,
+        fees: p.fees,
+        apr: p.apr,
+        bucket: p.bucket,
+        matched: !!p.lpKey
+    }));
+    
+    // Sort by bucket order, then by TVL within each bucket
+    const BUCKET_ORDER = ['stable', 'project', 'bluechip', 'single', 'unknown'];
+    store.ww.sort((a, b) => {
+        const bucketDiff = BUCKET_ORDER.indexOf(a.bucket) - BUCKET_ORDER.indexOf(b.bucket);
+        if (bucketDiff !== 0) return bucketDiff;
+        return b.tvl - a.tvl;
+    });
+    
     let html = '';
+    let currentBucket = null;
+    
     store.ww.forEach(b => {
+        // Add bucket header when bucket changes
+        if (b.bucket !== currentBucket) {
+            currentBucket = b.bucket;
+            const bucketColors = {
+                stable: 'text-yellow-400',
+                project: 'text-orange-400', 
+                bluechip: 'text-blue-400',
+                single: 'text-purple-400',
+                unknown: 'text-gray-500'
+            };
+            html += `<div class="col-span-12 ${bucketColors[currentBucket]} font-bold text-[10px] uppercase mt-2 mb-1 border-b border-gray-700 pb-1">${currentBucket}</div>`;
+        }
+        
+        const aprDisplay = typeof b.apr === 'number' ? (b.apr > 0 ? b.apr.toFixed(2) + '%' : '-') : (b.apr || '-');
+        const matchIndicator = b.matched ? '✓' : '';
         html += `<div class="grid grid-cols-12 gap-1 border-b border-gray-800/50 py-1 text-gray-300 hover:bg-white/5 px-2">
-            <div class="col-span-5 truncate text-white text-[10px]" title="${b.pool}">${b.pool}</div>
+            <div class="col-span-4 truncate text-white text-[10px]" title="SS: ${b.originalPool}${b.matched ? ' → Registry: ' + b.pool : ''}">${matchIndicator} ${b.pool}</div>
+            <div class="col-span-2 text-right font-mono text-[9px] text-cyan-300">${b.tvl > 0 ? fmt$(b.tvl) : '-'}</div>
             <div class="col-span-2 text-right font-mono text-[9px] text-blue-300">${b.volume > 0 ? fmt$(b.volume) : '-'}</div>
             <div class="col-span-2 text-right font-mono text-[9px] text-green-300">${b.fees > 0 ? fmt$(b.fees) : '-'}</div>
-            <div class="col-span-3 text-right text-[9px] text-yellow-400">${b.apr}</div>
+            <div class="col-span-2 text-right text-[9px] text-yellow-400">${aprDisplay}</div>
         </div>`;
     });
-    setHtml('ww-list', html || '<div class="text-center text-gray-600 italic py-4">No data parsed.</div>');
-    setTxt('ww-count', store.ww.length);
+    
+    // Count matches
+    const matched = store.ww.filter(p => p.matched).length;
+    
+    setHtml('ww-list', html || '<div class="text-center text-gray-600 italic py-4">No data. Fetch from GitHub or paste manually.</div>');
+    setTxt('ww-count', `${store.ww.length} (${matched} matched)`);
     
     pasteStatus.ww = store.ww.length > 0;
     updatePasteStatus('ps-ww', pasteStatus.ww);
+}
+
+// Token name aliases (SS name -> Registry name)
+const TOKEN_ALIASES = {
+    'bLUNA': 'boneLUNA',
+    'bluna': 'boneLUNA',
+    // Add more aliases as needed
+    'wBTC.axl': 'WBTC.axl',
+    'wBTC.osmo': 'WBTC.osmo',
+    'wETH': 'WETH',
+    'wstETH': 'wstETH',
+    'wSOL': 'WSOL',
+    'wBNB': 'WBNB'
+};
+
+// Normalize pool name for matching (handles order differences and aliases)
+function normalizePoolName(name) {
+    // Remove LP suffix, quotes, extra spaces
+    let clean = name.replace(/ LP$/i, '').replace(/"/g, '').trim();
+    
+    // Split by dash or slash
+    let parts = clean.split(/[-\/]/).map(p => p.trim()).filter(p => p);
+    
+    // Apply token aliases
+    parts = parts.map(token => TOKEN_ALIASES[token] || TOKEN_ALIASES[token.toLowerCase()] || token);
+    
+    // Sort alphabetically for consistent comparison
+    return parts.sort().join('-').toUpperCase();
+}
+
+// Find matching LP in registry (handles reversed order, different naming)
+function findLpRegistryMatch(ssPoolName) {
+    if (!store.lpRegistry || Object.keys(store.lpRegistry).length === 0) {
+        return null;
+    }
+    
+    const normalizedSS = normalizePoolName(ssPoolName);
+    
+    // Try exact match first (with Skeleton Swap dex)
+    const exactKey = `${ssPoolName}|Skeleton Swap`;
+    if (store.lpRegistry[exactKey]) {
+        return { ...store.lpRegistry[exactKey], key: exactKey };
+    }
+    
+    // Try normalized match across all registry entries
+    for (const [key, lp] of Object.entries(store.lpRegistry)) {
+        // Only match Skeleton Swap entries
+        if (lp.dex !== 'Skeleton Swap') continue;
+        
+        const normalizedLP = normalizePoolName(lp.lp);
+        if (normalizedLP === normalizedSS) {
+            return { ...lp, key };
+        }
+    }
+    
+    // No match found
+    return null;
+}
+
+// ============================================
+// ASTROPORT AUTO-FETCH SYSTEM
+// ============================================
+
+// Mode switcher
+function switchAstroMode(mode) {
+    const legacyTab = $('astro-tab-legacy');
+    const autoTab = $('astro-tab-auto');
+    const legacyContainer = $('astro-legacy-container');
+    const autoContainer = $('astro-auto-container');
+    
+    if (mode === 'legacy') {
+        legacyTab.className = 'px-4 py-2 text-xs font-bold rounded-t border-b-2 border-yellow-500 text-yellow-400 bg-yellow-900/20';
+        autoTab.className = 'px-4 py-2 text-xs font-bold rounded-t border-b-2 border-transparent text-gray-500 hover:text-gray-300';
+        legacyContainer.classList.remove('hidden');
+        autoContainer.classList.add('hidden');
+    } else {
+        autoTab.className = 'px-4 py-2 text-xs font-bold rounded-t border-b-2 border-blue-500 text-blue-400 bg-blue-900/20';
+        legacyTab.className = 'px-4 py-2 text-xs font-bold rounded-t border-b-2 border-transparent text-gray-500 hover:text-gray-300';
+        autoContainer.classList.remove('hidden');
+        legacyContainer.classList.add('hidden');
+    }
+}
+
+// TLA Bucket Contracts
+const TLA_CONTRACTS = {
+    stable: 'terra1v399cx9drllm70wxfsgvfe694tdsd9x96p9ha36w7muffe4znlusqswspq',
+    project: 'terra1awq6t7jfakg9wfjn40fk3wzwmd57mvrqtt3a39z9rmet7wdjj3ysgw3lpa',
+    bluechip: 'terra14mmvqn0kthw6sre75vku263lafn5655mkjdejqjedjga4cw0qx2qlf4arv',
+    single: 'terra1qdz5qgafx88kp5mf6m2tah8742g4u5g2cek0m3jrgssexexk7g4qw6e23k'
+};
+
+// LCD endpoint for Terra queries
+const TERRA_LCD = 'https://terra-rest.publicnode.com';
+
+// IBC Denoms cache
+let ibcDenomsCache = null;
+const IBC_DENOMS_URL = 'https://assets.chainsco.pe/data/v1/chains/terra2/mainnet/ibc-denoms.json';
+
+// Epoch schedule cache
+let epochScheduleCache = null;
+const EPOCH_SCHEDULE_URL = 'https://raw.githubusercontent.com/defipatriot/tla_json_storage/main/epoch_1-300_date.json';
+
+// Astroport GitHub repo
+const ASTRO_GITHUB_BASE = 'https://raw.githubusercontent.com/defipatriot/astroport-pool-data_2026/main';
+
+// Store for auto-fetched data
+let astroAutoData = {
+    pools: [],        // { name, bucket, poolContract, lpToken, lpType }
+    epochData: {},    // { poolName: { epochs: { 169: { liq, vol, liqPoints, volPoints } } } }
+    ibcDenoms: null,
+    epochSchedule: null
+};
+
+// Native denom to symbol mapping
+const NATIVE_DENOMS = {
+    'uluna': 'LUNA',
+    'uusd': 'UST'
+};
+
+// CORS Proxy with retry
+async function fetchWithCorsProxy(url) {
+    const proxies = [
+        '',
+        'https://api.allorigins.win/raw?url=',
+        'https://corsproxy.io/?'
+    ];
+    
+    for (const proxy of proxies) {
+        try {
+            const fetchUrl = proxy ? proxy + encodeURIComponent(url) : url;
+            const resp = await fetch(fetchUrl);
+            if (resp.ok) {
+                console.log(`✓ Fetched via ${proxy || 'direct'}: ${url.substring(0, 60)}...`);
+                return resp;
+            }
+        } catch (e) {
+            console.log(`✗ Failed ${proxy || 'direct'}: ${e.message}`);
+        }
+    }
+    throw new Error(`All fetch methods failed for ${url}`);
+}
+
+// Fetch IBC denoms
+async function fetchIBCDenoms() {
+    if (ibcDenomsCache) return ibcDenomsCache;
+    
+    try {
+        const resp = await fetchWithCorsProxy(IBC_DENOMS_URL);
+        ibcDenomsCache = await resp.json();
+        astroAutoData.ibcDenoms = ibcDenomsCache;
+        console.log(`✓ Loaded ${Object.keys(ibcDenomsCache).length} IBC denoms`);
+        return ibcDenomsCache;
+    } catch (e) {
+        console.error('Failed to fetch IBC denoms:', e);
+        return {};
+    }
+}
+
+// Fetch epoch schedule
+async function fetchEpochSchedule() {
+    if (epochScheduleCache) return epochScheduleCache;
+    
+    try {
+        const resp = await fetchWithCorsProxy(EPOCH_SCHEDULE_URL);
+        epochScheduleCache = await resp.json();
+        astroAutoData.epochSchedule = epochScheduleCache;
+        console.log(`✓ Loaded ${epochScheduleCache.length} epochs`);
+        return epochScheduleCache;
+    } catch (e) {
+        console.error('Failed to fetch epoch schedule:', e);
+        return [];
+    }
+}
+
+// Query Terra LCD
+async function queryTerraContract(contractAddr, queryMsg) {
+    const queryB64 = btoa(JSON.stringify(queryMsg));
+    const url = `${TERRA_LCD}/cosmwasm/wasm/v1/contract/${contractAddr}/smart/${queryB64}`;
+    
+    try {
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        console.log(`Query ${contractAddr.substring(0,12)}...:`, data);
+        return data.data;
+    } catch (e) {
+        console.error(`Query failed for ${contractAddr}:`, e);
+        return null;
+    }
+}
+
+// Resolve denom to symbol
+async function resolveDenom(denom) {
+    // Native
+    if (NATIVE_DENOMS[denom]) return NATIVE_DENOMS[denom];
+    
+    // Factory token (e.g., factory/terra.../ampLUNA)
+    if (denom.startsWith('factory/')) {
+        const parts = denom.split('/');
+        return parts[parts.length - 1].replace(/^u/, ''); // Get last part, strip leading 'u'
+    }
+    
+    // IBC token
+    if (denom.startsWith('ibc/')) {
+        const hash = denom.replace('ibc/', '');
+        const ibcDenoms = await fetchIBCDenoms();
+        const ibcInfo = ibcDenoms[hash];
+        
+        if (ibcInfo) {
+            // Extract symbol from base denom
+            let base = ibcInfo.d;
+            // Handle factory denoms in IBC
+            if (base.includes('factory/') || base.includes('factory:')) {
+                const parts = base.split(/[/:]/);
+                base = parts[parts.length - 1];
+            }
+            // Strip common prefixes
+            base = base.replace(/^u/, '').replace(/-wei$/, '').replace(/-satoshi$/, '');
+            return base.toUpperCase();
+        }
+        return `IBC/${hash.substring(0, 6)}`;
+    }
+    
+    // CW20 - would need to query token_info
+    if (denom.startsWith('terra1')) {
+        // Try to query token info
+        const tokenInfo = await queryTerraContract(denom, { token_info: {} });
+        if (tokenInfo?.symbol) return tokenInfo.symbol;
+        return denom.substring(0, 10) + '...';
+    }
+    
+    return denom;
+}
+
+// Extract pool contract from LP token
+function extractPoolFromLP(lpInfo) {
+    if (lpInfo.native) {
+        // Factory LP: factory/POOL_ADDR/uLP
+        const match = lpInfo.native.match(/^factory\/([^/]+)\/uLP$/);
+        if (match) return { type: 'factory', poolAddr: match[1], lpToken: lpInfo.native };
+        
+        // IBC single token
+        if (lpInfo.native.startsWith('ibc/')) {
+            return { type: 'single-ibc', lpToken: lpInfo.native };
+        }
+        
+        // Factory single token
+        if (lpInfo.native.startsWith('factory/')) {
+            return { type: 'single-factory', lpToken: lpInfo.native };
+        }
+    }
+    
+    if (lpInfo.cw20) {
+        return { type: 'cw20', lpToken: lpInfo.cw20 };
+    }
+    
+    return null;
+}
+
+// Resolve CW20 LP to pool contract via minter query
+async function resolveCW20Minter(cw20Addr) {
+    const minterInfo = await queryTerraContract(cw20Addr, { minter: {} });
+    if (minterInfo?.minter) {
+        return minterInfo.minter;
+    }
+    return null;
+}
+
+// Query pool pair info
+async function queryPoolPair(poolAddr) {
+    const pairInfo = await queryTerraContract(poolAddr, { pair: {} });
+    return pairInfo;
+}
+
+// Build pool name from asset infos
+async function buildPoolName(assetInfos) {
+    if (!assetInfos || assetInfos.length !== 2) return null;
+    
+    const symbols = [];
+    for (const asset of assetInfos) {
+        let denom;
+        if (asset.native_token) {
+            denom = asset.native_token.denom;
+        } else if (asset.token) {
+            denom = asset.token.contract_addr;
+        }
+        
+        if (denom) {
+            const symbol = await resolveDenom(denom);
+            symbols.push(symbol);
+        }
+    }
+    
+    if (symbols.length === 2) {
+        // Sort to maintain consistency (LUNA first if present)
+        if (symbols[1] === 'LUNA' || (symbols[0] !== 'LUNA' && symbols[1] < symbols[0])) {
+            symbols.reverse();
+        }
+        return symbols.join('-');
+    }
+    return null;
+}
+
+// Main TLA Whitelist Fetch
+async function fetchTLAWhitelist() {
+    const statusEl = $('tla-fetch-status');
+    statusEl.textContent = 'Fetching IBC denoms...';
+    statusEl.className = 'text-[9px] text-yellow-400';
+    
+    // Load IBC denoms first
+    await fetchIBCDenoms();
+    
+    astroAutoData.pools = [];
+    const bucketCounts = { stable: 0, project: 0, bluechip: 0, single: 0 };
+    
+    for (const [bucket, contract] of Object.entries(TLA_CONTRACTS)) {
+        statusEl.textContent = `Querying ${bucket} bucket...`;
+        
+        const result = await queryTerraContract(contract, { whitelisted_asset_details: {} });
+        
+        // The contract returns { data: [...] }, LCD wraps it, so result is { data: [...] }
+        // Check if result is the array directly OR nested in data
+        let items = null;
+        if (Array.isArray(result)) {
+            items = result;
+        } else if (result?.data && Array.isArray(result.data)) {
+            items = result.data;
+        }
+        
+        if (!items) {
+            console.warn(`No data for ${bucket}:`, result);
+            continue;
+        }
+        
+        const whitelisted = items.filter(item => item.whitelisted);
+        console.log(`${bucket}: ${whitelisted.length} whitelisted out of ${items.length}`);
+        
+        for (const item of whitelisted) {
+            const lpExtract = extractPoolFromLP(item.info);
+            if (!lpExtract) continue;
+            
+            let poolName = null;
+            let poolContract = null;
+            
+            if (lpExtract.type === 'factory') {
+                poolContract = lpExtract.poolAddr;
+                const pairInfo = await queryPoolPair(poolContract);
+                if (pairInfo?.asset_infos) {
+                    poolName = await buildPoolName(pairInfo.asset_infos);
+                }
+            } else if (lpExtract.type === 'cw20') {
+                statusEl.textContent = `Resolving CW20 ${lpExtract.lpToken.substring(0,12)}...`;
+                poolContract = await resolveCW20Minter(lpExtract.lpToken);
+                if (poolContract) {
+                    const pairInfo = await queryPoolPair(poolContract);
+                    if (pairInfo?.asset_infos) {
+                        poolName = await buildPoolName(pairInfo.asset_infos);
+                    }
+                }
+            } else if (lpExtract.type === 'single-ibc' || lpExtract.type === 'single-factory') {
+                // Single token staking
+                poolName = await resolveDenom(lpExtract.lpToken);
+                poolContract = null; // No pool for singles
+            }
+            
+            if (poolName) {
+                astroAutoData.pools.push({
+                    name: poolName,
+                    bucket,
+                    poolContract,
+                    lpToken: lpExtract.lpToken,
+                    lpType: lpExtract.type
+                });
+                bucketCounts[bucket]++;
+            }
+        }
+    }
+    
+    // Update UI
+    setTxt('tla-stable-count', bucketCounts.stable);
+    setTxt('tla-project-count', bucketCounts.project);
+    setTxt('tla-bluechip-count', bucketCounts.bluechip);
+    setTxt('tla-single-count', bucketCounts.single);
+    
+    renderTLAPoolList();
+    
+    const total = astroAutoData.pools.length;
+    statusEl.textContent = `✓ Found ${total} whitelisted pools`;
+    statusEl.className = 'text-[9px] text-green-400';
+    
+    // Enable next step
+    $('btn-fetch-astro').disabled = false;
+    $('astro-data-status').textContent = `Ready to fetch data for ${total} pools`;
+    
+    console.log(`✓ TLA Whitelist: ${total} pools discovered`);
+}
+
+function renderTLAPoolList() {
+    const bucketColors = {
+        stable: 'text-yellow-400',
+        project: 'text-orange-400',
+        bluechip: 'text-blue-400',
+        single: 'text-purple-400'
+    };
+    
+    let html = '';
+    astroAutoData.pools.forEach((p, i) => {
+        const contractShort = p.poolContract ? p.poolContract.substring(0, 16) + '...' : '-';
+        const lpShort = p.lpToken.length > 20 ? p.lpToken.substring(0, 16) + '...' : p.lpToken;
+        
+        html += `<div class="grid grid-cols-12 gap-1 py-1 border-b border-gray-800/50 hover:bg-white/5">
+            <div class="col-span-1 text-gray-500">${i + 1}</div>
+            <div class="col-span-3 text-white font-mono">${p.name}</div>
+            <div class="col-span-2 ${bucketColors[p.bucket]}">${p.bucket}</div>
+            <div class="col-span-3 text-gray-400 font-mono" title="${p.poolContract || ''}">${contractShort}</div>
+            <div class="col-span-3 text-gray-500 font-mono truncate" title="${p.lpToken}">${lpShort}</div>
+        </div>`;
+    });
+    
+    setHtml('tla-pool-list', html || '<div class="text-gray-600 italic text-center py-4">No pools found</div>');
+}
+
+// Fetch Astroport liquidity/volume data
+async function fetchAstroData() {
+    const statusEl = $('astro-data-status');
+    const progressContainer = $('astro-progress-container');
+    const progressBar = $('astro-progress-bar');
+    const dateRange = $('astro-date-range').value;
+    
+    // Load epoch schedule
+    await fetchEpochSchedule();
+    
+    const pools = astroAutoData.pools.filter(p => p.poolContract); // Only pools with contracts
+    if (pools.length === 0) {
+        statusEl.textContent = '✗ No pools with contracts to fetch';
+        statusEl.className = 'text-[9px] text-red-400';
+        return;
+    }
+    
+    progressContainer.classList.remove('hidden');
+    statusEl.textContent = `Fetching ${dateRange} data for ${pools.length} pools...`;
+    statusEl.className = 'text-[9px] text-yellow-400';
+    
+    astroAutoData.epochData = {};
+    
+    for (let i = 0; i < pools.length; i++) {
+        const pool = pools[i];
+        const progress = ((i + 1) / pools.length * 100).toFixed(0);
+        progressBar.style.width = progress + '%';
+        statusEl.textContent = `Fetching ${pool.name} (${i + 1}/${pools.length})...`;
+        
+        try {
+            const [liqData, volData] = await Promise.all([
+                fetchAstroChartData('liquidity', pool.poolContract, dateRange),
+                fetchAstroChartData('volume', pool.poolContract, dateRange)
+            ]);
+            
+            // Process into epoch averages
+            const epochAverages = processEpochAverages(liqData, volData);
+            
+            astroAutoData.epochData[pool.name] = {
+                bucket: pool.bucket,
+                poolContract: pool.poolContract,
+                epochs: epochAverages,
+                dateRange
+            };
+            
+        } catch (e) {
+            console.error(`Failed to fetch ${pool.name}:`, e);
+        }
+        
+        // Small delay to avoid rate limiting
+        await new Promise(r => setTimeout(r, 200));
+    }
+    
+    progressContainer.classList.add('hidden');
+    renderAstroDataList();
+    
+    const poolCount = Object.keys(astroAutoData.epochData).length;
+    statusEl.textContent = `✓ Fetched data for ${poolCount} pools`;
+    statusEl.className = 'text-[9px] text-green-400';
+    
+    // Enable export
+    $('btn-export-astro').disabled = false;
+    $('btn-save-astro-gh').disabled = false;
+}
+
+async function fetchAstroChartData(type, poolAddr, dateRange) {
+    const input = {
+        json: {
+            pools: [poolAddr],
+            dateRange: dateRange,
+            chainId: 'phoenix-1'
+        }
+    };
+    
+    const url = `https://app.astroport.fi/api/trpc/charts.${type}?input=${encodeURIComponent(JSON.stringify(input))}`;
+    
+    try {
+        const resp = await fetchWithCorsProxy(url);
+        const data = await resp.json();
+        return data?.result?.data?.json?.[0]?.series || [];
+    } catch (e) {
+        console.error(`Failed to fetch ${type} for ${poolAddr}:`, e);
+        return [];
+    }
+}
+
+function processEpochAverages(liqData, volData) {
+    const schedule = epochScheduleCache;
+    if (!schedule || schedule.length === 0) return {};
+    
+    const epochs = {};
+    
+    // Helper to find epoch for a timestamp
+    function findEpoch(timestamp) {
+        const ts = timestamp * 1000; // Convert to ms
+        for (const ep of schedule) {
+            const start = new Date(ep.start_time).getTime();
+            const end = new Date(ep.end_time).getTime();
+            if (ts >= start && ts < end) {
+                return ep.epoch;
+            }
+        }
+        return null;
+    }
+    
+    // Expected points per epoch (7 days × 6 points per day at 4hr intervals)
+    const EXPECTED_POINTS_PER_EPOCH = 42;
+    
+    // Group liquidity by epoch
+    const liqByEpoch = {};
+    for (const point of liqData) {
+        const epoch = findEpoch(point.time);
+        if (epoch) {
+            if (!liqByEpoch[epoch]) liqByEpoch[epoch] = [];
+            liqByEpoch[epoch].push(point.value);
+        }
+    }
+    
+    // Group volume by epoch
+    const volByEpoch = {};
+    for (const point of volData) {
+        const epoch = findEpoch(point.time);
+        if (epoch) {
+            if (!volByEpoch[epoch]) volByEpoch[epoch] = [];
+            volByEpoch[epoch].push(point.value);
+        }
+    }
+    
+    // Calculate averages
+    const allEpochs = new Set([...Object.keys(liqByEpoch), ...Object.keys(volByEpoch)]);
+    
+    for (const epoch of allEpochs) {
+        const liqPoints = liqByEpoch[epoch] || [];
+        const volPoints = volByEpoch[epoch] || [];
+        
+        // Liquidity: simple average of available points
+        const avgLiq = liqPoints.length > 0 
+            ? liqPoints.reduce((a, b) => a + b, 0) / liqPoints.length 
+            : 0;
+        
+        // Volume: sum divided by expected points (missing = 0)
+        const sumVol = volPoints.reduce((a, b) => a + b, 0);
+        const avgVol = sumVol / EXPECTED_POINTS_PER_EPOCH;
+        
+        epochs[epoch] = {
+            avgLiquidity: avgLiq,
+            avgVolume: avgVol,
+            liqPointCount: liqPoints.length,
+            volPointCount: volPoints.length
+        };
+    }
+    
+    return epochs;
+}
+
+function renderAstroDataList() {
+    const bucketColors = {
+        stable: 'text-yellow-400',
+        project: 'text-orange-400',
+        bluechip: 'text-blue-400',
+        single: 'text-purple-400'
+    };
+    
+    let html = '';
+    
+    for (const [poolName, data] of Object.entries(astroAutoData.epochData)) {
+        const epochs = Object.keys(data.epochs).sort((a, b) => b - a);
+        const latestEpoch = epochs[0];
+        const latestData = data.epochs[latestEpoch] || {};
+        
+        // Calculate totals across all epochs
+        let totalLiq = 0, totalVol = 0, totalPoints = 0;
+        for (const ep of Object.values(data.epochs)) {
+            totalLiq += ep.avgLiquidity;
+            totalVol += ep.avgVolume;
+            totalPoints += ep.liqPointCount;
+        }
+        const avgLiq = epochs.length > 0 ? totalLiq / epochs.length : 0;
+        const avgVol = epochs.length > 0 ? totalVol / epochs.length : 0;
+        
+        html += `<div class="grid grid-cols-12 gap-1 py-1 border-b border-gray-800/50 hover:bg-white/5">
+            <div class="col-span-3 text-white font-mono truncate" title="${poolName}">${poolName}</div>
+            <div class="col-span-2 ${bucketColors[data.bucket]}">${data.bucket}</div>
+            <div class="col-span-2 text-right text-cyan-300 font-mono">${fmt$(avgLiq)}</div>
+            <div class="col-span-2 text-right text-purple-300 font-mono">${fmt$(avgVol)}</div>
+            <div class="col-span-2 text-right text-gray-400">${epochs.join(', ')}</div>
+            <div class="col-span-1 text-right text-gray-500">${totalPoints}</div>
+        </div>`;
+    }
+    
+    setHtml('astro-data-list', html || '<div class="text-gray-600 italic text-center py-4">No data</div>');
+}
+
+function exportAstroJSON() {
+    const data = {
+        meta: {
+            created: new Date().toISOString(),
+            poolCount: Object.keys(astroAutoData.epochData).length,
+            dateRange: $('astro-date-range').value
+        },
+        pools: astroAutoData.epochData
+    };
+    
+    const filename = `astroport-epoch-data-${new Date().toISOString().split('T')[0]}.json`;
+    downloadJson(JSON.stringify(data, null, 2), filename);
+}
+
+async function saveAstroToGitHub() {
+    alert('GitHub save not yet implemented. Use Export JSON for now.');
+}
+
+// ============================================
+// SKELETON SWAP GITHUB FETCH
+// ============================================
+const SS_GITHUB_BASE = 'https://raw.githubusercontent.com/defipatriot/ss-pool-data_2026/main/data/weekly-avg';
+
+async function fetchSkeletonSwapData() {
+    const statusEl = $('ss-fetch-status');
+    statusEl.textContent = 'Fetching...';
+    statusEl.className = 'text-[9px] text-yellow-400';
+    
+    try {
+        // Get current epoch from the epoch data already loaded
+        const currentEpoch = store.liveEpochInfo?.currentEpoch || 169;
+        const csvUrl = `${SS_GITHUB_BASE}/2026-epoch-${currentEpoch}.csv`;
+        
+        console.log(`Fetching SkeletonSwap data: ${csvUrl}`);
+        
+        const response = await fetch(csvUrl);
+        if (!response.ok) {
+            // Try previous epoch if current doesn't exist yet
+            const prevUrl = `${SS_GITHUB_BASE}/2026-epoch-${currentEpoch - 1}.csv`;
+            console.log(`Current epoch not found, trying: ${prevUrl}`);
+            const prevResponse = await fetch(prevUrl);
+            if (!prevResponse.ok) throw new Error(`HTTP ${prevResponse.status}`);
+            return parseSkeletonSwapCSV(await prevResponse.text(), currentEpoch - 1);
+        }
+        
+        parseSkeletonSwapCSV(await response.text(), currentEpoch);
+        
+    } catch (err) {
+        console.error('Failed to fetch SkeletonSwap data:', err);
+        statusEl.textContent = `✗ Error: ${err.message}`;
+        statusEl.className = 'text-[9px] text-red-400';
+    }
+}
+
+function parseSkeletonSwapCSV(csvText, epoch) {
+    const statusEl = $('ss-fetch-status');
+    const lines = csvText.trim().split('\n');
+    
+    // Skip header row
+    store.ww = [];
+    
+    for (let i = 1; i < lines.length; i++) {
+        const line = lines[i];
+        // Parse CSV - handle quoted fields
+        const parts = line.match(/(".*?"|[^,]+)/g);
+        if (!parts || parts.length < 6) continue;
+        
+        const pool = parts[1].replace(/"/g, '').trim();  // pool_id
+        const tvl = parseFloat(parts[3]) || 0;           // avg_tvl_usd
+        const volume = parseFloat(parts[4]) || 0;        // total_volume_usd
+        const apr = parseFloat(parts[5]) || 0;           // avg_apr_7d
+        
+        // Calculate estimated fees (0.3% of volume for typical DEX)
+        const fees = volume * 0.003;
+        
+        store.ww.push({ pool, tvl, volume, fees, apr });
+    }
+    
+    // Sort by TVL descending initially (will be re-sorted by bucket in render)
+    store.ww.sort((a, b) => b.tvl - a.tvl);
+    
+    renderSkeletonSwapList();
+    
+    // Log matching stats
+    const matched = store.ww.filter(p => p.matched).length;
+    console.log(`✓ Loaded ${store.ww.length} SkeletonSwap pools for epoch ${epoch}`);
+    console.log(`  Matched to LP Registry: ${matched}/${store.ww.length}`);
+    
+    if (Object.keys(store.lpRegistry).length === 0) {
+        statusEl.textContent = `✓ Loaded ${store.ww.length} pools (load LP Registry first for bucket sorting)`;
+        statusEl.className = 'text-[9px] text-yellow-400';
+    } else {
+        statusEl.textContent = `✓ Loaded ${store.ww.length} pools, ${matched} matched to LP Registry`;
+        statusEl.className = 'text-[9px] text-green-400';
+    }
 }
 
 function getExportData() {
