@@ -790,17 +790,21 @@
                 </div>
             </div>
             <textarea id="votionPaste" class="input-dark h-24 font-mono text-[10px]" placeholder="Ctrl+A / Ctrl+C on a Votion lockup page... each lockup has its own optimization"></textarea>
-            <div class="flex gap-2">
-                <button onclick="parseVotion()" class="btn-action flex-1 bg-teal-900/40 text-teal-200 border border-teal-900">Add Lockup</button>
-                <button onclick="clearVotionLocks()" class="btn-action w-32 bg-red-900/30 text-red-300 border border-red-900/50">Clear All</button>
+            <div class="flex gap-2 items-center">
+                <button onclick="parseVotion()" class="btn-action flex-1 bg-teal-900/40 text-teal-200 border border-teal-900">Add Lockup (Paste)</button>
+                <button onclick="fetchAllVotion()" class="btn-action flex-1 bg-purple-900/40 text-purple-200 border border-purple-900">
+                    <i class="fas fa-download mr-1"></i> Fetch All from API
+                </button>
+                <button onclick="clearVotionLocks()" class="btn-action w-28 bg-red-900/30 text-red-300 border border-red-900/50">Clear All</button>
             </div>
+            <div id="votion-fetch-status" class="text-[9px] text-gray-500 mt-1"></div>
         </div>
     </div>
     
     <!-- Lockups Grid - Each lockup as its own card with vote allocations -->
     <div id="votion-lockups" class="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <div class="text-gray-600 text-[10px] italic text-center py-8 col-span-full border border-dashed border-gray-800 rounded">
-            No lockups loaded. Paste each Votion lockup page and click "Add Lockup".
+            No lockups loaded. Click "Fetch All from API" to auto-load, or paste each Votion page manually.
         </div>
     </div>
 </div>
@@ -3664,6 +3668,215 @@ function clearVotionLocks() {
         updatePasteStatus('ps-votion', false);
     }
 }
+
+// ============================================
+// VOTION API FETCH FUNCTIONS
+// ============================================
+const VOTION_API_BASE = 'https://backend.erisprotocol.com/votion/liquidity-alliance';
+
+const VOTION_LOCKUPS = [
+    { id: 'arbluna-max', type: 'arbLUNA', duration: 'Max', multiplier: 10 },
+    { id: 'ampluna-max', type: 'ampLUNA', duration: 'Max', multiplier: 10 },
+    { id: 'arbluna-12', type: 'arbLUNA', duration: '3mo', multiplier: 2 },
+    { id: 'ampluna-12', type: 'ampLUNA', duration: '3mo', multiplier: 2 },
+    { id: 'arbluna-1', type: 'arbLUNA', duration: '1wk', multiplier: 1 },
+    { id: 'ampluna-1', type: 'ampLUNA', duration: '1wk', multiplier: 1 },
+];
+
+async function fetchVotionFromApi(lockupId) {
+    const lockupConfig = VOTION_LOCKUPS.find(l => l.id === lockupId);
+    if (!lockupConfig) {
+        console.error('Unknown lockup:', lockupId);
+        return null;
+    }
+
+    const url = `${VOTION_API_BASE}/${lockupId}/optimization`;
+    
+    try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        
+        // Get ratios from store
+        const ratio = lockupConfig.type === 'arbLUNA' 
+            ? (store.votion.ratioArb || store.lstRatios.arbLUNA?.ratio || 0)
+            : (store.votion.ratioAmp || store.lstRatios.ampLUNA?.ratio || 0);
+        
+        // Get VP from first optimization (all have same total VP)
+        const vp = data.optimizations?.[0]?.votingPower || 0;
+        
+        // Calculate amount: VP = amount * ratio * multiplier
+        const amount = ratio > 0 ? vp / (ratio * lockupConfig.multiplier) : 0;
+        const luna = amount * ratio;
+        
+        // Get LUNA price for USD calculation
+        const lunaPrice = store.prices?.luna || 0;
+        const usd = luna * lunaPrice;
+        
+        // Build lockup object matching existing structure
+        const lockup = {
+            type: lockupConfig.type,
+            duration: lockupConfig.duration,
+            amount: amount,
+            luna: luna,
+            vp: vp,
+            usd: usd,
+            lockApy: 0,      // Will calculate below
+            lstApy: lockupConfig.type === 'ampLUNA' 
+                ? (store.lstRatios.ampLUNA?.apy || 0)
+                : (store.lstRatios.arbLUNA?.apy || 0),
+            votionApy: 0,    // Will calculate below
+            period: parseInt(data.period) || 0,
+            expectedRewards: data.summary?.totalExpectedReward || 0,
+            buckets: [],
+            fetchedFromApi: true,
+            fetchedAt: new Date().toISOString()
+        };
+        
+        // Calculate Votion APY from expected rewards
+        // Votion APY = (Weekly Rewards / USD Value) * 52 * 100
+        if (lockup.expectedRewards > 0 && usd > 0) {
+            lockup.votionApy = (lockup.expectedRewards / usd) * 52 * 100;
+            // Lock APY = LST APY + Votion APY
+            lockup.lockApy = lockup.lstApy + lockup.votionApy;
+        }
+        
+        // Parse buckets from optimizations
+        const BUCKET_NAMES = ['stable', 'project', 'bluechip', 'single'];
+        
+        for (const opt of data.optimizations || []) {
+            if (!BUCKET_NAMES.includes(opt.id)) continue;
+            
+            const pools = [];
+            const meta = opt.meta?.votes || [];
+            
+            // Build pool list from activeVoted and newVoted
+            const allPools = new Set([
+                ...Object.keys(opt.activeVoted || {}),
+                ...Object.keys(opt.newVoted || {})
+            ]);
+            
+            for (const poolAddr of allPools) {
+                const poolMeta = meta.find(m => m.id === poolAddr);
+                const poolName = poolMeta?.title?.replace(' LP', '') || poolAddr.slice(0, 8) + '...';
+                
+                const current = opt.activeVoted?.[poolAddr] || 0;
+                const optimized = opt.newVoted?.[poolAddr] || 0;
+                
+                if (current > 0 || optimized > 0) {
+                    pools.push({
+                        name: poolName,
+                        current: parseFloat(current.toFixed(2)),
+                        optimized: parseFloat(optimized.toFixed(2)),
+                        change: parseFloat((optimized - current).toFixed(2)),
+                        address: poolAddr
+                    });
+                }
+            }
+            
+            pools.sort((a, b) => b.optimized - a.optimized);
+            
+            lockup.buckets.push({
+                name: opt.id,
+                expectedRewards: opt.optimization?.totalExpectedReward || 0,
+                isWorthChanging: opt.diff?.isWorthChanging || false,
+                potentialGain: opt.diff?.rewardLoss || 0,
+                pools: pools
+            });
+        }
+        
+        return lockup;
+        
+    } catch (err) {
+        console.error(`Failed to fetch Votion ${lockupId}:`, err);
+        return null;
+    }
+}
+
+async function fetchAllVotion() {
+    const statusEl = $('votion-fetch-status');
+    if (statusEl) statusEl.innerHTML = '<span class="text-yellow-400"><i class="fas fa-spinner fa-spin mr-1"></i>Fetching all lockups...</span>';
+    
+    let successCount = 0;
+    let skipCount = 0;
+    let failCount = 0;
+    
+    for (const lockupConfig of VOTION_LOCKUPS) {
+        try {
+            const lockup = await fetchVotionFromApi(lockupConfig.id);
+            
+            if (lockup && lockup.vp > 0) {
+                // Check for duplicate and update
+                const existingIdx = store.votion.lockups.findIndex(
+                    l => l.type === lockup.type && l.duration === lockup.duration
+                );
+                
+                if (existingIdx >= 0) {
+                    store.votion.lockups[existingIdx] = lockup;
+                } else {
+                    store.votion.lockups.push(lockup);
+                }
+                successCount++;
+                console.log(`✓ Fetched ${lockupConfig.type} ${lockupConfig.duration}: VP=${lockup.vp.toLocaleString()}`);
+            } else {
+                skipCount++;
+                console.log(`⊘ ${lockupConfig.type} ${lockupConfig.duration}: No position`);
+            }
+        } catch (err) {
+            failCount++;
+            console.error(`✗ ${lockupConfig.type} ${lockupConfig.duration}:`, err.message);
+        }
+    }
+    
+    renderVotion();
+    updateWorkflowStatus();
+    
+    if (statusEl) {
+        if (successCount > 0) {
+            statusEl.innerHTML = `<span class="text-green-400">✓ Loaded ${successCount} lockups</span>` +
+                (skipCount > 0 ? `<span class="text-gray-500 ml-2">(${skipCount} empty)</span>` : '') +
+                (failCount > 0 ? `<span class="text-red-400 ml-2">(${failCount} failed)</span>` : '');
+            pasteStatus.votion = true;
+            updatePasteStatus('ps-votion', true);
+        } else if (skipCount > 0) {
+            statusEl.innerHTML = `<span class="text-gray-400">No positions found in ${skipCount} lockups</span>`;
+        } else {
+            statusEl.innerHTML = `<span class="text-red-400">Failed to fetch (${failCount} errors)</span>`;
+        }
+    }
+    
+    return { success: successCount, skipped: skipCount, failed: failCount };
+}
+
+// Fetch single lockup by ID (for selective refresh)
+async function fetchSingleVotion(lockupId) {
+    const statusEl = $('votion-fetch-status');
+    if (statusEl) statusEl.innerHTML = `<span class="text-yellow-400">Fetching ${lockupId}...</span>`;
+    
+    const lockup = await fetchVotionFromApi(lockupId);
+    
+    if (lockup && lockup.vp > 0) {
+        const existingIdx = store.votion.lockups.findIndex(
+            l => l.type === lockup.type && l.duration === lockup.duration
+        );
+        
+        if (existingIdx >= 0) {
+            store.votion.lockups[existingIdx] = lockup;
+        } else {
+            store.votion.lockups.push(lockup);
+        }
+        
+        renderVotion();
+        updateWorkflowStatus();
+        
+        if (statusEl) statusEl.innerHTML = `<span class="text-green-400">✓ Loaded ${lockup.type} ${lockup.duration}</span>`;
+        pasteStatus.votion = true;
+        updatePasteStatus('ps-votion', true);
+    } else {
+        if (statusEl) statusEl.innerHTML = `<span class="text-gray-400">No position in ${lockupId}</span>`;
+    }
+}
+// ============================================
 
 function recalcVotion() {
     let ratioArb = store.votion.ratioArb || 0;
