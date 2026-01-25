@@ -3752,9 +3752,12 @@ async function fetchVotionFromApi(lockupId) {
         const amount = ratio > 0 ? vp / (ratio * lockupConfig.multiplier) : 0;
         const luna = amount * ratio;
         
-        // Get LUNA price for USD calculation
-        const lunaPrice = store.prices?.luna || 0;
+        // Get LUNA price for USD calculation (from Prices tab)
+        const lunaPrice = store.tokenPrices?.LUNA?.price || 0;
         const usd = luna * lunaPrice;
+        
+        // Debug logging
+        console.log(`  ${lockupConfig.type} ${lockupConfig.duration}: ratio=${ratio.toFixed(4)}, lunaPrice=$${lunaPrice.toFixed(4)}, usd=$${usd.toFixed(2)}, lstApy=${store.lstRatios[lockupConfig.type]?.apy || 0}%`);
         
         // Build lockup object matching existing structure
         const lockup = {
