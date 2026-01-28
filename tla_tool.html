@@ -126,6 +126,10 @@
                             <span id="status-pd-bribes-date" class="text-[8px] text-gray-600">-</span>
                         </div>
                         <div class="flex flex-col items-center">
+                            <span id="status-dex-perf" class="text-gray-500 font-semibold" title="DEX Performance from epoch ext file">DEX Perf</span>
+                            <span id="dex-perf-status" class="text-[8px] text-gray-600">-</span>
+                        </div>
+                        <div class="flex flex-col items-center">
                             <span id="status-asset-meta" class="text-red-500 cursor-pointer font-semibold" title="Asset Metadata Manager - Click Config tab to load" onclick="acknowledgeStatus('assetMeta')">Asset Meta</span>
                             <span id="status-asset-meta-count" class="text-[8px] text-gray-600">not loaded</span>
                             <span id="status-asset-meta-epoch" class="text-[7px] text-gray-600"></span>
@@ -578,12 +582,24 @@
                     </div>
                 </div>
             </div>
+            <!-- Epoch/4Ep Toggle -->
+            <div class="flex justify-between items-center bg-gray-900/30 px-3 py-1 border-b border-gray-800">
+                <div class="flex items-center gap-2">
+                    <span class="text-[9px] text-gray-500 uppercase">Liquidity/Volume Display:</span>
+                    <button id="btn-liq-toggle" onclick="toggleLiqDisplay()" class="text-[10px] px-2 py-0.5 rounded border transition-colors bg-teal-900/50 text-teal-300 border-teal-700 hover:bg-teal-800">
+                        <span id="liq-toggle-label">4-Epoch Avg</span>
+                    </button>
+                </div>
+                <div id="liq-toggle-info" class="text-[9px] text-gray-500">
+                    Showing 4-epoch rolling average
+                </div>
+            </div>
             <div class="bg-indigo-900/20 text-indigo-200 rounded-t border-b border-gray-800">
                 <div class="vote-grid text-[11px] uppercase font-bold px-3 py-2 whitespace-nowrap">
                     <div class="truncate" title="pool_name">Pool</div>
                     <div class="text-center text-gray-500" title="pool_status (active/inactive)">Status</div>
-                    <div class="text-right text-teal-400 cursor-help" title="4-Epoch Average Liquidity" onclick="showScoreInfo('4ep-liq')">4Ep Liq</div>
-                    <div class="text-right text-teal-400 cursor-help" title="4-Epoch Average Volume" onclick="showScoreInfo('4ep-vol')">4Ep Vol</div>
+                    <div id="col-liq-header" class="text-right text-teal-400 cursor-help" title="4-Epoch Average Liquidity" onclick="showScoreInfo('4ep-liq')">4Ep Liq</div>
+                    <div id="col-vol-header" class="text-right text-teal-400 cursor-help" title="4-Epoch Average Volume" onclick="showScoreInfo('4ep-vol')">4Ep Vol</div>
                     <div class="text-right text-yellow-400 cursor-help" title="Capital Efficiency = Vol/Liq" onclick="showScoreInfo('efficiency')">Effic</div>
                     <div class="text-right cursor-help" title="APR: Green=Non-Amp, Yellow=Amplified" onclick="showScoreInfo('apr')"><span class="text-green-400">APR</span>/<span class="text-yellow-400">🔥</span></div>
                     <div class="text-right text-cyan-400 cursor-help" title="Access Score (asset + bridge + LUNA)" onclick="showScoreInfo('access')">Access</div>
@@ -1499,7 +1515,11 @@
             <div class="bg-gray-900/50 rounded-lg p-3 border border-orange-900/30">
                 <h3 class="text-[11px] font-bold text-orange-400 mb-2 flex items-center gap-2">
                     <i class="fas fa-store"></i> BBL Marketplace
-                    <a href="https://www.bbl.gg" target="_blank" class="ml-auto text-[9px] text-orange-400 hover:text-orange-300">
+                    <button onclick="fetchAllBBLData()" class="ml-auto text-[8px] bg-orange-700 hover:bg-orange-600 px-2 py-0.5 rounded" title="Fetch floor, listings, and epoch sales from BBL API">
+                        <i class="fas fa-bolt mr-1"></i>Fetch All
+                    </button>
+                    <span id="marketplace-fetch-status" class="text-[8px] text-gray-500"></span>
+                    <a href="https://www.bbl.gg" target="_blank" class="text-[9px] text-orange-400 hover:text-orange-300">
                         <i class="fas fa-external-link-alt"></i>
                     </a>
                 </h3>
@@ -1594,10 +1614,30 @@
             <div class="bg-gray-900/50 rounded-lg p-3 border border-blue-900/30">
                 <h3 class="text-[11px] font-bold text-blue-400 mb-2 flex items-center gap-2">
                     <i class="fas fa-rocket"></i> Boost Marketplace
-                    <a href="https://app.booost.bg" target="_blank" class="ml-auto text-[9px] text-blue-400 hover:text-blue-300">
+                    <button onclick="fetchAllBoostData()" class="ml-auto text-[8px] bg-blue-700 hover:bg-blue-600 px-2 py-0.5 rounded" title="Fetch from Boost API (requires deployed server)">
+                        <i class="fas fa-bolt mr-1"></i> Fetch All
+                    </button>
+                    <button onclick="toggleBoostPaste()" class="text-[8px] bg-gray-700 hover:bg-gray-600 px-2 py-0.5 rounded" title="Paste API JSON response manually">
+                        <i class="fas fa-paste mr-1"></i> Paste
+                    </button>
+                    <span id="boost-status" class="text-[9px] text-gray-500">Not Started</span>
+                    <a href="https://app.booost.bg" target="_blank" class="text-[9px] text-blue-400 hover:text-blue-300">
                         <i class="fas fa-external-link-alt"></i>
                     </a>
                 </h3>
+                <!-- Paste JSON Area (hidden by default) -->
+                <div id="boost-paste-area" class="hidden mb-2">
+                    <textarea id="boost-paste-json" class="w-full h-20 bg-gray-800 text-[9px] text-white p-2 rounded border border-gray-700" placeholder="Paste Boost API JSON response here (listings or sales)..."></textarea>
+                    <div class="flex gap-2 mt-1">
+                        <button onclick="parseBoostListingsJson()" class="text-[8px] bg-green-700 hover:bg-green-600 px-2 py-0.5 rounded">
+                            <i class="fas fa-list mr-1"></i> Parse as Listings
+                        </button>
+                        <button onclick="parseBoostSalesJson()" class="text-[8px] bg-cyan-700 hover:bg-cyan-600 px-2 py-0.5 rounded">
+                            <i class="fas fa-receipt mr-1"></i> Parse as Sales
+                        </button>
+                        <button onclick="toggleBoostPaste()" class="text-[8px] bg-gray-600 hover:bg-gray-500 px-2 py-0.5 rounded ml-auto">Cancel</button>
+                    </div>
+                </div>
                 <!-- Floors -->
                 <div class="flex justify-between items-center mb-1">
                     <span class="text-[9px] text-gray-400">Floor Prices</span>
@@ -1639,7 +1679,7 @@
                         <label class="flex items-center text-[8px] text-gray-500 whitespace-nowrap"><input type="checkbox" id="nft-boost-list-broken" class="mr-1"> Brk</label>
                         <button onclick="addBoostListing()" class="text-[9px] bg-blue-800 px-2 rounded hover:bg-blue-700">+</button>
                     </div>
-                    <div id="nft-boost-listings-list" class="max-h-20 overflow-y-auto text-[8px] space-y-0.5">
+                    <div id="boost-listings-list" class="max-h-20 overflow-y-auto text-[8px] space-y-0.5">
                         <div class="text-gray-600 italic">No listings</div>
                     </div>
                 </div>
@@ -1662,7 +1702,7 @@
                         <input type="time" id="nft-boost-sale-time" class="input-dark w-20 text-[8px]">
                         <button onclick="addBoostSale()" class="text-[9px] bg-blue-800 px-2 rounded hover:bg-blue-700">+ Sale</button>
                     </div>
-                    <div id="nft-boost-sales-list" class="max-h-20 overflow-y-auto text-[8px] space-y-0.5">
+                    <div id="boost-sales-list" class="max-h-20 overflow-y-auto text-[8px] space-y-0.5">
                         <div class="text-gray-600 italic">No sales</div>
                     </div>
                 </div>
@@ -2288,10 +2328,15 @@ async function fetchLiveNftBacking() {
 // Update unminted backing using live fetched data
 function updateUnmintedFromLiveData() {
     const unmintedCount = liveFetchedData.unminted || parseInt($('dash-unminted-count')?.value) || 0;
-    if (unmintedCount > 0 && liveFetchedData.backingLuna > 0) {
-        const totalLuna = unmintedCount * liveFetchedData.backingLuna;
-        const totalUsd = unmintedCount * liveFetchedData.backingUsd;
-        const totalAmp = unmintedCount * (store.dashboard?.backingAmpLuna || 0);
+    const ampLunaPerNft = store.dashboard?.backingAmpLuna || parseFloat($('dash-back-amp')?.value) || 0;
+    
+    if (unmintedCount > 0 && (liveFetchedData.backingLuna > 0 || ampLunaPerNft > 0)) {
+        const backingLunaPerNft = liveFetchedData.backingLuna || (ampLunaPerNft * (liveFetchedData.ampRate || 1.95));
+        const backingUsdPerNft = liveFetchedData.backingUsd || (backingLunaPerNft * (liveFetchedData.lunaPrice || 0.10));
+        
+        const totalAmp = unmintedCount * ampLunaPerNft;
+        const totalLuna = unmintedCount * backingLunaPerNft;
+        const totalUsd = unmintedCount * backingUsdPerNft;
         
         setTxt('dash-unminted-amp', totalAmp.toFixed(2));
         setTxt('dash-unminted-luna', totalLuna.toFixed(2));
@@ -2301,6 +2346,8 @@ function updateUnmintedFromLiveData() {
         store.dashboard.unmintedBackingAmp = totalAmp;
         store.dashboard.unmintedBackingLuna = totalLuna;
         store.dashboard.unmintedBackingUsd = totalUsd;
+        
+        console.log(`✓ Unminted backing: ${unmintedCount} × ${backingLunaPerNft.toFixed(4)} = ${totalLuna.toFixed(2)} LUNA`);
     }
 }
 
@@ -2319,33 +2366,77 @@ async function fetchLiveNftStats() {
         const data = await resp.json();
         const { collection_stats, nfts } = data;
         
-        // Calculate stats
+        // Calculate stats from deving.zone
         const daodaoCount = nfts.filter(nft => nft.daodao === true).length;
         const brokenCount = nfts.filter(nft => nft.broken).length;
         const daoEnterpriseWallet = 'terra1nn7yrgjzj6zvle7ms9vlpg4cj3kaxjls4g6ugw';
         const enterpriseCount = nfts.filter(nft => nft.enterprise === true && nft.owner !== daoEnterpriseWallet).length;
         const daoMembers = collection_stats?.unique_stakers || 0;
         
-        // Get minted count from collection_stats or count unique NFTs
-        const mintedCount = collection_stats?.total_supply || nfts.length || 4172;
+        // Get minted count
+        // NOTE: NFT contract num_tokens returns 10000 (total supply), NOT actual minted count
+        // All 10K tokens exist in contract but only ~4172 are minted to users
+        // Dashboard uses static value from statusSliders.mint.minted
+        let mintedCount = 4172; // Known value from dashboard
+        
+        try {
+            const numTokensQuery = btoa(JSON.stringify({ num_tokens: {} }));
+            const numTokensUrl = `${TERRA_LCD}/cosmwasm/wasm/v1/contract/${NFT_COLLECTION_CONTRACT}/smart/${numTokensQuery}`;
+            const numResp = await fetch(numTokensUrl);
+            if (numResp.ok) {
+                const numData = await numResp.json();
+                const contractCount = numData?.data?.count || 0;
+                // Only use contract value if it's NOT 10000 (total supply)
+                // and is a reasonable minted count (> 4000, < 10000)
+                if (contractCount > 4000 && contractCount < 10000) {
+                    mintedCount = contractCount;
+                    console.log('✓ Got minted from NFT contract:', mintedCount);
+                } else {
+                    console.log('NFT contract returned total supply (10000), using known minted:', mintedCount);
+                }
+            }
+        } catch (e) {
+            console.warn('NFT contract query failed, using fallback:', mintedCount);
+        }
+        
         const unmintedCount = 10000 - mintedCount;
         liveFetchedData.unminted = unmintedCount;
         
+        // DAO Controlled = 1000 broken NFTs held across 3 DAO wallets:
+        // - 900 in liquid wallets (terra1...8ywv, terra1...417v)
+        // - 100 in Enterprise staking wallet (terra1nn7yrgjzj6zvle7ms9vlpg4cj3kaxjls4g6ugw)
+        // Dashboard hardcodes this as 1000
+        const daoControlledBroken = 1000;
+        
+        // Calculate circulating = minted - DAO controlled
+        const circulatingSupply = Math.max(0, mintedCount - daoControlledBroken);
+        
+        // Calculate liquid = circulating - staked (daodao + enterprise by holders)
+        const totalStaked = daodaoCount + enterpriseCount;
+        const liquidSupply = Math.max(0, circulatingSupply - totalStaked);
+        
+        // DAODAO percentage of circulating
+        const daodaoPercent = circulatingSupply > 0 ? (daodaoCount / circulatingSupply * 100) : 0;
+        
         // Update NFT Stats inputs
-        const inputs = {
+        const inputUpdates = {
             'nft-broken-input': brokenCount,
             'nft-minted-input': mintedCount,
             'nft-daodao-input': daodaoCount,
+            'nft-daodao-pct-input': daodaoPercent.toFixed(2),
             'nft-enterprise-input': enterpriseCount,
-            'nft-members-input': daoMembers
+            'nft-members-input': daoMembers,
+            'nft-dao-broken-input': daoControlledBroken,
+            'nft-circ-input': circulatingSupply,
+            'nft-liquid-input': liquidSupply
         };
         
-        for (const [id, value] of Object.entries(inputs)) {
+        for (const [id, value] of Object.entries(inputUpdates)) {
             const el = $(id);
             if (el) el.value = value;
         }
         
-        // Update unminted display
+        // Update display spans
         setTxt('nft-unminted', unmintedCount.toLocaleString());
         setTxt('nft-unbroken', (10000 - brokenCount).toLocaleString());
         
@@ -2356,12 +2447,26 @@ async function fetchLiveNftStats() {
         // Update unminted backing if we have backing data
         updateUnmintedFromLiveData();
         
+        // Store in nftStats
+        store.nftStats.brokenNfts = brokenCount;
+        store.nftStats.mintedNfts = mintedCount;
+        store.nftStats.unmintedNfts = unmintedCount;
+        store.nftStats.daodaoStaked = daodaoCount;
+        store.nftStats.enterpriseStaked = enterpriseCount;
+        store.nftStats.daoMembers = daoMembers;
+        store.nftStats.daoControlledBroken = daoControlledBroken;
+        store.nftStats.circulatingSupply = circulatingSupply;
+        store.nftStats.liquidSupply = liquidSupply;
+        store.nftStats.daodaoPercent = daodaoPercent;
+        
         if (statusEl) {
             statusEl.textContent = `✓ Loaded`;
             statusEl.className = 'text-[9px] text-green-400';
         }
-        console.log(`✓ NFT Stats: ${daodaoCount} DAODAO, ${enterpriseCount} Enterprise, ${brokenCount} broken, ${daoMembers} members`);
-        return { daodaoCount, enterpriseCount, brokenCount, daoMembers, mintedCount, unmintedCount };
+        console.log(`✓ NFT Stats: minted=${mintedCount}, unminted=${unmintedCount}, circ=${circulatingSupply}, liquid=${liquidSupply}`);
+        console.log(`  Staking: DAODAO=${daodaoCount} (${daodaoPercent.toFixed(1)}%), Enterprise=${enterpriseCount}, Members=${daoMembers}`);
+        console.log(`  Broken: ${brokenCount} total, DAO controlled=${daoControlledBroken}`);
+        return { daodaoCount, enterpriseCount, brokenCount, daoMembers, mintedCount, unmintedCount, circulatingSupply, liquidSupply, daoControlledBroken };
     } catch (e) {
         console.error('NFT stats fetch error:', e);
         if (statusEl) { statusEl.textContent = '✗ Error'; statusEl.className = 'text-[9px] text-red-400'; }
@@ -2402,6 +2507,8 @@ async function fetchAllNftData() {
     try {
         await fetchLiveNftBacking();
         await fetchLiveNftStats();
+        await fetchAllBBLData(); // Fetch BBL listings, sales, floors via API
+        await fetchAllBoostData(); // Fetch Boost listings, sales, floors via GraphQL
         console.log('✓ All NFT data fetched');
     } finally {
         if (btn) {
@@ -2410,6 +2517,1145 @@ async function fetchAllNftData() {
         }
     }
 }
+
+// Fetch live marketplace data (tries Boost API first, then BBL)
+async function fetchLiveMarketplace() {
+    const statusEl = $('marketplace-fetch-status');
+    if (statusEl) {
+        statusEl.textContent = 'Fetching...';
+        statusEl.className = 'text-[8px] text-yellow-400';
+    }
+    
+    try {
+        // Try Boost API first (more reliable)
+        const boostContract = 'terra1phr9fngjv7a8an4dhmhd0u0f98wazxfnzccqtyheq4zqrrp4fpuqw3apw9';
+        const boostStatsUrl = `https://terra-nft.nyc3.cdn.digitaloceanspaces.com/boost/collections/${boostContract}/stats.json`;
+        
+        try {
+            const boostResp = await fetch(boostStatsUrl);
+            if (boostResp.ok) {
+                const boostData = await boostResp.json();
+                
+                // Get LUNA price for USD conversion
+                const lunaPrice = liveFetchedData.lunaPrice || geckoIdPrices['terra-luna-2']?.usd || 0.10;
+                
+                // Update Boost marketplace section
+                if (boostData.floor_price) {
+                    const boostFloorInput = $('nft-boost-floor-unbroken-amt');
+                    if (boostFloorInput) boostFloorInput.value = boostData.floor_price;
+                }
+                
+                if (boostData.volume) {
+                    const boostVolInput = $('nft-boost-volume');
+                    if (boostVolInput) boostVolInput.value = Math.round(boostData.volume);
+                }
+                
+                if (boostData.listed_count) {
+                    setTxt('boost-listing-count', boostData.listed_count);
+                }
+                
+                console.log(`✓ Boost stats: Floor ${boostData.floor_price} LUNA, Volume ${boostData.volume}, ${boostData.listed_count} listed`);
+                
+                if (statusEl) {
+                    statusEl.textContent = `✓ Boost`;
+                    statusEl.className = 'text-[8px] text-green-400';
+                }
+                return boostData;
+            }
+        } catch (boostErr) {
+            console.warn('Boost API failed:', boostErr);
+        }
+        
+        // Fallback: Try BBL API with CORS proxy
+        try {
+            const bblContract = 'terra1phr9fngjv7a8an4dhmhd0u0f98wazxfnzccqtyheq4zqrrp4fpuqw3apw9';
+            const bblUrl = `https://nft-server.api.erisprotocol.io/collections/${bblContract}`;
+            
+            // Try without proxy first (works on deployed sites)
+            let bblResp = await fetch(bblUrl).catch(() => null);
+            
+            // If failed, try with CORS proxy
+            if (!bblResp || !bblResp.ok) {
+                const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(bblUrl)}`;
+                bblResp = await fetch(proxyUrl).catch(() => null);
+            }
+            
+            if (bblResp && bblResp.ok) {
+                const bblData = await bblResp.json();
+                
+                const blunaPrice = geckoIdPrices['backbone-labs-staked-luna']?.usd || 0;
+                
+                // Update BBL floor
+                if (bblData.floor) {
+                    const bblFloorInput = $('nft-bbl-floor-unbroken-amt');
+                    if (bblFloorInput) {
+                        bblFloorInput.value = bblData.floor;
+                        // Trigger USD update
+                        if (typeof updateBblFloorUsd === 'function') updateBblFloorUsd();
+                    }
+                }
+                
+                // Update BBL volume
+                if (bblData.volume) {
+                    const bblVolInput = $('nft-bbl-volume');
+                    if (bblVolInput) {
+                        bblVolInput.value = Math.round(bblData.volume);
+                        const bblVolUsd = $('nft-bbl-volume-usd');
+                        if (bblVolUsd && blunaPrice > 0) {
+                            bblVolUsd.textContent = `($${Math.round(bblData.volume * blunaPrice).toLocaleString()})`;
+                        }
+                    }
+                }
+                
+                console.log(`✓ BBL stats: Floor ${bblData.floor} bLUNA, Volume ${bblData.volume}`);
+                
+                if (statusEl) {
+                    statusEl.textContent = `✓ BBL`;
+                    statusEl.className = 'text-[8px] text-green-400';
+                }
+                return bblData;
+            }
+        } catch (bblErr) {
+            console.warn('BBL API failed:', bblErr);
+        }
+        
+        // Both failed
+        if (statusEl) {
+            statusEl.textContent = 'APIs down';
+            statusEl.className = 'text-[8px] text-orange-400';
+        }
+        console.warn('⚠ Marketplace APIs unavailable');
+        return null;
+        
+    } catch (e) {
+        console.error('Marketplace fetch error:', e);
+        if (statusEl) {
+            statusEl.textContent = '✗ Error';
+            statusEl.className = 'text-[8px] text-red-400';
+        }
+        return null;
+    }
+}
+
+// ============================================
+// BBL MARKETPLACE API INTEGRATION (v9)
+// ============================================
+
+const BBL_ADAO_CONTRACT = 'terra1phr9fngjv7a8an4dhmhd0u0f98wazxfnzccqtyheq4zqrrp4fpuqw3apw9';
+const BBL_API_BASE = 'https://warlock.backbonelabs.io/api/v1/dapps/necropolis';
+
+// Boost DAO Marketplace API (GraphQL)
+const BOOST_API_URL = 'https://api.boostdao.io/graphql';
+const BOOST_LAUNCH_CONTRACT = 'terra1kj7pasyahtugajx9qud02r5jqaf60mtm7g5v9utr94rmdfftx0vqspf4at';
+const BOOST_ADAO_CONTRACT = 'terra1phr9fngjv7a8an4dhmhd0u0f98wazxfnzccqtyheq4zqrrp4fpuqw3apw9';
+const DEVING_ZONE_BULK_JSON = 'https://deving.zone/en/nfts/alliance_daos.json';
+
+// Multiple CORS proxies to try
+const CORS_PROXIES = [
+    url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+    url => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+    url => `https://thingproxy.freeboard.io/fetch/${url}`
+];
+
+// Cache for NFT broken status (loaded from bulk JSON)
+let nftBrokenCache = {};
+let devingZoneDataLoaded = false;
+
+// Get bLUNA price from various sources
+function getBLunaPrice() {
+    return geckoIdPrices['backbone-labs-staked-luna']?.usd || 
+           liveFetchedData.blunaPrice || 
+           (liveFetchedData.lunaPrice * 1.05) || 0.10;
+}
+
+// Helper to fetch with CORS proxy fallback
+// Supports both GET and POST requests
+async function fetchWithCors(url, options = {}) {
+    const isPost = options.method === 'POST';
+    
+    // Try direct first (works on deployed sites)
+    try {
+        const resp = await fetch(url, options);
+        if (resp.ok) return resp;
+    } catch (e) {
+        console.log('Direct fetch failed, trying proxies...');
+    }
+    
+    // For POST requests (GraphQL), use proxies that support POST
+    if (isPost) {
+        // Most CORS proxies don't support POST well from file:// origin
+        // Try several that might work
+        const postProxies = [
+            `https://corsproxy.io/?${url}`,
+            `https://thingproxy.freeboard.io/fetch/${url}`,
+            `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
+        ];
+        
+        for (const proxyUrl of postProxies) {
+            try {
+                console.log('Trying POST proxy:', proxyUrl.substring(0, 70) + '...');
+                const resp = await fetch(proxyUrl, options);
+                
+                // Check if we got HTML error page instead of JSON
+                const contentType = resp.headers.get('content-type') || '';
+                if (contentType.includes('text/html')) {
+                    console.log('POST proxy returned HTML (error page), skipping...');
+                    continue;
+                }
+                
+                if (resp.ok) {
+                    console.log('✓ POST Proxy succeeded');
+                    return resp;
+                }
+            } catch (e) {
+                console.log('POST proxy failed:', e.message);
+            }
+        }
+        
+        // If we're running from file://, POST requests won't work through proxies
+        if (window.location.protocol === 'file:') {
+            console.warn('POST requests (GraphQL) require deployment to a server or use "Fetch All" button on deployed site');
+        }
+        
+        throw new Error('All POST fetch methods failed - GraphQL APIs may require deployment to a server');
+    }
+    
+    // For GET requests, try each proxy in order
+    for (const proxyFn of CORS_PROXIES) {
+        try {
+            const proxyUrl = proxyFn(url);
+            console.log('Trying proxy:', proxyUrl.substring(0, 50) + '...');
+            const resp = await fetch(proxyUrl);
+            if (resp.ok) {
+                console.log('✓ Proxy succeeded');
+                return resp;
+            }
+        } catch (e) {
+            console.log('Proxy failed, trying next...');
+        }
+    }
+    
+    throw new Error('All fetch methods failed');
+}
+
+// Load ALL NFT data from deving.zone bulk JSON (single request)
+// Stores full data for each NFT including: broken, daodao, enterprise, bbl, boost, liquid, owner
+let devingZoneFullData = null; // Store full data for calculations
+
+async function loadDevingZoneBulkData() {
+    if (devingZoneDataLoaded && devingZoneFullData) {
+        console.log('Using cached deving.zone data');
+        return devingZoneFullData;
+    }
+    
+    try {
+        console.log('Loading deving.zone bulk NFT data...');
+        const resp = await fetchWithCors(DEVING_ZONE_BULK_JSON);
+        if (!resp.ok) throw new Error(`Status ${resp.status}`);
+        const data = await resp.json();
+        
+        if (data.nfts && Array.isArray(data.nfts)) {
+            // Store full data
+            devingZoneFullData = data;
+            
+            // Build lookup map: NFT ID -> full NFT data
+            nftBrokenCache = {};
+            data.nfts.forEach(nft => {
+                nftBrokenCache[nft.id] = {
+                    broken: nft.broken === true,
+                    daodao: nft.daodao === true,
+                    enterprise: nft.enterprise === true,
+                    bbl: nft.bbl === true,
+                    boost: nft.boost === true,
+                    liquid: nft.liquid === true,
+                    owner: nft.owner
+                };
+            });
+            devingZoneDataLoaded = true;
+            
+            // Calculate stats from the data
+            const nfts = data.nfts;
+            const collection_stats = data.collection_stats || {};
+            const daoEnterpriseWallet = 'terra1nn7yrgjzj6zvle7ms9vlpg4cj3kaxjls4g6ugw';
+            
+            const calculatedStats = {
+                // Staking counts
+                daodaoStaked: nfts.filter(nft => nft.daodao === true).length,
+                enterpriseStaked: nfts.filter(nft => nft.enterprise === true && nft.owner !== daoEnterpriseWallet).length,
+                enterpriseStakedByDao: nfts.filter(nft => nft.enterprise === true && nft.owner === daoEnterpriseWallet).length,
+                
+                // Broken status
+                brokenCount: nfts.filter(nft => nft.broken).length,
+                unbrokenCount: nfts.filter(nft => !nft.broken).length,
+                
+                // Marketplace listings
+                bblListed: nfts.filter(nft => nft.bbl === true).length,
+                boostListed: nfts.filter(nft => nft.boost === true).length,
+                
+                // Liquid (in wallet, not staked)
+                liquidCount: nfts.filter(nft => nft.liquid === true).length,
+                
+                // From collection_stats
+                totalStaked: collection_stats.total_staked || 0,
+                uniqueStakers: collection_stats.unique_stakers || 0,
+                avgStakedPerOwner: collection_stats.avg_staked_per_owner || 0,
+                stakedPercentage: collection_stats.staked_percentage || 0,
+                
+                // Supply calculations (using known minted count)
+                // NOTE: deving.zone has ALL 10K entries but only 4172 are minted
+                mintedCount: 4172, // Known value - TODO: query NFT contract
+                unmintedCount: 5828,
+                daoControlledBroken: 1000, // DAO holds 1000 broken across 3 wallets
+                circulatingSupply: 3172, // 4172 - 1000
+                liquidSupply: 0 // Will be calculated: circulating - daodao - enterprise
+            };
+            
+            // Calculate liquid supply
+            calculatedStats.liquidSupply = Math.max(0, 
+                calculatedStats.circulatingSupply - calculatedStats.daodaoStaked - calculatedStats.enterpriseStaked
+            );
+            
+            // DAODAO percentage
+            calculatedStats.daodaoPercent = calculatedStats.circulatingSupply > 0 
+                ? (calculatedStats.daodaoStaked / calculatedStats.circulatingSupply * 100) 
+                : 0;
+            
+            // Store in nftStats
+            store.nftStats.devingZoneStats = collection_stats;
+            store.nftStats.devingZoneCalc = calculatedStats;
+            
+            console.log(`✓ Loaded ${nfts.length} NFTs from deving.zone`);
+            console.log('  Collection stats:', collection_stats);
+            console.log('  Calculated:', calculatedStats);
+            
+            return devingZoneFullData;
+        }
+        return null;
+    } catch (err) {
+        console.error('Failed to load deving.zone bulk data:', err);
+        return null;
+    }
+}
+
+// Check if NFT is broken (uses cached bulk data)
+function checkNftBrokenStatus(tokenId) {
+    const nftData = nftBrokenCache[tokenId];
+    if (nftData !== undefined) {
+        return nftData.broken;
+    }
+    return null; // Unknown if not in cache
+}
+
+// Get full NFT info from cache (broken, daodao, enterprise, etc.)
+function getNftInfo(tokenId) {
+    return nftBrokenCache[tokenId] || null;
+}
+
+// Fetch BBL collection stats
+async function fetchBBLCollectionStats() {
+    try {
+        // Try BBL Warlock API first
+        const url = `${BBL_API_BASE}/collections/${BBL_ADAO_CONTRACT}`;
+        const resp = await fetchWithCors(url);
+        if (!resp.ok) throw new Error(`Status ${resp.status}`);
+        const data = await resp.json();
+        
+        console.log('✓ BBL Collection stats:', data);
+        return {
+            volume: data.volume || 0,
+            floor: data.floor || 0,
+            floor_token_id: data.floor_token_id,
+            last_sale_amount: data.last_sale_amount || 0,
+            last_sale_token_id: data.last_sale_token_id
+        };
+    } catch (err) {
+        console.warn('BBL Warlock API failed, trying Eris fallback...', err);
+        
+        // Fallback to Eris Protocol endpoint
+        try {
+            const erisUrl = `https://nft-server.api.erisprotocol.io/collections/${BBL_ADAO_CONTRACT}`;
+            const erisResp = await fetch(erisUrl);
+            if (erisResp.ok) {
+                const erisData = await erisResp.json();
+                console.log('✓ Eris fallback stats:', erisData);
+                return {
+                    volume: erisData.volume || 0,
+                    floor: erisData.floor || 0,
+                    floor_token_id: null,
+                    last_sale_amount: 0,
+                    last_sale_token_id: null
+                };
+            }
+        } catch (e2) {
+            console.warn('Eris fallback also failed:', e2);
+        }
+        
+        console.error('BBL Collection stats error: All sources failed');
+        return null;
+    }
+}
+
+// Fetch all BBL listings and check broken status
+async function fetchBBLListings(statusCallback) {
+    try {
+        // Load deving.zone bulk data FIRST (single request for all 10K NFTs)
+        if (statusCallback) statusCallback('Loading NFT data...');
+        await loadDevingZoneBulkData();
+        
+        let allListings = [];
+        let page = 1;
+        let hasMore = true;
+        
+        while (hasMore) {
+            if (statusCallback) statusCallback(`Listings p${page}...`);
+            const url = `${BBL_API_BASE}/nfts?nftContract=${BBL_ADAO_CONTRACT}&page=${page}&perPage=40&types=buy_now&sort=price-asc&sisterChains=`;
+            const resp = await fetchWithCors(url);
+            if (!resp.ok) throw new Error(`Status ${resp.status}`);
+            const data = await resp.json();
+            
+            if (data.nfts && data.nfts.length > 0) {
+                allListings = allListings.concat(data.nfts);
+            }
+            
+            hasMore = data.pagination && page < data.pagination.totalPages;
+            page++;
+            if (page > 20) break; // Safety limit
+        }
+        
+        console.log(`✓ Fetched ${allListings.length} BBL listings`);
+        
+        // Check broken status for each listing (INSTANT lookup from cached data)
+        let brokenCount = 0, unbrokenCount = 0;
+        let unbrokenFloor = null, brokenFloor = null;
+        const bLunaPrice = getBLunaPrice();
+        
+        for (let i = 0; i < allListings.length; i++) {
+            const nft = allListings[i];
+            const tokenId = nft.nft_token_id;
+            
+            // Instant lookup from cached deving.zone data
+            const isBroken = checkNftBrokenStatus(tokenId);
+            nft.is_broken = isBroken;
+            
+            // Parse price (reserve_price is in micro units)
+            const priceRaw = parseFloat(nft.auction?.reserve_price || 0) / 1e6;
+            nft.price_bluna = priceRaw;
+            nft.price_usd = priceRaw * bLunaPrice;
+            
+            if (isBroken === true) {
+                brokenCount++;
+                if (!brokenFloor || priceRaw < brokenFloor.amount) {
+                    brokenFloor = { amount: priceRaw, nft_id: tokenId, usd: priceRaw * bLunaPrice };
+                }
+            } else if (isBroken === false) {
+                unbrokenCount++;
+                if (!unbrokenFloor || priceRaw < unbrokenFloor.amount) {
+                    unbrokenFloor = { amount: priceRaw, nft_id: tokenId, usd: priceRaw * bLunaPrice };
+                }
+            }
+        }
+        
+        if (statusCallback) statusCallback(`✓ ${allListings.length} listings`);
+        
+        return {
+            listings: allListings,
+            counts: { total: allListings.length, unbroken: unbrokenCount, broken: brokenCount },
+            floors: { unbroken: unbrokenFloor, broken: brokenFloor }
+        };
+    } catch (err) {
+        console.error('BBL Listings error:', err);
+        return null;
+    }
+}
+
+// Get epoch date range for filtering sales
+function getEpochDateRange() {
+    // Use currentEpochInfo if available
+    if (currentEpochInfo?.end_time) {
+        const endDate = new Date(currentEpochInfo.end_time);
+        const startDate = new Date(endDate.getTime() - 7 * 24 * 60 * 60 * 1000);
+        return { start: startDate, end: endDate };
+    }
+    
+    // Fallback: estimate from current epoch number
+    const epoch = store.epoch || store.vote?.ep || 171;
+    // TLA epochs are ~7 days, epoch 1 started around 2024-01-01 (approximate)
+    const baseDate = new Date('2024-01-01T00:00:00Z');
+    const epochStart = new Date(baseDate.getTime() + (epoch - 1) * 7 * 24 * 60 * 60 * 1000);
+    const epochEnd = new Date(epochStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+    return { start: epochStart, end: epochEnd };
+}
+
+// Fetch BBL activity and filter for epoch sales
+async function fetchBBLEpochSales(statusCallback) {
+    try {
+        const dateRange = getEpochDateRange();
+        console.log(`Fetching BBL sales for epoch: ${dateRange.start.toISOString()} to ${dateRange.end.toISOString()}`);
+        
+        // Ensure deving.zone data is loaded (should already be from listings)
+        await loadDevingZoneBulkData();
+        
+        let allSales = [];
+        let page = 1;
+        let hasMore = true;
+        
+        while (hasMore && page <= 50) {
+            if (statusCallback) statusCallback(`Sales p${page}...`);
+            const url = `${BBL_API_BASE}/activity?page=${page}&perPage=100`;
+            const resp = await fetchWithCors(url);
+            if (!resp.ok) throw new Error(`Status ${resp.status}`);
+            const data = await resp.json();
+            
+            if (data.auctionHistory && data.auctionHistory.length > 0) {
+                // Filter for aDAO sales within date range
+                const relevantItems = data.auctionHistory.filter(item => {
+                    if (item.nft_contract !== BBL_ADAO_CONTRACT) return false;
+                    if (item.event_type !== 'settle') return false;
+                    const timestamp = new Date(item.timestamp);
+                    return timestamp >= dateRange.start && timestamp <= dateRange.end;
+                });
+                
+                allSales = allSales.concat(relevantItems);
+                
+                // Stop if oldest item is before our range
+                const oldest = data.auctionHistory[data.auctionHistory.length - 1];
+                if (oldest && new Date(oldest.timestamp) < dateRange.start) {
+                    hasMore = false;
+                }
+            } else {
+                hasMore = false;
+            }
+            
+            hasMore = hasMore && data.pagination && page < data.pagination.totalPages;
+            page++;
+        }
+        
+        console.log(`✓ Found ${allSales.length} aDAO sales in epoch`);
+        
+        // Enrich with broken status and USD (INSTANT lookups from cached data)
+        const bLunaPrice = getBLunaPrice();
+        let totalVolume = 0;
+        
+        for (let i = 0; i < allSales.length; i++) {
+            const sale = allSales[i];
+            // Instant lookup from cached deving.zone data
+            sale.is_broken = checkNftBrokenStatus(sale.token_id);
+            
+            const priceRaw = parseFloat(sale.final_price || 0) / 1e6;
+            sale.price_bluna = priceRaw;
+            sale.price_usd = priceRaw * bLunaPrice;
+            totalVolume += priceRaw;
+        }
+        
+        return {
+            sales: allSales,
+            epochVolume: { bluna: totalVolume, usd: totalVolume * bLunaPrice }
+        };
+    } catch (err) {
+        console.error('BBL Activity error:', err);
+        return null;
+    }
+}
+
+// Main BBL fetch function - fetches everything and updates UI
+async function fetchAllBBLData() {
+    const statusEl = $('marketplace-fetch-status');
+    const updateStatus = (msg, color = 'yellow') => {
+        if (statusEl) {
+            statusEl.textContent = msg;
+            statusEl.className = `text-[8px] text-${color}-400`;
+        }
+    };
+    
+    updateStatus('Starting...');
+    
+    let successCount = 0;
+    let failCount = 0;
+    let statsOk = false, listingsOk = false, salesOk = false;
+    
+    try {
+        // 1. Fetch collection stats
+        updateStatus('Stats...');
+        const stats = await fetchBBLCollectionStats();
+        
+        if (stats) {
+            statsOk = true;
+            successCount++;
+            
+            // Update volume
+            const volInput = $('nft-bbl-volume');
+            if (volInput) {
+                volInput.value = stats.volume.toFixed(2);
+                store.nftStats.bblVolume = stats.volume;
+            }
+            
+            // Update floor from stats (basic - not broken/unbroken specific)
+            if (stats.floor > 0) {
+                const floorInput = $('nft-bbl-floor-unbroken-amt');
+                if (floorInput && !floorInput.value) floorInput.value = stats.floor.toFixed(2);
+            }
+            
+            // Update volume USD
+            const bLunaPrice = getBLunaPrice();
+            const volUsd = $('nft-bbl-volume-usd');
+            if (volUsd) volUsd.textContent = `($${Math.round(stats.volume * bLunaPrice).toLocaleString()})`;
+        } else {
+            failCount++;
+        }
+        
+        // 2. Fetch listings with broken status
+        updateStatus('Listings...');
+        const listingsData = await fetchBBLListings(updateStatus);
+        
+        if (listingsData) {
+            listingsOk = true;
+            successCount++;
+            
+            // Update listing counts
+            store.nftStats.bblListingsTotal = listingsData.counts.total;
+            store.nftStats.bblListingsUnbroken = listingsData.counts.unbroken;
+            store.nftStats.bblListingsBroken = listingsData.counts.broken;
+            setTxt('bbl-listing-count', listingsData.counts.total);
+            
+            // Store listing items
+            store.nftStats.bblListingItems = listingsData.listings.map(l => ({
+                nft_id: l.nft_token_id,
+                amount: l.price_bluna,
+                token: 'bLUNA',
+                broken: l.is_broken,
+                usd: l.price_usd
+            }));
+            
+            // Update floor prices
+            if (listingsData.floors.unbroken) {
+                const floorInput = $('nft-bbl-floor-unbroken-amt');
+                if (floorInput) floorInput.value = listingsData.floors.unbroken.amount.toFixed(2);
+                store.nftStats.bblFloor = { 
+                    unbroken: { amount: listingsData.floors.unbroken.amount, token: 'bLUNA' }
+                };
+            }
+            if (listingsData.floors.broken) {
+                const floorInput = $('nft-bbl-floor-broken-amt');
+                if (floorInput) floorInput.value = listingsData.floors.broken.amount.toFixed(2);
+                if (!store.nftStats.bblFloor) store.nftStats.bblFloor = {};
+                store.nftStats.bblFloor.broken = { amount: listingsData.floors.broken.amount, token: 'bLUNA' };
+            }
+            
+            // Render listings
+            renderBBLListings();
+            updateBblFloorUsd();
+        } else {
+            failCount++;
+        }
+        
+        // 3. Fetch epoch sales
+        updateStatus('Sales...');
+        const salesData = await fetchBBLEpochSales(updateStatus);
+        
+        if (salesData) {
+            salesOk = true;
+            successCount++;
+            
+            // Store sales
+            store.nftStats.bblSales = salesData.sales.map(s => ({
+                nft_id: s.token_id,
+                amount: s.price_bluna,
+                token: 'bLUNA',
+                usd: s.price_usd,
+                broken: s.is_broken,
+                date: s.timestamp,
+                seller: s.seller,
+                buyer: s.buyer,
+                tx_hash: s.tx_hash
+            }));
+            
+            setTxt('bbl-sale-count', salesData.sales.length);
+            renderBBLSales();
+        } else {
+            failCount++;
+        }
+        
+        // Done - show results
+        const listCount = listingsData?.counts?.total || 0;
+        const saleCount = salesData?.sales?.length || 0;
+        
+        if (successCount === 3) {
+            updateStatus(`✓ ${listCount} listed, ${saleCount} sales`, 'green');
+            console.log('✓ All BBL data fetched successfully');
+        } else if (successCount > 0) {
+            const parts = [];
+            if (statsOk) parts.push('stats');
+            if (listingsOk) parts.push(`${listCount} list`);
+            if (salesOk) parts.push(`${saleCount} sales`);
+            updateStatus(`⚠ ${parts.join(', ')}`, 'orange');
+            console.log(`⚠ BBL partial success: ${successCount}/3`);
+        } else {
+            updateStatus('✗ CORS blocked - try deployed', 'red');
+            console.error('✗ All BBL fetches failed - likely CORS. Use deployed version.');
+        }
+        
+    } catch (err) {
+        console.error('BBL fetch error:', err);
+        updateStatus('✗ Error', 'red');
+    }
+}
+
+// Render BBL listings list
+function renderBBLListings() {
+    const container = $('nft-bbl-listings-list');
+    if (!container) return;
+    
+    const items = store.nftStats.bblListingItems || [];
+    if (items.length === 0) {
+        container.innerHTML = '<div class="text-gray-600 italic">No listings</div>';
+        return;
+    }
+    
+    container.innerHTML = items.slice(0, 50).map((item, idx) => {
+        const brokenClass = item.broken === true ? 'text-red-400' : item.broken === false ? 'text-green-400' : 'text-gray-500';
+        const brokenText = item.broken === true ? '⚠' : item.broken === false ? '✓' : '?';
+        return `<div class="flex justify-between items-center py-0.5 border-b border-gray-800/30 hover:bg-gray-800/30">
+            <span class="text-purple-400">#${item.nft_id}</span>
+            <span class="font-mono">${item.amount?.toFixed(1) || 0} ${item.token}</span>
+            <span class="text-gray-500">$${item.usd?.toFixed(2) || 0}</span>
+            <span class="${brokenClass}">${brokenText}</span>
+            <button onclick="removeBblListing(${idx})" class="text-red-500 hover:text-red-400 px-1">×</button>
+        </div>`;
+    }).join('');
+    
+    if (items.length > 50) {
+        container.innerHTML += `<div class="text-gray-500 text-center py-1">...and ${items.length - 50} more</div>`;
+    }
+}
+
+// Render BBL sales list  
+function renderBBLSales() {
+    const container = $('nft-bbl-sales-list');
+    if (!container) return;
+    
+    const sales = store.nftStats.bblSales || [];
+    if (sales.length === 0) {
+        container.innerHTML = '<div class="text-gray-600 italic">No sales</div>';
+        return;
+    }
+    
+    container.innerHTML = sales.map((sale, idx) => {
+        const brokenClass = sale.broken === true ? 'text-red-400' : sale.broken === false ? 'text-green-400' : 'text-gray-500';
+        const brokenText = sale.broken === true ? '⚠' : sale.broken === false ? '✓' : '?';
+        const dateStr = sale.date ? new Date(sale.date).toLocaleDateString() : '-';
+        return `<div class="flex justify-between items-center py-0.5 border-b border-gray-800/30 hover:bg-gray-800/30">
+            <span class="text-purple-400">#${sale.nft_id}</span>
+            <span class="font-mono">${sale.amount?.toFixed(1) || 0} ${sale.token}</span>
+            <span class="text-green-400">$${sale.usd?.toFixed(2) || 0}</span>
+            <span class="${brokenClass}">${brokenText}</span>
+            <span class="text-gray-600">${dateStr}</span>
+            <button onclick="removeBblSale(${idx})" class="text-red-500 hover:text-red-400 px-1">×</button>
+        </div>`;
+    }).join('');
+}
+
+// Remove functions for manual cleanup
+function removeBblListing(idx) {
+    if (store.nftStats.bblListingItems && store.nftStats.bblListingItems[idx]) {
+        store.nftStats.bblListingItems.splice(idx, 1);
+        store.nftStats.bblListingsTotal = store.nftStats.bblListingItems.length;
+        setTxt('bbl-listing-count', store.nftStats.bblListingsTotal);
+        renderBBLListings();
+    }
+}
+
+function removeBblSale(idx) {
+    if (store.nftStats.bblSales && store.nftStats.bblSales[idx]) {
+        store.nftStats.bblSales.splice(idx, 1);
+        setTxt('bbl-sale-count', store.nftStats.bblSales.length);
+        renderBBLSales();
+    }
+}
+
+// ============================================================
+// BOOST DAO MARKETPLACE API (GraphQL)
+// ============================================================
+
+// GraphQL query for active Boost listings
+const BOOST_LISTINGS_QUERY = `
+query Launches($where: View_launch_preparedWhereInput, $orderBy: [View_launch_preparedOrderByWithRelationInput!], $take: Int, $skip: Int) {
+  launches: view_launch_prepareds(where: $where, orderBy: $orderBy, take: $take, skip: $skip) {
+    creator
+    done
+    launch_id
+    cancelled
+    to_id
+    from_id
+    name
+    setup_msg
+    from_collection_id
+    from_nft_id
+    launch_type
+    from_amount
+    to_amount
+    from_usd
+    to_usd
+    discount
+    real_collection_id
+    __typename
+  }
+  aggregateLaunch: aggregateView_launch_prepared(where: $where) {
+    _count { _all __typename }
+    __typename
+  }
+}`;
+
+// Fetch Boost listings via GraphQL
+async function fetchBoostListings(statusCallback) {
+    try {
+        // Load deving.zone bulk data first for broken status
+        if (statusCallback) statusCallback('Loading NFT data...');
+        await loadDevingZoneBulkData();
+        
+        if (statusCallback) statusCallback('Fetching Boost listings...');
+        
+        const variables = {
+            where: {
+                launch_contract: { equals: BOOST_LAUNCH_CONTRACT },
+                AND: [],
+                done: { equals: false },
+                cancelled: { equals: false },
+                real_collection_id: { equals: BOOST_ADAO_CONTRACT },
+                discount: { gte: -0.001 },
+                active: { equals: true },
+                whitelist: { none: {} }
+            },
+            orderBy: [
+                { discount: { sort: "desc", nulls: "last" } },
+                { to_usd: { sort: "asc", nulls: "last" } }
+            ],
+            skip: 0,
+            take: 50
+        };
+        
+        const resp = await fetchWithCors(BOOST_API_URL, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({
+                operationName: 'Launches',
+                variables,
+                query: BOOST_LISTINGS_QUERY
+            })
+        });
+        
+        if (!resp.ok) {
+            console.error('Boost API error:', resp.status, resp.statusText);
+            throw new Error(`Status ${resp.status}`);
+        }
+        
+        // Check if response is JSON
+        const contentType = resp.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            const text = await resp.text();
+            console.error('Boost API returned non-JSON:', text.substring(0, 200));
+            throw new Error('API returned non-JSON response');
+        }
+        
+        const data = await resp.json();
+        
+        const listings = data?.data?.launches || [];
+        console.log(`✓ Fetched ${listings.length} Boost listings`);
+        
+        // Process listings - check broken status, calculate prices
+        let brokenCount = 0, unbrokenCount = 0;
+        let unbrokenFloor = null, brokenFloor = null;
+        const lunaPrice = liveFetchedData.lunaPrice || 0.0788;
+        
+        const processedListings = listings.map(listing => {
+            const tokenId = listing.from_nft_id;
+            const isBroken = checkNftBrokenStatus(parseInt(tokenId));
+            
+            // Price: to_amount is in micro units (for LUNA), to_usd is USD value
+            const priceUsd = listing.to_usd || 0;
+            // Determine payment token
+            let paymentToken = 'LUNA';
+            let priceAmount = 0;
+            
+            if (listing.to_id === 'uluna') {
+                priceAmount = (listing.to_amount || 0) / 1e6;
+                paymentToken = 'LUNA';
+            } else if (listing.to_id) {
+                // CW20 token - use USD value
+                priceAmount = priceUsd;
+                paymentToken = 'USD';
+            }
+            
+            // Track floors
+            if (isBroken === true) {
+                brokenCount++;
+                if (!brokenFloor || priceUsd < brokenFloor.usd) {
+                    brokenFloor = { amount: priceAmount, token: paymentToken, usd: priceUsd, nft_id: tokenId };
+                }
+            } else if (isBroken === false) {
+                unbrokenCount++;
+                if (!unbrokenFloor || priceUsd < unbrokenFloor.usd) {
+                    unbrokenFloor = { amount: priceAmount, token: paymentToken, usd: priceUsd, nft_id: tokenId };
+                }
+            }
+            
+            return {
+                nft_id: tokenId,
+                price: priceAmount,
+                token: paymentToken,
+                price_usd: priceUsd,
+                is_broken: isBroken,
+                launch_id: listing.launch_id,
+                seller: listing.creator
+            };
+        });
+        
+        // Store in nftStats
+        store.nftStats.boostListingsTotal = processedListings.length;
+        store.nftStats.boostListingsUnbroken = unbrokenCount;
+        store.nftStats.boostListingsBroken = brokenCount;
+        store.nftStats.boostListingItems = processedListings;
+        
+        // Store floors
+        if (unbrokenFloor) {
+            store.nftStats.boostFloor = unbrokenFloor;
+        }
+        if (brokenFloor) {
+            if (!store.nftStats.boostFloor) store.nftStats.boostFloor = {};
+            store.nftStats.boostFloor.broken = brokenFloor;
+        }
+        
+        return {
+            listings: processedListings,
+            counts: { total: processedListings.length, unbroken: unbrokenCount, broken: brokenCount },
+            floors: { unbroken: unbrokenFloor, broken: brokenFloor }
+        };
+        
+    } catch (err) {
+        console.error('Boost listings error:', err);
+        return null;
+    }
+}
+
+// Fetch Boost sales (completed launches) - ALL historical sales for volume calculation
+async function fetchBoostSales(statusCallback) {
+    try {
+        await loadDevingZoneBulkData();
+        
+        if (statusCallback) statusCallback('Fetching Boost sales...');
+        
+        // Query for completed (done=true) launches - paginate to get all
+        let allSales = [];
+        let skip = 0;
+        const take = 50;
+        let hasMore = true;
+        
+        while (hasMore) {
+            const variables = {
+                where: {
+                    launch_contract: { equals: BOOST_LAUNCH_CONTRACT },
+                    AND: [{ OR: [{ done: { equals: true } }] }],
+                    real_collection_id: { equals: BOOST_ADAO_CONTRACT },
+                    discount: { gte: -0.001 },
+                    whitelist: { none: {} }
+                },
+                orderBy: [
+                    { discount: { sort: "desc", nulls: "last" } },
+                    { to_usd: { sort: "asc", nulls: "last" } }
+                ],
+                skip: skip,
+                take: take
+            };
+            
+            const resp = await fetchWithCors(BOOST_API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    operationName: 'Launches',
+                    variables,
+                    query: BOOST_LISTINGS_QUERY
+                })
+            });
+            
+            if (!resp.ok) throw new Error(`Status ${resp.status}`);
+            const data = await resp.json();
+            
+            const sales = data?.data?.launches || [];
+            const totalCount = data?.data?.aggregateLaunch?._count?._all || 0;
+            
+            allSales = allSales.concat(sales);
+            skip += take;
+            hasMore = allSales.length < totalCount && sales.length === take;
+            
+            if (statusCallback) statusCallback(`Sales ${allSales.length}/${totalCount}...`);
+            
+            // Safety limit
+            if (skip > 500) break;
+        }
+        
+        console.log(`✓ Fetched ${allSales.length} Boost completed sales`);
+        
+        // Calculate total volume from all sales
+        let totalVolumeUsd = 0;
+        
+        // Process sales - check broken status
+        const processedSales = allSales.map(sale => {
+            const tokenId = sale.from_nft_id;
+            const isBroken = checkNftBrokenStatus(parseInt(tokenId));
+            
+            let paymentToken = 'LUNA';
+            let priceAmount = 0;
+            
+            if (sale.to_id === 'uluna') {
+                priceAmount = (sale.to_amount || 0) / 1e6;
+                paymentToken = 'LUNA';
+            } else if (sale.to_id?.startsWith('ibc/')) {
+                priceAmount = (sale.to_amount || 0) / 1e6;
+                paymentToken = 'IBC';
+            } else {
+                // CW20 token
+                priceAmount = (sale.to_amount || 0) / 1e6;
+                paymentToken = 'CW20';
+            }
+            
+            const priceUsd = sale.to_usd || 0;
+            totalVolumeUsd += priceUsd;
+            
+            return {
+                nft_id: tokenId,
+                price: priceAmount,
+                token: paymentToken,
+                price_usd: priceUsd,
+                is_broken: isBroken,
+                launch_id: sale.launch_id
+            };
+        });
+        
+        // Store all-time volume from API
+        store.nftStats.boostVolumeAllTime = totalVolumeUsd;
+        store.nftStats.boostSalesHistory = processedSales; // All historical sales
+        
+        // Keep existing manual epoch sales separate (don't overwrite)
+        // store.nftStats.boostSales remains for manual epoch entries
+        
+        console.log(`✓ Boost all-time volume: $${totalVolumeUsd.toFixed(2)} from ${processedSales.length} sales`);
+        
+        return { 
+            sales: processedSales, 
+            totalVolumeUsd,
+            count: processedSales.length
+        };
+        
+    } catch (err) {
+        console.error('Boost sales error:', err);
+        return null;
+    }
+}
+
+// Fetch all Boost data
+async function fetchAllBoostData() {
+    const statusEl = $('boost-status');
+    const updateStatus = (msg) => {
+        if (statusEl) {
+            statusEl.textContent = msg;
+            statusEl.className = 'text-[9px] text-yellow-400';
+        }
+    };
+    
+    try {
+        updateStatus('Fetching...');
+        
+        // Fetch listings
+        const listingsResult = await fetchBoostListings(updateStatus);
+        
+        // Fetch sales (all historical for volume)
+        const salesResult = await fetchBoostSales(updateStatus);
+        
+        // Update UI
+        if (listingsResult) {
+            setTxt('boost-listing-count', listingsResult.counts.total);
+            
+            // Update floor inputs
+            if (listingsResult.floors.unbroken) {
+                const floor = listingsResult.floors.unbroken;
+                const floorInput = $('nft-boost-floor-unbroken-amt');
+                const floorTokenInput = $('nft-boost-floor-unbroken-token');
+                if (floorInput) floorInput.value = floor.amount.toFixed(1);
+                if (floorTokenInput) floorTokenInput.value = floor.token;
+                setTxt('nft-boost-floor-unbroken-usd', `($${floor.usd.toFixed(2)})`);
+            }
+            
+            if (listingsResult.floors.broken) {
+                const floor = listingsResult.floors.broken;
+                const floorInput = $('nft-boost-floor-broken-amt');
+                const floorTokenInput = $('nft-boost-floor-broken-token');
+                if (floorInput) floorInput.value = floor.amount.toFixed(1);
+                if (floorTokenInput) floorTokenInput.value = floor.token;
+                setTxt('nft-boost-floor-broken-usd', `($${floor.usd.toFixed(2)})`);
+            }
+            
+            renderBoostListings();
+        }
+        
+        if (salesResult) {
+            // Update volume display with all-time volume from API
+            const volumeEl = $('boost-volume-display');
+            const noteEl = $('boost-volume-note');
+            if (volumeEl) {
+                volumeEl.textContent = `$${salesResult.totalVolumeUsd.toFixed(2)}`;
+            }
+            if (noteEl) {
+                noteEl.textContent = `(${salesResult.count} sales all-time)`;
+            }
+            
+            // Store volume for export
+            store.nftStats.boostVolume = salesResult.totalVolumeUsd;
+            
+            // Show sale count (historical from API)
+            setTxt('boost-history-count', salesResult.count);
+        }
+        
+        const listCount = listingsResult?.counts?.total || 0;
+        const saleCount = salesResult?.count || 0;
+        const volume = salesResult?.totalVolumeUsd || 0;
+        
+        // Check if we actually got data
+        if (!listingsResult && !salesResult) {
+            // Both failed - show error with paste hint
+            if (statusEl) {
+                statusEl.textContent = '✗ API failed (use Paste)';
+                statusEl.className = 'text-[9px] text-red-400';
+            }
+            console.log('Boost API fetch failed - use Paste button to manually load data');
+            return false;
+        }
+        
+        if (statusEl) {
+            statusEl.textContent = `✓ ${listCount} listed, $${volume.toFixed(0)} vol`;
+            statusEl.className = 'text-[9px] text-green-400';
+        }
+        
+        console.log('✓ All Boost data fetched successfully');
+        return true;
+        
+    } catch (err) {
+        console.error('Boost data fetch error:', err);
+        if (statusEl) {
+            // Show helpful message if running from local file
+            if (window.location.protocol === 'file:') {
+                statusEl.textContent = '✗ Local file (deploy to server)';
+            } else {
+                statusEl.textContent = '✗ Error';
+            }
+            statusEl.className = 'text-[9px] text-red-400';
+        }
+        return false;
+    }
+}
+
 
 // Unified number parser: handles K/M suffixes, strips non-numeric
 function parseNum(s) {
@@ -3277,6 +4523,52 @@ function getExportWarnings() {
 
 const BUCKET_ORDER = ['STABLE', 'PROJECT', 'BLUECHIP', 'SINGLE'];
 
+// Liq/Vol display mode: '4ep' (default) or 'epoch' (current epoch)
+let liqVolDisplayMode = '4ep';
+
+// Toggle between epoch and 4-epoch display
+function toggleLiqDisplay() {
+    liqVolDisplayMode = liqVolDisplayMode === '4ep' ? 'epoch' : '4ep';
+    
+    // Update button and headers
+    const btn = $('btn-liq-toggle');
+    const label = $('liq-toggle-label');
+    const info = $('liq-toggle-info');
+    const liqHeader = $('col-liq-header');
+    const volHeader = $('col-vol-header');
+    
+    if (liqVolDisplayMode === 'epoch') {
+        // Current epoch mode
+        if (btn) btn.className = 'text-[10px] px-2 py-0.5 rounded border transition-colors bg-orange-900/50 text-orange-300 border-orange-700 hover:bg-orange-800';
+        if (label) label.textContent = 'Current Epoch';
+        if (info) info.textContent = 'Showing current epoch values';
+        if (liqHeader) {
+            liqHeader.textContent = 'Ep Liq';
+            liqHeader.title = 'Current Epoch Average Liquidity';
+        }
+        if (volHeader) {
+            volHeader.textContent = 'Ep Vol';
+            volHeader.title = 'Current Epoch Total Volume';
+        }
+    } else {
+        // 4-epoch average mode (default)
+        if (btn) btn.className = 'text-[10px] px-2 py-0.5 rounded border transition-colors bg-teal-900/50 text-teal-300 border-teal-700 hover:bg-teal-800';
+        if (label) label.textContent = '4-Epoch Avg';
+        if (info) info.textContent = 'Showing 4-epoch rolling average';
+        if (liqHeader) {
+            liqHeader.textContent = '4Ep Liq';
+            liqHeader.title = '4-Epoch Average Liquidity';
+        }
+        if (volHeader) {
+            volHeader.textContent = '4Ep Vol';
+            volHeader.title = '4-Epoch Average Volume';
+        }
+    }
+    
+    // Re-render table
+    renderVoteTable();
+}
+
 // === DATA STORE ===
 let store = {
     dao: { dep: 0, depTla: 0, depCalc: 0, depSource: '--', apr: 0, rew: {z: 0, amp: 0, usd: 0}, toks: [], vRew: {}, vRewPeriods: [], lVp: 0, lFac: 0, lAst: 0, locks: [] },
@@ -3318,6 +4610,7 @@ let store = {
         enterpriseStaked: 0,
         daoMembers: 0,
         daoBrokenHeld: 0,
+        daoControlledBroken: 1000, // DAO holds 1000 broken NFTs across 3 wallets
         circulatingSupply: 0,
         liquidSupply: 0,
         backingAmpLuna: 0,
@@ -3334,8 +4627,10 @@ let store = {
         bblListingItems: [],
         // Boost Marketplace
         boostSales: [],
+        boostSalesHistory: [], // All historical sales from API
         boostFloor: null,
         boostVolume: 0,
+        boostVolumeAllTime: 0, // All-time volume from API
         boostListingsBroken: 0,
         boostListingsUnbroken: 0,
         boostListingsTotal: 0,
@@ -3694,11 +4989,17 @@ async function loadExtData() {
         console.log('Applied archive:', Object.keys(fileStatus.archive.data.lps).length, 'LPs');
     }
     
-    // Apply epoch ext data (votion, pd_bribes for this epoch)
+    // Apply epoch ext data (votion, pd_bribes, dex_performance for this epoch)
     if (fileStatus.epochExt.data) {
         store.ext.votion = fileStatus.epochExt.data.votion || null;
         store.ext.pdBribesEpoch = fileStatus.epochExt.data.pd_bribes || null;
-        console.log('Applied epoch ext: votion=' + !!store.ext.votion + ', pd_bribes=' + !!store.ext.pdBribesEpoch);
+        store.ext.dexPerformance = fileStatus.epochExt.data.dex_performance || null;
+        console.log('Applied epoch ext: votion=' + !!store.ext.votion + ', pd_bribes=' + !!store.ext.pdBribesEpoch + ', dex_perf=' + !!store.ext.dexPerformance);
+        
+        // Auto-apply DEX performance if available
+        if (store.ext.dexPerformance && store.vote.pools.length > 0) {
+            applyDexPerformanceToPools();
+        }
     }
     
     // Apply PD bribes master file
@@ -3719,6 +5020,9 @@ async function loadExtData() {
         // Re-render vote table to apply ext data
         if (store.vote.pools.length > 0) {
             applyExtDataToPools();
+            if (store.ext.dexPerformance) {
+                applyDexPerformanceToPools();
+            }
             renderVoteTable();
         }
     }
@@ -3771,6 +5075,18 @@ function applyExtData(data) {
     store.ext.meta = data.meta || {};
     store.ext.loaded = true;
     
+    // Also load votion and dex_performance if present (epoch ext file format)
+    if (data.votion) {
+        store.ext.votion = data.votion;
+    }
+    if (data.pd_bribes) {
+        store.ext.pdBribesEpoch = data.pd_bribes;
+    }
+    if (data.dex_performance) {
+        store.ext.dexPerformance = data.dex_performance;
+        console.log('Manual load: dex_performance with', Object.keys(data.dex_performance).length, 'LPs');
+    }
+    
     // Update paste progress status
     updatePasteStatus('ps-ext', true);
     
@@ -3785,6 +5101,9 @@ function applyExtData(data) {
     // Re-render vote table to apply ext data
     if (store.vote.pools.length > 0) {
         applyExtDataToPools();
+        if (store.ext.dexPerformance) {
+            applyDexPerformanceToPools();
+        }
         renderVoteTable();
     }
     
@@ -4062,6 +5381,111 @@ function applyExtDataToPools() {
     
     console.log('Applied ext data to pools: votion=' + Object.keys(votionPools).length + 
                 ', pdBribes=' + Object.keys(pdBribesEpoch).length);
+}
+
+// Apply DEX Performance data from epoch ext file
+// Maps dex_performance to pool liq4Ep/vol4Ep and adds epochLiq/epochVol
+function applyDexPerformanceToPools() {
+    if (!store.ext.dexPerformance) return;
+    
+    const dexPerf = store.ext.dexPerformance;
+    let applied = 0;
+    
+    store.vote.pools.forEach(p => {
+        // Build key to match dex_performance: "LUNA-USDC|Astroport"
+        let dexName = isAstroport(p.d) ? 'Astroport' : 
+                      isSkeletonSwap(p.d) ? 'Skeleton Swap' : null;
+        if (!dexName) return;
+        
+        // Try exact match first
+        let lpKey = `${p.n}|${dexName}`;
+        let perfData = dexPerf[lpKey];
+        
+        // Try flexible matching if not found
+        if (!perfData) {
+            perfData = findDexPerfMatch(p.n, dexName, dexPerf);
+        }
+        
+        if (perfData) {
+            // Apply current epoch average
+            if (perfData.epochAvg) {
+                p.epochLiq = perfData.epochAvg.avgLiquidity || 0;
+                p.epochVol = perfData.epochAvg.totalVolume || 0;
+            }
+            
+            // Apply last 4 epoch average to liq4Ep/vol4Ep
+            if (perfData.last4Avg) {
+                p.liq4Ep = {
+                    avg: perfData.last4Avg.avgLiquidity || 0,
+                    count: perfData.last4Avg.epochsUsed || 4
+                };
+                p.vol4Ep = {
+                    avg: perfData.last4Avg.totalVolume || 0,
+                    count: perfData.last4Avg.epochsUsed || 4
+                };
+                p.dexPerfSource = 'epochExt';
+            }
+            
+            // Also store registry depth for reference
+            if (perfData.registryDepth) {
+                p.registryDepth = perfData.registryDepth;
+            }
+            
+            applied++;
+        }
+    });
+    
+    console.log('Applied DEX performance to', applied, 'pools');
+    
+    // Update status indicator
+    updateDexPerfStatus(applied);
+}
+
+// Find matching DEX performance data with flexible matching
+function findDexPerfMatch(poolName, dexName, dexPerf) {
+    // Normalize for comparison
+    function normalize(name) {
+        name = name.replace(/([^.])(atom|axl|osmo|wh)$/gi, (m, p1, p2) => p1 + '.' + p2.toLowerCase());
+        name = name.replace(/\.(ATOM|AXL|OSMO|WH)/g, (m) => m.toLowerCase());
+        return name.toLowerCase();
+    }
+    
+    let normPoolName = normalize(poolName);
+    
+    // Build search variants (exact + swapped order)
+    let searchVariants = [normPoolName];
+    if (normPoolName.includes('-')) {
+        let parts = normPoolName.split('-');
+        searchVariants.push(`${parts[1]}-${parts[0]}`);
+    }
+    
+    for (let key of Object.keys(dexPerf)) {
+        let [keyPool, keyDex] = key.split('|');
+        if (keyDex !== dexName) continue;
+        
+        let normKeyPool = normalize(keyPool);
+        for (let variant of searchVariants) {
+            if (normKeyPool === variant) {
+                return dexPerf[key];
+            }
+        }
+    }
+    
+    return null;
+}
+
+// Update DEX Performance status display
+function updateDexPerfStatus(count) {
+    let statusEl = $('dex-perf-status');
+    if (statusEl) {
+        if (count > 0) {
+            statusEl.textContent = `✓ ${count} pools`;
+            statusEl.className = 'text-[9px] text-green-400';
+        } else {
+            statusEl.textContent = 'No data';
+            statusEl.className = 'text-[9px] text-gray-500';
+        }
+    }
 }
 
 function updateVotionSummary(totalVp, poolCount) {
@@ -4922,6 +6346,8 @@ function showPoolScoreDetails(poolName, dex) {
     
     let liq4EpStr = p.liq4Ep ? `$${(p.liq4Ep.avg/1000).toFixed(1)}K (${p.liq4Ep.count} epochs)` : 'N/A';
     let vol4EpStr = p.vol4Ep ? `$${(p.vol4Ep.avg/1000).toFixed(1)}K (${p.vol4Ep.count} epochs)` : 'N/A';
+    let epochLiqStr = p.epochLiq > 0 ? `$${(p.epochLiq/1000).toFixed(1)}K` : 'N/A';
+    let epochVolStr = p.epochVol > 0 ? `$${(p.epochVol/1000).toFixed(1)}K` : 'N/A';
     
     // Access score breakdown
     let accessHtml = '';
@@ -5017,6 +6443,8 @@ function showPoolScoreDetails(poolName, dex) {
                 <div class="bg-gray-800/50 p-3 rounded">
                     <h4 class="text-teal-400 font-bold mb-2 border-b border-gray-700 pb-1">Performance Metrics</h4>
                     <div class="space-y-1 text-[10px]">
+                        <div class="flex justify-between"><span class="text-gray-500">Current Ep Liquidity:</span><span class="text-orange-300">${epochLiqStr}</span></div>
+                        <div class="flex justify-between"><span class="text-gray-500">Current Ep Volume:</span><span class="text-orange-300">${epochVolStr}</span></div>
                         <div class="flex justify-between"><span class="text-gray-500">4Ep Avg Liquidity:</span><span class="text-teal-300">${liq4EpStr}</span></div>
                         <div class="flex justify-between"><span class="text-gray-500">4Ep Avg Volume:</span><span class="text-teal-300">${vol4EpStr}</span></div>
                         <div class="flex justify-between"><span class="text-gray-500">Efficiency (Vol/Liq):</span><span class="text-yellow-400">${p.efficiency?.toFixed(3) || 'N/A'}</span></div>
@@ -7693,6 +9121,9 @@ function parseVote() {
         pasteStatus.vote = true;
         updatePasteStatus('ps-vote', true);
         applyExtDataToPools();
+        if (store.ext.dexPerformance) {
+            applyDexPerformanceToPools();
+        }
         renderVoteTable();
     } catch(e) {
         console.error(e);
@@ -7860,13 +9291,23 @@ function renderVoteTable() {
             let dexColor = isAstroOrSingle ? 'text-blue-600' : 'text-green-400';
             let inactiveText = p.vps < 1 ? '<span class="text-red-500 font-bold text-[11px]">INACT</span>' : '';
             
-            // 4Ep averages
-            let liq4Ep = p.liq4Ep?.avg || 0;
-            let vol4Ep = p.vol4Ep?.avg || 0;
-            let liq4EpStr = liq4Ep > 0 ? fmt$(liq4Ep) : '-';
-            let vol4EpStr = vol4Ep > 0 ? fmt$(vol4Ep) : '-';
-            let liq4EpTitle = p.liq4Ep ? `${p.liq4Ep.count} epochs avg` : 'No ext data';
-            let vol4EpTitle = p.vol4Ep ? `${p.vol4Ep.count} epochs avg` : 'No ext data';
+            // Liquidity/Volume display based on toggle
+            let liqVal, volVal, liqTitle, volTitle;
+            if (liqVolDisplayMode === 'epoch') {
+                // Current epoch values
+                liqVal = p.epochLiq || 0;
+                volVal = p.epochVol || 0;
+                liqTitle = 'Current epoch avg';
+                volTitle = 'Current epoch total';
+            } else {
+                // 4-epoch average (default)
+                liqVal = p.liq4Ep?.avg || 0;
+                volVal = p.vol4Ep?.avg || 0;
+                liqTitle = p.liq4Ep ? `${p.liq4Ep.count} epochs avg` : 'No ext data';
+                volTitle = p.vol4Ep ? `${p.vol4Ep.count} epochs avg` : 'No ext data';
+            }
+            let liqStr = liqVal > 0 ? fmt$(liqVal) : '-';
+            let volStr = volVal > 0 ? fmt$(volVal) : '-';
             
             // Efficiency
             let effStr = p.efficiency > 0 ? p.efficiency.toFixed(2) : '-';
@@ -7914,8 +9355,8 @@ function renderVoteTable() {
                     <span class="text-[10px] ${dexColor}">${dexFull}</span>
                 </div>
                 <div class="text-center text-[11px]">${inactiveText}</div>
-                <div class="text-right font-mono text-teal-400 text-[11px]" title="${liq4EpTitle}">${liq4EpStr}</div>
-                <div class="text-right font-mono text-teal-400 text-[11px]" title="${vol4EpTitle}">${vol4EpStr}</div>
+                <div class="text-right font-mono text-teal-400 text-[11px]" title="${liqTitle}">${liqStr}</div>
+                <div class="text-right font-mono text-teal-400 text-[11px]" title="${volTitle}">${volStr}</div>
                 <div class="text-right font-mono ${effColor} text-[11px]" title="Vol/Liq ratio">${effStr}</div>
                 <div class="text-right flex flex-col leading-tight" title="Non-amp / Amplified APR">
                     <span class="font-mono ${aprColor} text-[11px]">${aprNonStr}</span>
@@ -8376,6 +9817,9 @@ function parseLiquidity() {
     // Re-apply ext data to update APR on vote pools
     if (store.ext.loaded) {
         applyExtDataToPools();
+        if (store.ext.dexPerformance) {
+            applyDexPerformanceToPools();
+        }
         renderVoteTable();
     }
 }
@@ -9959,7 +11403,7 @@ function addBoostListing() {
 }
 
 function renderBoostListings() {
-    const el = $('nft-boost-listings-list');
+    const el = $('boost-listings-list');
     const countEl = $('boost-listing-count');
     if (!el) return;
     
@@ -9971,14 +11415,19 @@ function renderBoostListings() {
         return;
     }
     
-    el.innerHTML = items.map((s, i) => `
-        <div class="flex justify-between items-center py-0.5 px-1 rounded ${s.broken ? 'bg-red-900/20 text-red-400' : 'bg-green-900/20 text-green-400'}">
-            <span>#${s.nft_id} ${s.broken ? '🔥' : ''}</span>
-            <span class="font-mono">${s.amount} ${s.token}</span>
-            <span class="text-gray-400">$${s.usd.toFixed(2)}</span>
+    // Normalize field names (API uses is_broken, manual uses broken)
+    el.innerHTML = items.map((s, i) => {
+        const isBroken = s.is_broken !== undefined ? s.is_broken : s.broken;
+        const price = s.price !== undefined ? s.price : s.amount;
+        const priceUsd = s.price_usd !== undefined ? s.price_usd : s.usd;
+        return `
+        <div class="flex justify-between items-center py-0.5 px-1 rounded ${isBroken ? 'bg-red-900/20 text-red-400' : 'bg-green-900/20 text-green-400'}">
+            <span>#${s.nft_id} ${isBroken ? '🔥' : ''}</span>
+            <span class="font-mono">${price?.toFixed?.(1) || price} ${s.token}</span>
+            <span class="text-gray-400">$${priceUsd?.toFixed?.(2) || priceUsd}</span>
             <button onclick="removeBoostListing(${i})" class="text-red-400 hover:text-red-300">×</button>
         </div>
-    `).join('');
+    `}).join('');
 }
 
 function removeBoostListing(index) {
@@ -10024,7 +11473,7 @@ function addBoostSale() {
 }
 
 function renderBoostSales() {
-    const el = $('nft-boost-sales-list');
+    const el = $('boost-sales-list');
     const countEl = $('boost-sale-count');
     if (!el) return;
     
@@ -10038,13 +11487,17 @@ function renderBoostSales() {
     }
     
     el.innerHTML = sales.map((s, i) => {
-        let dateStr = new Date(s.timestamp_utc).toLocaleDateString();
+        // Handle both API format and manual format
+        const isBroken = s.is_broken !== undefined ? s.is_broken : s.broken;
+        const price = s.price !== undefined ? s.price : s.amount;
+        const priceUsd = s.price_usd !== undefined ? s.price_usd : s.usd;
+        let dateStr = s.timestamp_utc ? new Date(s.timestamp_utc).toLocaleDateString() : '';
         return `
-        <div class="flex justify-between items-center py-0.5 px-1 rounded ${s.broken ? 'bg-red-900/20 text-red-400' : 'bg-green-900/20 text-green-400'}">
-            <span>#${s.nft_id} ${s.broken ? '🔥' : ''}</span>
-            <span class="font-mono">${s.amount} ${s.token}</span>
-            <span class="text-gray-400">$${s.usd.toFixed(2)}</span>
-            <span class="text-gray-500">${dateStr}</span>
+        <div class="flex justify-between items-center py-0.5 px-1 rounded ${isBroken ? 'bg-red-900/20 text-red-400' : 'bg-green-900/20 text-green-400'}">
+            <span>#${s.nft_id} ${isBroken ? '🔥' : ''}</span>
+            <span class="font-mono">${price?.toFixed?.(1) || price} ${s.token}</span>
+            <span class="text-gray-400">$${priceUsd?.toFixed?.(2) || priceUsd}</span>
+            ${dateStr ? `<span class="text-gray-500">${dateStr}</span>` : ''}
             <button onclick="removeBoostSale(${i})" class="text-red-400 hover:text-red-300">×</button>
         </div>
     `}).join('');
@@ -10058,28 +11511,262 @@ function removeBoostSale(index) {
     renderBoostSales();
 }
 
+// Toggle Boost paste area visibility
+function toggleBoostPaste() {
+    const area = $('boost-paste-area');
+    if (area) area.classList.toggle('hidden');
+}
+
+// Parse pasted Boost listings JSON
+async function parseBoostListingsJson() {
+    const textarea = $('boost-paste-json');
+    const statusEl = $('boost-status');
+    if (!textarea) return;
+    
+    try {
+        const jsonText = textarea.value.trim();
+        if (!jsonText) {
+            alert('Please paste Boost API JSON response');
+            return;
+        }
+        
+        const data = JSON.parse(jsonText);
+        const listings = data?.data?.launches || [];
+        
+        if (listings.length === 0) {
+            alert('No listings found in JSON');
+            return;
+        }
+        
+        // Load deving.zone data for broken status
+        await loadDevingZoneBulkData();
+        
+        // Process listings
+        let brokenCount = 0, unbrokenCount = 0;
+        let unbrokenFloor = null, brokenFloor = null;
+        
+        const processedListings = listings.map(listing => {
+            const tokenId = listing.from_nft_id;
+            const isBroken = checkNftBrokenStatus(parseInt(tokenId));
+            
+            const priceUsd = listing.to_usd || 0;
+            let paymentToken = 'LUNA';
+            let priceAmount = 0;
+            
+            if (listing.to_id === 'uluna') {
+                priceAmount = (listing.to_amount || 0) / 1e6;
+                paymentToken = 'LUNA';
+            } else if (listing.to_id) {
+                priceAmount = (listing.to_amount || 0) / 1e6;
+                paymentToken = 'CW20';
+            }
+            
+            // Track floors
+            if (isBroken === true) {
+                brokenCount++;
+                if (!brokenFloor || priceUsd < brokenFloor.usd) {
+                    brokenFloor = { amount: priceAmount, token: paymentToken, usd: priceUsd, nft_id: tokenId };
+                }
+            } else if (isBroken === false) {
+                unbrokenCount++;
+                if (!unbrokenFloor || priceUsd < unbrokenFloor.usd) {
+                    unbrokenFloor = { amount: priceAmount, token: paymentToken, usd: priceUsd, nft_id: tokenId };
+                }
+            }
+            
+            return {
+                nft_id: tokenId,
+                price: priceAmount,
+                token: paymentToken,
+                price_usd: priceUsd,
+                is_broken: isBroken,
+                launch_id: listing.launch_id,
+                seller: listing.creator
+            };
+        });
+        
+        // Store
+        store.nftStats.boostListingsTotal = processedListings.length;
+        store.nftStats.boostListingsUnbroken = unbrokenCount;
+        store.nftStats.boostListingsBroken = brokenCount;
+        store.nftStats.boostListingItems = processedListings;
+        
+        // Store floors
+        if (unbrokenFloor) {
+            store.nftStats.boostFloor = unbrokenFloor;
+            const floorInput = $('nft-boost-floor-unbroken-amt');
+            const floorTokenInput = $('nft-boost-floor-unbroken-token');
+            if (floorInput) floorInput.value = unbrokenFloor.amount.toFixed(1);
+            if (floorTokenInput) floorTokenInput.value = unbrokenFloor.token;
+            setTxt('nft-boost-floor-unbroken-usd', `($${unbrokenFloor.usd.toFixed(2)})`);
+        }
+        if (brokenFloor) {
+            if (!store.nftStats.boostFloor) store.nftStats.boostFloor = {};
+            store.nftStats.boostFloor.broken = brokenFloor;
+            const floorInput = $('nft-boost-floor-broken-amt');
+            const floorTokenInput = $('nft-boost-floor-broken-token');
+            if (floorInput) floorInput.value = brokenFloor.amount.toFixed(1);
+            if (floorTokenInput) floorTokenInput.value = brokenFloor.token;
+            setTxt('nft-boost-floor-broken-usd', `($${brokenFloor.usd.toFixed(2)})`);
+        }
+        
+        // Update UI
+        setTxt('boost-listing-count', processedListings.length);
+        renderBoostListings();
+        
+        // Hide paste area
+        toggleBoostPaste();
+        textarea.value = '';
+        
+        if (statusEl) {
+            statusEl.textContent = `✓ ${processedListings.length} listings`;
+            statusEl.className = 'text-[9px] text-green-400';
+        }
+        
+        console.log(`✓ Parsed ${processedListings.length} Boost listings from JSON`);
+        
+    } catch (err) {
+        console.error('Error parsing Boost listings JSON:', err);
+        alert('Error parsing JSON: ' + err.message);
+    }
+}
+
+// Parse pasted Boost sales JSON
+async function parseBoostSalesJson() {
+    const textarea = $('boost-paste-json');
+    const statusEl = $('boost-status');
+    if (!textarea) return;
+    
+    try {
+        const jsonText = textarea.value.trim();
+        if (!jsonText) {
+            alert('Please paste Boost API JSON response');
+            return;
+        }
+        
+        const data = JSON.parse(jsonText);
+        const sales = data?.data?.launches || [];
+        
+        if (sales.length === 0) {
+            alert('No sales found in JSON');
+            return;
+        }
+        
+        // Load deving.zone data for broken status
+        await loadDevingZoneBulkData();
+        
+        // Calculate total volume
+        let totalVolumeUsd = 0;
+        
+        const processedSales = sales.map(sale => {
+            const tokenId = sale.from_nft_id;
+            const isBroken = checkNftBrokenStatus(parseInt(tokenId));
+            
+            let paymentToken = 'LUNA';
+            let priceAmount = 0;
+            
+            if (sale.to_id === 'uluna') {
+                priceAmount = (sale.to_amount || 0) / 1e6;
+                paymentToken = 'LUNA';
+            } else if (sale.to_id?.startsWith('ibc/')) {
+                priceAmount = (sale.to_amount || 0) / 1e6;
+                paymentToken = 'IBC';
+            } else {
+                priceAmount = (sale.to_amount || 0) / 1e6;
+                paymentToken = 'CW20';
+            }
+            
+            const priceUsd = sale.to_usd || 0;
+            totalVolumeUsd += priceUsd;
+            
+            return {
+                nft_id: tokenId,
+                price: priceAmount,
+                token: paymentToken,
+                price_usd: priceUsd,
+                is_broken: isBroken,
+                launch_id: sale.launch_id
+            };
+        });
+        
+        // Store
+        store.nftStats.boostVolumeAllTime = totalVolumeUsd;
+        store.nftStats.boostSalesHistory = processedSales;
+        store.nftStats.boostVolume = totalVolumeUsd;
+        
+        // Update volume display
+        const volumeEl = $('boost-volume-display');
+        const noteEl = $('boost-volume-note');
+        if (volumeEl) volumeEl.textContent = `$${totalVolumeUsd.toFixed(2)}`;
+        if (noteEl) {
+            noteEl.textContent = `(${processedSales.length} sales all-time)`;
+            noteEl.className = 'text-gray-500';
+        }
+        
+        setTxt('boost-history-count', processedSales.length);
+        
+        // Hide paste area
+        toggleBoostPaste();
+        textarea.value = '';
+        
+        if (statusEl) {
+            statusEl.textContent = `✓ $${totalVolumeUsd.toFixed(0)} vol, ${processedSales.length} sales`;
+            statusEl.className = 'text-[9px] text-green-400';
+        }
+        
+        console.log(`✓ Parsed ${processedSales.length} Boost sales, total volume: $${totalVolumeUsd.toFixed(2)}`);
+        
+    } catch (err) {
+        console.error('Error parsing Boost sales JSON:', err);
+        alert('Error parsing JSON: ' + err.message);
+    }
+}
+
 // Update Boost volume display from history + new sales
 function updateBoostVolumeDisplay() {
     const displayEl = $('boost-volume-display');
     const noteEl = $('boost-volume-note');
     if (!displayEl) return;
     
-    // Get cumulative volume from history
+    // If we have API volume, use that (most accurate)
+    if (store.nftStats.boostVolumeAllTime > 0) {
+        const apiVolume = store.nftStats.boostVolumeAllTime;
+        const apiSalesCount = store.nftStats.boostSalesHistory?.length || 0;
+        
+        // Add any new manual epoch sales
+        let newEpochVolume = (store.nftStats.boostSales || []).reduce((sum, s) => {
+            const usd = s.price_usd !== undefined ? s.price_usd : s.usd || 0;
+            return sum + usd;
+        }, 0);
+        
+        let totalVolume = apiVolume + newEpochVolume;
+        displayEl.textContent = `$${totalVolume.toFixed(2)}`;
+        
+        if (newEpochVolume > 0) {
+            noteEl.textContent = `(${apiSalesCount} + new)`;
+            noteEl.className = 'text-green-500';
+        } else {
+            noteEl.textContent = `(${apiSalesCount} sales)`;
+            noteEl.className = 'text-gray-500';
+        }
+        return;
+    }
+    
+    // Fallback to history file data
     let cumulativeVolume = window.salesHistory.cumulative?.boost?.total_volume_usd || 0;
     
-    // If we have yearTotals, we need to add this year's volume from history
-    // (cumulative already includes it, so this is just for display breakdown)
-    let historyYearVolume = window.salesHistory.yearTotals?.boost?.volume_usd || 0;
-    
     // Get new epoch sales volume
-    let newEpochVolume = (store.nftStats.boostSales || []).reduce((sum, s) => sum + (s.usd || 0), 0);
+    let newEpochVolume = (store.nftStats.boostSales || []).reduce((sum, s) => {
+        const usd = s.price_usd !== undefined ? s.price_usd : s.usd || 0;
+        return sum + usd;
+    }, 0);
     
     // Total = cumulative + new epoch sales
     let totalVolume = cumulativeVolume + newEpochVolume;
     
     displayEl.textContent = `$${totalVolume.toFixed(2)}`;
     
-    if (!window.salesHistory.loaded) {
+    if (!window.salesHistory.loaded && store.nftStats.boostVolumeAllTime === 0) {
         noteEl.textContent = '(load history)';
         noteEl.className = 'text-gray-600';
     } else if (newEpochVolume > 0) {
