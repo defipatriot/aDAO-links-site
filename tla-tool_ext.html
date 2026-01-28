@@ -241,11 +241,11 @@
     <div id="tab-pdbribes" class="tab-btn tab-incomplete" onclick="switchTab('pdbribes')">
         <span class="tab-status">●</span> 5. PD Bribes
     </div>
-    <div id="tab-astro" class="tab-btn tab-optional" onclick="switchTab('astro')">
-        <span class="tab-status">○</span> 6. Astroport
+    <div id="tab-astro" class="tab-btn tab-incomplete" onclick="switchTab('astro')">
+        <span class="tab-status">●</span> 6. Astroport
     </div>
-    <div id="tab-ww" class="tab-btn tab-optional" onclick="switchTab('ww')">
-        <span class="tab-status">○</span> 7. Skeleton
+    <div id="tab-ww" class="tab-btn tab-incomplete" onclick="switchTab('ww')">
+        <span class="tab-status">●</span> 7. Skeleton
     </div>
 </div>
 
@@ -960,16 +960,16 @@ AMPLUNA-LUNA (55.44%): $ 150 = 1973.01 LUNA per epoch
 <div id="ws-astro" class="workspace">
     <!-- Mode Switcher Tabs -->
     <div class="flex gap-2 mb-4 border-b border-gray-800 pb-3">
-        <button onclick="switchAstroMode('legacy')" id="astro-tab-legacy" class="px-4 py-2 text-xs font-bold rounded-t border-b-2 border-yellow-500 text-yellow-400 bg-yellow-900/20">
-            📋 Legacy (Manual Paste)
+        <button onclick="switchAstroMode('auto')" id="astro-tab-auto" class="px-4 py-2 text-xs font-bold rounded-t border-b-2 border-blue-500 text-blue-400 bg-blue-900/20">
+            🤖 Auto Fetch (Recommended)
         </button>
-        <button onclick="switchAstroMode('auto')" id="astro-tab-auto" class="px-4 py-2 text-xs font-bold rounded-t border-b-2 border-transparent text-gray-500 hover:text-gray-300">
-            🤖 Auto (TLA Fetch)
+        <button onclick="switchAstroMode('legacy')" id="astro-tab-legacy" class="px-4 py-2 text-xs font-bold rounded-t border-b-2 border-transparent text-gray-500 hover:text-gray-300">
+            📋 Legacy (Manual Paste)
         </button>
     </div>
     
-    <!-- LEGACY MODE CONTAINER (existing manual system) -->
-    <div id="astro-legacy-container">
+    <!-- LEGACY MODE CONTAINER (existing manual system) - NOW HIDDEN BY DEFAULT -->
+    <div id="astro-legacy-container" class="hidden">
     <!-- Mode-specific content will be rendered here -->
     <div id="astro-staging-mode">
         <!-- STAGING MODE: 4-day 180d capture -->
@@ -1311,31 +1311,61 @@ AMPLUNA-LUNA (55.44%): $ 150 = 1973.01 LUNA per epoch
     </div>
     </div><!-- END astro-legacy-container -->
     
-    <!-- AUTO MODE CONTAINER (new TLA fetch system) -->
-    <div id="astro-auto-container" class="hidden">
-        <!-- Info Banner -->
+    <!-- AUTO MODE CONTAINER (new TLA fetch system) - NOW DEFAULT -->
+    <div id="astro-auto-container">
+        <!-- Header with Workflow + Export -->
         <div class="bg-blue-900/20 border border-blue-700 rounded-lg p-4 mb-4">
-            <div class="flex items-center gap-3">
-                <div class="text-blue-400 text-xl">🤖</div>
-                <div class="flex-grow">
-                    <h3 class="text-blue-400 font-bold text-sm">Automated TLA Pool Fetcher</h3>
-                    <p class="text-blue-200/70 text-[10px]">Fetches whitelisted pools from TLA staking contracts, resolves pool names, and pulls liquidity/volume data from Astroport API.</p>
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="text-blue-400 text-xl">🤖</div>
+                    <div>
+                        <h3 class="text-blue-400 font-bold text-sm">Astroport TLA Pool Fetcher</h3>
+                        <p class="text-blue-200/70 text-[10px]">Auto-fetches pools from chain, resolves names, pulls D7/D30/D90 data, validates, and exports.</p>
+                    </div>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="runFullAstroWorkflow()" id="btn-full-workflow" class="btn-action bg-green-900/50 text-green-300 border border-green-600 px-4 py-2 text-sm font-bold">
+                        <i class="fas fa-play mr-2"></i> Run Full Workflow
+                    </button>
+                    <button onclick="exportAstroManual()" id="btn-astro-export" class="btn-action bg-purple-900/50 text-purple-300 border border-purple-600 px-4 py-2 text-sm" disabled title="Export Astroport data for troubleshooting">
+                        <i class="fas fa-download mr-2"></i> Export JSON
+                    </button>
+                </div>
+            </div>
+            <!-- Workflow Status Bar -->
+            <div id="workflow-progress" class="hidden mt-3 pt-3 border-t border-blue-700/50">
+                <div class="flex items-center justify-between">
+                    <div id="workflow-status" class="text-[10px] text-gray-400"></div>
+                    <div class="flex items-center gap-1 text-[9px]">
+                        <span id="wf-step-1" class="w-2 h-2 rounded-full bg-gray-600" title="Fetch Pools"></span>
+                        <span id="wf-step-2" class="w-2 h-2 rounded-full bg-gray-600" title="Resolve Names"></span>
+                        <span id="wf-step-3" class="w-2 h-2 rounded-full bg-gray-600" title="Fetch D7"></span>
+                        <span id="wf-step-4" class="w-2 h-2 rounded-full bg-gray-600" title="Fetch D30"></span>
+                        <span id="wf-step-5" class="w-2 h-2 rounded-full bg-gray-600" title="Fetch D90"></span>
+                        <span id="wf-step-6" class="w-2 h-2 rounded-full bg-gray-600" title="Validate"></span>
+                        <span id="wf-step-7" class="w-2 h-2 rounded-full bg-gray-600" title="Export"></span>
+                    </div>
                 </div>
             </div>
         </div>
         
-        <!-- Step 1: Fetch TLA Whitelist -->
+        <!-- Pool Discovery Section -->
         <div class="bg-[#161616] rounded border border-gray-800 p-4 mb-4">
             <div class="flex items-center justify-between mb-3">
-                <h3 class="text-sm font-bold text-white">Step 1: Fetch TLA Whitelisted Pools</h3>
-                <button onclick="fetchTLAWhitelist()" id="btn-fetch-tla" class="btn-action bg-blue-900/40 text-blue-300 border border-blue-700 px-4">
-                    <i class="fas fa-download mr-1"></i> Fetch from Chain
-                </button>
+                <h3 class="text-sm font-bold text-white">Pool Discovery</h3>
+                <div class="flex gap-2 items-center">
+                    <button onclick="fetchTLAWhitelist()" id="btn-fetch-tla" class="btn-action bg-blue-900/40 text-blue-300 border border-blue-700 px-3 text-[10px]">
+                        <i class="fas fa-download mr-1"></i> Fetch from Chain
+                    </button>
+                    <button onclick="resolvePoolNames()" id="btn-resolve-names" class="btn-action bg-purple-900/40 text-purple-300 border border-purple-700 px-3 text-[10px]" disabled>
+                        <i class="fas fa-tag mr-1"></i> Resolve Names
+                    </button>
+                </div>
             </div>
             <div id="tla-fetch-status" class="text-[9px] text-gray-500 mb-3">Ready to fetch...</div>
             
             <!-- Bucket Summary -->
-            <div class="grid grid-cols-4 gap-2 mb-3">
+            <div class="grid grid-cols-5 gap-2 mb-3">
                 <div class="bg-[#0D0D0D] rounded p-2 border border-yellow-900/50">
                     <div class="text-[9px] text-yellow-400 font-bold uppercase">Stable</div>
                     <div class="text-lg font-bold text-white"><span id="tla-stable-count">-</span></div>
@@ -1352,6 +1382,10 @@ AMPLUNA-LUNA (55.44%): $ 150 = 1973.01 LUNA per epoch
                     <div class="text-[9px] text-purple-400 font-bold uppercase">Single</div>
                     <div class="text-lg font-bold text-white"><span id="tla-single-count">-</span></div>
                 </div>
+                <div class="bg-[#0D0D0D] rounded p-2 border border-green-900/50">
+                    <div class="text-[9px] text-green-400 font-bold uppercase">Names Resolved</div>
+                    <div class="text-lg font-bold text-white"><span id="tla-resolved-count">-</span></div>
+                </div>
             </div>
             
             <!-- Pool List Preview -->
@@ -1360,29 +1394,34 @@ AMPLUNA-LUNA (55.44%): $ 150 = 1973.01 LUNA per epoch
                     <div class="col-span-1">#</div>
                     <div class="col-span-3">Pool Name</div>
                     <div class="col-span-2">Bucket</div>
-                    <div class="col-span-3">Pool Contract</div>
-                    <div class="col-span-3">LP Token</div>
+                    <div class="col-span-2 text-right">Spot Liq</div>
+                    <div class="col-span-4">Pool Contract</div>
                 </div>
                 <div id="tla-pool-list" class="space-y-0 text-[9px]">
-                    <div class="text-gray-600 italic text-center py-4">Click "Fetch from Chain" to discover TLA whitelisted pools</div>
+                    <div class="text-gray-600 italic text-center py-4">Click "Run Full Workflow" or "Fetch from Chain" to discover TLA whitelisted pools</div>
                 </div>
             </div>
         </div>
         
-        <!-- Step 2: Fetch Astroport Data -->
+        <!-- Liquidity & Volume Data Section -->
         <div class="bg-[#161616] rounded border border-gray-800 p-4 mb-4">
             <div class="flex items-center justify-between mb-3">
-                <h3 class="text-sm font-bold text-white">Step 2: Fetch Liquidity & Volume Data</h3>
+                <h3 class="text-sm font-bold text-white">Liquidity & Volume Data</h3>
                 <div class="flex gap-2 items-center">
-                    <select id="astro-date-range" class="input-dark text-[10px] w-24">
-                        <option value="D7">7 Days</option>
-                        <option value="D30">30 Days</option>
-                        <option value="D90">90 Days</option>
+                    <select id="astro-date-range" class="input-dark text-[10px] w-28">
+                        <option value="D7">7 Days (~42 pts)</option>
+                        <option value="D30">30 Days (~11 pts)</option>
+                        <option value="D90">90 Days (~4 pts)</option>
                     </select>
                     <button onclick="fetchAstroData()" id="btn-fetch-astro" class="btn-action bg-cyan-900/40 text-cyan-300 border border-cyan-700 px-4" disabled>
                         <i class="fas fa-chart-line mr-1"></i> Fetch Data
                     </button>
                 </div>
+            </div>
+            <div class="text-[9px] text-gray-600 mb-2">
+                <span class="text-cyan-400">D7</span>: 4hr intervals (42 pts/epoch) | 
+                <span class="text-yellow-400">D30</span>: 16hr intervals (~11 pts/epoch) | 
+                <span class="text-orange-400">D90</span>: 48hr intervals (~4 pts/epoch)
             </div>
             <div id="astro-data-status" class="text-[9px] text-gray-500 mb-3">Fetch TLA pools first...</div>
             
@@ -1396,10 +1435,10 @@ AMPLUNA-LUNA (55.44%): $ 150 = 1973.01 LUNA per epoch
                 <div class="grid grid-cols-12 gap-1 text-[9px] text-gray-500 uppercase font-bold px-2 py-1 border-b border-gray-800 mb-1">
                     <div class="col-span-3">Pool</div>
                     <div class="col-span-2">Bucket</div>
-                    <div class="col-span-2 text-right">Avg Liq</div>
+                    <div class="col-span-2 text-right">Latest Liq</div>
                     <div class="col-span-2 text-right">Avg Vol</div>
                     <div class="col-span-2 text-right">Epochs</div>
-                    <div class="col-span-1 text-right">Pts</div>
+                    <div class="col-span-1 text-right">Pts/E</div>
                 </div>
                 <div id="astro-data-list" class="space-y-0 text-[9px]">
                     <div class="text-gray-600 italic text-center py-4">No data fetched yet</div>
@@ -1407,56 +1446,156 @@ AMPLUNA-LUNA (55.44%): $ 150 = 1973.01 LUNA per epoch
             </div>
         </div>
         
-        <!-- Step 3: Export -->
+        <!-- Validation Against LP Registry -->
         <div class="bg-[#161616] rounded border border-gray-800 p-4">
-            <div class="flex items-center justify-between">
-                <div>
-                    <h3 class="text-sm font-bold text-white">Step 3: Export Data</h3>
-                    <p class="text-[10px] text-gray-500">Download processed epoch averages or save to GitHub</p>
+            <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center gap-3">
+                    <h3 class="text-sm font-bold text-white">Validation Against LP Registry</h3>
+                    <div id="astro-validation-status" class="flex items-center gap-2">
+                        <div id="astro-validation-light" class="w-3 h-3 rounded-full bg-gray-700"></div>
+                        <span class="text-[9px] text-gray-500">Not validated</span>
+                    </div>
                 </div>
-                <div class="flex gap-2">
-                    <button onclick="exportAstroJSON()" class="btn-action bg-green-900/40 text-green-300 border border-green-700 px-4" disabled id="btn-export-astro">
-                        <i class="fas fa-download mr-1"></i> Export JSON
-                    </button>
-                    <button onclick="saveAstroToGitHub()" class="btn-action bg-purple-900/40 text-purple-300 border border-purple-700 px-4" disabled id="btn-save-astro-gh">
-                        <i class="fab fa-github mr-1"></i> Save to GitHub
-                    </button>
+                <button onclick="validateAstroAgainstRegistry()" class="btn-action bg-orange-900/40 text-orange-300 border border-orange-700 px-4" id="btn-validate-astro">
+                    <i class="fas fa-check-double mr-1"></i> Validate
+                </button>
+            </div>
+            <p class="text-[10px] text-gray-500 mb-3">Matches fetched Astroport pools against LP Registry. All active LP Registry entries must be found.</p>
+            
+            <!-- Validation Summary -->
+            <div id="astro-validation-summary" class="grid grid-cols-4 gap-2 mb-3 hidden">
+                <div class="bg-[#0D0D0D] rounded p-2 border border-gray-800">
+                    <div class="text-[9px] text-gray-500">Registry LPs</div>
+                    <div class="text-lg font-bold text-white"><span id="val-registry-count">0</span></div>
+                </div>
+                <div class="bg-[#0D0D0D] rounded p-2 border border-green-900/50">
+                    <div class="text-[9px] text-green-400">Matched</div>
+                    <div class="text-lg font-bold text-green-400"><span id="val-matched-count">0</span></div>
+                </div>
+                <div class="bg-[#0D0D0D] rounded p-2 border border-yellow-900/50">
+                    <div class="text-[9px] text-yellow-400">Flagged</div>
+                    <div class="text-lg font-bold text-yellow-400"><span id="val-flagged-count">0</span></div>
+                </div>
+                <div class="bg-[#0D0D0D] rounded p-2 border border-red-900/50">
+                    <div class="text-[9px] text-red-400">Missing</div>
+                    <div class="text-lg font-bold text-red-400"><span id="val-missing-count">0</span></div>
+                </div>
+            </div>
+            
+            <!-- Validation Results Table -->
+            <div class="bg-[#0D0D0D] rounded border border-gray-800 p-2 max-h-[300px] overflow-y-auto custom-scroll">
+                <div class="grid grid-cols-12 gap-1 text-[9px] text-gray-500 uppercase font-bold px-2 py-1 border-b border-gray-800 mb-1">
+                    <div class="col-span-1">✓</div>
+                    <div class="col-span-3">LP Name</div>
+                    <div class="col-span-2">Bucket</div>
+                    <div class="col-span-2 text-right">Registry Depth</div>
+                    <div class="col-span-2 text-right">Spot Liq</div>
+                    <div class="col-span-2 text-right">Variance</div>
+                </div>
+                <div id="astro-validation-list" class="space-y-0 text-[9px]">
+                    <div class="text-gray-600 italic text-center py-4">Click "Validate" after fetching data and loading LP Registry</div>
                 </div>
             </div>
         </div>
     </div><!-- END astro-auto-container -->
 </div>
 
-<!-- WS 4: WHITEWHALE -->
+<!-- WS 4: SKELETON SWAP -->
 <div id="ws-ww" class="workspace">
+    <!-- Header with Workflow + Export -->
+    <div class="bg-green-900/20 border border-green-700 rounded-lg p-4 mb-4">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="text-green-400 text-xl">🦴</div>
+                <div>
+                    <h3 class="text-green-400 font-bold text-sm">Skeleton Swap TLA Pool Fetcher</h3>
+                    <p class="text-green-200/70 text-[10px]">Fetches pool data from cron snapshots, validates against LP Registry, and exports for comparison.</p>
+                </div>
+            </div>
+            <div class="flex gap-2 flex-wrap">
+                <button onclick="runSkeletonSwapWorkflow()" id="btn-ss-workflow" class="btn-action bg-green-900/50 text-green-300 border border-green-600 px-4 py-2 text-sm font-bold">
+                    <i class="fas fa-play mr-2"></i> Fetch & Validate
+                </button>
+                <button onclick="exportSkeletonSwapJSON()" id="btn-ss-export" class="btn-action bg-purple-900/50 text-purple-300 border border-purple-600 px-4 py-2 text-sm" disabled title="Export SS data for troubleshooting">
+                    <i class="fas fa-download mr-2"></i> Export SS JSON
+                </button>
+            </div>
+        </div>
+        <div id="ss-workflow-status" class="text-[10px] text-gray-400 mt-2 hidden"></div>
+    </div>
+    
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Data Source -->
         <div class="bg-[#161616] p-3 rounded border border-gray-800 flex flex-col gap-2">
             <div class="flex justify-between items-center">
-                <h3 class="text-green-400 font-bold text-xs">Skeleton Swap Data</h3>
-                <button onclick="clearPaste('wwPaste')" class="text-[9px] text-red-400 hover:text-red-300">Clear</button>
+                <h3 class="text-green-400 font-bold text-xs">Data Source</h3>
+                <div class="flex gap-2">
+                    <select id="ss-data-source" class="input-dark text-[10px] w-32">
+                        <option value="github">GitHub (Cron)</option>
+                        <option value="paste">Manual Paste</option>
+                    </select>
+                    <button onclick="clearPaste('wwPaste')" class="text-[9px] text-red-400 hover:text-red-300">Clear</button>
+                </div>
             </div>
-            <textarea id="wwPaste" class="input-dark h-48 font-mono text-[10px]" placeholder="Paste Skeleton Swap dashboard text..."></textarea>
+            <textarea id="wwPaste" class="input-dark h-32 font-mono text-[10px]" placeholder="Paste Skeleton Swap dashboard text (or use Fetch from GitHub)..."></textarea>
             <div class="flex gap-2">
-                <button onclick="parseWW()" class="btn-action flex-1 bg-green-900/40 text-green-200 border border-green-900">Parse (Paste)</button>
-                <button onclick="fetchSkeletonSwapData()" class="btn-action flex-1 bg-blue-900/40 text-blue-200 border border-blue-900">
+                <button onclick="parseWW()" class="btn-action flex-1 bg-gray-900/40 text-gray-200 border border-gray-700 text-[10px]">Parse Paste</button>
+                <button onclick="fetchSkeletonSwapData()" class="btn-action flex-1 bg-blue-900/40 text-blue-200 border border-blue-900 text-[10px]">
                     <i class="fas fa-download mr-1"></i> Fetch from GitHub
                 </button>
             </div>
             <div id="ss-fetch-status" class="text-[9px] text-gray-500"></div>
         </div>
-        <div class="preview-card flex flex-col">
-            <div class="flex justify-between items-center mb-2 border-b border-gray-800 pb-2">
-                <h3 class="text-xs font-bold text-white">Skeleton Swap Pools</h3>
-                <div class="text-[10px] text-gray-500">Pools: <span id="ww-count" class="text-white font-mono">0</span></div>
+        
+        <!-- Validation Summary -->
+        <div class="bg-[#161616] p-3 rounded border border-gray-800 flex flex-col gap-2">
+            <div class="flex justify-between items-center mb-2">
+                <h3 class="text-xs font-bold text-white">Validation vs LP Registry</h3>
+                <div class="flex items-center gap-2">
+                    <div id="ss-validation-light" class="w-3 h-3 rounded-full bg-gray-700"></div>
+                    <span id="ss-validation-text" class="text-[9px] text-gray-500">Not validated</span>
+                </div>
             </div>
-            <div class="grid grid-cols-12 gap-1 text-[9px] text-gray-500 uppercase font-bold px-2 py-1 bg-gray-900 rounded-t">
-                <div class="col-span-4">Pool</div>
-                <div class="col-span-2 text-right">TVL</div>
-                <div class="col-span-2 text-right">Volume</div>
-                <div class="col-span-2 text-right">Fees</div>
-                <div class="col-span-2 text-right">APR</div>
+            <div class="grid grid-cols-4 gap-2">
+                <div class="bg-[#0D0D0D] rounded p-2 border border-gray-800">
+                    <div class="text-[9px] text-gray-500 uppercase">Total</div>
+                    <div class="text-lg font-bold text-white"><span id="ss-total-count">-</span></div>
+                </div>
+                <div class="bg-[#0D0D0D] rounded p-2 border border-green-900/50">
+                    <div class="text-[9px] text-green-400 uppercase">Matched</div>
+                    <div class="text-lg font-bold text-green-300"><span id="ss-matched-count">-</span></div>
+                </div>
+                <div class="bg-[#0D0D0D] rounded p-2 border border-yellow-900/50">
+                    <div class="text-[9px] text-yellow-400 uppercase">Unmatched</div>
+                    <div class="text-lg font-bold text-yellow-300"><span id="ss-unmatched-count">-</span></div>
+                </div>
+                <div class="bg-[#0D0D0D] rounded p-2 border border-red-900/50">
+                    <div class="text-[9px] text-red-400 uppercase">Missing</div>
+                    <div class="text-lg font-bold text-red-300"><span id="ss-missing-count">-</span></div>
+                </div>
             </div>
-            <div id="ww-list" class="max-h-[500px] overflow-y-auto text-xs bg-[#0D0D0D] p-2 border border-gray-800 rounded-b custom-scroll space-y-0"></div>
+            <button onclick="validateSkeletonSwap()" id="btn-ss-validate" class="btn-action bg-cyan-900/40 text-cyan-300 border border-cyan-700 text-[10px] mt-2" disabled>
+                <i class="fas fa-check-circle mr-1"></i> Validate Against LP Registry
+            </button>
+        </div>
+    </div>
+    
+    <!-- Pool List -->
+    <div class="bg-[#161616] p-3 rounded border border-gray-800 mt-4">
+        <div class="flex justify-between items-center mb-2 border-b border-gray-800 pb-2">
+            <h3 class="text-xs font-bold text-white">Skeleton Swap Pools</h3>
+            <div class="text-[10px] text-gray-500">Pools: <span id="ww-count" class="text-white font-mono">0</span></div>
+        </div>
+        <div class="grid grid-cols-12 gap-1 text-[9px] text-gray-500 uppercase font-bold px-2 py-1 bg-gray-900 rounded-t">
+            <div class="col-span-1">✓</div>
+            <div class="col-span-3">Pool</div>
+            <div class="col-span-2">Bucket</div>
+            <div class="col-span-2 text-right">TVL</div>
+            <div class="col-span-2 text-right">Volume</div>
+            <div class="col-span-2 text-right">Registry Depth</div>
+        </div>
+        <div id="ww-list" class="max-h-[400px] overflow-y-auto text-xs bg-[#0D0D0D] p-2 border border-gray-800 rounded-b custom-scroll space-y-0">
+            <div class="text-gray-600 italic text-center py-4">Click "Fetch & Validate" to load Skeleton Swap data</div>
         </div>
     </div>
 </div>
@@ -3470,11 +3609,42 @@ function parseVoteTab() {
                     dex = 'Skeleton Swap'; // Normalize to Skeleton Swap
                 }
                 
-                // VP line: "VP 15.85M  76.9 %" or "VP 1.29M  5.8 %"
+                // VP line: "VP 15.85M  76.9 %" or "VP 1.29M  5.8 %" or "VP < 0.01  0.0 %"
                 if (next.startsWith('VP ') && next.includes('%')) {
                     let pctMatch = next.match(/([\d\.]+)\s*%/);
                     if (pctMatch) {
                         votePct = parseFloat(pctMatch[1]);
+                    }
+                    
+                    // Also capture VP amount (e.g., "15.85M" -> 15850000)
+                    let vpAmountMatch = next.match(/VP\s+([\d\.]+)([KMB]?)/i);
+                    let vpAmount = 0;
+                    if (vpAmountMatch) {
+                        vpAmount = parseFloat(vpAmountMatch[1]);
+                        let suffix = (vpAmountMatch[2] || '').toUpperCase();
+                        if (suffix === 'K') vpAmount *= 1000;
+                        else if (suffix === 'M') vpAmount *= 1000000;
+                        else if (suffix === 'B') vpAmount *= 1000000000;
+                    }
+                    
+                    // Look for Depth line in next few lines: "Depth $ 684.65K" or "Depth $ 45.23K"
+                    let depth = 0;
+                    for (let d = 1; d <= 3 && i + k + d < lines.length; d++) {
+                        let depthLine = lines[i + k + d];
+                        if (depthLine.startsWith('Depth $') || depthLine.startsWith('Depth $')) {
+                            // Parse: "Depth $ 684.65K" or "Depth $ 1.29M" or "Depth $ 7 071.40" or "Depth $ < 0.01"
+                            let depthMatch = depthLine.match(/Depth\s*\$\s*([\d\s,\.]+)([KMB]?)/i);
+                            if (depthMatch) {
+                                // Remove spaces and commas from number
+                                let depthNum = depthMatch[1].replace(/[\s,]/g, '');
+                                depth = parseFloat(depthNum) || 0;
+                                let depthSuffix = (depthMatch[2] || '').toUpperCase();
+                                if (depthSuffix === 'K') depth *= 1000;
+                                else if (depthSuffix === 'M') depth *= 1000000;
+                                else if (depthSuffix === 'B') depth *= 1000000000;
+                            }
+                            break;
+                        }
                     }
                     
                     // Use detected dex or default (for singles)
@@ -3490,9 +3660,15 @@ function parseVoteTab() {
                             dex: finalDex,
                             bucket: currentBucket || 'unknown',
                             vote_pct: votePct,
+                            vp_amount: vpAmount,
+                            depth: depth,  // NEW: Pool depth for validation
                             active: votePct >= 1,
                             single: isSingle  // Mark as single-sided pool
                         };
+                        
+                        if (depth > 0) {
+                            console.log(`LP Registry: ${key} depth=$${depth.toLocaleString()}`);
+                        }
                         
                         if (isSingle) {
                             console.log('Created single pool entry:', key, votePct + '%');
@@ -3569,10 +3745,13 @@ function renderLpRegistry() {
             let dexLabel = lp.dex === 'Astroport' ? 'Astro' : 'SS';
             // Show single indicator for single-sided pools
             let singleBadge = lp.single ? '<span class="text-[8px] bg-green-900/50 text-green-400 px-1 rounded ml-1">single</span>' : '';
+            // Show depth if available
+            let depthHtml = lp.depth > 0 ? `<span class="text-gray-500 text-[9px]">${fmt$(lp.depth)}</span>` : '';
             
             html += `<div class="flex items-center justify-between py-1 px-2 bg-[#0D0D0D] rounded text-[10px]">
                 <span class="${activeClass} font-mono">${lp.lp}${singleBadge}</span>
                 <div class="flex items-center gap-3">
+                    ${depthHtml}
                     <span class="${dexColor}">${lp.vote_pct.toFixed(1)}% ${dexLabel}</span>
                 </div>
             </div>`;
@@ -6618,10 +6797,12 @@ function renderSkeletonSwapList() {
         const match = findLpRegistryMatch(ssName);
         return {
             ...pool,
-            bucket: match?.bucket || 'unknown',
+            bucket: pool.bucket || match?.bucket || 'unknown',
             lpKey: match?.key || null,
             registryName: match?.lp || ssName,
-            originalName: ssName  // Always preserve the original SS name
+            originalName: ssName,  // Always preserve the original SS name
+            registryDepth: pool.registryDepth || match?.depth || null,
+            matched: pool.matched !== undefined ? pool.matched : !!match?.key
         };
     });
     
@@ -6634,7 +6815,10 @@ function renderSkeletonSwapList() {
         fees: p.fees,
         apr: p.apr,
         bucket: p.bucket,
-        matched: !!p.lpKey
+        matched: p.matched,
+        registryDepth: p.registryDepth,
+        lpToken: p.lpToken,
+        poolContract: p.poolContract
     }));
     
     // Sort by bucket order, then by TVL within each bucket
@@ -6653,38 +6837,46 @@ function renderSkeletonSwapList() {
         if (b.bucket !== currentBucket) {
             currentBucket = b.bucket;
             const bucketColors = {
-                stable: 'text-yellow-400',
-                project: 'text-orange-400', 
-                bluechip: 'text-blue-400',
-                single: 'text-purple-400',
-                unknown: 'text-gray-500'
+                stable: 'text-yellow-400 border-yellow-900/50',
+                project: 'text-orange-400 border-orange-900/50', 
+                bluechip: 'text-blue-400 border-blue-900/50',
+                single: 'text-purple-400 border-purple-900/50',
+                unknown: 'text-gray-500 border-gray-700'
             };
-            html += `<div class="col-span-12 ${bucketColors[currentBucket]} font-bold text-[10px] uppercase mt-2 mb-1 border-b border-gray-700 pb-1">${currentBucket}</div>`;
+            html += `<div class="col-span-12 ${bucketColors[currentBucket]} font-bold text-[10px] uppercase mt-2 mb-1 border-b pb-1">${currentBucket}</div>`;
         }
         
-        const aprDisplay = typeof b.apr === 'number' ? (b.apr > 0 ? b.apr.toFixed(2) + '%' : '-') : (b.apr || '-');
-        const matchIndicator = b.matched ? '✓' : '';
+        const matchIcon = b.matched ? '<span class="text-green-400">✓</span>' : '<span class="text-red-400">✗</span>';
+        const bucketColor = {
+            stable: 'text-yellow-400',
+            project: 'text-orange-400',
+            bluechip: 'text-blue-400',
+            single: 'text-purple-400',
+            unknown: 'text-gray-500'
+        }[b.bucket] || 'text-gray-500';
+        
         html += `<div class="grid grid-cols-12 gap-1 border-b border-gray-800/50 py-1 text-gray-300 hover:bg-white/5 px-2">
-            <div class="col-span-4 truncate text-white text-[10px]" title="SS: ${b.originalPool}${b.matched ? ' → Registry: ' + b.pool : ''}">${matchIndicator} ${b.pool}</div>
+            <div class="col-span-1 text-center">${matchIcon}</div>
+            <div class="col-span-3 truncate text-white text-[10px]" title="SS: ${b.originalPool}${b.matched ? ' → Registry: ' + b.pool : ''}">${b.pool}</div>
+            <div class="col-span-2 ${bucketColor} text-[9px]">${b.bucket}</div>
             <div class="col-span-2 text-right font-mono text-[9px] text-cyan-300">${b.tvl > 0 ? fmt$(b.tvl) : '-'}</div>
             <div class="col-span-2 text-right font-mono text-[9px] text-blue-300">${b.volume > 0 ? fmt$(b.volume) : '-'}</div>
-            <div class="col-span-2 text-right font-mono text-[9px] text-green-300">${b.fees > 0 ? fmt$(b.fees) : '-'}</div>
-            <div class="col-span-2 text-right text-[9px] text-yellow-400">${aprDisplay}</div>
+            <div class="col-span-2 text-right font-mono text-[9px] ${b.registryDepth ? 'text-green-300' : 'text-gray-600'}">${b.registryDepth ? fmt$(b.registryDepth) : '-'}</div>
         </div>`;
     });
     
     // Count matches
     const matched = store.ww.filter(p => p.matched).length;
     
-    setHtml('ww-list', html || '<div class="text-center text-gray-600 italic py-4">No data. Fetch from GitHub or paste manually.</div>');
+    setHtml('ww-list', html || '<div class="text-center text-gray-600 italic py-4">Click "Fetch & Validate" to load Skeleton Swap data</div>');
     setTxt('ww-count', `${store.ww.length} (${matched} matched)`);
     
     pasteStatus.ww = store.ww.length > 0;
     updatePasteStatus('ps-ww', pasteStatus.ww);
 }
 
-// Token name aliases (SS name -> Registry name)
-const TOKEN_ALIASES = {
+// Token name aliases for Skeleton Swap (SS name -> Registry name)
+const SS_TOKEN_ALIASES = {
     'bLUNA': 'boneLUNA',
     'bluna': 'boneLUNA',
     // Add more aliases as needed
@@ -6696,8 +6888,8 @@ const TOKEN_ALIASES = {
     'wBNB': 'WBNB'
 };
 
-// Normalize pool name for matching (handles order differences and aliases)
-function normalizePoolName(name) {
+// Normalize pool name for Skeleton Swap matching (handles order differences and aliases)
+function normalizeSSPoolName(name) {
     // Remove LP suffix, quotes, extra spaces
     let clean = name.replace(/ LP$/i, '').replace(/"/g, '').trim();
     
@@ -6705,19 +6897,19 @@ function normalizePoolName(name) {
     let parts = clean.split(/[-\/]/).map(p => p.trim()).filter(p => p);
     
     // Apply token aliases
-    parts = parts.map(token => TOKEN_ALIASES[token] || TOKEN_ALIASES[token.toLowerCase()] || token);
+    parts = parts.map(token => SS_TOKEN_ALIASES[token] || SS_TOKEN_ALIASES[token.toLowerCase()] || token);
     
     // Sort alphabetically for consistent comparison
     return parts.sort().join('-').toUpperCase();
 }
 
-// Find matching LP in registry (handles reversed order, different naming)
+// Find matching LP in registry for Skeleton Swap (handles reversed order, different naming)
 function findLpRegistryMatch(ssPoolName) {
     if (!store.lpRegistry || Object.keys(store.lpRegistry).length === 0) {
         return null;
     }
     
-    const normalizedSS = normalizePoolName(ssPoolName);
+    const normalizedSS = normalizeSSPoolName(ssPoolName);
     
     // Try exact match first (with Skeleton Swap dex)
     const exactKey = `${ssPoolName}|Skeleton Swap`;
@@ -6730,7 +6922,7 @@ function findLpRegistryMatch(ssPoolName) {
         // Only match Skeleton Swap entries
         if (lp.dex !== 'Skeleton Swap') continue;
         
-        const normalizedLP = normalizePoolName(lp.lp);
+        const normalizedLP = normalizeSSPoolName(lp.lp);
         if (normalizedLP === normalizedSS) {
             return { ...lp, key };
         }
@@ -6798,6 +6990,56 @@ let astroAutoData = {
 const NATIVE_DENOMS = {
     'uluna': 'LUNA',
     'uusd': 'UST'
+};
+
+// Known IBC/Factory denoms to clean names
+const KNOWN_TOKEN_MAP = {
+    // IBC tokens by hash
+    '2C962DAB9F57FE0921435426AE75196009FAA1981BF86991203C8411F8980FDB': 'USDC',
+    '8D8A7F7253615E5F76CB6252A1E1BD921D5EDB7BBAAF8913FB1C77FF125D9995': 'ASTRO',
+    'B3504E092456BA618CC28AC671A71FB08C6CA0FD0BE7C8A5B5A3E2DD933CC9E4': 'USDC.axl',
+    'CBF67A2BCF6CAE343FDF251E510C8E18C361FC02B23430C121116E0811835DEF': 'USDT.axl',
+    '05D299885B07905B6886F554B39346EA6761B7F5F3C0DEEC1E862B6C02D15C99': 'ATOM',
+    '40C29143BFA4B4EFE4C5F5B26CF6F1E5B84D1F9EFCE5A3D76F8D6C91C30AD763': 'stATOM',
+    '88386AC48152D48B34B082648DF836F975506F0B57DBBFC10A54213B1BF484CB': 'wBTC',
+    '4CD525F166D32B0132C095F353F74C6CC79DEDE59624AE63DC81820B0F79B595': 'wETH',
+    '62A23670B4F5E7BAC97BE1C886C44C399EBEE813C0AB24271C8B13DA6D6E1ED1': 'INJ',
+    '785AF3E1A76B1A04BD8ED2A7E23CF5E0A3327B2CD48F6E8EB4E4B4DEE186C695': 'wBNB',
+    'F74225B0AFD29627FFF4AC3C39A37D0C5728B23B5B1C3F91C39DE1A8DDB6F6FE': 'wstETH',
+    '0EF563': 'PAXG', // Truncated hash
+    // Wormhole BTC (transfer/channel-xxx/0x2260fac...)
+    '0X2260FAC5E5542A773AA44FBCFEDF7C193BC2C599': 'wBTC.wh',
+    // EURe
+    '46A7F7973F5F20AB71E7F42A07EF28FDE62FEB327C63A53A7B5DA5313B5F6933': 'EURe',
+};
+
+// Token base denom patterns to clean names
+const DENOM_PATTERNS = {
+    'erc20/tether/usdt': 'USDT',
+    'usdt': 'USDT', 
+    'usdc': 'USDC',
+    'uatom': 'ATOM',
+    'stuatom': 'stATOM',
+    'stuluna': 'stLUNA',
+    'weth': 'wETH',
+    'wbtc': 'wBTC',
+    'wbnb': 'wBNB',
+    'eure': 'EURe',
+    'paxg': 'PAXG',
+    'inj': 'INJ',
+    'ampluna': 'ampLUNA',
+    'bluna': 'bLUNA',
+    'arbluna': 'arbLUNA',
+    'stluna': 'stLUNA',
+    'solid': 'SOLID',
+    'capa': 'CAPA',
+    'roar': 'ROAR',
+    'fuel': 'FUEL',
+    'astro': 'ASTRO',
+    'xastro': 'xASTRO',
+    'ampcapa': 'ampCAPA',
+    'amproar': 'ampROAR',
+    'wsteth': 'wstETH',
 };
 
 // CORS Proxy with retry
@@ -6880,25 +7122,53 @@ async function resolveDenom(denom) {
     // Factory token (e.g., factory/terra.../ampLUNA)
     if (denom.startsWith('factory/')) {
         const parts = denom.split('/');
-        return parts[parts.length - 1].replace(/^u/, ''); // Get last part, strip leading 'u'
+        let symbol = parts[parts.length - 1].replace(/^u/, ''); // Get last part, strip leading 'u'
+        // Check pattern map for proper casing
+        const lowerSymbol = symbol.toLowerCase();
+        if (DENOM_PATTERNS[lowerSymbol]) return DENOM_PATTERNS[lowerSymbol];
+        return symbol;
     }
     
     // IBC token
     if (denom.startsWith('ibc/')) {
         const hash = denom.replace('ibc/', '');
+        
+        // Check known map first (full or partial hash)
+        if (KNOWN_TOKEN_MAP[hash]) return KNOWN_TOKEN_MAP[hash];
+        if (KNOWN_TOKEN_MAP[hash.substring(0, 6)]) return KNOWN_TOKEN_MAP[hash.substring(0, 6)];
+        
         const ibcDenoms = await fetchIBCDenoms();
         const ibcInfo = ibcDenoms[hash];
         
         if (ibcInfo) {
             // Extract symbol from base denom
             let base = ibcInfo.d;
+            
+            // Check if it's a wormhole/transfer path with contract address
+            const wormholeMatch = base.match(/0x[a-fA-F0-9]{40}/i);
+            if (wormholeMatch) {
+                const contractUpper = wormholeMatch[0].toUpperCase();
+                if (KNOWN_TOKEN_MAP[contractUpper]) return KNOWN_TOKEN_MAP[contractUpper];
+            }
+            
             // Handle factory denoms in IBC
             if (base.includes('factory/') || base.includes('factory:')) {
                 const parts = base.split(/[/:]/);
                 base = parts[parts.length - 1];
             }
+            
+            // Handle erc20/tether/usdt style
+            if (base.toLowerCase().includes('erc20/tether/usdt')) return 'USDT';
+            if (base.toLowerCase().includes('tether/usdt')) return 'USDT';
+            
             // Strip common prefixes
             base = base.replace(/^u/, '').replace(/-wei$/, '').replace(/-satoshi$/, '');
+            
+            // Check pattern map
+            const lowerBase = base.toLowerCase();
+            if (DENOM_PATTERNS[lowerBase]) return DENOM_PATTERNS[lowerBase];
+            
+            // Return cleaned up version
             return base.toUpperCase();
         }
         return `IBC/${hash.substring(0, 6)}`;
@@ -6908,7 +7178,11 @@ async function resolveDenom(denom) {
     if (denom.startsWith('terra1')) {
         // Try to query token info
         const tokenInfo = await queryTerraContract(denom, { token_info: {} });
-        if (tokenInfo?.symbol) return tokenInfo.symbol;
+        if (tokenInfo?.symbol) {
+            const lowerSymbol = tokenInfo.symbol.toLowerCase();
+            if (DENOM_PATTERNS[lowerSymbol]) return DENOM_PATTERNS[lowerSymbol];
+            return tokenInfo.symbol;
+        }
         return denom.substring(0, 10) + '...';
     }
     
@@ -6984,6 +7258,361 @@ async function buildPoolName(assetInfos) {
     return null;
 }
 
+// ============================================================
+// FULL WORKFLOW ORCHESTRATION
+// ============================================================
+
+// Store for multi-range data
+let astroMultiRangeData = {
+    D7: null,
+    D30: null,
+    D90: null
+};
+
+// Run the complete Astroport data collection workflow
+async function runFullAstroWorkflow() {
+    const btn = $('btn-full-workflow');
+    const progressEl = $('workflow-progress');
+    const statusEl = $('workflow-status');
+    
+    // Disable button and show progress
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Running...';
+    progressEl.classList.remove('hidden');
+    
+    // Reset all step indicators
+    for (let i = 1; i <= 7; i++) {
+        const step = $(`wf-step-${i}`);
+        step.className = 'w-2 h-2 rounded-full bg-gray-600';
+    }
+    
+    // Clear previous multi-range data
+    astroMultiRangeData = { D7: null, D30: null, D90: null };
+    
+    const updateStep = (stepNum, status) => {
+        const step = $(`wf-step-${stepNum}`);
+        if (status === 'active') {
+            step.className = 'w-2 h-2 rounded-full bg-yellow-400 animate-pulse';
+        } else if (status === 'done') {
+            step.className = 'w-2 h-2 rounded-full bg-green-400';
+        } else if (status === 'error') {
+            step.className = 'w-2 h-2 rounded-full bg-red-400';
+        }
+    };
+    
+    try {
+        // Step 1: Fetch from Chain
+        updateStep(1, 'active');
+        statusEl.textContent = 'Fetching TLA whitelisted pools from chain...';
+        await fetchTLAWhitelist();
+        updateStep(1, 'done');
+        
+        // Small delay between steps
+        await new Promise(r => setTimeout(r, 500));
+        
+        // Step 2: Resolve Names
+        updateStep(2, 'active');
+        statusEl.textContent = 'Resolving pool names from Astroport...';
+        await resolvePoolNames();
+        updateStep(2, 'done');
+        
+        await new Promise(r => setTimeout(r, 500));
+        
+        // Step 3: Fetch D7 Data
+        updateStep(3, 'active');
+        statusEl.textContent = 'Fetching 7-day liquidity & volume data...';
+        $('astro-date-range').value = 'D7';
+        await fetchAstroData();
+        astroMultiRangeData.D7 = JSON.parse(JSON.stringify(astroAutoData.epochData));
+        updateStep(3, 'done');
+        
+        await new Promise(r => setTimeout(r, 500));
+        
+        // Step 4: Fetch D30 Data
+        updateStep(4, 'active');
+        statusEl.textContent = 'Fetching 30-day liquidity & volume data...';
+        $('astro-date-range').value = 'D30';
+        // Clear epoch data but keep pools
+        for (const contract of Object.keys(astroAutoData.epochData)) {
+            astroAutoData.epochData[contract].epochs = {};
+            astroAutoData.epochData[contract].latestLiquidity = 0;
+            astroAutoData.epochData[contract].latestEpoch = null;
+        }
+        await fetchAstroData();
+        astroMultiRangeData.D30 = JSON.parse(JSON.stringify(astroAutoData.epochData));
+        updateStep(4, 'done');
+        
+        await new Promise(r => setTimeout(r, 500));
+        
+        // Step 5: Fetch D90 Data
+        updateStep(5, 'active');
+        statusEl.textContent = 'Fetching 90-day liquidity & volume data...';
+        $('astro-date-range').value = 'D90';
+        // Clear epoch data but keep pools
+        for (const contract of Object.keys(astroAutoData.epochData)) {
+            astroAutoData.epochData[contract].epochs = {};
+            astroAutoData.epochData[contract].latestLiquidity = 0;
+            astroAutoData.epochData[contract].latestEpoch = null;
+        }
+        await fetchAstroData();
+        astroMultiRangeData.D90 = JSON.parse(JSON.stringify(astroAutoData.epochData));
+        updateStep(5, 'done');
+        
+        await new Promise(r => setTimeout(r, 500));
+        
+        // Step 6: Validate
+        updateStep(6, 'active');
+        statusEl.textContent = 'Validating against LP Registry...';
+        validateAstroAgainstRegistry();
+        updateStep(6, 'done');
+        
+        await new Promise(r => setTimeout(r, 500));
+        
+        // Step 7: Export comprehensive JSON
+        updateStep(7, 'active');
+        statusEl.textContent = 'Generating comprehensive export...';
+        await exportComprehensiveAstroJSON();
+        updateStep(7, 'done');
+        
+        statusEl.textContent = '✓ Full workflow complete! Comprehensive data exported.';
+        statusEl.className = 'text-[10px] text-green-400 mt-2';
+        
+        // Enable export button for re-export
+        $('btn-astro-export').disabled = false;
+        
+        // Update tab status - green if all LPs matched
+        updateAstroTabStatus();
+        
+    } catch (error) {
+        console.error('Workflow error:', error);
+        statusEl.textContent = `Error: ${error.message}`;
+        statusEl.className = 'text-[10px] text-red-400 mt-2';
+    }
+    
+    // Re-enable button
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-play mr-2"></i> Run Full Workflow';
+}
+
+// Update Astroport tab status based on validation
+function updateAstroTabStatus() {
+    const tabEl = $('tab-astro');
+    if (!tabEl) return;
+    
+    // Check if all Astroport Registry LPs have data
+    const astroRegistryCount = Object.values(store.lpRegistry).filter(lp => lp.dex === 'Astroport').length;
+    const validationResults = astroValidationState?.results || [];
+    const missingCount = validationResults.filter(r => r.status === 'missing').length;
+    const dataLoaded = Object.keys(astroMultiRangeData?.D90 || astroAutoData?.epochData || {}).length > 0;
+    
+    if (astroRegistryCount > 0 && missingCount === 0 && dataLoaded) {
+        // All LPs matched - green
+        tabEl.className = 'tab-btn tab-complete';
+        tabEl.querySelector('.tab-status').textContent = '✓';
+    } else if (dataLoaded) {
+        // Data fetched but some missing - yellow
+        tabEl.className = 'tab-btn tab-incomplete';
+        tabEl.querySelector('.tab-status').textContent = '●';
+    } else {
+        // No data yet - red
+        tabEl.className = 'tab-btn tab-incomplete';
+        tabEl.querySelector('.tab-status').textContent = '●';
+    }
+}
+
+// Export comprehensive JSON with all date ranges
+async function exportComprehensiveAstroJSON() {
+    const currentEpoch = store.currentEpoch || store.liveEpochInfo?.currentEpoch || 'unknown';
+    const timestamp = new Date().toISOString();
+    
+    // Helper to calculate totals for an epoch
+    const calcEpochTotals = (epochData) => {
+        if (!epochData) return { avgLiquidity: 0, totalVolume: 0 };
+        
+        const avgVol = epochData.avgVolume || 0;
+        const daysInEpoch = 7;
+        const totalVolume = avgVol * daysInEpoch;
+        
+        return {
+            avgLiquidity: epochData.avgLiquidity || 0,
+            totalVolume: totalVolume,
+            avgVolume: avgVol,
+            liqPointCount: epochData.liqPointCount || 0,
+            volPointCount: epochData.volPointCount || 0
+        };
+    };
+    
+    // Build unified pool data
+    const pools = {};
+    const d90Data = astroMultiRangeData.D90 || astroAutoData.epochData || {};
+    
+    for (const [contract, poolData] of Object.entries(d90Data)) {
+        if (poolData.deprecated) continue; // Skip deprecated pools
+        
+        const name = poolData.name;
+        const d7Pool = astroMultiRangeData.D7?.[contract];
+        const d30Pool = astroMultiRangeData.D30?.[contract];
+        
+        // Get all epochs sorted descending (most recent first)
+        const allEpochs = poolData.epochs || {};
+        const sortedEpochNums = Object.keys(allEpochs).map(Number).filter(n => !isNaN(n)).sort((a, b) => b - a);
+        
+        // Current epoch data (most recent)
+        const latestEpochNum = sortedEpochNums[0] || null;
+        const latestEpoch = allEpochs[latestEpochNum];
+        const latestMetrics = latestEpoch ? calcEpochTotals(latestEpoch) : { avgLiquidity: 0, totalVolume: 0 };
+        
+        // Calculate 4-epoch rolling average (for grading)
+        let avg4Epoch = null;
+        const last4Epochs = sortedEpochNums.slice(0, 4);
+        if (last4Epochs.length >= 2) { // Calculate if at least 2 epochs available
+            let totalLiq = 0, totalVol = 0;
+            last4Epochs.forEach(epNum => {
+                const ep = allEpochs[epNum];
+                if (ep) {
+                    totalLiq += ep.avgLiquidity || 0;
+                    totalVol += (ep.avgVolume || 0) * 7; // Convert to total volume
+                }
+            });
+            avg4Epoch = {
+                epochs: last4Epochs,
+                epochCount: last4Epochs.length,
+                avgLiquidity: totalLiq / last4Epochs.length,
+                avgVolume: totalVol / last4Epochs.length,
+                complete: last4Epochs.length >= 4 // True if full 4 epochs
+            };
+        }
+        
+        // Get LP Registry depth for validation
+        const registryKey = `${name}|Astroport`;
+        const registryEntry = store.lpRegistry[registryKey];
+        const registryDepth = registryEntry?.depth || 0;
+        
+        pools[name] = {
+            // Identity
+            name: name,
+            dex: 'Astroport',
+            poolContract: contract,
+            lpToken: poolData.lpToken,
+            bucket: poolData.bucket,
+            
+            // Registry info
+            registryDepth: registryDepth,
+            
+            // Spot/current data
+            spotLiquidity: poolData.spotLiquidity || 0,
+            
+            // Current epoch data (for this epoch's grading)
+            currentEpoch: {
+                epoch: latestEpochNum,
+                avgLiquidity: latestMetrics.avgLiquidity,
+                totalVolume: latestMetrics.totalVolume,
+                liqPointCount: latestMetrics.liqPointCount,
+                volPointCount: latestMetrics.volPointCount
+            },
+            
+            // 4-epoch rolling average (for trend analysis and grading)
+            avg4Epoch: avg4Epoch,
+            
+            // Historical data by epoch (for charts)
+            historical: {}
+        };
+        
+        // Add historical epochs (all available)
+        for (const [epNum, epData] of Object.entries(allEpochs)) {
+            const metrics = calcEpochTotals(epData);
+            pools[name].historical[epNum] = {
+                avgLiquidity: metrics.avgLiquidity,
+                totalVolume: metrics.totalVolume,
+                liqPointCount: metrics.liqPointCount,
+                volPointCount: metrics.volPointCount
+            };
+        }
+    }
+    
+    // Build deprecated pools list
+    const deprecatedPools = {};
+    for (const [contract, poolData] of Object.entries(d90Data)) {
+        if (!poolData.deprecated) continue;
+        deprecatedPools[poolData.name + ' (' + contract.substring(0,8) + ')'] = {
+            poolContract: contract,
+            name: poolData.name,
+            reason: poolData.deprecatedReason
+        };
+    }
+    
+    // Build validation results
+    const validation = astroValidationState.results?.map(r => ({
+        name: r.name,
+        bucket: r.bucket,
+        registryDepth: r.registryDepth,
+        spotLiquidity: r.fetchedLiq,
+        variance: r.variancePct ? (r.variancePct * 100).toFixed(2) + '%' : null,
+        status: r.status,
+        matchedAs: r.matchedAs,
+        matchedContract: r.matchedContract
+    })) || [];
+    
+    const exportData = {
+        meta: {
+            created: timestamp,
+            epoch: currentEpoch,
+            dex: 'Astroport',
+            toolVersion: 'v28',
+            activePoolCount: Object.keys(pools).length,
+            deprecatedPoolCount: Object.keys(deprecatedPools).length,
+            has4EpochData: Object.values(pools).some(p => p.avg4Epoch?.complete)
+        },
+        
+        // LP Registry snapshot (Astroport only)
+        lpRegistry: Object.fromEntries(
+            Object.entries(store.lpRegistry).filter(([k, v]) => v.dex === 'Astroport')
+        ),
+        
+        // Active pools with unified metrics
+        pools: pools,
+        
+        // Deprecated/duplicate pools
+        deprecated: deprecatedPools,
+        
+        // Validation results
+        validation: {
+            summary: {
+                matched: validation.filter(v => v.status === 'matched').length,
+                flagged: validation.filter(v => v.status === 'flagged').length,
+                missing: validation.filter(v => v.status === 'missing').length
+            },
+            details: validation
+        }
+    };
+    
+    // Store data for main export (no auto-download - main Download JSON handles that)
+    store.astroComprehensive = exportData;
+    
+    console.log('✓ Astroport comprehensive data ready:', exportData.meta);
+    return exportData;
+}
+
+// Manual export button - downloads Astroport data for troubleshooting
+async function exportAstroManual() {
+    const exportData = await exportComprehensiveAstroJSON();
+    if (!exportData) return;
+    
+    const currentEpoch = store.currentEpoch || store.liveEpochInfo?.currentEpoch || 'unknown';
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const dateStr = new Date().toISOString().split('T')[0];
+    a.href = url;
+    a.download = `astroport-epoch-${currentEpoch}-${dateStr}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    console.log('✓ Astroport manual export downloaded');
+}
+
 // Main TLA Whitelist Fetch
 async function fetchTLAWhitelist() {
     const statusEl = $('tla-fetch-status');
@@ -7047,6 +7676,15 @@ async function fetchTLAWhitelist() {
             }
             
             if (poolName) {
+                // Check for duplicates by pool contract only
+                // Don't dedupe by name because IBC resolution might give same name for different bridges
+                // The "Resolve Names" step will fix the names later
+                const existingByContract = astroAutoData.pools.find(p => p.poolContract === poolContract);
+                if (existingByContract) {
+                    console.log(`⏭ Skipping duplicate pool ${poolName} (already in ${existingByContract.bucket})`);
+                    continue;
+                }
+                
                 astroAutoData.pools.push({
                     name: poolName,
                     bucket,
@@ -7064,18 +7702,110 @@ async function fetchTLAWhitelist() {
     setTxt('tla-project-count', bucketCounts.project);
     setTxt('tla-bluechip-count', bucketCounts.bluechip);
     setTxt('tla-single-count', bucketCounts.single);
+    setTxt('tla-resolved-count', '0');
     
     renderTLAPoolList();
     
     const total = astroAutoData.pools.length;
-    statusEl.textContent = `✓ Found ${total} whitelisted pools`;
+    statusEl.textContent = `✓ Found ${total} pools. Click "Resolve Names" for exact names & spot liquidity.`;
     statusEl.className = 'text-[9px] text-green-400';
     
-    // Enable next step
+    // Enable buttons
+    $('btn-resolve-names').disabled = false;
     $('btn-fetch-astro').disabled = false;
     $('astro-data-status').textContent = `Ready to fetch data for ${total} pools`;
     
     console.log(`✓ TLA Whitelist: ${total} pools discovered`);
+}
+
+// Resolve exact pool names and spot liquidity via Astroport pools.byAddress API
+async function resolvePoolNames() {
+    const statusEl = $('tla-fetch-status');
+    const pools = astroAutoData.pools.filter(p => p.poolContract);
+    
+    if (pools.length === 0) {
+        statusEl.textContent = '✗ No pools with contracts to resolve';
+        statusEl.className = 'text-[9px] text-red-400';
+        return;
+    }
+    
+    statusEl.textContent = `Resolving names for ${pools.length} pools...`;
+    statusEl.className = 'text-[9px] text-yellow-400';
+    
+    let resolved = 0;
+    let failed = 0;
+    
+    for (let i = 0; i < pools.length; i++) {
+        const pool = pools[i];
+        statusEl.textContent = `Resolving ${i + 1}/${pools.length}: ${pool.name}...`;
+        
+        try {
+            // Query Astroport pools.byAddress API
+            const url = `https://app.astroport.fi/api/trpc/pools.byAddress?input=${encodeURIComponent(JSON.stringify({
+                json: {
+                    chainId: ["phoenix-1"],
+                    address: pool.poolContract
+                }
+            }))}`;
+            
+            const response = await fetch(url);
+            if (!response.ok) {
+                console.warn(`Failed to resolve ${pool.name}: HTTP ${response.status}`);
+                failed++;
+                continue;
+            }
+            
+            const data = await response.json();
+            const poolInfo = data?.result?.data?.json;
+            
+            if (poolInfo) {
+                // Get exact name from API
+                const exactName = poolInfo.name?.replace(' - ', '-').replace(/\s+/g, '') || pool.name;
+                
+                // Get spot liquidity
+                const spotLiq = poolInfo.poolLiquidityUsd || 0;
+                
+                // Get asset symbols for even more precise naming
+                const assets = poolInfo.assets || [];
+                let symbolName = null;
+                if (assets.length === 2) {
+                    symbolName = `${assets[0].symbol}-${assets[1].symbol}`;
+                }
+                
+                // Update pool data
+                pool.resolvedName = symbolName || exactName;
+                pool.spotLiquidity = spotLiq;
+                pool.poolType = poolInfo.poolType;
+                pool.dayVolumeUsd = poolInfo.dayVolumeUsd || 0;
+                
+                console.log(`✓ Resolved: ${pool.name} → ${pool.resolvedName} ($${spotLiq.toLocaleString()})`);
+                resolved++;
+            } else {
+                console.warn(`No data for ${pool.name}`);
+                failed++;
+            }
+        } catch (e) {
+            console.warn(`Error resolving ${pool.name}:`, e);
+            failed++;
+        }
+        
+        // Small delay to avoid rate limiting
+        await new Promise(r => setTimeout(r, 100));
+    }
+    
+    // Update UI
+    setTxt('tla-resolved-count', resolved);
+    renderTLAPoolList();
+    
+    if (failed > 0) {
+        statusEl.textContent = `✓ Resolved ${resolved}/${pools.length} pools (${failed} failed)`;
+        statusEl.className = 'text-[9px] text-yellow-400';
+    } else {
+        statusEl.textContent = `✓ Resolved all ${resolved} pool names with spot liquidity`;
+        statusEl.className = 'text-[9px] text-green-400';
+    }
+    
+    console.log(`✓ Name resolution complete: ${resolved} resolved, ${failed} failed`);
 }
 
 function renderTLAPoolList() {
@@ -7088,15 +7818,22 @@ function renderTLAPoolList() {
     
     let html = '';
     astroAutoData.pools.forEach((p, i) => {
-        const contractShort = p.poolContract ? p.poolContract.substring(0, 16) + '...' : '-';
-        const lpShort = p.lpToken.length > 20 ? p.lpToken.substring(0, 16) + '...' : p.lpToken;
+        const contractShort = p.poolContract ? p.poolContract.substring(0, 20) + '...' : '-';
+        
+        // Show resolved name if available, otherwise original name
+        const displayName = p.resolvedName || p.name;
+        const nameClass = p.resolvedName ? 'text-green-300' : 'text-white';
+        
+        // Show spot liquidity if resolved
+        const spotLiq = p.spotLiquidity ? fmt$(p.spotLiquidity) : '-';
+        const spotClass = p.spotLiquidity ? 'text-cyan-300' : 'text-gray-600';
         
         html += `<div class="grid grid-cols-12 gap-1 py-1 border-b border-gray-800/50 hover:bg-white/5">
             <div class="col-span-1 text-gray-500">${i + 1}</div>
-            <div class="col-span-3 text-white font-mono">${p.name}</div>
+            <div class="col-span-3 ${nameClass} font-mono truncate" title="${displayName}">${displayName}</div>
             <div class="col-span-2 ${bucketColors[p.bucket]}">${p.bucket}</div>
-            <div class="col-span-3 text-gray-400 font-mono" title="${p.poolContract || ''}">${contractShort}</div>
-            <div class="col-span-3 text-gray-500 font-mono truncate" title="${p.lpToken}">${lpShort}</div>
+            <div class="col-span-2 text-right ${spotClass} font-mono">${spotLiq}</div>
+            <div class="col-span-4 text-gray-500 font-mono truncate" title="${p.poolContract || ''}">${contractShort}</div>
         </div>`;
     });
     
@@ -7130,7 +7867,10 @@ async function fetchAstroData() {
         const pool = pools[i];
         const progress = ((i + 1) / pools.length * 100).toFixed(0);
         progressBar.style.width = progress + '%';
-        statusEl.textContent = `Fetching ${pool.name} (${i + 1}/${pools.length})...`;
+        
+        // Use resolved name if available, otherwise original name
+        const poolName = pool.resolvedName || pool.name;
+        statusEl.textContent = `Fetching ${poolName} (${i + 1}/${pools.length})...`;
         
         try {
             const [liqData, volData] = await Promise.all([
@@ -7138,18 +7878,46 @@ async function fetchAstroData() {
                 fetchAstroChartData('volume', pool.poolContract, dateRange)
             ]);
             
+            // Log data received
+            console.log(`${poolName}: ${liqData.length} liq points, ${volData.length} vol points`);
+            
             // Process into epoch averages
             const epochAverages = processEpochAverages(liqData, volData);
             
-            astroAutoData.epochData[pool.name] = {
+            // Get latest epoch liquidity
+            const epochKeys = Object.keys(epochAverages).sort((a, b) => b - a);
+            const latestEpoch = epochKeys[0] || null;
+            const latestLiq = latestEpoch ? epochAverages[latestEpoch].avgLiquidity : 0;
+            
+            // Key by contract to avoid duplicates overwriting each other
+            // Two pools with same name but different contracts will both be stored
+            astroAutoData.epochData[pool.poolContract] = {
+                name: poolName,
                 bucket: pool.bucket,
                 poolContract: pool.poolContract,
+                lpToken: pool.lpToken,
+                spotLiquidity: pool.spotLiquidity || null,
                 epochs: epochAverages,
-                dateRange
+                dateRange,
+                latestLiquidity: latestLiq,
+                latestEpoch
             };
             
+            console.log(`✓ ${poolName} @ ${pool.poolContract.substring(0,12)}...: $${latestLiq.toLocaleString()}`);
+            
         } catch (e) {
-            console.error(`Failed to fetch ${pool.name}:`, e);
+            console.error(`Failed to fetch ${poolName}:`, e);
+            astroAutoData.epochData[pool.poolContract] = {
+                name: poolName,
+                bucket: pool.bucket,
+                poolContract: pool.poolContract,
+                lpToken: pool.lpToken,
+                epochs: {},
+                dateRange,
+                error: e.message,
+                latestLiquidity: 0,
+                latestEpoch: null
+            };
         }
         
         // Small delay to avoid rate limiting
@@ -7157,15 +7925,119 @@ async function fetchAstroData() {
     }
     
     progressContainer.classList.add('hidden');
+    
+    // Detect and handle duplicate pools (same name, different contracts)
+    detectDuplicatePools();
+    
     renderAstroDataList();
     
     const poolCount = Object.keys(astroAutoData.epochData).length;
-    statusEl.textContent = `✓ Fetched data for ${poolCount} pools`;
-    statusEl.className = 'text-[9px] text-green-400';
+    const activeCount = Object.values(astroAutoData.epochData).filter(p => !p.deprecated).length;
+    const deprecatedCount = poolCount - activeCount;
     
-    // Enable export
-    $('btn-export-astro').disabled = false;
-    $('btn-save-astro-gh').disabled = false;
+    if (deprecatedCount > 0) {
+        statusEl.textContent = `✓ Fetched ${poolCount} pools (${activeCount} active, ${deprecatedCount} deprecated)`;
+        statusEl.className = 'text-[9px] text-yellow-400';
+    } else {
+        statusEl.textContent = `✓ Fetched data for ${poolCount} pools`;
+        statusEl.className = 'text-[9px] text-green-400';
+    }
+    
+    // Enable export (header button)
+    const exportBtn = $('btn-astro-export');
+    if (exportBtn) exportBtn.disabled = false;
+}
+
+// Detect duplicate pools (same name OR reversed order, different contracts on same DEX)
+// Compare to LP Registry depth to determine which is the active/correct pool
+function detectDuplicatePools() {
+    // Normalize name for grouping (handles reversed order)
+    function getNormalizedKey(name) {
+        if (!name) return '';
+        const parts = name.toUpperCase().split('-');
+        // Sort tokens alphabetically so LUNA-ROAR and ROAR-LUNA become the same key
+        return parts.sort().join('-');
+    }
+    
+    // Group pools by normalized name (catches both exact matches and reversed order)
+    const poolsByNormalizedName = {};
+    for (const [contract, data] of Object.entries(astroAutoData.epochData)) {
+        const name = data.name;
+        const normalizedKey = getNormalizedKey(name);
+        if (!poolsByNormalizedName[normalizedKey]) poolsByNormalizedName[normalizedKey] = [];
+        poolsByNormalizedName[normalizedKey].push({ contract, originalName: name, ...data });
+    }
+    
+    // Process groups with duplicates
+    for (const [normalizedKey, pools] of Object.entries(poolsByNormalizedName)) {
+        if (pools.length <= 1) continue;
+        
+        // Get display name (use the first one's original name)
+        const displayName = pools[0].originalName;
+        const allNames = [...new Set(pools.map(p => p.originalName))].join(' / ');
+        
+        console.log(`🔍 Found ${pools.length} pools for "${allNames}":`);
+        pools.forEach(p => {
+            const liq = p.latestLiquidity || p.spotLiquidity || 0;
+            console.log(`   - ${p.originalName} @ ${p.contract.substring(0,16)}... : $${liq.toLocaleString()}`);
+        });
+        
+        // Get registry depth for comparison (check both name orders)
+        let registryDepth = 0;
+        for (const pool of pools) {
+            const registryKey = `${pool.originalName}|Astroport`;
+            const registryEntry = store.lpRegistry?.[registryKey];
+            if (registryEntry?.depth && registryEntry.depth > registryDepth) {
+                registryDepth = registryEntry.depth;
+            }
+        }
+        
+        console.log(`   Registry depth: $${registryDepth.toLocaleString()}`);
+        
+        // Find best match based on liquidity
+        let bestPool = null;
+        let bestScore = Infinity;
+        
+        for (const pool of pools) {
+            const liq = pool.latestLiquidity || pool.spotLiquidity || 0;
+            
+            if (registryDepth > 0) {
+                // Score by how close to registry depth
+                const diff = Math.abs(liq - registryDepth);
+                const pctDiff = registryDepth > 0 ? diff / registryDepth : (liq > 0 ? 0 : 1);
+                
+                if (pctDiff < bestScore) {
+                    bestScore = pctDiff;
+                    bestPool = pool;
+                }
+            } else {
+                // No registry - pick highest liquidity
+                if (liq > (bestPool?.latestLiquidity || bestPool?.spotLiquidity || 0)) {
+                    bestPool = pool;
+                    bestScore = 0;
+                }
+            }
+        }
+        
+        // If no best pool found (all have $0), pick the first one as "active"
+        if (!bestPool && pools.length > 0) {
+            bestPool = pools[0];
+            console.log(`   ⚠ All pools have $0 liquidity - keeping first as active`);
+        }
+        
+        // Mark non-best pools as deprecated
+        for (const pool of pools) {
+            if (!bestPool || pool.contract !== bestPool.contract) {
+                astroAutoData.epochData[pool.contract].deprecated = true;
+                astroAutoData.epochData[pool.contract].deprecatedReason = 
+                    `Duplicate of ${bestPool?.originalName || displayName} - lower liquidity match`;
+                console.log(`   ⚠ Marked deprecated: ${pool.originalName} @ ${pool.contract.substring(0,16)}...`);
+            } else {
+                astroAutoData.epochData[pool.contract].deprecated = false;
+                console.log(`   ✓ Active pool: ${pool.originalName} @ ${pool.contract.substring(0,16)}...`);
+            }
+        }
+    }
 }
 
 async function fetchAstroChartData(type, poolAddr, dateRange) {
@@ -7182,7 +8054,15 @@ async function fetchAstroChartData(type, poolAddr, dateRange) {
     try {
         const resp = await fetchWithCorsProxy(url);
         const data = await resp.json();
-        return data?.result?.data?.json?.[0]?.series || [];
+        
+        // Check for error response from Astroport
+        if (data?.error) {
+            console.warn(`Astroport API error for ${type} ${poolAddr.substring(0,12)}:`, data.error);
+            return [];
+        }
+        
+        const series = data?.result?.data?.json?.[0]?.series || [];
+        return series;
     } catch (e) {
         console.error(`Failed to fetch ${type} for ${poolAddr}:`, e);
         return [];
@@ -7191,7 +8071,10 @@ async function fetchAstroChartData(type, poolAddr, dateRange) {
 
 function processEpochAverages(liqData, volData) {
     const schedule = epochScheduleCache;
-    if (!schedule || schedule.length === 0) return {};
+    if (!schedule || schedule.length === 0) {
+        console.warn('No epoch schedule loaded!');
+        return {};
+    }
     
     const epochs = {};
     
@@ -7268,28 +8151,50 @@ function renderAstroDataList() {
     
     let html = '';
     
-    for (const [poolName, data] of Object.entries(astroAutoData.epochData)) {
-        const epochs = Object.keys(data.epochs).sort((a, b) => b - a);
-        const latestEpoch = epochs[0];
-        const latestData = data.epochs[latestEpoch] || {};
+    // Convert to array and sort: active first, then deprecated; within each group by name
+    const poolsArray = Object.entries(astroAutoData.epochData)
+        .map(([contract, data]) => ({ contract, ...data }))
+        .sort((a, b) => {
+            // Deprecated last
+            if (a.deprecated !== b.deprecated) return a.deprecated ? 1 : -1;
+            // Then by name
+            return (a.name || '').localeCompare(b.name || '');
+        });
+    
+    for (const pool of poolsArray) {
+        const poolName = pool.name || 'Unknown';
+        const epochs = Object.keys(pool.epochs || {}).sort((a, b) => b - a);
+        const latestLiq = pool.latestLiquidity || 0;
         
-        // Calculate totals across all epochs
-        let totalLiq = 0, totalVol = 0, totalPoints = 0;
-        for (const ep of Object.values(data.epochs)) {
-            totalLiq += ep.avgLiquidity;
-            totalVol += ep.avgVolume;
-            totalPoints += ep.liqPointCount;
+        // Calculate average volume across all epochs
+        let totalVol = 0, totalPoints = 0;
+        for (const ep of Object.values(pool.epochs || {})) {
+            totalVol += ep.avgVolume || 0;
+            totalPoints += ep.liqPointCount || 0;
         }
-        const avgLiq = epochs.length > 0 ? totalLiq / epochs.length : 0;
         const avgVol = epochs.length > 0 ? totalVol / epochs.length : 0;
+        const avgPtsPerEpoch = epochs.length > 0 ? Math.round(totalPoints / epochs.length) : 0;
         
-        html += `<div class="grid grid-cols-12 gap-1 py-1 border-b border-gray-800/50 hover:bg-white/5">
-            <div class="col-span-3 text-white font-mono truncate" title="${poolName}">${poolName}</div>
-            <div class="col-span-2 ${bucketColors[data.bucket]}">${data.bucket}</div>
-            <div class="col-span-2 text-right text-cyan-300 font-mono">${fmt$(avgLiq)}</div>
+        // Color code points per epoch
+        let ptsClass = 'text-gray-500';
+        if (avgPtsPerEpoch >= 30) ptsClass = 'text-green-400';
+        else if (avgPtsPerEpoch >= 8) ptsClass = 'text-yellow-400';
+        else if (avgPtsPerEpoch >= 2) ptsClass = 'text-orange-400';
+        else if (avgPtsPerEpoch === 0) ptsClass = 'text-red-400';
+        
+        // Deprecated styling
+        const rowClass = pool.deprecated ? 'opacity-40 bg-red-900/10' : '';
+        const nameClass = pool.deprecated ? 'text-gray-500 line-through' : 'text-white';
+        const deprecatedBadge = pool.deprecated ? '<span class="text-red-400 text-[7px] ml-1">DEPRECATED</span>' : '';
+        const contractHint = pool.deprecated ? ` (${pool.contract.substring(0,8)}...)` : '';
+        
+        html += `<div class="grid grid-cols-12 gap-1 py-1 border-b border-gray-800/50 hover:bg-white/5 ${rowClass}">
+            <div class="col-span-3 ${nameClass} font-mono truncate" title="${poolName}${contractHint}">${poolName}${deprecatedBadge}</div>
+            <div class="col-span-2 ${bucketColors[pool.bucket]}">${pool.bucket}</div>
+            <div class="col-span-2 text-right text-cyan-300 font-mono">${fmt$(latestLiq)}</div>
             <div class="col-span-2 text-right text-purple-300 font-mono">${fmt$(avgVol)}</div>
-            <div class="col-span-2 text-right text-gray-400">${epochs.join(', ')}</div>
-            <div class="col-span-1 text-right text-gray-500">${totalPoints}</div>
+            <div class="col-span-2 text-right text-gray-400">${epochs.join(', ') || '-'}</div>
+            <div class="col-span-1 text-right ${ptsClass}">${avgPtsPerEpoch}</div>
         </div>`;
     }
     
@@ -7297,17 +8202,61 @@ function renderAstroDataList() {
 }
 
 function exportAstroJSON() {
-    const data = {
+    // Build LP registry section from discovered pools (keyed by contract)
+    const lpRegistry = {};
+    const poolsExport = {};
+    
+    // Count active vs deprecated
+    let activeCount = 0;
+    let deprecatedCount = 0;
+    
+    for (const [contract, data] of Object.entries(astroAutoData.epochData)) {
+        const poolName = data.name || 'Unknown';
+        
+        // Add to registry (only non-deprecated)
+        if (!data.deprecated) {
+            lpRegistry[`${poolName}|Astroport`] = {
+                lp: poolName,
+                dex: 'Astroport',
+                bucket: data.bucket,
+                lpToken: data.lpToken,
+                poolContract: contract
+            };
+            activeCount++;
+        } else {
+            deprecatedCount++;
+        }
+        
+        // Add to pools (all, with deprecated flag)
+        poolsExport[poolName + (data.deprecated ? ' (deprecated)' : '')] = {
+            name: poolName,
+            bucket: data.bucket,
+            poolContract: contract,
+            lpToken: data.lpToken,
+            spotLiquidity: data.spotLiquidity || null,
+            epochs: data.epochs,
+            dateRange: data.dateRange,
+            latestLiquidity: data.latestLiquidity || 0,
+            latestEpoch: data.latestEpoch || null,
+            deprecated: data.deprecated || false,
+            deprecatedReason: data.deprecatedReason || null
+        };
+    }
+    
+    const exportData = {
         meta: {
             created: new Date().toISOString(),
-            poolCount: Object.keys(astroAutoData.epochData).length,
+            poolCount: activeCount,
+            deprecatedCount: deprecatedCount,
+            totalCount: activeCount + deprecatedCount,
             dateRange: $('astro-date-range').value
         },
-        pools: astroAutoData.epochData
+        lpRegistry: lpRegistry,
+        pools: poolsExport
     };
     
     const filename = `astroport-epoch-data-${new Date().toISOString().split('T')[0]}.json`;
-    downloadJson(JSON.stringify(data, null, 2), filename);
+    downloadJson(JSON.stringify(exportData, null, 2), filename);
 }
 
 async function saveAstroToGitHub() {
@@ -7315,9 +8264,764 @@ async function saveAstroToGitHub() {
 }
 
 // ============================================
+// ASTROPORT VALIDATION AGAINST LP REGISTRY
+// ============================================
+const ASTRO_VALIDATION_THRESHOLD_LOW = 0.05;  // 5% - OK
+const ASTRO_VALIDATION_THRESHOLD_HIGH = 0.10; // 10% - Flag for review
+
+// Store validation state
+let astroValidationState = {
+    results: [],
+    accepted: new Set(),  // Set of pool names with accepted discrepancies
+    validated: false
+};
+
+// Check if name has a bridge suffix and return it
+function getBridgeSuffix(name) {
+    const match = name.match(/\.(atom|axl|osmo|wh|eth)$/i);
+    return match ? match[1].toLowerCase() : null;
+}
+
+// Normalize pool name for matching (handles order and token aliases)
+function normalizePoolName(name, stripSuffix = true) {
+    if (!name) return '';
+    
+    // Alias mappings (TLA name → Astroport name)
+    const ALIASES = {
+        'BONELUNA': 'BLUNA',  // TLA calls it boneLUNA, Astroport calls it bLUNA
+    };
+    
+    let normalized = name;
+    
+    // Only strip bridge suffixes if requested
+    if (stripSuffix) {
+        normalized = normalized
+            .replace(/\.atom/gi, '')
+            .replace(/\.axl/gi, '')
+            .replace(/\.osmo/gi, '')
+            .replace(/\.wh/gi, '')
+            .replace(/\.eth/gi, '');
+    }
+    
+    // Apply aliases to each token
+    let parts = normalized.toUpperCase().split('-');
+    parts = parts.map(p => ALIASES[p] || p);
+    
+    return parts.join('-');
+}
+
+// Check if LP is a single-sided staking asset (not a trading pair)
+// Only ampCAPA and xASTRO are single assets - they have no LP pairs on Astroport
+function isSingleSidedToken(lpName) {
+    const SINGLE_ASSETS = ['AMPCAPA', 'XASTRO'];
+    const upper = lpName.toUpperCase().replace(/-/g, '');
+    return SINGLE_ASSETS.includes(upper);
+}
+
+// Check if pool name contains an ambiguous bridged token
+function hasAmbiguousBridgeToken(name) {
+    const upper = name.toUpperCase();
+    // These tokens have multiple bridge variants that should NOT be collapsed
+    return /WBTC|WETH|USDC|USDT/.test(upper);
+}
+
+// Try to find matching pool in fetched data (keyed by contract)
+// Handles Astroport's inconsistent naming where .atom has no suffix but .axl does
+// Only matches non-deprecated pools
+function findMatchingPool(registryLpName, fetchedPools) {
+    const regSuffix = getBridgeSuffix(registryLpName);
+    const regHasAmbiguous = hasAmbiguousBridgeToken(registryLpName);
+    
+    let bestMatch = null;
+    let bestMatchScore = Infinity;
+    
+    // Try each fetched pool (keyed by contract)
+    for (const [contract, poolData] of Object.entries(fetchedPools)) {
+        // Skip deprecated pools
+        if (poolData.deprecated) continue;
+        
+        const fetchedName = poolData.name;
+        if (!fetchedName) continue;
+        
+        // Direct name match first
+        if (fetchedName === registryLpName) {
+            return { pool: poolData, matchedName: fetchedName, contract };
+        }
+        
+        const fetchSuffix = getBridgeSuffix(fetchedName);
+        const fetchHasAmbiguous = hasAmbiguousBridgeToken(fetchedName);
+        
+        // Special handling for wBTC: Astroport shows .atom as just "WBTC" (no suffix)
+        // but shows .axl as "WBTC.axl"
+        if (regHasAmbiguous || fetchHasAmbiguous) {
+            // Case 1: Registry has .atom suffix, Fetched has NO suffix (Astroport wBTC convention)
+            if (regSuffix === 'atom' && fetchSuffix === null) {
+                // Potentially a match - continue to name comparison
+            }
+            // Case 2: Both have same suffix (including both null)
+            else if (regSuffix === fetchSuffix) {
+                // Same suffix - continue to name comparison
+            }
+            // Case 3: Different non-null suffixes (.atom vs .axl)
+            else if (regSuffix !== null && fetchSuffix !== null && regSuffix !== fetchSuffix) {
+                // Different bridges - skip
+                continue;
+            }
+            // Case 4: Registry has no suffix but Fetched has suffix
+            else if (regSuffix === null && fetchSuffix !== null) {
+                // Registry is generic, Fetched is specific - skip to avoid wrong match
+                continue;
+            }
+            // Case 5: Registry has non-.atom suffix, Fetched has no suffix
+            else if (regSuffix !== null && regSuffix !== 'atom' && fetchSuffix === null) {
+                // Registry has .axl/.osmo but Fetched has none - skip
+                continue;
+            }
+        }
+        
+        // Normalize both names (strip suffixes for comparison)
+        const normalizedRegistry = normalizePoolName(registryLpName, true);
+        const normalizedFetched = normalizePoolName(fetchedName, true);
+        
+        // Exact normalized match
+        if (normalizedRegistry === normalizedFetched) {
+            return { pool: poolData, matchedName: fetchedName, contract };
+        }
+        
+        // Try reversed order (USDC-EURe vs EURe-USDC)
+        const registryParts = normalizedRegistry.split('-');
+        const fetchedParts = normalizedFetched.split('-');
+        
+        if (registryParts.length === 2 && fetchedParts.length === 2) {
+            const reversedRegistry = `${registryParts[1]}-${registryParts[0]}`;
+            if (reversedRegistry === normalizedFetched) {
+                return { pool: poolData, matchedName: fetchedName, contract };
+            }
+        }
+    }
+    
+    return null;
+}
+
+function validateAstroAgainstRegistry() {
+    // Check prerequisites
+    if (!store.lpRegistry || Object.keys(store.lpRegistry).length === 0) {
+        alert('Please load LP Registry first (LP Registry tab)');
+        return;
+    }
+    
+    if (!astroAutoData.epochData || Object.keys(astroAutoData.epochData).length === 0) {
+        alert('Please fetch Astroport data first (Steps 1 & 2)');
+        return;
+    }
+    
+    // Get LP Registry entries for Astroport
+    const astroRegistryLps = Object.entries(store.lpRegistry)
+        .filter(([key, lp]) => lp.dex === 'Astroport')
+        .map(([key, lp]) => ({ key, ...lp }));
+    
+    console.log(`Validating ${astroRegistryLps.length} Astroport LPs from Registry`);
+    
+    // Results tracking
+    const results = [];
+    let matched = 0, missing = 0, flagged = 0, skipped = 0;
+    
+    for (const regLp of astroRegistryLps) {
+        const lpName = regLp.lp;
+        
+        // Check if this is a single-sided token (no chart data available)
+        if (isSingleSidedToken(lpName) || regLp.single) {
+            results.push({
+                name: lpName,
+                bucket: regLp.bucket,
+                registryDepth: regLp.depth || 0,
+                registryPct: regLp.vote_pct,
+                fetchedLiq: null,
+                matchedAs: null,
+                status: 'skipped',
+                variance: null,
+                variancePct: null,
+                active: regLp.active,
+                reason: 'Single-sided (no LP)'
+            });
+            skipped++;
+            console.log(`⏭ Skipped single-sided: ${lpName}`);
+            continue;
+        }
+        
+        // Find matching pool in fetched data (handles name variations)
+        const match = findMatchingPool(lpName, astroAutoData.epochData);
+        
+        if (!match) {
+            // Not found in fetched data
+            results.push({
+                name: lpName,
+                bucket: regLp.bucket,
+                registryDepth: regLp.depth || 0,
+                registryPct: regLp.vote_pct,
+                fetchedLiq: null,
+                matchedAs: null,
+                status: 'missing',
+                variance: null,
+                variancePct: null,
+                active: regLp.active
+            });
+            missing++;
+            console.log(`✗ Missing: ${lpName}`);
+            continue;
+        }
+        
+        const fetchedPool = match.pool;
+        const matchedName = match.matchedName;
+        const matchedContract = match.contract;
+        
+        // Log if names differ
+        if (matchedName !== lpName) {
+            console.log(`✓ Matched: ${lpName} → ${matchedName} (${matchedContract?.substring(0,12)}...)`);
+        }
+        
+        // Use spot liquidity for validation (point-in-time comparison with Registry depth)
+        // Fall back to epoch average if spot not available
+        const spotLiq = fetchedPool.spotLiquidity || fetchedPool.latestLiquidity || 0;
+        const epochAvgLiq = fetchedPool.latestLiquidity || 0;
+        
+        // Calculate variance between registry depth and spot liquidity
+        let variance = null;
+        let variancePct = null;
+        let status = 'matched';
+        
+        const regDepth = regLp.depth || 0;
+        
+        if (regDepth > 0 && spotLiq > 0) {
+            // Calculate absolute and percentage variance
+            variance = spotLiq - regDepth;
+            variancePct = Math.abs(variance) / regDepth;
+            
+            // Flag based on threshold
+            if (variancePct > ASTRO_VALIDATION_THRESHOLD_HIGH) {
+                status = 'flagged';
+                flagged++;
+                console.log(`⚠ ${lpName}: Registry $${regDepth.toLocaleString()} vs Spot $${spotLiq.toLocaleString()} (${(variancePct * 100).toFixed(1)}% variance)`);
+            } else {
+                matched++;
+            }
+        } else if (regDepth === 0 && spotLiq > 0) {
+            // No registry depth but we have fetched data - OK
+            matched++;
+        } else if (regDepth > 0 && spotLiq === 0) {
+            // Registry has depth but fetched is 0 - flag
+            status = 'flagged';
+            flagged++;
+            variancePct = 1; // 100% variance
+        } else {
+            matched++;
+        }
+        
+        results.push({
+            name: lpName,
+            bucket: regLp.bucket,
+            registryDepth: regDepth,
+            registryPct: regLp.vote_pct,
+            fetchedLiq: spotLiq,          // Now using spot for validation
+            epochAvgLiq: epochAvgLiq,     // Keep epoch avg for reference
+            matchedAs: matchedName !== lpName ? matchedName : null,
+            matchedContract: matchedContract,
+            status: status,
+            variance: variance,
+            variancePct: variancePct,
+            active: regLp.active
+        });
+    }
+    
+    // Store results
+    astroValidationState.results = results;
+    astroValidationState.validated = true;
+    
+    // Update summary counts (don't count skipped in total for status)
+    const validatable = astroRegistryLps.length - skipped;
+    setTxt('val-registry-count', `${validatable} (${skipped} skipped)`);
+    setTxt('val-matched-count', matched);
+    setTxt('val-flagged-count', flagged);
+    setTxt('val-missing-count', missing);
+    $('astro-validation-summary').classList.remove('hidden');
+    
+    // Update status light
+    updateAstroValidationStatus(matched, flagged, missing, validatable);
+    
+    // Render results
+    renderAstroValidationList(results);
+}
+
+function updateAstroValidationStatus(matched, flagged, missing, total) {
+    const light = $('astro-validation-light');
+    const statusEl = $('astro-validation-status');
+    
+    // Count accepted items
+    const acceptedFlagged = astroValidationState.results
+        .filter(r => r.status === 'flagged' && astroValidationState.accepted.has(r.name))
+        .length;
+    const acceptedMissing = astroValidationState.results
+        .filter(r => r.status === 'missing' && astroValidationState.accepted.has(r.name))
+        .length;
+    
+    const unresolvedFlagged = flagged - acceptedFlagged;
+    const unresolvedMissing = missing - acceptedMissing;
+    
+    if (unresolvedMissing > 0 || unresolvedFlagged > 0) {
+        // RED - unresolved issues
+        light.className = 'w-3 h-3 rounded-full bg-red-500 animate-pulse';
+        statusEl.innerHTML = `<span class="text-[9px] text-red-400">${unresolvedMissing} missing, ${unresolvedFlagged} flagged</span>`;
+    } else if (acceptedFlagged > 0 || acceptedMissing > 0) {
+        // YELLOW - all issues accepted
+        light.className = 'w-3 h-3 rounded-full bg-yellow-500';
+        statusEl.innerHTML = `<span class="text-[9px] text-yellow-400">✓ ${matched}/${total} matched (${acceptedFlagged + acceptedMissing} accepted)</span>`;
+    } else {
+        // GREEN - all good
+        light.className = 'w-3 h-3 rounded-full bg-green-500';
+        statusEl.innerHTML = `<span class="text-[9px] text-green-400">✓ ${matched}/${total} matched</span>`;
+    }
+}
+
+function renderAstroValidationList(results) {
+    const bucketColors = {
+        stable: 'text-yellow-400',
+        project: 'text-orange-400',
+        bluechip: 'text-blue-400',
+        single: 'text-purple-400'
+    };
+    
+    let html = '';
+    
+    // Sort: missing first, then flagged, then matched, then skipped; within each group sort by bucket
+    results.sort((a, b) => {
+        const statusOrder = { missing: 0, flagged: 1, matched: 2, skipped: 3 };
+        if (statusOrder[a.status] !== statusOrder[b.status]) {
+            return statusOrder[a.status] - statusOrder[b.status];
+        }
+        return a.bucket.localeCompare(b.bucket);
+    });
+    
+    for (const r of results) {
+        const isAccepted = astroValidationState.accepted.has(r.name);
+        const checkboxId = `val-accept-${r.name.replace(/[^a-zA-Z0-9]/g, '_')}`;
+        
+        let statusHtml = '';
+        let rowClass = '';
+        let varianceHtml = '';
+        
+        // Show variance percentage if available
+        if (r.variancePct !== null) {
+            const pct = (r.variancePct * 100).toFixed(1);
+            const sign = r.variance > 0 ? '+' : '';
+            if (r.variancePct <= ASTRO_VALIDATION_THRESHOLD_LOW) {
+                varianceHtml = `<span class="text-green-400">${sign}${pct}%</span>`;
+            } else if (r.variancePct <= ASTRO_VALIDATION_THRESHOLD_HIGH) {
+                varianceHtml = `<span class="text-yellow-400">${sign}${pct}%</span>`;
+            } else {
+                varianceHtml = `<span class="text-red-400">${sign}${pct}%</span>`;
+            }
+        }
+        
+        if (r.status === 'skipped') {
+            // Single-sided assets - no LP data available
+            statusHtml = `<span class="text-gray-500">⏭ ${r.reason || 'N/A'}</span>`;
+            rowClass = 'opacity-50';
+        } else if (r.status === 'missing') {
+            statusHtml = isAccepted 
+                ? '<span class="text-yellow-400">✓ Accepted</span>'
+                : '<span class="text-red-400">⚠ Missing</span>';
+            rowClass = isAccepted ? 'bg-yellow-900/10' : 'bg-red-900/10';
+        } else if (r.status === 'flagged') {
+            statusHtml = isAccepted
+                ? `<span class="text-yellow-400">✓ ${varianceHtml}</span>`
+                : `<span class="text-orange-400">⚠ ${varianceHtml}</span>`;
+            rowClass = isAccepted ? 'bg-yellow-900/10' : 'bg-orange-900/20';
+        } else {
+            statusHtml = varianceHtml ? `<span class="text-green-400">✓ ${varianceHtml}</span>` : '<span class="text-green-400">✓ OK</span>';
+            rowClass = '';
+        }
+        
+        // Only show checkbox for issues
+        const showCheckbox = r.status === 'missing' || r.status === 'flagged';
+        const activeLabel = r.active ? '' : '<span class="text-gray-600 ml-1">(inactive)</span>';
+        
+        // Show matched name if different
+        const matchedLabel = r.matchedAs ? `<span class="text-cyan-500 text-[8px] ml-1">→ ${r.matchedAs}</span>` : '';
+        
+        html += `<div class="grid grid-cols-12 gap-1 py-1 border-b border-gray-800/50 ${rowClass}">
+            <div class="col-span-1">
+                ${showCheckbox ? `<input type="checkbox" id="${checkboxId}" ${isAccepted ? 'checked' : ''} 
+                    onchange="toggleAstroValidationAccept('${r.name}')" 
+                    class="accent-yellow-500 cursor-pointer" title="Accept this discrepancy">` : ''}
+            </div>
+            <div class="col-span-3 text-white font-mono truncate" title="${r.name}${r.matchedAs ? ' → ' + r.matchedAs : ''}">${r.name}${matchedLabel}${activeLabel}</div>
+            <div class="col-span-2 ${bucketColors[r.bucket] || 'text-gray-400'}">${r.bucket}</div>
+            <div class="col-span-2 text-right text-gray-400 font-mono">${r.registryDepth > 0 ? fmt$(r.registryDepth) : '-'}</div>
+            <div class="col-span-2 text-right text-cyan-300 font-mono">${r.fetchedLiq !== null ? fmt$(r.fetchedLiq) : '-'}</div>
+            <div class="col-span-2 text-right">${statusHtml}</div>
+        </div>`;
+    }
+    
+    setHtml('astro-validation-list', html || '<div class="text-gray-600 italic text-center py-4">No LPs to validate</div>');
+}
+
+function toggleAstroValidationAccept(poolName) {
+    if (astroValidationState.accepted.has(poolName)) {
+        astroValidationState.accepted.delete(poolName);
+    } else {
+        astroValidationState.accepted.add(poolName);
+    }
+    
+    // Recount and update status
+    const results = astroValidationState.results;
+    const matched = results.filter(r => r.status === 'matched').length;
+    const flagged = results.filter(r => r.status === 'flagged').length;
+    const missing = results.filter(r => r.status === 'missing').length;
+    
+    updateAstroValidationStatus(matched, flagged, missing, results.length);
+    renderAstroValidationList(results);
+}
+
+// Helper to get latest liquidity from raw data points (not epoch average)
+function getLatestLiquidityPoints(poolName, numPoints = 2) {
+    // This would need raw data storage - for now use epoch data
+    const pool = astroAutoData.epochData[poolName];
+    if (!pool) return null;
+    
+    const epochs = Object.keys(pool.epochs).sort((a, b) => b - a);
+    if (epochs.length === 0) return null;
+    
+    // Return latest epoch's average as approximation
+    return pool.epochs[epochs[0]]?.avgLiquidity || 0;
+}
+
+// ============================================
 // SKELETON SWAP GITHUB FETCH
 // ============================================
 const SS_GITHUB_BASE = 'https://raw.githubusercontent.com/defipatriot/ss-pool-data_2026/main/data/weekly-avg';
+
+// Store for Skeleton Swap validation
+let ssValidationState = {
+    pools: [],
+    results: [],
+    matched: 0,
+    unmatched: 0,
+    missing: 0
+};
+
+// Run the full Skeleton Swap workflow
+async function runSkeletonSwapWorkflow() {
+    const btn = $('btn-ss-workflow');
+    const statusEl = $('ss-workflow-status');
+    
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Running...';
+    statusEl.classList.remove('hidden');
+    statusEl.textContent = 'Fetching current epoch data...';
+    statusEl.className = 'text-[10px] text-yellow-400 mt-2';
+    
+    try {
+        const currentEpoch = store.liveEpochInfo?.currentEpoch || 169;
+        
+        // Step 1: Fetch current epoch data
+        await fetchSkeletonSwapData();
+        
+        // Step 2: Fetch historical data for 4-epoch averaging
+        statusEl.textContent = 'Fetching historical epochs for 4-epoch avg...';
+        const histCount = await fetchSSHistoricalData(currentEpoch);
+        
+        // Step 3: Validate against LP Registry
+        statusEl.textContent = 'Validating against LP Registry...';
+        validateSkeletonSwap();
+        
+        // Enable export buttons
+        const exportBtn = $('btn-ss-export');
+        if (exportBtn) exportBtn.disabled = false;
+        const validateBtn = $('btn-ss-validate');
+        if (validateBtn) validateBtn.disabled = false;
+        
+        statusEl.textContent = `✓ Complete! ${store.ww.length} pools, ${ssValidationState.matched} matched, ${histCount} epochs loaded`;
+        statusEl.className = 'text-[10px] text-green-400 mt-2';
+        
+        // Update tab status - green if no missing LPs from Registry
+        updateSSTabStatus();
+        
+    } catch (error) {
+        console.error('Skeleton Swap workflow error:', error);
+        statusEl.textContent = `Error: ${error.message}`;
+        statusEl.className = 'text-[10px] text-red-400 mt-2';
+    }
+    
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-play mr-2"></i> Fetch & Validate';
+}
+
+// Update Skeleton Swap tab status based on validation
+function updateSSTabStatus() {
+    const tabEl = $('tab-ww');
+    if (!tabEl) return;
+    
+    // Check if all SS Registry LPs have data
+    const ssRegistryCount = Object.values(store.lpRegistry).filter(lp => lp.dex === 'Skeleton Swap').length;
+    const missingCount = ssValidationState.missing || 0;
+    
+    if (ssRegistryCount > 0 && missingCount === 0 && store.ww?.length > 0) {
+        // All LPs matched - green
+        tabEl.className = 'tab-btn tab-complete';
+        tabEl.querySelector('.tab-status').textContent = '✓';
+    } else if (store.ww?.length > 0) {
+        // Data fetched but some missing - yellow
+        tabEl.className = 'tab-btn tab-incomplete';
+        tabEl.querySelector('.tab-status').textContent = '●';
+    } else {
+        // No data yet - red
+        tabEl.className = 'tab-btn tab-incomplete';
+        tabEl.querySelector('.tab-status').textContent = '●';
+    }
+}
+
+// Validate Skeleton Swap pools against LP Registry
+function validateSkeletonSwap() {
+    ssValidationState = { pools: [], results: [], matched: 0, unmatched: 0, missing: 0 };
+    
+    // Get Skeleton Swap pools from LP Registry
+    const ssRegistryPools = Object.entries(store.lpRegistry)
+        .filter(([key, lp]) => lp.dex === 'Skeleton Swap')
+        .map(([key, lp]) => ({ key, ...lp }));
+    
+    // Track which registry pools were matched
+    const matchedRegistryKeys = new Set();
+    
+    // Match each fetched pool to Registry using findLpRegistryMatch (handles aliases)
+    store.ww.forEach(pool => {
+        const match = findLpRegistryMatch(pool.pool);
+        
+        if (match) {
+            pool.matched = true;
+            pool.matchedAs = match.lp !== pool.pool ? match.lp : null;
+            pool.bucket = match.bucket;
+            pool.registryDepth = match.depth || null;
+            pool.lpToken = match.lpToken;
+            pool.poolContract = match.poolContract;
+            matchedRegistryKeys.add(match.key);
+            ssValidationState.matched++;
+        } else {
+            pool.matched = false;
+            pool.bucket = 'unknown';
+            ssValidationState.unmatched++;
+        }
+        
+        ssValidationState.results.push({
+            name: pool.pool,
+            matched: pool.matched,
+            matchedAs: pool.matchedAs,
+            bucket: pool.bucket,
+            tvl: pool.tvl,
+            volume: pool.volume,
+            registryDepth: pool.registryDepth
+        });
+    });
+    
+    // Check for pools in Registry but not in fetched data
+    ssRegistryPools.forEach(regPool => {
+        if (!matchedRegistryKeys.has(regPool.key)) {
+            ssValidationState.missing++;
+            ssValidationState.results.push({
+                name: regPool.lp,
+                matched: false,
+                missing: true,
+                bucket: regPool.bucket,
+                tvl: 0,
+                volume: 0,
+                registryDepth: regPool.depth || null
+            });
+        }
+    });
+    
+    // Update UI
+    setTxt('ss-total-count', store.ww.length);
+    setTxt('ss-matched-count', ssValidationState.matched);
+    setTxt('ss-unmatched-count', ssValidationState.unmatched);
+    setTxt('ss-missing-count', ssValidationState.missing);
+    
+    // Update validation indicator
+    const light = $('ss-validation-light');
+    const text = $('ss-validation-text');
+    
+    if (ssValidationState.unmatched === 0 && ssValidationState.missing === 0) {
+        light.className = 'w-3 h-3 rounded-full bg-green-400';
+        text.textContent = 'All pools validated';
+        text.className = 'text-[9px] text-green-400';
+    } else if (ssValidationState.matched > 0) {
+        light.className = 'w-3 h-3 rounded-full bg-yellow-400';
+        text.textContent = `${ssValidationState.unmatched + ssValidationState.missing} issues`;
+        text.className = 'text-[9px] text-yellow-400';
+    } else {
+        light.className = 'w-3 h-3 rounded-full bg-red-400';
+        text.textContent = 'Validation failed';
+        text.className = 'text-[9px] text-red-400';
+    }
+    
+    // Re-render list with validation info
+    renderSkeletonSwapList();
+}
+
+// Export Skeleton Swap data as JSON (unified format matching Astroport)
+function exportSkeletonSwapJSON() {
+    const currentEpoch = store.liveEpochInfo?.currentEpoch || store.currentEpoch || 'unknown';
+    const timestamp = new Date().toISOString();
+    
+    // Check if we have historical data
+    const hasHistorical = Object.keys(ssHistoricalData).length > 0;
+    const availableEpochs = Object.keys(ssHistoricalData).map(Number).sort((a, b) => b - a);
+    
+    // Build pools object in unified format
+    const pools = {};
+    store.ww.forEach(p => {
+        if (!p.matched) return; // Only export matched pools (TLA whitelisted)
+        
+        const name = p.pool;
+        
+        // Get LP Registry info
+        const registryKey = `${name}|Skeleton Swap`;
+        const registryEntry = store.lpRegistry[registryKey];
+        const registryDepth = registryEntry?.depth || p.registryDepth || 0;
+        
+        // Find matching pool names in historical data (handles aliases)
+        const ssPoolNames = findSSPoolMatches(registryEntry?.lp || name);
+        
+        // Collect historical data for this pool
+        const historical = {};
+        const epochsWithData = [];
+        
+        for (const [epochStr, epochData] of Object.entries(ssHistoricalData)) {
+            const epoch = parseInt(epochStr);
+            for (const ssName of ssPoolNames) {
+                if (epochData[ssName]) {
+                    historical[epoch] = {
+                        avgLiquidity: epochData[ssName].avgLiquidity,
+                        totalVolume: epochData[ssName].totalVolume
+                    };
+                    epochsWithData.push(epoch);
+                    break;
+                }
+            }
+        }
+        
+        // Add current data if not in historical
+        if (!historical[currentEpoch]) {
+            historical[currentEpoch] = {
+                avgLiquidity: p.tvl,
+                totalVolume: p.volume
+            };
+            epochsWithData.push(currentEpoch);
+        }
+        
+        // Calculate 4-epoch average
+        let avg4Epoch = null;
+        const sortedEpochs = [...new Set(epochsWithData)].sort((a, b) => b - a).slice(0, 4);
+        if (sortedEpochs.length >= 2) {
+            let totalLiq = 0, totalVol = 0;
+            sortedEpochs.forEach(ep => {
+                totalLiq += historical[ep]?.avgLiquidity || 0;
+                totalVol += historical[ep]?.totalVolume || 0;
+            });
+            avg4Epoch = {
+                epochs: sortedEpochs,
+                epochCount: sortedEpochs.length,
+                avgLiquidity: totalLiq / sortedEpochs.length,
+                avgVolume: totalVol / sortedEpochs.length,
+                complete: sortedEpochs.length >= 4
+            };
+        }
+        
+        pools[name] = {
+            // Identity (same structure as Astroport)
+            name: name,
+            dex: 'Skeleton Swap',
+            poolContract: p.poolContract || null,
+            lpToken: p.lpToken || null,
+            bucket: p.bucket || 'unknown',
+            
+            // Registry info
+            registryDepth: registryDepth,
+            active: registryEntry?.active !== false,
+            
+            // Current epoch data (for this epoch's grading)
+            currentEpoch: {
+                epoch: currentEpoch,
+                avgLiquidity: p.tvl,
+                totalVolume: p.volume
+            },
+            
+            // 4-epoch rolling average (for grading/trends)
+            avg4Epoch: avg4Epoch,
+            
+            // Historical data by epoch (for charts)
+            historical: historical
+        };
+    });
+    
+    // Build unmatched pools list (pools on SS but not TLA whitelisted)
+    const unmatchedPools = {};
+    store.ww.forEach(p => {
+        if (p.matched) return;
+        unmatchedPools[p.pool] = {
+            name: p.pool,
+            avgLiquidity: p.tvl,
+            totalVolume: p.volume,
+            reason: 'Not TLA whitelisted'
+        };
+    });
+    
+    const exportData = {
+        meta: {
+            created: timestamp,
+            epoch: currentEpoch,
+            dex: 'Skeleton Swap',
+            toolVersion: 'v28',
+            activePoolCount: Object.keys(pools).length,
+            unmatchedPoolCount: Object.keys(unmatchedPools).length,
+            historicalEpochsLoaded: availableEpochs,
+            has4EpochData: Object.values(pools).some(p => p.avg4Epoch?.complete)
+        },
+        
+        // LP Registry snapshot (Skeleton Swap only)
+        lpRegistry: Object.fromEntries(
+            Object.entries(store.lpRegistry).filter(([k, v]) => v.dex === 'Skeleton Swap')
+        ),
+        
+        // Active pools with unified metrics
+        pools: pools,
+        
+        // Unmatched pools (not TLA whitelisted)
+        unmatched: unmatchedPools,
+        
+        // Validation results
+        validation: {
+            summary: {
+                matched: ssValidationState.matched,
+                unmatched: ssValidationState.unmatched,
+                missing: ssValidationState.missing
+            },
+            details: ssValidationState.results
+        }
+    };
+    
+    // Download
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const dateStr = new Date().toISOString().split('T')[0];
+    a.href = url;
+    a.download = `skeletonswap-epoch-${currentEpoch}-${dateStr}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    console.log('✓ Skeleton Swap export complete:', exportData.meta);
+}
 
 async function fetchSkeletonSwapData() {
     const statusEl = $('ss-fetch-status');
@@ -7348,6 +9052,273 @@ async function fetchSkeletonSwapData() {
         statusEl.textContent = `✗ Error: ${err.message}`;
         statusEl.className = 'text-[9px] text-red-400';
     }
+}
+
+// Storage for historical SS data by epoch
+let ssHistoricalData = {};
+
+// Fetch historical epochs for 4-epoch averaging
+async function fetchSSHistoricalData(targetEpoch) {
+    const statusEl = $('ss-fetch-status');
+    statusEl.textContent = 'Fetching historical data...';
+    
+    // Need current + 3 previous epochs for 4-epoch average
+    const epochsToFetch = [targetEpoch, targetEpoch - 1, targetEpoch - 2, targetEpoch - 3].filter(e => e > 0);
+    ssHistoricalData = {};
+    
+    let successCount = 0;
+    for (const epoch of epochsToFetch) {
+        try {
+            const csvUrl = `${SS_GITHUB_BASE}/2026-epoch-${epoch}.csv`;
+            const response = await fetch(csvUrl);
+            if (response.ok) {
+                const csvText = await response.text();
+                ssHistoricalData[epoch] = parseSSCSVToObject(csvText);
+                successCount++;
+                console.log(`✓ Loaded SS epoch ${epoch}: ${Object.keys(ssHistoricalData[epoch]).length} pools`);
+            } else {
+                console.log(`⚠ SS epoch ${epoch} not available (${response.status})`);
+            }
+        } catch (err) {
+            console.log(`⚠ Failed to fetch SS epoch ${epoch}:`, err.message);
+        }
+    }
+    
+    statusEl.textContent = `Loaded ${successCount}/${epochsToFetch.length} epochs`;
+    return successCount;
+}
+
+// Parse SS CSV into object keyed by pool name
+function parseSSCSVToObject(csvText) {
+    const result = {};
+    const lines = csvText.trim().split('\n');
+    
+    for (let i = 1; i < lines.length; i++) {
+        const line = lines[i];
+        const parts = line.match(/(".*?"|[^,]+)/g);
+        if (!parts || parts.length < 6) continue;
+        
+        const poolName = parts[1].replace(/"/g, '').trim();
+        const avgTvl = parseFloat(parts[3]) || 0;
+        const totalVolume = parseFloat(parts[4]) || 0;
+        
+        result[poolName] = {
+            avgLiquidity: avgTvl,
+            totalVolume: totalVolume
+        };
+    }
+    
+    return result;
+}
+
+// Build comprehensive DEX performance data for all LPs in Registry
+function buildDexPerformanceData(targetEpoch) {
+    const dexPerformance = {};
+    
+    // Process each LP in the Registry
+    for (const [key, lpData] of Object.entries(store.lpRegistry)) {
+        const lpName = lpData.lp;
+        const dex = lpData.dex;
+        const bucket = lpData.bucket;
+        
+        // Initialize performance entry
+        const perfEntry = {
+            lp: lpName,
+            dex: dex,
+            bucket: bucket,
+            active: lpData.active !== false,
+            registryDepth: lpData.depth || 0,
+            currentEpoch: {
+                epoch: targetEpoch,
+                avgLiquidity: 0,
+                totalVolume: 0
+            },
+            avg4Epoch: null,
+            historical: {}
+        };
+        
+        if (dex === 'Skeleton Swap') {
+            // Get SS data - need to normalize pool name for matching
+            const ssPoolNames = findSSPoolMatches(lpName);
+            
+            // Collect historical data
+            const epochsWithData = [];
+            for (const [epochStr, epochData] of Object.entries(ssHistoricalData)) {
+                const epoch = parseInt(epochStr);
+                for (const ssName of ssPoolNames) {
+                    if (epochData[ssName]) {
+                        perfEntry.historical[epoch] = {
+                            avgLiquidity: epochData[ssName].avgLiquidity,
+                            totalVolume: epochData[ssName].totalVolume
+                        };
+                        epochsWithData.push(epoch);
+                        break;
+                    }
+                }
+            }
+            
+            // Set current epoch data
+            if (perfEntry.historical[targetEpoch]) {
+                perfEntry.currentEpoch.avgLiquidity = perfEntry.historical[targetEpoch].avgLiquidity;
+                perfEntry.currentEpoch.totalVolume = perfEntry.historical[targetEpoch].totalVolume;
+            }
+            
+            // Calculate 4-epoch average
+            const sortedEpochs = epochsWithData.sort((a, b) => b - a).slice(0, 4);
+            if (sortedEpochs.length >= 2) {
+                let totalLiq = 0, totalVol = 0;
+                sortedEpochs.forEach(ep => {
+                    totalLiq += perfEntry.historical[ep]?.avgLiquidity || 0;
+                    totalVol += perfEntry.historical[ep]?.totalVolume || 0;
+                });
+                perfEntry.avg4Epoch = {
+                    epochs: sortedEpochs,
+                    epochCount: sortedEpochs.length,
+                    avgLiquidity: totalLiq / sortedEpochs.length,
+                    avgVolume: totalVol / sortedEpochs.length,
+                    complete: sortedEpochs.length >= 4
+                };
+            }
+        } else if (dex === 'Astroport') {
+            // Get Astroport data from astroMultiRangeData
+            const d90Data = astroMultiRangeData.D90 || astroAutoData.epochData || {};
+            
+            // Find pool by name (may need contract lookup)
+            for (const [contract, poolData] of Object.entries(d90Data)) {
+                if (poolData.name === lpName && !poolData.deprecated) {
+                    // Collect historical epochs
+                    const allEpochs = poolData.epochs || {};
+                    for (const [epStr, epData] of Object.entries(allEpochs)) {
+                        const ep = parseInt(epStr);
+                        const avgVol = epData.avgVolume || 0;
+                        perfEntry.historical[ep] = {
+                            avgLiquidity: epData.avgLiquidity || 0,
+                            totalVolume: avgVol * 7 // Convert avg to total
+                        };
+                    }
+                    
+                    // Find latest epoch
+                    const sortedEpochs = Object.keys(allEpochs).map(Number).sort((a, b) => b - a);
+                    const latestEp = sortedEpochs[0];
+                    if (latestEp && perfEntry.historical[latestEp]) {
+                        perfEntry.currentEpoch.epoch = latestEp;
+                        perfEntry.currentEpoch.avgLiquidity = perfEntry.historical[latestEp].avgLiquidity;
+                        perfEntry.currentEpoch.totalVolume = perfEntry.historical[latestEp].totalVolume;
+                    }
+                    
+                    // Calculate 4-epoch average
+                    const last4 = sortedEpochs.slice(0, 4);
+                    if (last4.length >= 2) {
+                        let totalLiq = 0, totalVol = 0;
+                        last4.forEach(ep => {
+                            totalLiq += perfEntry.historical[ep]?.avgLiquidity || 0;
+                            totalVol += perfEntry.historical[ep]?.totalVolume || 0;
+                        });
+                        perfEntry.avg4Epoch = {
+                            epochs: last4,
+                            epochCount: last4.length,
+                            avgLiquidity: totalLiq / last4.length,
+                            avgVolume: totalVol / last4.length,
+                            complete: last4.length >= 4
+                        };
+                    }
+                    
+                    perfEntry.poolContract = contract;
+                    break;
+                }
+            }
+        }
+        
+        dexPerformance[key] = perfEntry;
+    }
+    
+    return dexPerformance;
+}
+
+// Find matching SS pool names (handles aliases and reversed order)
+function findSSPoolMatches(registryName) {
+    const matches = [registryName];
+    
+    // Try reversed order
+    const parts = registryName.split('-');
+    if (parts.length === 2) {
+        matches.push(`${parts[1]}-${parts[0]}`);
+    }
+    
+    // Handle bLUNA/boneLUNA alias
+    if (registryName.includes('boneLUNA')) {
+        matches.push(registryName.replace('boneLUNA', 'bLUNA'));
+        matches.push(registryName.replace('boneLUNA', 'bLUNA').split('-').reverse().join('-'));
+    }
+    if (registryName.includes('bLUNA')) {
+        matches.push(registryName.replace('bLUNA', 'boneLUNA'));
+    }
+    
+    // Handle USDT/USDt
+    if (registryName.includes('USDT')) {
+        matches.push(registryName.replace('USDT', 'USDt'));
+        matches.push(registryName.replace('USDT', 'USDt').split('-').reverse().join('-'));
+    }
+    
+    return matches;
+}
+
+// Export comprehensive DEX performance data for ext epoch file
+function exportDexPerformanceJSON() {
+    const currentEpoch = store.liveEpochInfo?.currentEpoch || store.currentEpoch || 'unknown';
+    const timestamp = new Date().toISOString();
+    
+    // Build DEX performance for all registry LPs
+    const dexPerformance = buildDexPerformanceData(currentEpoch);
+    
+    // Separate by DEX for easy access
+    const astroPerf = {};
+    const ssPerf = {};
+    
+    for (const [key, data] of Object.entries(dexPerformance)) {
+        if (data.dex === 'Astroport') {
+            astroPerf[key] = data;
+        } else if (data.dex === 'Skeleton Swap') {
+            ssPerf[key] = data;
+        }
+    }
+    
+    const exportData = {
+        meta: {
+            created: timestamp,
+            epoch: currentEpoch,
+            toolVersion: 'v28',
+            lpCount: Object.keys(dexPerformance).length,
+            astroCount: Object.keys(astroPerf).length,
+            ssCount: Object.keys(ssPerf).length,
+            has4EpochData: Object.values(dexPerformance).some(p => p.avg4Epoch?.complete)
+        },
+        
+        // All DEX performance keyed by "LP|DEX"
+        dex_performance: dexPerformance,
+        
+        // Grouped by DEX for convenience
+        astroport: astroPerf,
+        skeleton_swap: ssPerf,
+        
+        // LP Registry snapshot
+        lp_registry: store.lpRegistry
+    };
+    
+    // Download
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const dateStr = new Date().toISOString().split('T')[0];
+    a.href = url;
+    a.download = `dex-performance-epoch-${currentEpoch}-${dateStr}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    console.log('✓ DEX Performance export complete:', exportData.meta);
+    return exportData;
 }
 
 function parseSkeletonSwapCSV(csvText, epoch) {
@@ -7523,6 +9494,16 @@ function getExportData() {
         }
     });
     
+    // Build DEX Performance data for all LPs in Registry
+    // This includes current epoch avg + last 4 epochs avg (using available epochs)
+    let dexPerformance = {};
+    try {
+        dexPerformance = buildDexPerformanceForExport(currentEpoch);
+        console.log('DEX Performance built:', Object.keys(dexPerformance).length, 'LPs');
+    } catch (err) {
+        console.error('Error building DEX performance:', err);
+    }
+    
     return {
         meta: {
             generated_at: new Date().toISOString(),
@@ -7561,9 +9542,148 @@ function getExportData() {
         lp_registry: store.lpRegistry,
         pd_bribes: pdBribesForEpoch, // Simplified bribes for this epoch
         pd_bribes_master: store.pdBribesHistory, // Full bribe history
-        astroport_data: store.astro,
+        // DEX Performance - current epoch + last 4 epoch avg for all LPs
+        dex_performance: dexPerformance,
+        // Raw DEX data for detailed analysis
+        astroport_data: astroMultiRangeData?.D90 || astroAutoData?.epochData || {},
         skeleton_swap_data: store.ww
     };
+}
+
+// Build DEX performance data for main export
+// Includes current epoch and last 4 epoch averages for all LPs in Registry
+function buildDexPerformanceForExport(targetEpoch) {
+    const result = {};
+    
+    // Process each LP in the Registry
+    for (const [key, lpData] of Object.entries(store.lpRegistry)) {
+        const lpName = lpData.lp;
+        const dex = lpData.dex;
+        
+        const entry = {
+            lp: lpName,
+            dex: dex,
+            bucket: lpData.bucket,
+            active: lpData.active !== false,
+            registryDepth: lpData.depth || 0,
+            
+            // Current epoch metrics
+            epochAvg: {
+                avgLiquidity: 0,
+                totalVolume: 0
+            },
+            
+            // Last 4 epochs average (uses 2, 3, or 4 epochs as available)
+            last4Avg: {
+                avgLiquidity: 0,
+                totalVolume: 0,
+                epochsUsed: 0,
+                epochs: []
+            }
+        };
+        
+        if (dex === 'Skeleton Swap') {
+            // Get SS data from ssHistoricalData
+            const ssPoolNames = findSSPoolMatches(lpName);
+            
+            // Collect historical data for this pool
+            const historicalPoints = [];
+            for (const [epochStr, epochData] of Object.entries(ssHistoricalData || {})) {
+                const epoch = parseInt(epochStr);
+                for (const ssName of ssPoolNames) {
+                    if (epochData[ssName]) {
+                        historicalPoints.push({
+                            epoch: epoch,
+                            avgLiquidity: epochData[ssName].avgLiquidity || 0,
+                            totalVolume: epochData[ssName].totalVolume || 0
+                        });
+                        break;
+                    }
+                }
+            }
+            
+            // Also check current store.ww for current epoch data
+            const currentPool = store.ww?.find(p => {
+                const normalizedP = normalizeSSPoolName(p.pool);
+                const normalizedLP = normalizeSSPoolName(lpName);
+                return normalizedP === normalizedLP;
+            });
+            
+            if (currentPool && !historicalPoints.find(h => h.epoch === targetEpoch)) {
+                historicalPoints.push({
+                    epoch: targetEpoch,
+                    avgLiquidity: currentPool.tvl || 0,
+                    totalVolume: currentPool.volume || 0
+                });
+            }
+            
+            // Sort by epoch descending and take last 4
+            historicalPoints.sort((a, b) => b.epoch - a.epoch);
+            const last4 = historicalPoints.slice(0, 4);
+            
+            // Set current epoch data
+            const currentData = last4.find(p => p.epoch === targetEpoch) || last4[0];
+            if (currentData) {
+                entry.epochAvg.avgLiquidity = currentData.avgLiquidity;
+                entry.epochAvg.totalVolume = currentData.totalVolume;
+            }
+            
+            // Calculate last 4 average (using whatever epochs are available)
+            if (last4.length > 0) {
+                let totalLiq = 0, totalVol = 0;
+                last4.forEach(p => {
+                    totalLiq += p.avgLiquidity;
+                    totalVol += p.totalVolume;
+                });
+                entry.last4Avg = {
+                    avgLiquidity: totalLiq / last4.length,
+                    totalVolume: totalVol / last4.length,
+                    epochsUsed: last4.length,
+                    epochs: last4.map(p => p.epoch)
+                };
+            }
+            
+        } else if (dex === 'Astroport') {
+            // Get Astroport data from astroMultiRangeData
+            const d90Data = astroMultiRangeData?.D90 || astroAutoData?.epochData || {};
+            
+            for (const [contract, poolData] of Object.entries(d90Data)) {
+                if (poolData.name === lpName && !poolData.deprecated) {
+                    const allEpochs = poolData.epochs || {};
+                    const sortedEpochs = Object.keys(allEpochs).map(Number).sort((a, b) => b - a);
+                    
+                    // Current epoch data
+                    const latestEp = sortedEpochs[0];
+                    if (latestEp && allEpochs[latestEp]) {
+                        entry.epochAvg.avgLiquidity = allEpochs[latestEp].avgLiquidity || 0;
+                        entry.epochAvg.totalVolume = (allEpochs[latestEp].avgVolume || 0) * 7;
+                    }
+                    
+                    // Last 4 epochs average
+                    const last4Epochs = sortedEpochs.slice(0, 4);
+                    if (last4Epochs.length > 0) {
+                        let totalLiq = 0, totalVol = 0;
+                        last4Epochs.forEach(ep => {
+                            totalLiq += allEpochs[ep]?.avgLiquidity || 0;
+                            totalVol += (allEpochs[ep]?.avgVolume || 0) * 7;
+                        });
+                        entry.last4Avg = {
+                            avgLiquidity: totalLiq / last4Epochs.length,
+                            totalVolume: totalVol / last4Epochs.length,
+                            epochsUsed: last4Epochs.length,
+                            epochs: last4Epochs
+                        };
+                    }
+                    
+                    break;
+                }
+            }
+        }
+        
+        result[key] = entry;
+    }
+    
+    return result;
 }
 
 function clearAll() {
