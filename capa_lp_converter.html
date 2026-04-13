@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ampLP → CAPA Converter | Alliance DAO</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0a0c10; color: #e8e4d9; font-family: 'Space Mono', monospace; min-height: 100vh; padding: 32px 20px; display: flex; justify-content: center; align-items: flex-start; }
+  .container { width: 100%; max-width: 860px; }
+  .header { margin-bottom: 24px; }
+  .header h1 { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 22px; letter-spacing: -0.5px; color: #f0e9d6; margin-bottom: 4px; }
+  .header p { font-size: 11px; color: #6b6557; letter-spacing: 0.5px; }
+  .accent { color: #a855f7; }
+  .tabs { display: flex; gap: 2px; margin-bottom: 18px; }
+  .tab { background: #111318; border: 1px solid #1e2028; border-radius: 7px; color: #6b6557; cursor: pointer; font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: 1px; padding: 9px 18px; text-transform: uppercase; transition: all 0.15s; }
+  .tab:hover { color: #a855f7; border-color: #a855f733; }
+  .tab.active { background: #1a0d2e; border-color: #a855f7; color: #a855f7; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+  .rates-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+  .rate-card { background: #111318; border: 1px solid #1e2028; border-radius: 10px; padding: 14px 16px; }
+  .rate-card-label { font-size: 9px; color: #6b6557; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 6px; }
+  .rate-value { font-size: 15px; color: #a855f7; font-weight: 700; }
+  .rate-sub { font-size: 9px; color: #5d3d8a; margin-top: 3px; line-height: 1.4; }
+  .status-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
+  .dot-live    { background: #4ade80; box-shadow: 0 0 6px #4ade80; animation: pulse 2s infinite; }
+  .dot-loading { background: #a855f7; animation: pulse 0.8s infinite; }
+  .dot-error   { background: #ef4444; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
+  .input-block { background: #111318; border: 1px solid #1e2028; border-radius: 10px; padding: 18px 20px; margin-bottom: 16px; }
+  .input-label { font-size: 10px; color: #6b6557; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 10px; display: block; }
+  .input-row { display: flex; gap: 10px; align-items: center; }
+  input[type="text"] { flex: 1; background: #0d0f14; border: 1px solid #2a2d38; border-radius: 7px; color: #f0e9d6; font-family: 'Space Mono', monospace; font-size: 14px; padding: 10px 14px; outline: none; transition: border-color 0.2s; }
+  input[type="text"]:focus { border-color: #a855f7; }
+  input[type="text"]::placeholder { color: #3a3d48; }
+  .btn { background: #a855f7; border: none; border-radius: 7px; color: #0a0c10; cursor: pointer; font-family: 'Space Mono', monospace; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; padding: 10px 16px; transition: background 0.2s, transform 0.1s; white-space: nowrap; }
+  .btn:hover { background: #b870ff; }
+  .btn:active { transform: scale(0.97); }
+  .btn:disabled { background: #3d2060; color: #6b6557; cursor: not-allowed; }
+  .btn-outline { background: transparent; border: 1px solid #a855f7; color: #a855f7; }
+  .btn-outline:hover { background: #a855f722; }
+  .result-block { background: #0d0818; border: 1px solid #3d1a5f; border-radius: 10px; padding: 16px; margin-top: 12px; display: none; }
+  .result-block.visible { display: block; }
+  .result-label { font-size: 9px; color: #7c3aed; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 10px; }
+  .result-capa  { font-family: 'Syne', sans-serif; font-size: 32px; font-weight: 800; background: linear-gradient(135deg, #a855f7, #ec4899); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; letter-spacing: -1px; margin-bottom: 4px; }
+  .result-sub   { font-size: 11px; color: #7c3aed; }
+  .divider { border: none; border-top: 1px solid #1e2028; margin: 14px 0; }
+  .calc-steps { font-size: 10px; color: #5d3d8a; line-height: 2; }
+  .calc-step-val { color: #a78bfa; }
+  .error-msg { background: #1a0d0d; border: 1px solid #3a1a1a; border-radius: 7px; color: #ef8080; font-size: 11px; padding: 10px 14px; margin-top: 10px; display: none; }
+  .error-msg.visible { display: block; }
+  .members-controls { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+  .members-summary { background: #111318; border: 1px solid #1e2028; border-radius: 10px; padding: 14px 18px; margin-bottom: 14px; display: none; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  .members-summary.visible { display: grid; }
+  .summary-item-label { font-size: 9px; color: #6b6557; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 4px; }
+  .summary-item-val { font-size: 14px; color: #a855f7; font-weight: 700; }
+  .members-table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  thead th { background: #0d0f14; color: #6b6557; font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase; padding: 10px 12px; text-align: left; border-bottom: 1px solid #1e2028; cursor: pointer; user-select: none; white-space: nowrap; }
+  thead th:hover { color: #a855f7; }
+  tbody tr { border-bottom: 1px solid #111318; transition: background 0.1s; }
+  tbody tr:hover { background: #111318; }
+  tbody td { padding: 9px 12px; color: #b0a898; vertical-align: middle; }
+  tbody td.rank { color: #5d3d8a; font-size: 10px; }
+  tbody td.addr { font-size: 10px; color: #7a6f5f; }
+  tbody td.addr span { cursor: pointer; border-bottom: 1px dashed #3d2060; }
+  tbody td.addr span:hover { color: #a855f7; }
+  tbody td.capa-val { color: #e879f9; font-weight: 700; }
+  tbody td.zero { color: #3a3d48; }
+  .progress-msg { font-size: 11px; color: #6b6557; padding: 20px 0; text-align: center; }
+  .footer-note { font-size: 9px; color: #3d2060; text-align: center; margin-top: 20px; line-height: 1.8; }
+  /* Change period tabs */
+  .period-tabs { display: flex; gap: 4px; margin-bottom: 10px; }
+  .ptab { background: #1e2028; border: 1px solid #2a2d38; border-radius: 5px; color: #6b6557; cursor: pointer; font-family: 'Space Mono', monospace; font-size: 9px; font-weight: 700; letter-spacing: 1px; padding: 5px 10px; text-transform: uppercase; transition: all 0.15s; }
+  .ptab:hover { color: #a855f7; }
+  .ptab.active { background: #1a0d2e; border-color: #a855f7; color: #a855f7; }
+  .delta-up   { color: #4ade80; font-weight: 700; }
+  .delta-down { color: #ef4444; font-weight: 700; }
+  .delta-flat { color: #4a4840; }
+  .snap-badge { font-size: 8px; color: #4a4840; margin-left: 6px; }
+  .copy-toast { position: fixed; bottom: 24px; right: 24px; background: #1a0d2e; border: 1px solid #7c3aed; border-radius: 7px; color: #e879f9; font-size: 11px; padding: 8px 14px; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+  .copy-toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <h1>ampCAPA <span class="accent">DAO</span> Dashboard</h1>
+    <p>ALLIANCE DAO · LIVE RATES · DAO MEMBER TRACKER</p>
+  </div>
+
+  <div class="rates-grid">
+    <div class="rate-card">
+      <div class="rate-card-label"><span class="status-dot dot-loading" id="dot1"></span>ampCAPA → CAPA</div>
+      <div class="rate-value" id="rate1">fetching…</div>
+      <div class="rate-sub" id="rate1-sub">Eris staking ratio</div>
+    </div>
+    <div class="rate-card">
+      <div class="rate-card-label"><span class="status-dot dot-loading" id="dot2"></span>ampLP → ampCAPA</div>
+      <div class="rate-value" id="rate2">fetching…</div>
+      <div class="rate-sub" id="rate2-sub">ve3 compounding ratio</div>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('members')">DAO Members</div>
+    <div class="tab" onclick="switchTab('gov')">CAPA Governance</div>
+    <div class="tab" onclick="switchTab('capa')">CAPA Holders</div>
+  </div>
+
+  <!-- CONVERTER TILE (always visible, inline below rates) -->
+  <div class="input-block" style="margin-bottom:16px">
+    <label class="input-label">ampLP → CAPA Converter</label>
+    <div class="input-row">
+      <input type="text" id="lp-input" placeholder="Paste your DAODAO ampLP balance…" />
+      <button class="btn" onclick="calculate()">CALC</button>
+    </div>
+    <div class="error-msg" id="error-msg"></div>
+    <div class="result-block" id="result-block" style="margin-top:12px;margin-bottom:0">
+      <div class="result-label">Underlying CAPA</div>
+      <div class="result-capa" id="result-capa">—</div>
+      <div class="result-sub" id="result-sub"></div>
+      <hr class="divider">
+      <div class="calc-steps" id="calc-steps"></div>
+    </div>
+  </div>
+
+  <!-- DAO MEMBERS -->
+  <div class="panel active" id="panel-members">
+    <div class="members-controls">
+      <div class="period-tabs">
+        <button class="ptab active" id="ptab-24h"  onclick="setPeriod('24h')">24H</button>
+        <button class="ptab"        id="ptab-7d"   onclick="setPeriod('7d')">7D</button>
+        <button class="ptab"        id="ptab-30d"  onclick="setPeriod('30d')">30D</button>
+      </div>
+      <button class="btn btn-outline" id="export-btn" onclick="exportCSV()" style="display:none;margin-left:auto">EXPORT CSV</button>
+      <button class="btn btn-outline" id="refresh-btn" onclick="fetchAllMembers()" style="display:none">↻ REFRESH</button>
+      <span id="fetch-status" style="font-size:10px; color:#6b6557;"></span>
+    </div>
+    <div class="members-summary" id="members-summary">
+      <div><div class="summary-item-label">Total Members</div><div class="summary-item-val" id="sum-members">—</div></div>
+      <div><div class="summary-item-label">Total CAPA</div><div class="summary-item-val" id="sum-capa">—</div></div>
+      <div><div class="summary-item-label">Active Stakers</div><div class="summary-item-val" id="sum-active">—</div></div>
+    </div>
+    <div class="members-table-wrap">
+      <div class="progress-msg" id="members-placeholder">Loading DAO member data…</div>
+      <table id="members-table" style="display:none">
+        <thead>
+          <tr>
+            <th onclick="sortBy('rank')">#</th>
+            <th onclick="sortBy('address')">Address</th>
+            <th onclick="sortBy('amplp')">ampLP</th>
+            <th onclick="sortBy('ampcapa')">ampCAPA</th>
+            <th onclick="sortBy('capa')">CAPA</th>
+            <th onclick="sortBy('delta')" id="delta-header">Δ CAPA <span class="snap-badge" id="snap-badge">24H</span></th>
+            <th onclick="sortBy('vp')">VP %</th>
+          </tr>
+        </thead>
+        <tbody id="members-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- CAPA GOVERNANCE -->
+  <div class="panel" id="panel-gov">
+    <div class="members-controls">
+      <button class="btn btn-outline" id="gov-export-btn" onclick="govExportCSV()" style="display:none">EXPORT CSV</button>
+      <button class="btn btn-outline" id="gov-refresh-btn" onclick="fetchGovStakers()" style="display:none">↻ REFRESH</button>
+      <span id="gov-status" style="font-size:10px; color:#6b6557;"></span>
+    </div>
+    <div class="members-summary" id="gov-summary">
+      <div><div class="summary-item-label">Total Stakers</div><div class="summary-item-val" id="gov-sum-stakers">—</div></div>
+      <div><div class="summary-item-label">Total CAPA Staked</div><div class="summary-item-val" id="gov-sum-staked">—</div></div>
+      <div><div class="summary-item-label">Active Stakers</div><div class="summary-item-val" id="gov-sum-active">—</div></div>
+    </div>
+    <div class="members-table-wrap">
+      <div class="progress-msg" id="gov-placeholder">Loading CAPA governance stakers…</div>
+      <table id="gov-table" style="display:none">
+        <thead>
+          <tr>
+            <th onclick="govSortBy('rank')">#</th>
+            <th onclick="govSortBy('address')">Address</th>
+            <th onclick="govSortBy('capa')">CAPA Staked ↓</th>
+            <th onclick="govSortBy('vp')">VP %</th>
+          </tr>
+        </thead>
+        <tbody id="gov-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="footer-note" id="footer-note">Connecting to Terra LCD…</div>
+</div>
+
+<!-- CAPA Holders panel (outside container so iframe can be full width) -->
+<div class="panel" id="panel-capa" style="width:100%;max-width:100%;position:fixed;inset:0;z-index:10;background:#0a0c10;display:none;flex-direction:column;">
+  <div style="display:flex;align-items:center;gap:12px;padding:12px 20px;background:#111318;border-bottom:1px solid #1e2028;flex-shrink:0;">
+    <button onclick="switchTab('members')" style="background:#1e2028;border:1px solid #2a2d38;border-radius:6px;color:#6b6557;cursor:pointer;font-family:'Space Mono',monospace;font-size:10px;font-weight:700;letter-spacing:1px;padding:6px 12px;text-transform:uppercase;transition:all 0.15s;" onmouseover="this.style.color='#a855f7'" onmouseout="this.style.color='#6b6557'">← Back</button>
+    <span style="font-size:11px;color:#6b6557;letter-spacing:1px;text-transform:uppercase;">CAPA Holders · SmartStake Analytics</span>
+    <a href="https://analytics.smartstake.io/terra/tokens/CAPA" target="_blank" style="margin-left:auto;font-size:10px;color:#a855f7;text-decoration:none;border:1px solid #a855f733;border-radius:5px;padding:5px 10px;font-family:'Space Mono',monospace;letter-spacing:0.5px;" onmouseover="this.style.background='#a855f722'" onmouseout="this.style.background='transparent'">
+      ↗ Open in new tab
+    </a>
+  </div>
+  <iframe
+    id="capa-iframe"
+    src=""
+    style="flex:1;width:100%;border:none;background:#0a0c10;"
+    title="CAPA Holders — SmartStake Analytics"
+    onload="var m=document.getElementById('capa-iframe-msg'); if(m) m.style.display='none';"
+  ></iframe>
+  <div id="capa-iframe-msg" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none;">
+    <div style="font-size:11px;color:#6b6557;letter-spacing:1px;">Loading SmartStake…</div>
+  </div>
+</div>
+
+<div class="copy-toast" id="copy-toast">Address copied!</div>
+
+<script>
+  const LCD_ENDPOINTS  = ['https://terra-lcd.publicnode.com', 'https://phoenix-lcd.terra.dev'];
+  const STAKING_CONTRACT = 'terra186rpfczl7l2kugdsqqedegl4es4hp624phfc7ddy8my02a4e8lgq5rlx7y';
+  const VE3_CONTRACT     = 'terra1zly98gvcec54m3caxlqexce7rus6rzgplz7eketsdz7nh750h2rqvu8uzx';
+  const VOTING_MODULE    = 'terra1juj3ymejnug9p92upphcq0prq4e0hpw6rcu20njf8tk7n9sl2wxqldr0mt';
+  const AMPCAPA_DENOM    = 'factory/terra186rpfczl7l2kugdsqqedegl4es4hp624phfc7ddy8my02a4e8lgq5rlx7y/ampCAPA';
+
+  let rateStaking = null, rateVe3 = null, activeLCD = null;
+  let allMembers = [], sortCol = 'capa', sortAsc = false;
+
+  // ── Snapshot / change-period state ────────────────────────────────────────
+  // Point this at your GitHub raw snapshots directory
+  const SNAP_BASE = 'https://raw.githubusercontent.com/defipatriot/ampcapa-data_2026/main/snapshots';
+  let snapshotIndex = null;
+  let snapshotCache = {};      // key → {address: capa} lookup
+  let activePeriod  = '24h';   // '24h' | '7d' | '30d'
+  let snapLabel     = '24H';
+
+  function b64(obj) { return btoa(unescape(encodeURIComponent(JSON.stringify(obj)))); }
+
+  async function queryContract(lcd, address, query) {
+    const url = `${lcd}/cosmwasm/wasm/v1/contract/${address}/smart/${b64(query)}`;
+    const res = await fetch(url, { headers: { Accept: 'application/json' } });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    return json.data !== undefined ? json.data : json;
+  }
+
+  async function tryAll(address, query) {
+    const ordered = activeLCD ? [activeLCD, ...LCD_ENDPOINTS.filter(e => e !== activeLCD)] : LCD_ENDPOINTS;
+    for (const lcd of ordered) {
+      try { const r = await queryContract(lcd, address, query); activeLCD = lcd; return r; } catch (_) {}
+    }
+    throw new Error('All LCD endpoints failed');
+  }
+
+  function fmt(n, d = 2) { return n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }); }
+  function shortAddr(a) { return a.slice(0, 10) + '…' + a.slice(-6); }
+  function lpToCapa(raw) {
+    const micro = raw / 1_000_000;
+    const ampCapa = micro * rateVe3;
+    const capa = ampCapa * rateStaking;
+    return { micro, ampCapa, capa };
+  }
+
+  function switchTab(name) {
+    // Update tab active state
+    const tabNames = ['members', 'gov', 'capa'];
+    document.querySelectorAll('.tab').forEach((t, i) => {
+      t.classList.toggle('active', tabNames[i] === name);
+    });
+
+    if (name === 'capa') {
+      const panel = document.getElementById('panel-capa');
+      panel.style.display = 'flex';
+      const iframe = document.getElementById('capa-iframe');
+      if (!iframe.src || iframe.src === window.location.href) {
+        iframe.src = 'https://analytics.smartstake.io/terra/tokens/CAPA';
+      }
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.getElementById('panel-capa').style.display = 'none';
+      document.body.style.overflow = '';
+      document.querySelectorAll('.panel:not(#panel-capa)').forEach(p => p.classList.remove('active'));
+      const target = document.getElementById('panel-' + name);
+      if (target) target.classList.add('active');
+      if (name === 'members' && allMembers.length === 0) fetchAllMembers();
+      if (name === 'gov'     && govStakers.length === 0) fetchGovStakers();
+    }
+  }
+
+  async function fetchRates() {
+    try {
+      const d = await tryAll(STAKING_CONTRACT, { state: {} });
+      rateStaking = parseFloat(d.exchange_rate);
+      document.getElementById('rate1').textContent = rateStaking.toFixed(6);
+      document.getElementById('rate1-sub').textContent = rateStaking.toFixed(6) + ' CAPA per ampCAPA';
+      document.getElementById('dot1').className = 'status-dot dot-live';
+    } catch(e) { document.getElementById('rate1').textContent = 'ERROR'; document.getElementById('dot1').className = 'status-dot dot-error'; }
+
+    try {
+      const ve3q = { exchange_rates: { assets: [["single", { native: AMPCAPA_DENOM }]], limit: 1 } };
+      const d = await tryAll(VE3_CONTRACT, ve3q);
+      const rates = d[0]?.exchange_rates;
+      if (!rates?.length) throw new Error('No rate data');
+      const latest = rates.sort((a, b) => b[0] - a[0])[0];
+      rateVe3 = parseFloat(latest[1].exchange_rate);
+      document.getElementById('rate2').textContent = rateVe3.toFixed(6);
+      document.getElementById('rate2-sub').textContent = rateVe3.toFixed(6) + ' ampCAPA per ampLP';
+      document.getElementById('dot2').className = 'status-dot dot-live';
+    } catch(e) { document.getElementById('rate2').textContent = 'ERROR'; document.getElementById('dot2').className = 'status-dot dot-error'; }
+
+    const host = activeLCD ? activeLCD.replace('https://','') : '—';
+    document.getElementById('footer-note').innerHTML = `Live rates · ${host} · refreshes every 60s<br>ampLP ÷ 1,000,000 × LP→ampCAPA × ampCAPA→CAPA`;
+  }
+
+  function calculate() {
+    const err = document.getElementById('error-msg');
+    const result = document.getElementById('result-block');
+    err.classList.remove('visible');
+    const raw = document.getElementById('lp-input').value.replace(/,/g,'').trim();
+    if (!raw) { err.textContent = 'Enter your DAODAO ampLP balance.'; err.classList.add('visible'); return; }
+    const lp = parseFloat(raw);
+    if (isNaN(lp) || lp <= 0) { err.textContent = 'Invalid number.'; err.classList.add('visible'); return; }
+    if (!rateStaking || !rateVe3) { err.textContent = 'Rates still loading — try again in a moment.'; err.classList.add('visible'); return; }
+    const { micro, ampCapa, capa } = lpToCapa(lp);
+    document.getElementById('result-capa').textContent = fmt(capa, 2) + ' CAPA';
+    document.getElementById('result-sub').textContent = '≈ ' + fmt(ampCapa, 4) + ' ampCAPA underlying';
+    document.getElementById('calc-steps').innerHTML = `
+      <span style="color:#6b6557">① Micro → ampLP</span><br>
+      ${fmt(lp,0)} ÷ 1,000,000 = <span class="calc-step-val">${fmt(micro,4)} ampLP</span><br><br>
+      <span style="color:#6b6557">② ampLP → ampCAPA &nbsp;(rate: ${rateVe3.toFixed(6)})</span><br>
+      ${fmt(micro,4)} × ${rateVe3.toFixed(6)} = <span class="calc-step-val">${fmt(ampCapa,4)} ampCAPA</span><br><br>
+      <span style="color:#6b6557">③ ampCAPA → CAPA &nbsp;(rate: ${rateStaking.toFixed(6)})</span><br>
+      ${fmt(ampCapa,4)} × ${rateStaking.toFixed(6)} = <span class="calc-step-val">${fmt(capa,4)} CAPA</span>
+    `;
+    result.classList.add('visible');
+  }
+
+  document.getElementById('lp-input').addEventListener('keydown', e => { if (e.key === 'Enter') calculate(); });
+
+  async function fetchAllMembers() {
+    if (!rateStaking || !rateVe3) {
+      document.getElementById('fetch-status').textContent = 'Waiting for rates to load…';
+      // Retry once rates are ready
+      setTimeout(() => { if (rateStaking && rateVe3) fetchAllMembers(); }, 1000);
+      return;
+    }
+    document.getElementById('export-btn').style.display = 'none';
+    document.getElementById('refresh-btn').style.display = 'none';
+    document.getElementById('members-table').style.display = 'none';
+    document.getElementById('members-summary').classList.remove('visible');
+    document.getElementById('members-placeholder').style.display = 'block';
+    allMembers = [];
+    let startAfter = null;
+    const LIMIT = 30;
+    let page = 0;
+    try {
+      while (true) {
+        page++;
+        const query = startAfter
+          ? { list_stakers: { limit: LIMIT, start_after: startAfter } }
+          : { list_stakers: { limit: LIMIT } };
+        document.getElementById('fetch-status').textContent = `Fetching page ${page}… (${allMembers.length} stakers so far)`;
+        document.getElementById('members-placeholder').textContent = `Fetching page ${page}… (${allMembers.length} stakers loaded)`;
+        const data = await tryAll(VOTING_MODULE, query);
+        const stakers = data.stakers || [];
+        for (const s of stakers) {
+          const bal = parseFloat(s.balance);
+          const { micro, ampCapa, capa } = lpToCapa(bal);
+          allMembers.push({ address: s.address, rawBalance: bal, micro, ampCapa, capa });
+        }
+        if (stakers.length < LIMIT) break;
+        startAfter = stakers[stakers.length - 1].address;
+      }
+      // Calculate VP% for each member
+      const totalRaw = allMembers.reduce((s, m) => s + m.rawBalance, 0);
+      allMembers.forEach(m => { m.vpPct = totalRaw > 0 ? (m.rawBalance / totalRaw) * 100 : 0; });
+      document.getElementById('fetch-status').textContent = `Loaded ${allMembers.length} stakers`;
+      renderMembers();
+    } catch(e) {
+      document.getElementById('fetch-status').textContent = 'Error: ' + e.message;
+      document.getElementById('members-placeholder').textContent = 'Failed to load members.';
+    }
+  }
+
+  // ── Snapshot loading ─────────────────────────────────────────────────────────
+  async function loadSnapshotIndex() {
+    try {
+      const res = await fetch(`${SNAP_BASE}/index.json`);
+      if (!res.ok) throw new Error(res.status);
+      snapshotIndex = await res.json();
+    } catch(e) { snapshotIndex = null; }
+  }
+
+  async function loadSnapshot(key) {
+    if (snapshotCache[key]) return snapshotCache[key];
+    try {
+      const res = await fetch(key);
+      if (!res.ok) throw new Error(res.status);
+      const data = await res.json();
+      // Build address→capa lookup
+      const lookup = {};
+      (data.members || []).forEach(m => { lookup[m.address] = m.capa; });
+      snapshotCache[key] = lookup;
+      return lookup;
+    } catch(e) { return null; }
+  }
+
+  async function getComparisonSnapshot(period) {
+    if (!snapshotIndex) return null;
+    let fileKey = null;
+
+    if (period === '24h') {
+      // Most recent daily that isn't today
+      const today = new Date().toISOString().slice(0,10);
+      const candidates = (snapshotIndex.daily || []).filter(d => d < today).slice(-1);
+      if (candidates.length) fileKey = `${SNAP_BASE}/daily/${candidates[0]}.json`;
+    } else if (period === '7d') {
+      // Daily from ~7 days ago
+      const target = new Date(); target.setUTCDate(target.getUTCDate() - 7);
+      const targetStr = target.toISOString().slice(0,10);
+      const candidates = (snapshotIndex.daily || []).filter(d => d <= targetStr).slice(-1);
+      if (candidates.length) fileKey = `${SNAP_BASE}/daily/${candidates[0]}.json`;
+    } else if (period === '30d') {
+      // Most recent monthly, or weekly from ~30 days ago
+      if ((snapshotIndex.monthly || []).length) {
+        const m = snapshotIndex.monthly.slice(-1)[0];
+        fileKey = `${SNAP_BASE}/monthly/${m}.json`;
+      } else if ((snapshotIndex.weekly || []).length) {
+        const target = new Date(); target.setUTCDate(target.getUTCDate() - 30);
+        const targetStr = target.toISOString().slice(0,10);
+        const candidates = (snapshotIndex.weekly || []).filter(w => w <= targetStr).slice(-1);
+        if (candidates.length) fileKey = `${SNAP_BASE}/weekly/${candidates[0]}.json`;
+      }
+    }
+
+    return fileKey ? loadSnapshot(fileKey) : null;
+  }
+
+  function setPeriod(period) {
+    activePeriod = period;
+    const labels = { '24h': '24H', '7d': '7D', '30d': '30D' };
+    snapLabel = labels[period];
+    ['24h','7d','30d'].forEach(p => {
+      document.getElementById(`ptab-${p}`).classList.toggle('active', p === period);
+    });
+    document.getElementById('snap-badge').textContent = snapLabel;
+    if (allMembers.length) renderMembers();
+  }
+
+  // ── renderMembers ─────────────────────────────────────────────────────────
+  async function renderMembers() {
+    // Load the comparison snapshot for the active period
+    const snapLookup = await getComparisonSnapshot(activePeriod);
+
+    allMembers.sort((a, b) => {
+      if (sortCol === 'address') return sortAsc ? a.address.localeCompare(b.address) : b.address.localeCompare(a.address);
+      if (sortCol === 'delta') {
+        const da = snapLookup ? (a.capa - (snapLookup[a.address] ?? a.capa)) : 0;
+        const db = snapLookup ? (b.capa - (snapLookup[b.address] ?? b.capa)) : 0;
+        return sortAsc ? da - db : db - da;
+      }
+      const map = { amplp: 'rawBalance', ampcapa: 'ampCapa', capa: 'capa', rank: 'rawBalance', vp: 'vpPct' };
+      const k = map[sortCol] || 'capa';
+      return sortAsc ? a[k] - b[k] : b[k] - a[k];
+    });
+
+    const active = allMembers.filter(m => m.rawBalance > 0);
+    const totalCapa = active.reduce((s, m) => s + m.capa, 0);
+    document.getElementById('sum-members').textContent = allMembers.length;
+    document.getElementById('sum-active').textContent  = active.length;
+    document.getElementById('sum-capa').textContent    = fmt(totalCapa, 0);
+    document.getElementById('members-summary').classList.add('visible');
+
+    const tbody = document.getElementById('members-body');
+    tbody.innerHTML = '';
+    allMembers.forEach((m, i) => {
+      const z = m.rawBalance === 0;
+
+      // Delta calculation
+      let deltaCell = '<td class="delta-flat">—</td>';
+      if (!z && snapLookup) {
+        const prev = snapLookup[m.address];
+        if (prev !== undefined) {
+          const delta = m.capa - prev;
+          const sign  = delta >= 0 ? '+' : '';
+          const cls   = delta > 0 ? 'delta-up' : delta < 0 ? 'delta-down' : 'delta-flat';
+          deltaCell   = `<td class="${cls}">${sign}${fmt(delta, 0)}</td>`;
+        } else {
+          deltaCell = '<td class="delta-flat" title="New address not in snapshot">NEW</td>';
+        }
+      }
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="rank">${i+1}</td>
+        <td class="addr ${z?'zero':''}"><span title="${m.address}" onclick="copyAddr('${m.address}')">${shortAddr(m.address)}</span></td>
+        <td class="${z?'zero':''}">${z ? '—' : fmt(m.micro,2)}</td>
+        <td class="${z?'zero':''}">${z ? '—' : fmt(m.ampCapa,2)}</td>
+        <td class="${z?'zero':'capa-val'}">${z ? '—' : fmt(m.capa,2)}</td>
+        ${deltaCell}
+        <td class="${z?'zero':''}" style="color:${z?'':'#ec4899'}">${z ? '—' : m.vpPct.toFixed(2) + '%'}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    document.getElementById('members-placeholder').style.display = 'none';
+    document.getElementById('members-table').style.display = 'table';
+    document.getElementById('export-btn').style.display = '';
+    document.getElementById('refresh-btn').style.display = '';
+  }
+
+  function sortBy(col) {
+    sortAsc = (sortCol === col) ? !sortAsc : false;
+    sortCol = col;
+    if (allMembers.length) renderMembers();
+  }
+
+  function exportCSV() {
+    const rows = [['Rank','Address','ampLP','ampCAPA','CAPA',`Δ CAPA (${snapLabel})`,'VP%']];
+    allMembers.forEach((m, i) => rows.push([i+1, m.address, m.micro.toFixed(6), m.ampCapa.toFixed(6), m.capa.toFixed(6), '', m.vpPct.toFixed(4)]));
+    const a = document.createElement('a');
+    a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(rows.map(r => r.join(',')).join('\n'));
+    a.download = `ampcapa-dao-members-${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+  }
+
+  function copyAddr(addr) {
+    navigator.clipboard.writeText(addr).then(() => {
+      const t = document.getElementById('copy-toast');
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 1800);
+    });
+  }
+
+  // ── CAPA Governance Stakers ──────────────────────────────────────────────────
+
+  const CAPA_GOV_CONTRACT = 'terra1sf66d5vap897xlvv2hlcp4l20y4pp42r6ala4snk8mgd246jvufqwe0cnm';
+  let govStakers = [], govSortCol = 'capa', govSortAsc = false;
+
+  // 13 query patterns covering DAO DAO, Anchor, Solid, CW-staking, bond/xToken styles
+  const STAKER_QUERY_FNS = [
+    (lim, start) => start ? { list_stakers:    { limit: lim, start_after: start } } : { list_stakers:    { limit: lim } },
+    (lim, start) => start ? { stakers:          { limit: lim, start_after: start } } : { stakers:          { limit: lim } },
+    (lim, start) => start ? { all_stakers:      { limit: lim, start_after: start } } : { all_stakers:      { limit: lim } },
+    (lim, start) => ({ top_stakers:     { limit: lim } }),
+    (lim, start) => start ? { all_staker_info:  { limit: lim, start_after: start } } : { all_staker_info:  { limit: lim } },
+    (lim, start) => start ? { staker_infos:     { limit: lim, start_after: start } } : { staker_infos:     { limit: lim } },
+    (lim, start) => start ? { bonded:            { limit: lim, start_after: start } } : { bonded:            { limit: lim } },
+    (lim, start) => start ? { list_bonders:      { limit: lim, start_after: start } } : { list_bonders:      { limit: lim } },
+    (lim, start) => start ? { all_accounts:      { limit: lim, start_after: start } } : { all_accounts:      { limit: lim } },
+    (lim, start) => start ? { list_voters:       { limit: lim, start_after: start } } : { list_voters:       { limit: lim } },
+    (lim, start) => start ? { voters:             { limit: lim, start_after: start } } : { voters:             { limit: lim } },
+    (lim, start) => start ? { vote_infos:         { limit: lim, start_after: start } } : { vote_infos:         { limit: lim } },
+    (lim, start) => start ? { get_stakers:        { limit: lim, start_after: start } } : { get_stakers:        { limit: lim } },
+  ];
+
+  function extractStakers(data) {
+    if (!data) return null;
+    if (Array.isArray(data.stakers))      return data.stakers;
+    if (Array.isArray(data.voters))       return data.voters;
+    if (Array.isArray(data.bonded))       return data.bonded;
+    if (Array.isArray(data.accounts))     return data.accounts;
+    if (Array.isArray(data.staker_infos)) return data.staker_infos;
+    if (Array.isArray(data))              return data;
+    for (const k of Object.keys(data)) {
+      if (Array.isArray(data[k])) return data[k];
+    }
+    return null;
+  }
+
+  function extractBalance(entry) {
+    const raw = entry.balance ?? entry.staked ?? entry.amount ??
+                entry.voting_power ?? entry.power ?? entry.stake ??
+                entry.bonded ?? entry.share ?? '0';
+    return parseFloat(String(raw)) / 1e6;
+  }
+
+  function extractAddress(entry) {
+    return entry.address ?? entry.staker ?? entry.voter ??
+           entry.account ?? entry.delegator ?? null;
+  }
+
+  // Raw contract state scan — last resort when no query works
+  async function fetchGovViaStateEnum() {
+    document.getElementById('gov-status').textContent = 'Trying raw state scan…';
+    const results = [];
+    let nextKey = null;
+    let pages = 0;
+    while (pages < 50) {
+      pages++;
+      let url = `${activeLCD}/cosmwasm/wasm/v1/contract/${CAPA_GOV_CONTRACT}/state?pagination.limit=100`;
+      if (nextKey) url += `&pagination.key=${encodeURIComponent(nextKey)}`;
+      const res = await fetch(url, { headers: { Accept: 'application/json' } });
+      if (!res.ok) throw new Error(`State scan HTTP ${res.status}`);
+      const data = await res.json();
+      for (const m of (data.models || [])) {
+        try {
+          const val = JSON.parse(atob(m.value));
+          const bal = val.balance ?? val.staked ?? val.amount ?? val.power ?? null;
+          const addr = val.address ?? val.staker ?? val.voter ?? null;
+          if (bal !== null && addr && !isNaN(parseFloat(bal))) {
+            results.push({ address: addr, capa: parseFloat(bal) / 1e6 });
+          }
+        } catch(_) {}
+      }
+      document.getElementById('gov-status').textContent = `State scan p.${pages} (${results.length} found)…`;
+      nextKey = data.pagination?.next_key;
+      if (!nextKey || (data.models || []).length === 0) break;
+    }
+    return results;
+  }
+
+  async function fetchGovStakers() {
+    document.getElementById('gov-export-btn').style.display = 'none';
+    document.getElementById('gov-refresh-btn').style.display = 'none';
+    document.getElementById('gov-table').style.display = 'none';
+    document.getElementById('gov-summary').classList.remove('visible');
+    document.getElementById('gov-placeholder').style.display = 'block';
+    document.getElementById('gov-status').textContent = 'Detecting contract query interface…';
+    govStakers = [];
+
+    const LIMIT = 30;
+    let workingFn = null;
+
+    // Probe each query pattern with a small limit
+    for (const fn of STAKER_QUERY_FNS) {
+      try {
+        const result = await tryAll(CAPA_GOV_CONTRACT, fn(5, null));
+        const entries = extractStakers(result);
+        if (entries !== null) { workingFn = fn; break; }
+      } catch(_) {}
+    }
+
+    if (workingFn) {
+      // Paginate with the working pattern
+      let startAfter = null, page = 0;
+      try {
+        while (true) {
+          page++;
+          document.getElementById('gov-status').textContent = `Fetching page ${page}… (${govStakers.length} so far)`;
+          document.getElementById('gov-placeholder').textContent = `Fetching page ${page}… (${govStakers.length} stakers loaded)`;
+          const result = await tryAll(CAPA_GOV_CONTRACT, workingFn(LIMIT, startAfter));
+          const entries = extractStakers(result) || [];
+          for (const e of entries) {
+            const addr = extractAddress(e);
+            const bal  = extractBalance(e);
+            if (addr) govStakers.push({ address: addr, capa: bal });
+          }
+          if (entries.length < LIMIT) break;
+          startAfter = extractAddress(entries[entries.length - 1]);
+        }
+      } catch(e) {
+        document.getElementById('gov-status').textContent = 'Pagination error: ' + e.message;
+      }
+    } else {
+      // Fallback: raw state scan
+      try {
+        govStakers = await fetchGovViaStateEnum();
+      } catch(e) {
+        document.getElementById('gov-status').textContent =
+          'All query methods failed. Contract may require an off-chain indexer. Error: ' + e.message;
+        document.getElementById('gov-placeholder').textContent =
+          'Unable to load CAPA governance stakers — contract interface not recognised.';
+        return;
+      }
+    }
+
+    if (govStakers.length === 0) {
+      document.getElementById('gov-status').textContent = 'No stakers returned — contract may use a non-standard interface.';
+      document.getElementById('gov-placeholder').textContent = 'No staker data found.';
+      return;
+    }
+
+    const totalCapa = govStakers.reduce((s, m) => s + m.capa, 0);
+    govStakers.forEach(m => { m.vpPct = totalCapa > 0 ? (m.capa / totalCapa) * 100 : 0; });
+    document.getElementById('gov-status').textContent = `Loaded ${govStakers.length} stakers`;
+    renderGovStakers();
+  }
+
+  function renderGovStakers() {
+    govStakers.sort((a, b) => {
+      if (govSortCol === 'address') return govSortAsc ? a.address.localeCompare(b.address) : b.address.localeCompare(a.address);
+      const k = govSortCol === 'vp' ? 'vpPct' : 'capa';
+      return govSortAsc ? a[k] - b[k] : b[k] - a[k];
+    });
+
+    const active = govStakers.filter(m => m.capa > 0);
+    const totalStaked = active.reduce((s, m) => s + m.capa, 0);
+    document.getElementById('gov-sum-stakers').textContent = govStakers.length;
+    document.getElementById('gov-sum-active').textContent  = active.length;
+    document.getElementById('gov-sum-staked').textContent  = fmt(totalStaked, 2);
+    document.getElementById('gov-summary').classList.add('visible');
+
+    const tbody = document.getElementById('gov-body');
+    tbody.innerHTML = '';
+    govStakers.forEach((m, i) => {
+      const z = m.capa === 0;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="rank">${i + 1}</td>
+        <td class="addr ${z ? 'zero' : ''}">
+          <span title="${m.address}" onclick="copyAddr('${m.address}')">${shortAddr(m.address)}</span>
+        </td>
+        <td class="${z ? 'zero' : 'capa-val'}">${z ? '—' : fmt(m.capa, 2)}</td>
+        <td class="${z ? 'zero' : ''}" style="color:${z ? '' : '#ec4899'}">${z ? '—' : m.vpPct.toFixed(2) + '%'}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    document.getElementById('gov-placeholder').style.display = 'none';
+    document.getElementById('gov-table').style.display = 'table';
+    document.getElementById('gov-export-btn').style.display = '';
+    document.getElementById('gov-refresh-btn').style.display = '';
+  }
+
+  function govSortBy(col) {
+    govSortAsc = (govSortCol === col) ? !govSortAsc : false;
+    govSortCol = col;
+    if (govStakers.length) renderGovStakers();
+  }
+
+  function govExportCSV() {
+    const rows = [['Rank', 'Address', 'CAPA Staked', 'VP %']];
+    govStakers.forEach((m, i) => rows.push([i+1, m.address, m.capa.toFixed(6), m.vpPct.toFixed(4)]));
+    const a = document.createElement('a');
+    a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(rows.map(r => r.join(',')).join('\n'));
+    a.download = `capa-governance-stakers-${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+  }
+
+    // Load snapshot index then start fetching
+  loadSnapshotIndex().then(() => {
+    fetchRates().then(() => fetchAllMembers());
+  });
+  setInterval(fetchRates, 60000);
+</script>
+</body>
+</html>
