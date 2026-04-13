@@ -1065,9 +1065,32 @@
                     .collection-filter-btn:not(.active) img {
                         opacity: 0.5;
                     }
+                    /* Toggle groups */
+                    .listings-toggle-group { display: flex; background: rgba(31,41,55,0.8); border: 1px solid rgba(75,85,99,0.4); border-radius: 8px; overflow: hidden; }
+                    .listings-toggle-btn { padding: 4px 10px; font-size: 11px; font-weight: 600; cursor: pointer; border: none; background: transparent; color: #6b7280; transition: all 0.15s; white-space: nowrap; }
+                    .listings-toggle-btn.active { background: rgba(6,182,212,0.2); color: #22d3ee; }
+                    .listings-toggle-btn:hover:not(.active) { color: #9ca3af; }
+                    .listings-toggle-divider { width: 1px; background: rgba(75,85,99,0.4); align-self: stretch; }
                 </style>
-                <div class="text-xs text-gray-500 mb-3">
-                    <i class="fas fa-sort-amount-up mr-1"></i>Sorted by USD price (lowest first) • Click collection to hide/show
+                <!-- Sub-filters row -->
+                <div class="flex items-center gap-3 mb-3 flex-wrap">
+                    <span class="text-xs text-gray-500">Condition:</span>
+                    <div class="listings-toggle-group" id="condition-toggle">
+                        <button class="listings-toggle-btn active" data-condition="unbroken">Unbroken</button>
+                        <div class="listings-toggle-divider"></div>
+                        <button class="listings-toggle-btn" data-condition="both">Both</button>
+                        <div class="listings-toggle-divider"></div>
+                        <button class="listings-toggle-btn" data-condition="broken">Broken</button>
+                    </div>
+                    <span class="text-xs text-gray-500 ml-2">Marketplace:</span>
+                    <div class="listings-toggle-group" id="marketplace-toggle">
+                        <button class="listings-toggle-btn" data-mp="bbl">BBL</button>
+                        <div class="listings-toggle-divider"></div>
+                        <button class="listings-toggle-btn active" data-mp="both">Both</button>
+                        <div class="listings-toggle-divider"></div>
+                        <button class="listings-toggle-btn" data-mp="boost">Boost</button>
+                    </div>
+                    <span class="text-xs text-gray-500 ml-auto"><i class="fas fa-sort-amount-up mr-1"></i>Sorted by USD price (lowest first)</span>
                 </div>
                 <div id="combined-listings-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[600px] overflow-y-auto pr-2" style="scrollbar-width: thin; scrollbar-color: #4b5563 #1f2937;">
                     <div class="text-gray-500 text-sm text-center py-8 col-span-full">
@@ -8464,6 +8487,8 @@ est. APR 58.53 %"></textarea>
                     pixelions: false,
                     tla_locks: false
                 };
+                let listingConditionFilter = 'unbroken'; // 'unbroken' | 'both' | 'broken'
+                let listingMarketplaceFilter = 'both';   // 'bbl' | 'both' | 'boost'
                 
                 // Setup collection tabs (for overview tiles only)
                 function setupCollectionTabs() {
@@ -9281,9 +9306,23 @@ est. APR 58.53 %"></textarea>
                         }
                     });
                     
+                    // Apply condition filter
+                    if (listingConditionFilter === 'unbroken') {
+                        allListings = allListings.filter(l => !l.isBroken);
+                    } else if (listingConditionFilter === 'broken') {
+                        allListings = allListings.filter(l => l.isBroken);
+                    }
+
+                    // Apply marketplace filter
+                    if (listingMarketplaceFilter === 'bbl') {
+                        allListings = allListings.filter(l => l.marketplace === 'bbl');
+                    } else if (listingMarketplaceFilter === 'boost') {
+                        allListings = allListings.filter(l => l.marketplace === 'boost');
+                    }
+
                     // Sort by USD price (lowest first)
                     allListings.sort((a, b) => (a.priceUsd || 0) - (b.priceUsd || 0));
-                    
+
                     // Update total count
                     if (totalCountEl) {
                         totalCountEl.textContent = `(${allListings.length} total)`;
@@ -9495,6 +9534,28 @@ est. APR 58.53 %"></textarea>
                     loadMoreBtn?.addEventListener('click', () => {
                         displayedListingsCount += 12;
                         renderCombinedListings();
+                    });
+
+                    // Condition toggle
+                    document.getElementById('condition-toggle')?.querySelectorAll('.listings-toggle-btn').forEach(btn => {
+                        btn.addEventListener('click', () => {
+                            document.querySelectorAll('#condition-toggle .listings-toggle-btn').forEach(b => b.classList.remove('active'));
+                            btn.classList.add('active');
+                            listingConditionFilter = btn.dataset.condition;
+                            displayedListingsCount = 12;
+                            renderCombinedListings();
+                        });
+                    });
+
+                    // Marketplace toggle
+                    document.getElementById('marketplace-toggle')?.querySelectorAll('.listings-toggle-btn').forEach(btn => {
+                        btn.addEventListener('click', () => {
+                            document.querySelectorAll('#marketplace-toggle .listings-toggle-btn').forEach(b => b.classList.remove('active'));
+                            btn.classList.add('active');
+                            listingMarketplaceFilter = btn.dataset.mp;
+                            displayedListingsCount = 12;
+                            renderCombinedListings();
+                        });
                     });
                 }
                 
