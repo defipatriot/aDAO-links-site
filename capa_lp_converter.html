@@ -195,24 +195,19 @@
   <div class="footer-note" id="footer-note">Connecting to Terra LCD…</div>
 </div>
 
-<!-- CAPA Holders panel (outside container so iframe can be full width) -->
-<div class="panel" id="panel-capa" style="width:100%;max-width:100%;position:fixed;inset:0;z-index:10;background:#0a0c10;display:none;flex-direction:column;">
-  <div style="display:flex;align-items:center;gap:12px;padding:12px 20px;background:#111318;border-bottom:1px solid #1e2028;flex-shrink:0;">
-    <button onclick="switchTab('members')" style="background:#1e2028;border:1px solid #2a2d38;border-radius:6px;color:#6b6557;cursor:pointer;font-family:'Space Mono',monospace;font-size:10px;font-weight:700;letter-spacing:1px;padding:6px 12px;text-transform:uppercase;transition:all 0.15s;" onmouseover="this.style.color='#a855f7'" onmouseout="this.style.color='#6b6557'">← Back</button>
-    <span style="font-size:11px;color:#6b6557;letter-spacing:1px;text-transform:uppercase;">CAPA Holders · SmartStake Analytics</span>
-    <a href="https://analytics.smartstake.io/terra/tokens/CAPA" target="_blank" style="margin-left:auto;font-size:10px;color:#a855f7;text-decoration:none;border:1px solid #a855f733;border-radius:5px;padding:5px 10px;font-family:'Space Mono',monospace;letter-spacing:0.5px;" onmouseover="this.style.background='#a855f722'" onmouseout="this.style.background='transparent'">
-      ↗ Open in new tab
+<!-- CAPA Holders panel — SmartStake blocks iframes so we link out -->
+<div class="panel" id="panel-capa">
+  <div style="background:#111318;border:1px solid #1e2028;border-radius:10px;padding:40px 24px;text-align:center;margin-top:8px;">
+    <div style="width:52px;height:52px;border-radius:14px;background:rgba(168,85,247,0.1);border:1px solid rgba(168,85,247,0.25);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:1.5rem;color:#a855f7;">◎</div>
+    <div style="font-size:9px;color:#a855f7;letter-spacing:2px;text-transform:uppercase;font-weight:700;margin-bottom:8px;">SmartStake Analytics</div>
+    <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:#fff;margin-bottom:10px;">CAPA Token Holders</div>
+    <div style="font-size:11px;color:#6b6557;line-height:1.7;max-width:380px;margin:0 auto 24px;">Full holder distribution, top wallets, and on-chain analytics for the CAPA token — powered by SmartStake.</div>
+    <a href="https://analytics.smartstake.io/terra/tokens/CAPA" target="_blank" rel="noopener noreferrer"
+       style="display:inline-flex;align-items:center;gap:8px;background:#a855f7;color:#0a0c10;font-family:'Space Mono',monospace;font-size:11px;font-weight:700;letter-spacing:0.5px;padding:11px 24px;border-radius:7px;text-decoration:none;"
+       onmouseover="this.style.background='#b870ff'" onmouseout="this.style.background='#a855f7'">
+      ↗ OPEN SMARTSTAKE
     </a>
-  </div>
-  <iframe
-    id="capa-iframe"
-    src=""
-    style="flex:1;width:100%;border:none;background:#0a0c10;"
-    title="CAPA Holders — SmartStake Analytics"
-    onload="var m=document.getElementById('capa-iframe-msg'); if(m) m.style.display='none';"
-  ></iframe>
-  <div id="capa-iframe-msg" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;pointer-events:none;">
-    <div style="font-size:11px;color:#6b6557;letter-spacing:1px;">Loading SmartStake…</div>
+    <div style="font-size:9px;color:#3a3530;margin-top:14px;">Opens in a new tab</div>
   </div>
 </div>
 
@@ -270,23 +265,11 @@
       t.classList.toggle('active', tabNames[i] === name);
     });
 
-    if (name === 'capa') {
-      const panel = document.getElementById('panel-capa');
-      panel.style.display = 'flex';
-      const iframe = document.getElementById('capa-iframe');
-      if (!iframe.src || iframe.src === window.location.href) {
-        iframe.src = 'https://analytics.smartstake.io/terra/tokens/CAPA';
-      }
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.getElementById('panel-capa').style.display = 'none';
-      document.body.style.overflow = '';
-      document.querySelectorAll('.panel:not(#panel-capa)').forEach(p => p.classList.remove('active'));
-      const target = document.getElementById('panel-' + name);
-      if (target) target.classList.add('active');
-      if (name === 'members' && allMembers.length === 0) fetchAllMembers();
-      if (name === 'gov'     && govStakers.length === 0) fetchGovStakers();
-    }
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    const target = document.getElementById('panel-' + name);
+    if (target) target.classList.add('active');
+    if (name === 'members' && allMembers.length === 0) fetchAllMembers();
+    if (name === 'gov'     && govStakers.length === 0) fetchGovStakers();
   }
 
   async function fetchRates() {
@@ -412,16 +395,24 @@
     let fileKey = null;
 
     if (period === '24h') {
-      // Most recent daily that isn't today
+      // daily is an object {dayName: dateStr} — get sorted array of date values
       const today = new Date().toISOString().slice(0,10);
-      const candidates = (snapshotIndex.daily || []).filter(d => d < today).slice(-1);
-      if (candidates.length) fileKey = `${SNAP_BASE}/daily/${candidates[0]}.json`;
+      const dailyDates = Object.values(snapshotIndex.daily || {}).sort();
+      const candidates = dailyDates.filter(d => d < today).slice(-1);
+      // Map date back to day name to build the filename
+      if (candidates.length) {
+        const dayName = Object.keys(snapshotIndex.daily).find(k => snapshotIndex.daily[k] === candidates[0]);
+        if (dayName) fileKey = `${SNAP_BASE}/daily/${dayName}.json`;
+      }
     } else if (period === '7d') {
-      // Daily from ~7 days ago
       const target = new Date(); target.setUTCDate(target.getUTCDate() - 7);
       const targetStr = target.toISOString().slice(0,10);
-      const candidates = (snapshotIndex.daily || []).filter(d => d <= targetStr).slice(-1);
-      if (candidates.length) fileKey = `${SNAP_BASE}/daily/${candidates[0]}.json`;
+      const dailyDates = Object.values(snapshotIndex.daily || {}).sort();
+      const candidates = dailyDates.filter(d => d <= targetStr).slice(-1);
+      if (candidates.length) {
+        const dayName = Object.keys(snapshotIndex.daily).find(k => snapshotIndex.daily[k] === candidates[0]);
+        if (dayName) fileKey = `${SNAP_BASE}/daily/${dayName}.json`;
+      }
     } else if (period === '30d') {
       // Most recent monthly, or weekly from ~30 days ago
       if ((snapshotIndex.monthly || []).length) {
