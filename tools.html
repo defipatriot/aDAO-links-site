@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tools | Alliance DAO Dashboard</title>
+    <link rel="icon" type="image/x-icon" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/favicon-16x16.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/apple-touch-icon.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #0a0b0f; color: #EAEAEA; }
+
+        .bg-mesh { position: fixed; inset: 0; z-index: -1; background: radial-gradient(ellipse 80% 50% at 20% 40%, rgba(6,182,212,0.08), transparent), radial-gradient(ellipse 60% 40% at 80% 60%, rgba(45,212,191,0.05), transparent); pointer-events: none; }
+
+        /* Nav dropdown — exact copy from index.html */
+        .nav-dropdown { position: relative; display: inline-block; }
+        .nav-dropdown-btn { display: flex; align-items: center; gap: 6px; }
+        .nav-dropdown-content { display: none; position: absolute; top: 100%; left: 0; min-width: 160px; background: rgba(31,41,55,0.98); border: 1px solid #374151; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); z-index: 100; margin-top: 4px; overflow: hidden; }
+        .nav-dropdown:hover .nav-dropdown-content { display: block; }
+        .nav-dropdown-content a { display: block; padding: 10px 16px; color: #e5e7eb; font-size: 14px; font-weight: 500; transition: all 0.2s; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .nav-dropdown-content a:last-child { border-bottom: none; }
+        .nav-dropdown-content a:hover { background: rgba(45,212,191,0.15); color: #2dd4bf; }
+        .nav-dropdown-content a i { margin-right: 8px; width: 16px; text-align: center; }
+
+        /* Tool tiles */
+        .tool-tile { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 1rem; padding: 1.5rem; cursor: pointer; transition: all 0.25s ease; display: flex; flex-direction: column; align-items: flex-start; gap: 1rem; text-align: left; width: 100%; }
+        .tool-tile:hover { transform: translateY(-3px); }
+        .tool-tile-teal:hover   { border-color: rgba(45,212,191,0.4);  box-shadow: 0 12px 40px rgba(45,212,191,0.1); }
+        .tool-tile-purple:hover { border-color: rgba(168,85,247,0.4);  box-shadow: 0 12px 40px rgba(168,85,247,0.1); }
+        .tool-tile-blue:hover   { border-color: rgba(56,189,248,0.4);  box-shadow: 0 12px 40px rgba(56,189,248,0.1); }
+
+        .tile-icon-wrap { width: 52px; height: 52px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 1.375rem; flex-shrink: 0; }
+        .icon-teal   { background: rgba(45,212,191,0.12);  border: 1px solid rgba(45,212,191,0.3);  color: #2dd4bf; }
+        .icon-purple { background: rgba(168,85,247,0.12); border: 1px solid rgba(168,85,247,0.3); color: #c084fc; }
+        .icon-blue   { background: rgba(56,189,248,0.12);  border: 1px solid rgba(56,189,248,0.3);  color: #38bdf8; }
+
+        .tile-label  { font-size: 0.65rem; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; }
+        .label-teal   { color: #2dd4bf; }
+        .label-purple { color: #c084fc; }
+        .label-blue   { color: #38bdf8; }
+        .tile-title { font-size: 1.125rem; font-weight: 800; color: #fff; margin-bottom: 0.25rem; }
+        .tile-desc  { font-size: 0.8rem; color: #9ca3af; line-height: 1.55; }
+        .tile-cta   { margin-top: auto; font-size: 0.75rem; font-weight: 600; display: flex; align-items: center; gap: 0.375rem; opacity: 0.7; transition: opacity 0.2s; }
+        .tool-tile:hover .tile-cta { opacity: 1; }
+
+        /* Modal */
+        .modal-overlay { position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,0.82); display: flex; align-items: center; justify-content: center; padding: 1rem; opacity: 0; pointer-events: none; transition: opacity 0.25s ease; }
+        .modal-overlay.open { opacity: 1; pointer-events: all; }
+        .modal-box { background: #0f1117; border: 1px solid rgba(255,255,255,0.1); border-radius: 1rem; width: 100%; max-width: 800px; max-height: 90vh; display: flex; flex-direction: column; transform: scale(0.95) translateY(20px); transition: transform 0.25s ease; box-shadow: 0 40px 100px rgba(0,0,0,0.7); overflow: hidden; }
+        .modal-box.wide { max-width: 1000px; }
+        .modal-overlay.open .modal-box { transform: scale(1) translateY(0); }
+        .modal-head { display: flex; align-items: center; gap: 1rem; padding: 1.25rem 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.07); flex-shrink: 0; }
+        .modal-head-icon { width: 42px; height: 42px; border-radius: 11px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; flex-shrink: 0; }
+        .modal-close { margin-left: auto; color: #6b7280; cursor: pointer; font-size: 1.25rem; transition: color 0.2s; background: none; border: none; padding: 0.25rem; }
+        .modal-close:hover { color: #fff; }
+
+        /* Tabs */
+        .modal-tabs { display: flex; padding: 0.75rem 1.5rem 0; border-bottom: 1px solid rgba(255,255,255,0.07); flex-shrink: 0; gap: 2px; }
+        .mtab { padding: 0.5rem 1.125rem; font-size: 0.7rem; font-weight: 700; color: #6b7280; cursor: pointer; border-radius: 6px 6px 0 0; border: 1px solid transparent; border-bottom: none; transition: all 0.15s; background: none; letter-spacing: 0.5px; text-transform: uppercase; }
+        .mtab.act-purple { color: #c084fc; border-color: rgba(168,85,247,0.3); background: rgba(168,85,247,0.07); }
+        .modal-body { overflow-y: auto; padding: 1.5rem; flex: 1; }
+        .mpanel { display: none; } .mpanel.active { display: block; }
+        .tool-iframe { width: 100%; height: 72vh; border: none; border-radius: 0.5rem; background: #0a0b0f; }
+
+        /* ampCAPA (purple) */
+        .rate-g2  { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem; }
+        .rc-p     { background: rgba(168,85,247,0.06); border: 1px solid rgba(168,85,247,0.18); border-radius: 0.625rem; padding: 0.875rem 1rem; }
+        .rcl      { font-size: 0.6rem; color: #9ca3af; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 0.25rem; }
+        .rcv      { font-size: 0.9rem; color: #c084fc; font-weight: 700; font-family: monospace; }
+        .rcs      { font-size: 0.6rem; color: #6b7280; margin-top: 0.2rem; }
+        .lpb      { background: rgba(168,85,247,0.04); border: 1px solid rgba(168,85,247,0.15); border-radius: 0.625rem; padding: 1rem; margin-bottom: 1rem; }
+        .lpl      { font-size: 0.6rem; color: #9ca3af; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 0.5rem; display: block; }
+        .lpr      { display: flex; gap: 0.625rem; }
+        .lpi      { flex: 1; background: #0a0b0f; border: 1px solid rgba(168,85,247,0.25); border-radius: 0.5rem; color: #e5e7eb; font-family: monospace; font-size: 0.9rem; padding: 0.625rem 0.875rem; outline: none; transition: border-color 0.2s; }
+        .lpi:focus { border-color: rgba(168,85,247,0.6); }
+        .lpi::placeholder { color: #4b5563; }
+        .btn-pp   { background: rgba(168,85,247,0.2); border: 1px solid rgba(168,85,247,0.4); color: #c084fc; font-weight: 700; font-size: 0.75rem; padding: 0.625rem 1rem; border-radius: 0.5rem; cursor: pointer; transition: all 0.2s; white-space: nowrap; letter-spacing: 0.5px; }
+        .btn-pp:hover { background: rgba(168,85,247,0.35); }
+        .res-p    { background: rgba(88,28,135,0.12); border: 1px solid rgba(168,85,247,0.2); border-radius: 0.625rem; padding: 1.125rem; display: none; }
+        .res-p.show { display: block; }
+        .rp-lbl   { font-size: 0.6rem; color: #9ca3af; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 0.4rem; }
+        .rp-val   { font-size: 1.875rem; font-weight: 800; color: #e879f9; letter-spacing: -0.5px; margin-bottom: 0.25rem; }
+        .rp-sub   { font-size: 0.75rem; color: #a855f7; }
+        .rp-steps { font-size: 0.68rem; color: #6b7280; line-height: 2; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid rgba(255,255,255,0.06); }
+        .sv-p     { color: #a78bfa; }
+        .err-p    { background: rgba(127,29,29,0.3); border: 1px solid rgba(239,68,68,0.3); border-radius: 0.375rem; color: #f87171; font-size: 0.75rem; padding: 0.625rem; margin-top: 0.5rem; display: none; }
+        .err-p.show { display: block; }
+
+        /* Fuel (light blue) */
+        .fsg { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem; margin-bottom: 1.25rem; }
+        .fsc { background: rgba(56,189,248,0.05); border: 1px solid rgba(56,189,248,0.18); border-radius: 0.625rem; padding: 0.875rem 1rem; text-align: center; }
+        .fsl { font-size: 0.6rem; color: #9ca3af; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 0.25rem; }
+        .fsv { font-size: 1rem; color: #38bdf8; font-weight: 700; font-family: monospace; }
+        .fss { font-size: 0.6rem; color: #6b7280; margin-top: 0.2rem; }
+        .fcc { background: rgba(255,255,255,0.02); border: 1px solid rgba(56,189,248,0.12); border-radius: 0.75rem; padding: 1.25rem; }
+        .fct { font-size: 0.65rem; color: #9ca3af; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 1rem; }
+        .fcw { position: relative; height: 200px; }
+        .fn  { background: rgba(56,189,248,0.04); border: 1px solid rgba(56,189,248,0.12); border-radius: 0.5rem; padding: 0.75rem; margin-top: 1rem; font-size: 0.7rem; color: #6b7280; line-height: 1.6; }
+        .fn strong { color: #38bdf8; }
+
+        /* Dots */
+        .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+        .dot-live  { background: #4ade80; animation: pdot 2s infinite; }
+        .dot-ld-p  { background: #c084fc; animation: pdot 0.8s infinite; }
+        .dot-ld-b  { background: #38bdf8; animation: pdot 0.8s infinite; }
+        .dot-error { background: #ef4444; }
+        @keyframes pdot { 0%,100%{opacity:1} 50%{opacity:0.3} }
+    </style>
+</head>
+<body class="antialiased">
+<div class="bg-mesh"></div>
+
+<!-- Header — matches current index.html exactly -->
+<header class="py-4">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-wrap md:flex-nowrap justify-between items-center">
+        <div class="flex-shrink-0 w-1/2 md:w-32 order-1">
+            <a href="index.html">
+                <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Alliance%20DAO%20Logo.png" alt="Alliance DAO Logo" class="h-12 md:h-16 w-auto" onerror="this.src='https://placehold.co/128x64/0D0D0D/EAEAEA?text=Logo'; this.onerror=null;">
+            </a>
+        </div>
+        <nav class="flex-1 w-full md:w-auto flex justify-center items-center gap-3 order-3 md:order-2 mt-4 md:mt-0">
+            <div class="nav-dropdown">
+                <a href="nft-explorer-index.html" class="nav-dropdown-btn bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-8 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center">
+                    NFT Explorer
+                    <i class="fas fa-chevron-down text-[10px] opacity-60"></i>
+                </a>
+                <div class="nav-dropdown-content">
+                    <a href="nft-explorer-index.html"><i class="fas fa-images"></i>NFT Explorer</a>
+                    <a href="planet-map.html"><i class="fas fa-globe"></i>Galaxy Map</a>
+                </div>
+            </div>
+            <a href="tla-stats.html" class="bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-8 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center">
+                TLA Stats
+            </a>
+            <a href="dao_governance.html" class="bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-8 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center">
+                DAO
+            </a>
+        </nav>
+        <div class="w-1/2 md:w-32 flex-shrink-0 flex justify-end order-2 md:order-3">
+            <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Terra.PNG" alt="Terra Logo" class="h-12 md:h-16 w-auto" onerror="this.src='https://placehold.co/128x64/0D0D0D/EAEAEA?text=Logo'; this.onerror=null;">
+        </div>
+    </div>
+</header>
+
+<!-- Price ticker — same widget as index.html -->
+<div class="py-2 border-b border-gray-800">
+    <script src="https://widgets.coingecko.com/gecko-coin-price-marquee-widget.js"></script>
+    <gecko-coin-price-marquee-widget locale="en" dark-mode="true" outlined="true" coin-ids="terra-luna-2,eris-amplified-luna,eris-arbitrage-luna,backbone-labs-staked-luna,lion-dao,capapult,solid-2,astroport-fi,eureka-bridged-wbtc-terra,cosmos,ethereum" initial-currency="usd"></gecko-coin-price-marquee-widget>
+</div>
+
+<main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+    <div class="mb-8">
+        <div class="flex items-center gap-3 mb-1">
+            <i class="fas fa-wrench text-teal-400 text-xl"></i>
+            <h1 class="text-2xl font-bold text-white">Community Tools</h1>
+        </div>
+        <p class="text-gray-500 text-sm ml-9">Click any tile to open the full tool.</p>
+    </div>
+
+    <!-- Tiles -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+
+        <a href="tla_tool.html" class="tool-tile tool-tile-teal" style="text-decoration:none">
+            <div class="flex items-center gap-3 w-full">
+                <div class="tile-icon-wrap icon-teal"><i class="fas fa-lock"></i></div>
+                <div>
+                    <div class="tile-label label-teal">Alliance DAO</div>
+                    <div class="tile-title">TLA Tool</div>
+                </div>
+            </div>
+            <div class="tile-desc">Calculate your TLA deposit position — underlying LUNA value, lock status, and estimated rewards based on your staked NFTs.</div>
+            <div class="tile-cta" style="color:#2dd4bf"><i class="fas fa-arrow-right text-xs"></i> Open Tool</div>
+        </a>
+
+        <button class="tool-tile tool-tile-purple" onclick="openModal('ampcapa')">
+            <div class="flex items-center gap-3 w-full">
+                <div class="tile-icon-wrap icon-purple"><i class="fas fa-exchange-alt"></i></div>
+                <div>
+                    <div class="tile-label label-purple">ampCAPA DAO</div>
+                    <div class="tile-title">ampCAPA Converter</div>
+                </div>
+            </div>
+            <div class="tile-desc">Convert your DAODAO ampLP balance to underlying CAPA using live on-chain rates. Track member positions over time.</div>
+            <div class="tile-cta" style="color:#c084fc"><i class="fas fa-arrow-right text-xs"></i> Open Tool</div>
+        </button>
+
+        <button class="tool-tile tool-tile-blue" onclick="openModal('fuel')">
+            <div class="flex items-center gap-3 w-full">
+                <div class="tile-icon-wrap icon-blue"><i class="fas fa-gas-pump"></i></div>
+                <div>
+                    <div class="tile-label label-blue">Terra DEX</div>
+                    <div class="tile-title">FUEL Price Tracker</div>
+                </div>
+            </div>
+            <div class="tile-desc">Live FUEL token price from the LUNA-FUEL Astroport pool, plus historical liquidity data from epoch snapshots.</div>
+            <div class="tile-cta" style="color:#38bdf8"><i class="fas fa-arrow-right text-xs"></i> Open Tool</div>
+        </button>
+
+    </div>
+</main>
+
+<!-- MODAL: ampCAPA -->
+<div class="modal-overlay" id="modal-ampcapa" onclick="handleOverlay(event,'modal-ampcapa')">
+    <div class="modal-box">
+        <div class="modal-head">
+            <div class="modal-head-icon icon-purple"><i class="fas fa-exchange-alt"></i></div>
+            <div>
+                <div style="font-size:0.6rem;color:#c084fc;letter-spacing:1.5px;text-transform:uppercase;font-weight:700">ampCAPA DAO</div>
+                <div style="font-size:1rem;font-weight:800;color:#fff">ampCAPA Converter</div>
+            </div>
+            <button class="modal-close" onclick="closeModal('modal-ampcapa')"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-tabs">
+            <button class="mtab act-purple" id="tab-conv" onclick="switchAcTab('conv')">Converter</button>
+            <button class="mtab" id="tab-hist" onclick="switchAcTab('hist')">Member History</button>
+        </div>
+        <div class="modal-body">
+
+            <!-- Converter tab -->
+            <div class="mpanel active" id="panel-conv">
+                <p class="text-xs text-gray-500 mb-4">Convert your DAODAO ampLP balance to underlying CAPA using live on-chain exchange rates.</p>
+                <div class="rate-g2">
+                    <div class="rc-p">
+                        <div class="rcl"><span class="dot dot-ld-p" id="ac-d1"></span>ampCAPA → CAPA</div>
+                        <div class="rcv" id="ac-r1">fetching…</div>
+                        <div class="rcs" id="ac-r1s">Eris staking ratio</div>
+                    </div>
+                    <div class="rc-p">
+                        <div class="rcl"><span class="dot dot-ld-p" id="ac-d2"></span>ampLP → ampCAPA</div>
+                        <div class="rcv" id="ac-r2">fetching…</div>
+                        <div class="rcs" id="ac-r2s">ve3 compounding ratio</div>
+                    </div>
+                </div>
+                <div class="lpb">
+                    <label class="lpl">Your DAODAO ampLP Balance</label>
+                    <div class="lpr">
+                        <input type="text" class="lpi" id="ac-inp" placeholder="e.g. 4141890580449" />
+                        <button class="btn-pp" onclick="acCalc()">CALCULATE</button>
+                    </div>
+                    <div class="err-p" id="ac-err"></div>
+                </div>
+                <div class="res-p" id="ac-res">
+                    <div class="rp-lbl">Underlying CAPA</div>
+                    <div class="rp-val" id="ac-rv">—</div>
+                    <div class="rp-sub" id="ac-rs"></div>
+                    <div class="rp-steps" id="ac-rst"></div>
+                </div>
+                <p class="text-xs text-gray-700 mt-3 text-center" id="ac-ft">Connecting to Terra LCD…</p>
+            </div>
+
+            <!-- Member History tab -->
+            <div class="mpanel" id="panel-hist">
+                <div style="background:rgba(168,85,247,0.05);border:1px solid rgba(168,85,247,0.15);border-radius:0.75rem;padding:2rem;text-align:center">
+                    <i class="fas fa-chart-line text-5xl mb-4" style="color:rgba(168,85,247,0.3)"></i>
+                    <h3 class="text-white font-bold text-lg mb-2">Member Position History</h3>
+                    <p class="text-gray-400 text-sm leading-relaxed max-w-sm mx-auto mb-4">Weekly snapshots of all DAODAO stakers showing underlying CAPA — who's growing vs decreasing their position over time.</p>
+                    <div style="background:rgba(168,85,247,0.08);border:1px solid rgba(168,85,247,0.18);border-radius:0.625rem;padding:0.875rem;text-align:left;margin-bottom:1.25rem">
+                        <p class="text-xs font-bold uppercase tracking-wider mb-2" style="color:rgba(192,132,252,0.7)">How it works</p>
+                        <ul class="text-xs text-gray-500 space-y-1.5">
+                            <li><i class="fas fa-check mr-2" style="color:rgba(168,85,247,0.5)"></i>GitHub Actions cron runs every Sunday</li>
+                            <li><i class="fas fa-check mr-2" style="color:rgba(168,85,247,0.5)"></i>Fetches all stakers from the voting module contract</li>
+                            <li><i class="fas fa-check mr-2" style="color:rgba(168,85,247,0.5)"></i>Converts ampLP → CAPA using live on-chain rates</li>
+                            <li><i class="fas fa-check mr-2" style="color:rgba(168,85,247,0.5)"></i>Saves to <code style="color:rgba(192,132,252,0.6)">snapshots.json</code> in GitHub repo</li>
+                        </ul>
+                    </div>
+                    <a href="ampcapa-tracker.html" style="display:inline-flex;align-items:center;gap:0.5rem;background:rgba(168,85,247,0.15);border:1px solid rgba(168,85,247,0.35);color:#c084fc;font-weight:600;font-size:0.875rem;padding:0.625rem 1.5rem;border-radius:0.5rem;text-decoration:none;transition:all 0.2s">
+                        <i class="fas fa-external-link-alt text-xs"></i> View Full Tracker
+                    </a>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- MODAL: Fuel -->
+<div class="modal-overlay" id="modal-fuel" onclick="handleOverlay(event,'modal-fuel')">
+    <div class="modal-box">
+        <div class="modal-head">
+            <div class="modal-head-icon icon-blue"><i class="fas fa-gas-pump"></i></div>
+            <div>
+                <div style="font-size:0.6rem;color:#38bdf8;letter-spacing:1.5px;text-transform:uppercase;font-weight:700">Terra DEX · Astroport</div>
+                <div style="font-size:1rem;font-weight:800;color:#fff">FUEL Price Tracker</div>
+            </div>
+            <button class="modal-close" onclick="closeModal('modal-fuel')"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="modal-body">
+            <div class="fsg">
+                <div class="fsc"><div class="fsl"><span class="dot dot-ld-b" id="f-dot"></span>FUEL Price (USD)</div><div class="fsv" id="f-price">—</div><div class="fss">Live · Astroport pool</div></div>
+                <div class="fsc"><div class="fsl">Pool TVL</div><div class="fsv" id="f-tvl">—</div><div class="fss">LUNA-FUEL liquidity</div></div>
+                <div class="fsc"><div class="fsl">LUNA Price</div><div class="fsv" id="f-luna">—</div><div class="fss">CoinGecko · live</div></div>
+            </div>
+            <div class="fcc">
+                <div class="fct">LUNA-FUEL Pool Liquidity (TVL in USD) — Epochs 166–178</div>
+                <div class="fcw"><canvas id="f-chart"></canvas></div>
+            </div>
+            <div class="fn">
+                <strong>Data source:</strong> Historical pool liquidity from epoch snapshot files at
+                <a href="https://github.com/defipatriot/tla-ext_json_storage" target="_blank" style="color:#38bdf8">tla-ext_json_storage</a>.
+                Live FUEL price is derived from current Astroport pool reserves + LUNA/USD.
+                Direct price history tracking begins once the cron job is set up.
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Footer — exact copy from current index.html -->
+<footer class="border-t border-gray-800 mt-12 py-8">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-gray-500 text-sm">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+            <div><h4 class="font-bold text-gray-300 mb-2">Disclaimer</h4><p>This website is for informational purposes only and does not constitute financial advice. All data is provided "as is" without warranty. Please do your own research.</p></div>
+            <div><h4 class="font-bold text-gray-300 mb-2">Project Origin</h4><p>This site is built and maintained by a council member, not at the direction of the council, but as a passionate community member looking to improve the optics of the collection.</p></div>
+            <div><h4 class="font-bold text-gray-300 mb-2">Data Source</h4><p>Data on this site is a mix of live on-chain data and static snapshots. See the banner at the top for details.</p></div>
+            <div><h4 class="font-bold text-gray-300 mb-2">Transparency</h4><p>The plan is for the script used to retrieve on-chain data to be open-source. You will be able to view the public repository to see how information is retrieved.</p><a href="https://github.com/defipatriot" target="_blank" rel="noopener noreferrer" class="text-cyan-400 hover:underline mt-2 inline-block">View on GitHub</a></div>
+        </div>
+    </div>
+</footer>
+<footer class="py-6">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-gray-400">
+        <div class="flex justify-center items-center space-x-6 mb-4">
+            <a href="https://t.me/The_AllianceDAO" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors"><i class="fab fa-telegram-plane text-3xl"></i></a>
+            <a href="https://x.com/The_AllianceDAO" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors"><i class="fab fa-twitter text-3xl"></i></a>
+        </div>
+        <div class="flex flex-wrap justify-center items-center space-x-6 text-sm">
+            <a href="tutorials.html" class="hover:text-white hover:underline transition-colors">Tutorials</a>
+            <a href="links.html" class="hover:text-white hover:underline transition-colors">Official Links</a>
+            <a href="https://chainsco.pe/terra2/address/terra1phr9fngjv7a8an4dhmhd0u0f98wazxfnzccqtyheq4zqrrp4fpuqw3apw9" target="_blank" rel="noopener noreferrer" class="hover:text-white hover:underline transition-colors">NFT Contract</a>
+            <a href="https://github.com/SCV-Security/PublicReports/blob/b819ec669f81e603caca261931e2a4aaca1cddf7/Alliance/Alliance%20DAO%20-%20NFT%20Collection%20Contract%20-%20Audit%20Report%20v1.0.pdf" target="_blank" rel="noopener noreferrer" class="hover:text-white hover:underline transition-colors">Contract Audit</a>
+
+        </div>
+    </div>
+</footer>
+
+<script>
+// ── Modal ─────────────────────────────────────────────────────────────────────
+function openModal(name) {
+    document.getElementById('modal-'+name).classList.add('open');
+    document.body.style.overflow = 'hidden';
+    if (name === 'ampcapa' && !acRS) acFetch();
+    if (name === 'fuel'    && !fLoaded) loadFuel();
+}
+function closeModal(id) {
+    document.getElementById(id).classList.remove('open');
+    document.body.style.overflow = '';
+}
+function handleOverlay(e, id) {
+    if (e.target === document.getElementById(id)) closeModal(id);
+}
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') document.querySelectorAll('.modal-overlay.open').forEach(m => { m.classList.remove('open'); document.body.style.overflow = ''; });
+});
+
+// ── ampCAPA Converter ─────────────────────────────────────────────────────────
+const LCD   = 'https://terra-lcd.publicnode.com';
+const SC    = 'terra186rpfczl7l2kugdsqqedegl4es4hp624phfc7ddy8my02a4e8lgq5rlx7y';
+const VE3   = 'terra1zly98gvcec54m3caxlqexce7rus6rzgplz7eketsdz7nh750h2rqvu8uzx';
+const DENOM = 'factory/terra186rpfczl7l2kugdsqqedegl4es4hp624phfc7ddy8my02a4e8lgq5rlx7y/ampCAPA';
+let acRS = null, acRV = null;
+
+function b64(o) { return btoa(unescape(encodeURIComponent(JSON.stringify(o)))); }
+async function qc(addr, q) {
+    const r = await fetch(`${LCD}/cosmwasm/wasm/v1/contract/${addr}/smart/${b64(q)}`, { headers: { Accept: 'application/json' } });
+    if (!r.ok) throw new Error(r.status);
+    const j = await r.json(); return j.data ?? j;
+}
+
+async function acFetch() {
+    try {
+        const d = await qc(SC, { state: {} });
+        acRS = parseFloat(d.exchange_rate);
+        document.getElementById('ac-r1').textContent  = acRS.toFixed(6);
+        document.getElementById('ac-r1s').textContent = acRS.toFixed(6) + ' CAPA per ampCAPA';
+        document.getElementById('ac-d1').className    = 'dot dot-live';
+    } catch { document.getElementById('ac-r1').textContent = 'ERROR'; document.getElementById('ac-d1').className = 'dot dot-error'; }
+
+    try {
+        const d = await qc(VE3, { exchange_rates: { assets: [["single", { native: DENOM }]], limit: 1 } });
+        const rates = d[0]?.exchange_rates;
+        if (!rates?.length) throw new Error();
+        const lat = rates.sort((a, b) => b[0] - a[0])[0];
+        acRV = parseFloat(lat[1].exchange_rate);
+        document.getElementById('ac-r2').textContent  = acRV.toFixed(6);
+        document.getElementById('ac-r2s').textContent = acRV.toFixed(6) + ' ampCAPA per ampLP';
+        document.getElementById('ac-d2').className    = 'dot dot-live';
+    } catch { document.getElementById('ac-r2').textContent = 'ERROR'; document.getElementById('ac-d2').className = 'dot dot-error'; }
+
+    document.getElementById('ac-ft').textContent = 'Live rates · terra-lcd.publicnode.com · refreshes every 60s';
+}
+setInterval(() => { if (acRS) acFetch(); }, 60000);
+
+function fmt(n, d = 2) { return (n || 0).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }); }
+
+function acCalc() {
+    const err = document.getElementById('ac-err'), res = document.getElementById('ac-res');
+    err.classList.remove('show');
+    const raw = document.getElementById('ac-inp').value.replace(/,/g, '').trim();
+    if (!raw)              { err.textContent = 'Enter your ampLP balance.'; err.classList.add('show'); return; }
+    const lp = parseFloat(raw);
+    if (isNaN(lp) || lp <= 0) { err.textContent = 'Invalid number.'; err.classList.add('show'); return; }
+    if (!acRS || !acRV)   { err.textContent = 'Rates still loading — try again in a moment.'; err.classList.add('show'); return; }
+    const micro = lp / 1e6, ampCapa = micro * acRV, capa = ampCapa * acRS;
+    document.getElementById('ac-rv').textContent  = fmt(capa, 2) + ' CAPA';
+    document.getElementById('ac-rs').textContent  = '≈ ' + fmt(ampCapa, 4) + ' ampCAPA underlying';
+    document.getElementById('ac-rst').innerHTML   = `
+        <span style="color:#7c3aed">① Micro → ampLP</span>&nbsp;
+        ${fmt(lp,0)} ÷ 1,000,000 = <span class="sv-p">${fmt(micro,4)} ampLP</span><br>
+        <span style="color:#7c3aed">② ampLP → ampCAPA</span> (${acRV.toFixed(6)})&nbsp;
+        ${fmt(micro,4)} × ${acRV.toFixed(6)} = <span class="sv-p">${fmt(ampCapa,4)} ampCAPA</span><br>
+        <span style="color:#7c3aed">③ ampCAPA → CAPA</span> (${acRS.toFixed(6)})&nbsp;
+        ${fmt(ampCapa,4)} × ${acRS.toFixed(6)} = <span class="sv-p">${fmt(capa,4)} CAPA</span>
+    `;
+    res.classList.add('show');
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('ac-inp').addEventListener('keydown', e => { if (e.key === 'Enter') acCalc(); });
+});
+
+function switchAcTab(name) {
+    ['conv','hist'].forEach(t => {
+        document.getElementById('tab-'+t).className  = 'mtab' + (t === name ? ' act-purple' : '');
+        document.getElementById('panel-'+t).className = 'mpanel' + (t === name ? ' active' : '');
+    });
+}
+
+// ── Fuel Price Tracker ────────────────────────────────────────────────────────
+const FUEL_POOL = 'terra10yfnsqn20rzlnlzkeva5255q27zp6ws9te9uuql9e0lacfcze7zsffjct5';
+let fLoaded = false, fChart = null;
+
+// Epoch 166–178 LUNA-FUEL pool liquidity from tla-ext-epoch-178-end.json astroport_data
+const ELIQ = {
+    166: 37973.37, 167: 40304.27, 168: 41715.96,
+    169: 38646.46, 170: 36612.01, 171: 30270.10,
+    172: 29414.86, 173: 30161.21, 174: 29620.87,
+    175: 27895.78, 176: 18391.09, 177: 36241.13,
+    178: 35292.74
+};
+
+async function loadFuel() {
+    fLoaded = true;
+
+    // LUNA price via CoinGecko
+    let lunaUsd = null;
+    try {
+        const r = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=terra-luna-2&vs_currencies=usd');
+        const d = await r.json();
+        lunaUsd = d['terra-luna-2']?.usd;
+        if (lunaUsd) document.getElementById('f-luna').textContent = '$' + lunaUsd.toFixed(5);
+    } catch { document.getElementById('f-luna').textContent = 'n/a'; }
+
+    // Pool reserves from Astroport LCD
+    try {
+        const r = await fetch(`${LCD}/cosmwasm/wasm/v1/contract/${FUEL_POOL}/smart/${b64({ pool: {} })}`, { headers: { Accept: 'application/json' } });
+        const d = await r.json();
+        const assets = d.data?.assets || d.assets || [];
+        let luna = null, fuel = null;
+        for (const a of assets) {
+            const dn = a.info?.native_token?.denom || '';
+            if (dn === 'uluna')                                    luna = parseFloat(a.amount) / 1e6;
+            else if (dn.toLowerCase().includes('fuel'))             fuel = parseFloat(a.amount) / 1e6;
+        }
+        if (luna && fuel && lunaUsd) {
+            const fp  = (luna / fuel) * lunaUsd;
+            const tvl = luna * lunaUsd * 2;
+            document.getElementById('f-price').textContent = '$' + fp.toFixed(6);
+            document.getElementById('f-tvl').textContent   = '$' + tvl.toLocaleString('en-US', { maximumFractionDigits: 0 });
+            document.getElementById('f-dot').className     = 'dot dot-live';
+        } else {
+            document.getElementById('f-price').textContent = 'querying…';
+            if (lunaUsd) document.getElementById('f-tvl').textContent = '~$' + ELIQ[178].toLocaleString('en-US', { maximumFractionDigits: 0 });
+        }
+    } catch {
+        document.getElementById('f-price').textContent = 'Error';
+        document.getElementById('f-dot').className     = 'dot dot-error';
+    }
+
+    // Chart
+    const ctx = document.getElementById('f-chart').getContext('2d');
+    if (fChart) fChart.destroy();
+    fChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: Object.keys(ELIQ).map(e => 'Ep ' + e),
+            datasets: [{
+                label: 'Pool TVL (USD)',
+                data: Object.values(ELIQ),
+                borderColor: '#38bdf8',
+                backgroundColor: 'rgba(56,189,248,0.07)',
+                borderWidth: 2,
+                pointBackgroundColor: '#38bdf8',
+                pointRadius: 4,
+                pointHoverRadius: 6,
+                fill: true,
+                tension: 0.35
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: { backgroundColor: '#111318', borderColor: '#1e3a5f', borderWidth: 1, titleColor: '#38bdf8', bodyColor: '#b0a898', callbacks: { label: ctx => ' $' + ctx.parsed.y.toLocaleString('en-US', { maximumFractionDigits: 0 }) + ' TVL' } }
+            },
+            scales: {
+                x: { ticks: { color: '#4a4840', font: { size: 10 } }, grid: { color: '#111318' } },
+                y: { ticks: { color: '#4a4840', font: { size: 10 }, callback: v => '$' + (v / 1000).toFixed(0) + 'k' }, grid: { color: '#1e2028' } }
+            }
+        }
+    });
+}
+</script>
+</body>
+</html>
