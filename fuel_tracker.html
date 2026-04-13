@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FUEL Price Tracker · Alliance DAO</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0a0c10;
+      color: #e8e4d9;
+      font-family: 'Space Mono', monospace;
+      min-height: 100vh;
+      padding: 32px 24px;
+    }
+    .container { width: 100%; max-width: 1000px; margin: 0 auto; }
+
+    /* ── Back button ── */
+    .back-btn {
+      display: inline-flex; align-items: center; gap: 7px;
+      background: #111318; border: 1px solid #1e2028; border-radius: 7px;
+      color: #6b6557; cursor: pointer; font-family: 'Space Mono', monospace;
+      font-size: 10px; font-weight: 700; letter-spacing: 1px;
+      padding: 8px 14px; text-decoration: none; text-transform: uppercase;
+      transition: all 0.15s; margin-bottom: 28px;
+    }
+    .back-btn:hover { border-color: #38bdf8; color: #38bdf8; }
+
+    /* ── Header ── */
+    .header { margin-bottom: 28px; }
+    .header h1 {
+      font-size: 1.9rem; font-weight: 800; letter-spacing: -0.5px;
+      color: #fff; margin-bottom: 6px;
+    }
+    .header h1 span { color: #38bdf8; }
+    .header p { color: #6b6557; font-size: 11px; letter-spacing: 0.5px; }
+
+    /* ── Stat cards ── */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+    .stat-card {
+      background: #111318; border: 1px solid #1e2028; border-radius: 10px;
+      padding: 18px 20px;
+    }
+    .stat-label {
+      color: #6b6557; font-size: 9px; font-weight: 700;
+      letter-spacing: 1.5px; text-transform: uppercase;
+      display: flex; align-items: center; gap: 7px; margin-bottom: 10px;
+    }
+    .stat-value {
+      font-size: 1.5rem; font-weight: 800; color: #38bdf8;
+      line-height: 1; margin-bottom: 4px;
+    }
+    .stat-sub { color: #4a4840; font-size: 10px; }
+
+    /* ── Dot indicators ── */
+    .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .dot-live    { background: #4ade80; box-shadow: 0 0 6px #4ade80; animation: pulse 2s infinite; }
+    .dot-loading { background: #a855f7; animation: pulse 1s infinite; }
+    .dot-error   { background: #f87171; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+    /* ── Change colors ── */
+    .up   { color: #4ade80; }
+    .down { color: #f87171; }
+    .neutral { color: #6b6557; }
+
+    /* ── Chart section ── */
+    .chart-section {
+      background: #111318; border: 1px solid #1e2028; border-radius: 10px;
+      padding: 20px 22px; margin-bottom: 20px;
+    }
+    .chart-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 16px; flex-wrap: wrap; gap: 10px;
+    }
+    .chart-title {
+      color: #6b6557; font-size: 9px; font-weight: 700;
+      letter-spacing: 1.5px; text-transform: uppercase;
+    }
+    .chart-tabs {
+      display: flex; gap: 6px;
+    }
+    .chart-tab {
+      background: #0d0f14; border: 1px solid #1e2028; border-radius: 5px;
+      color: #6b6557; cursor: pointer; font-family: 'Space Mono', monospace;
+      font-size: 9px; font-weight: 700; letter-spacing: 0.5px;
+      padding: 5px 10px; text-transform: uppercase; transition: all 0.15s;
+    }
+    .chart-tab.active, .chart-tab:hover { border-color: #38bdf8; color: #38bdf8; }
+    .chart-tab.active { background: rgba(56,189,248,0.08); }
+    .chart-wrap { height: 260px; }
+
+    /* ── Info section ── */
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 14px; margin-bottom: 20px;
+    }
+    .info-card {
+      background: #111318; border: 1px solid #1e2028; border-radius: 10px;
+      padding: 16px 18px;
+    }
+    .info-card-title {
+      color: #6b6557; font-size: 9px; font-weight: 700;
+      letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 10px;
+    }
+    .info-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 6px 0; border-bottom: 1px solid #0d0f14; font-size: 11px;
+    }
+    .info-row:last-child { border-bottom: none; }
+    .info-row-key { color: #4a4840; }
+    .info-row-val { color: #b0a898; font-size: 10px; word-break: break-all; text-align: right; max-width: 55%; }
+    .info-row-val.mono { font-size: 9px; color: #6b6557; }
+
+    /* ── Note ── */
+    .note {
+      background: #0d0f14; border: 1px solid #1e2028; border-radius: 8px;
+      color: #4a4840; font-size: 10px; line-height: 1.6; padding: 12px 16px;
+    }
+    .note a { color: #38bdf8; text-decoration: none; }
+    .note a:hover { text-decoration: underline; }
+
+    /* ── Nav ── */
+    .nav {
+      display: flex; justify-content: space-between; align-items: center;
+      padding-bottom: 20px; margin-bottom: 24px;
+      border-bottom: 1px solid #111318;
+    }
+    .nav-brand { font-size: 13px; font-weight: 700; color: #fff; }
+    .nav-brand span { color: #38bdf8; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <nav class="nav">
+    <div class="nav-brand">ALLIANCE <span>DAO</span></div>
+    <a class="back-btn" href="tools.html"><i class="fas fa-arrow-left"></i> Back to Tools</a>
+  </nav>
+
+  <div class="header">
+    <h1>⛽ <span>FUEL</span> Price Tracker</h1>
+    <p>BOOST DAO · TERRA BLOCKCHAIN · LIVE FROM ASTROPORT</p>
+  </div>
+
+  <!-- Stat Cards -->
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-label"><span class="dot dot-loading" id="dot-price"></span>Current Price</div>
+      <div class="stat-value" id="price-usd">—</div>
+      <div class="stat-sub">USD · Astroport API</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">24h Change</div>
+      <div class="stat-value neutral" id="change-24h">—</div>
+      <div class="stat-sub" id="change-24h-sub">vs 24 hours ago</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">7d Change</div>
+      <div class="stat-value neutral" id="change-7d">—</div>
+      <div class="stat-sub">vs 7 days ago</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Pool TVL</div>
+      <div class="stat-value" id="pool-tvl">—</div>
+      <div class="stat-sub">LUNA-FUEL pool liquidity</div>
+    </div>
+  </div>
+
+  <!-- Chart -->
+  <div class="chart-section">
+    <div class="chart-header">
+      <div class="chart-title" id="chart-title">FUEL/USD Price History</div>
+      <div class="chart-tabs">
+        <button class="chart-tab active" onclick="switchChart('price7d',this)">PRICE 7D</button>
+        <button class="chart-tab" onclick="switchChart('priceAll',this)" id="tab-all">PRICE ALL</button>
+        <button class="chart-tab" onclick="switchChart('liquidity',this)">LIQUIDITY</button>
+        <button class="chart-tab" onclick="switchChart('volume',this)">VOLUME</button>
+      </div>
+    </div>
+    <div class="chart-wrap"><canvas id="price-chart"></canvas></div>
+  </div>
+
+  <!-- Token Info + Pool Info -->
+  <div class="info-grid">
+    <div class="info-card">
+      <div class="info-card-title">Token Information</div>
+      <div class="info-row">
+        <span class="info-row-key">Symbol</span>
+        <span class="info-row-val">FUEL</span>
+      </div>
+      <div class="info-row">
+        <span class="info-row-key">Protocol</span>
+        <span class="info-row-val">Boost DAO</span>
+      </div>
+      <div class="info-row">
+        <span class="info-row-key">Origin Chain</span>
+        <span class="info-row-val">Neutron</span>
+      </div>
+      <div class="info-row">
+        <span class="info-row-key">Decimals</span>
+        <span class="info-row-val">6</span>
+      </div>
+      <div class="info-row">
+        <span class="info-row-key">Terra IBC Denom</span>
+        <span class="info-row-val mono">ibc/4B44…B3961</span>
+      </div>
+      <div class="info-row">
+        <span class="info-row-key">Origin Denom</span>
+        <span class="info-row-val mono">factory/neutron1zl2…/fuel</span>
+      </div>
+    </div>
+    <div class="info-card">
+      <div class="info-card-title">Pool Information</div>
+      <div class="info-row">
+        <span class="info-row-key">DEX</span>
+        <span class="info-row-val">Astroport (Terra)</span>
+      </div>
+      <div class="info-row">
+        <span class="info-row-key">Pair</span>
+        <span class="info-row-val">LUNA / FUEL</span>
+      </div>
+      <div class="info-row">
+        <span class="info-row-key">Pool Contract</span>
+        <span class="info-row-val mono">terra10yfn…fjct5</span>
+      </div>
+      <div class="info-row">
+        <span class="info-row-key">Volume 24h</span>
+        <span class="info-row-val" id="vol-24h">—</span>
+      </div>
+      <div class="info-row">
+        <span class="info-row-key">Data Source</span>
+        <span class="info-row-val">Astroport tRPC API</span>
+      </div>
+      <div class="info-row">
+        <span class="info-row-key">Last Refreshed</span>
+        <span class="info-row-val" id="last-refresh">—</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Note -->
+  <div class="note">
+    <strong>Data sources:</strong>
+    Live price from <a href="https://app.astroport.fi" target="_blank">Astroport</a>
+    (<code>tokens.byChain</code> API, phoenix-1).
+    7-day chart from Astroport <code>token.getTokens</code> series.
+    Daily confirmed history from <a href="https://github.com/defipatriot/fuel-data_2026" target="_blank">fuel-data_2026</a> (hourly cron job).
+    <br><br>
+    <strong>Epoch estimates (amber dashed line):</strong> Historical prices are approximated using
+    the current LUNA/FUEL pool reserve ratio from the Terra LCD, multiplied by the LUNA price
+    recorded in each epoch snapshot file. Accuracy improves the closer the epoch is to today —
+    older epochs may drift as the pool ratio shifts with trading activity.
+  </div>
+
+</div>
+
+<script>
+const FUEL_DENOM   = 'ibc/4B44179AC2F0BEE50C16A673B3B886398988692885B2848A1C8AEF27148B3961';
+const BYCHAIN_URL  = 'https://app.astroport.fi/api/trpc/tokens.byChain?input=' +
+    encodeURIComponent(JSON.stringify({ json: { chainId: 'phoenix-1' } }));
+const GETTOK_URL   = 'https://app.astroport.fi/api/trpc/token.getTokens?input=' +
+    encodeURIComponent(JSON.stringify({ "0": { "json": { "chainIds": ["phoenix-1"] } } }));
+const SNAP_BASE    = 'https://raw.githubusercontent.com/defipatriot/fuel-data_2026/main/snapshots';
+const FUEL_POOL    = 'terra10yfnsqn20rzlnlzkeva5255q27zp6ws9te9uuql9e0lacfcze7zsffjct5';
+const LCD          = 'https://terra-lcd.publicnode.com';
+const EPOCH_BASE   = 'https://raw.githubusercontent.com/defipatriot/tla-ext_json_storage/main';
+const EPOCH_NUMS   = [165, 166, 167, 169, 177, 178];  // available epoch snapshot files
+
+function astroChartUrl(type, dateRange) {
+    return 'https://app.astroport.fi/api/trpc/charts.' + type + '?input=' +
+        encodeURIComponent(JSON.stringify({
+            json: { pools: [FUEL_POOL], dateRange, chainId: 'phoenix-1' }
+        }));
+}
+
+let priceChart  = null;
+let seriesData  = [];   // 7-day price series from getTokens
+let historyData = [];   // daily cron history from GitHub
+let liqSeries       = [];   // 24h liquidity series
+let epochHistoryData = [];   // estimated historical prices from epoch files
+let volSeries   = [];   // 24h volume series
+
+// ── Format helpers ──────────────────────────────────────────────────────────
+
+function fmtPrice(p) {
+    if (p === null || p === undefined) return '—';
+    if (p < 0.0001) return '$' + p.toFixed(8);
+    if (p < 0.01)   return '$' + p.toFixed(6);
+    return '$' + p.toFixed(4);
+}
+
+function fmtPct(v) {
+    if (v === null || v === undefined) return { text: '—', cls: 'neutral' };
+    const pct = (v * 100).toFixed(2);
+    return { text: (v >= 0 ? '+' : '') + pct + '%', cls: v >= 0 ? 'up' : 'down' };
+}
+
+function fmtTvl(v) {
+    if (!v) return '—';
+    return '$' + v.toLocaleString('en-US', { maximumFractionDigits: 0 });
+}
+
+// ── Chart builder ────────────────────────────────────────────────────────────
+
+function buildChart(labels, prices, titleSuffix, chartType = 'price') {
+    const ctx = document.getElementById('price-chart').getContext('2d');
+    if (priceChart) priceChart.destroy();
+
+    // Color gradient based on price direction
+    const first = prices[0] ?? 0;
+    const last  = prices[prices.length - 1] ?? 0;
+    const lineColor = last >= first ? '#4ade80' : '#f87171';
+    const fillColor = last >= first ? 'rgba(74,222,128,0.07)' : 'rgba(248,113,113,0.07)';
+
+    document.getElementById('chart-title').textContent =
+        `FUEL/USD Price History · ${titleSuffix}`;
+
+    priceChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [{
+                label: 'FUEL Price (USD)',
+                data: prices,
+                borderColor: lineColor,
+                backgroundColor: fillColor,
+                borderWidth: 2,
+                pointRadius: 0,
+                pointHoverRadius: 5,
+                fill: true,
+                tension: 0.3
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: '#111318',
+                    borderColor: '#1e2028',
+                    borderWidth: 1,
+                    titleColor: '#38bdf8',
+                    bodyColor: '#b0a898',
+                    callbacks: {
+                        label: c => {
+                            if (chartType === 'tvl') return ' $' + c.parsed.y.toLocaleString('en-US', { maximumFractionDigits: 0 }) + ' TVL';
+                            if (chartType === 'volume') return ' ' + c.parsed.y.toFixed(4) + ' LUNA';
+                            return ' ' + fmtPrice(c.parsed.y);
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    ticks: { color: '#4a4840', font: { size: 9 }, maxTicksLimit: 8 },
+                    grid: { color: '#111318' }
+                },
+                y: {
+                    ticks: {
+                        color: '#4a4840',
+                        font: { size: 10 },
+                        callback: v => {
+                            if (chartType === 'tvl') return '$' + (v/1000).toFixed(1) + 'k';
+                            if (chartType === 'volume') return v.toFixed(2) + ' ⦿';
+                            return fmtPrice(v);
+                        }
+                    },
+                    grid: { color: '#1e2028' }
+                }
+            }
+        }
+    });
+}
+
+// ── Dual-dataset chart (epoch estimates + live/cron data) ────────────────────
+
+function buildChartDual(estPts, realPts) {
+    const ctx = document.getElementById('price-chart').getContext('2d');
+    if (priceChart) priceChart.destroy();
+
+    document.getElementById('chart-title').textContent =
+        'FUEL/USD · All History (epoch est. + live)';
+
+    // Merge all labels sorted
+    const allDates = [...new Set([
+        ...estPts.map(p => p.date),
+        ...realPts.map(p => p.date)
+    ])].sort();
+
+    const estMap  = Object.fromEntries(estPts.map(p => [p.date, p.avgPrice]));
+    const realMap = Object.fromEntries(realPts.map(p => [p.date, p.avgPrice ?? p.priceUsd ?? null]));
+
+    const estData  = allDates.map(d => estMap[d]  ?? null);
+    const realData = allDates.map(d => realMap[d] ?? null);
+
+    const opts = {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+            legend: { display: true, position: 'top',
+                labels: { color: '#6b6557', font: { family: 'Space Mono', size: 10 } } },
+            tooltip: {
+                backgroundColor: '#111318', borderColor: '#1e2028', borderWidth: 1,
+                titleColor: '#38bdf8', bodyColor: '#b0a898',
+                callbacks: {
+                    title: items => {
+                        const d = allDates[items[0].dataIndex];
+                        const ep = estPts.find(p => p.date === d);
+                        return ep ? `${d}  (Epoch ${ep.epoch})` : d;
+                    },
+                    label: c => {
+                        const v = c.parsed.y;
+                        if (v === null) return null;
+                        const suffix = c.datasetIndex === 0 ? ' (estimated)' : ' (confirmed)';
+                        return ' ' + fmtPrice(v) + suffix;
+                    }
+                }
+            }
+        },
+        scales: {
+            x: { ticks: { color: '#4a4840', font: { size: 9 }, maxTicksLimit: 10 }, grid: { color: '#111318' } },
+            y: { ticks: { color: '#4a4840', font: { size: 10 }, callback: v => fmtPrice(v) }, grid: { color: '#1e2028' } }
+        }
+    };
+
+    priceChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: allDates,
+            datasets: [
+                {
+                    label: 'Epoch estimates',
+                    data: estData,
+                    borderColor: '#f59e0b',
+                    backgroundColor: 'rgba(245,158,11,0.06)',
+                    borderWidth: 1.5,
+                    borderDash: [4, 3],
+                    pointRadius: 5,
+                    pointBackgroundColor: '#f59e0b',
+                    pointHoverRadius: 7,
+                    fill: false,
+                    tension: 0.2,
+                    spanGaps: true
+                },
+                {
+                    label: 'Live / cron',
+                    data: realData,
+                    borderColor: '#38bdf8',
+                    backgroundColor: 'rgba(56,189,248,0.07)',
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    pointHoverRadius: 5,
+                    fill: true,
+                    tension: 0.3,
+                    spanGaps: false
+                }
+            ]
+        },
+        options: opts
+    });
+}
+
+// ── Chart switcher ───────────────────────────────────────────────────────────
+
+function switchChart(mode, el) {
+    document.querySelectorAll('.chart-tab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+
+    if (mode === 'price7d' && seriesData.length) {
+        const labels = seriesData.map(p => {
+            const d = new Date(p.time * 1000);
+            return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+        });
+        buildChart(labels, seriesData.map(p => p.value), '7 Days', 'price');
+
+    } else if (mode === 'priceAll') {
+        const combined = [
+            ...epochHistoryData,
+            ...historyData.map(h => ({ ...h, estimated: false }))
+        ].sort((a, b) => a.date.localeCompare(b.date));
+
+        if (!combined.length) {
+            switchChart('price7d', document.querySelector('.chart-tab'));
+            return;
+        }
+
+        const estPts  = combined.filter(p => p.estimated);
+        const realPts = combined.filter(p => !p.estimated);
+        buildChartDual(estPts, realPts);
+
+    } else if (mode === 'liquidity') {
+        if (!liqSeries.length) {
+            document.getElementById('chart-title').textContent = 'Liquidity — loading...';
+            return;
+        }
+        const labels = liqSeries.map(p => {
+            const d = new Date(p.time * 1000);
+            return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+        });
+        buildChart(labels, liqSeries.map(p => p.value), 'Pool TVL (24h)', 'tvl');
+
+    } else if (mode === 'volume') {
+        if (!volSeries.length) {
+            document.getElementById('chart-title').textContent = 'Volume — loading...';
+            return;
+        }
+        const labels = volSeries.map(p => {
+            const d = new Date(p.time * 1000);
+            return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+        });
+        buildChart(labels, volSeries.map(p => p.value), 'Volume per Trade · LUNA (24h)', 'volume');
+    }
+}
+
+// ── Load cron history ────────────────────────────────────────────────────────
+
+// ── Pool ratio from Terra LCD ────────────────────────────────────────────────
+async function fetchPoolRatio() {
+    const query = btoa(JSON.stringify({ pool: {} }));
+    const url   = `${LCD}/cosmwasm/wasm/v1/contract/${FUEL_POOL}/smart/${query}`;
+    const r = await fetch(url, { headers: { Accept: 'application/json' } });
+    const d = await r.json();
+    const assets = d.data?.assets || [];
+    let luna = null, fuel = null;
+    for (const a of assets) {
+        const denom = a.info?.native_token?.denom || '';
+        if (denom === 'uluna') luna = parseFloat(a.amount);
+        else if (denom.includes('4B44') || denom.toLowerCase().includes('fuel')) fuel = parseFloat(a.amount);
+    }
+    if (!luna || !fuel) throw new Error('Pool assets not found in LCD response');
+    // For xyk pool: FUEL price in LUNA = luna_reserve / fuel_reserve
+    return luna / fuel;
+}
+
+// ── Fetch one epoch file ──────────────────────────────────────────────────────
+async function fetchEpochFile(epochNum) {
+    const url = `${EPOCH_BASE}/tla-ext-epoch-${epochNum}-end.json`;
+    try {
+        const r = await fetch(url);
+        if (!r.ok) return null;
+        const d = await r.json();
+        const fuelPoolKey = 'terra10yfnsqn20rzlnlzkeva5255q27zp6ws9te9uuql9e0lacfcze7zsffjct5';
+        return {
+            epoch:     d.meta?.epoch,
+            date:      d.meta?.generated_at?.slice(0, 10),
+            lunaPrice: d.token_prices?.LUNA?.price ?? null,
+            spotTvl:   d.astroport_data?.[fuelPoolKey]?.spotLiquidity ?? null
+        };
+    } catch (e) {
+        console.warn(`Epoch ${epochNum} fetch failed:`, e.message);
+        return null;
+    }
+}
+
+// ── Build historical price estimates from epoch files ─────────────────────────
+async function loadEpochHistory() {
+    // Step 1: get current pool ratio from LCD
+    let fuelInLunaRatio = null;
+    try {
+        fuelInLunaRatio = await fetchPoolRatio();
+        console.log(`Pool ratio (FUEL/LUNA): ${fuelInLunaRatio.toFixed(6)} LUNA per FUEL`);
+    } catch (e) {
+        console.warn('Pool ratio fetch failed — skipping epoch history:', e.message);
+        return;
+    }
+
+    // Step 2: fetch all epoch files in parallel
+    const results = await Promise.allSettled(EPOCH_NUMS.map(n => fetchEpochFile(n)));
+    const points  = [];
+
+    for (const r of results) {
+        if (r.status !== 'fulfilled' || !r.value) continue;
+        const ep = r.value;
+        if (!ep.date || !ep.lunaPrice) continue;
+
+        // Estimated FUEL price = (LUNA per FUEL) × (LUNA price at epoch)
+        const estimatedPrice = fuelInLunaRatio * ep.lunaPrice;
+        points.push({
+            date:      ep.date,
+            epoch:     ep.epoch,
+            avgPrice:  parseFloat(estimatedPrice.toFixed(8)),
+            tvlUsd:    ep.spotTvl,
+            estimated: true
+        });
+        console.log(`Epoch ${ep.epoch} (${ep.date}): ~$${estimatedPrice.toFixed(6)}`);
+    }
+
+    epochHistoryData = points.sort((a, b) => a.date.localeCompare(b.date));
+    console.log(`Loaded ${epochHistoryData.length} epoch history estimates`);
+
+    // Update the ALL tab label
+    const tabAll = document.getElementById('tab-all');
+    if (epochHistoryData.length) {
+        tabAll.textContent = `PRICE ALL (${epochHistoryData.length} ep)`;
+    }
+}
+
+async function loadCronHistory() {
+    try {
+        const r = await fetch(`${SNAP_BASE}/index.json`);
+        if (!r.ok) return;
+        const idx = await r.json();
+        if (idx.history && idx.history.length > 0) {
+            historyData = idx.history;
+            const tabAll = document.getElementById('tab-all');
+            tabAll.textContent = `ALL (${historyData.length}d)`;
+            console.log(`Loaded ${historyData.length} daily history points from cron`);
+        }
+    } catch (e) {
+        // Repo doesn't exist yet — no cron data, that's fine
+        console.log('No cron history available yet:', e.message);
+    }
+}
+
+// ── Main load ────────────────────────────────────────────────────────────────
+
+async function loadAll() {
+
+    // 1. Fast price from tokens.byChain
+    try {
+        const r = await fetch(BYCHAIN_URL);
+        const d = await r.json();
+        const fuelTok = d?.result?.data?.json?.tokens?.[FUEL_DENOM];
+        if (fuelTok?.priceUsd !== undefined) {
+            const p = fuelTok.priceUsd;
+            document.getElementById('price-usd').textContent = fmtPrice(p);
+            document.getElementById('dot-price').className = 'dot dot-live';
+            document.getElementById('last-refresh').textContent =
+                new Date().toLocaleTimeString('en-US', { hour12: false });
+        }
+    } catch (e) {
+        document.getElementById('price-usd').textContent = 'Error';
+        document.getElementById('dot-price').className = 'dot dot-error';
+    }
+
+    // 2. 7-day series + TVL + 24h/7d change from getTokens (larger fetch)
+    try {
+        const r = await fetch(GETTOK_URL);
+        const d = await r.json();
+        const chainData = d?.result?.data?.json?.['phoenix-1']
+                       || d?.[0]?.result?.data?.json?.['phoenix-1'];
+        const tok = chainData?.[FUEL_DENOM];
+
+        if (tok) {
+            // TVL
+            if (tok.tvl) {
+                const tvl = parseFloat(tok.tvl) / 1e6;
+                document.getElementById('pool-tvl').textContent = fmtTvl(tvl);
+            }
+
+            // 24h / 7d change
+            const c24 = fmtPct(tok.priceChange24h);
+            const c7d = fmtPct(tok.priceChange7d);
+            const el24 = document.getElementById('change-24h');
+            const el7d = document.getElementById('change-7d');
+            el24.textContent = c24.text;
+            el24.className   = 'stat-value ' + c24.cls;
+            el7d.textContent = c7d.text;
+            el7d.className   = 'stat-value ' + c7d.cls;
+
+            // Volume (from tok.volume if available)
+            if (tok.volume !== undefined) {
+                document.getElementById('vol-24h').textContent =
+                    parseFloat(tok.volume).toFixed(2) + ' LUNA';
+            }
+
+            // 7-day series for chart
+            if (tok.series && tok.series.length) {
+                seriesData = tok.series;
+                const labels = seriesData.map(p => {
+                    const dt = new Date(p.time * 1000);
+                    return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+                });
+                buildChart(labels, seriesData.map(p => p.value), '7 Days', 'price');
+            }
+        }
+    } catch (e) {
+        console.error('getTokens fetch error:', e);
+    }
+
+    // 3. Load 24h liquidity series
+    try {
+        const r = await fetch(astroChartUrl('liquidity', 'HR24'));
+        const d = await r.json();
+        const series = d?.result?.data?.json?.[0]?.series || [];
+        if (series.length) {
+            liqSeries = series;
+            // Update TVL stat card with latest series point
+            const latestTvl = series[series.length - 1].value;
+            if (latestTvl && latestTvl > 100) {
+                // Only override if we didn't already get it from getTokens
+                const tvlEl = document.getElementById('pool-tvl');
+                if (tvlEl.textContent === '—') tvlEl.textContent = '$' + latestTvl.toLocaleString('en-US', { maximumFractionDigits: 0 });
+            }
+        }
+    } catch (e) { console.error('Liquidity series error:', e); }
+
+    // 4. Load 24h volume series
+    try {
+        const r = await fetch(astroChartUrl('volume', 'HR24'));
+        const d = await r.json();
+        const series = d?.result?.data?.json?.[0]?.series || [];
+        if (series.length) {
+            volSeries = series;
+            const total = series.reduce((s, p) => s + p.value, 0);
+            document.getElementById('vol-24h').textContent = total.toFixed(3) + ' LUNA';
+        }
+    } catch (e) { console.error('Volume series error:', e); }
+
+    // 5. Load cron history (async, non-blocking)
+    await loadCronHistory();
+
+    // 6. Load epoch historical estimates from LCD + epoch files
+    await loadEpochHistory();
+}
+
+// Boot
+loadAll();
+</script>
+</body>
+</html>
