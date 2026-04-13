@@ -2280,112 +2280,72 @@ est. APR 58.53 %"></textarea>
             };
             
             // --- Function to fetch Avg Daily Gain from GitHub snapshots ---
+            // Backing cron data repo
+            const BACKING_INDEX_URL = 'https://raw.githubusercontent.com/defipatriot/backing-data_2026/main/snapshots/index.json';
+            let backingCronHistory = null; // Cache
+
+            async function fetchBackingCronHistory() {
+                if (backingCronHistory) return backingCronHistory;
+                try {
+                    const r = await fetch(BACKING_INDEX_URL);
+                    if (!r.ok) return null;
+                    const idx = await r.json();
+                    backingCronHistory = idx.history || [];
+                    return backingCronHistory;
+                } catch (e) {
+                    console.warn('Backing cron index fetch failed:', e.message);
+                    return null;
+                }
+            }
+
             async function fetchAvgDailyGainFromGitHub() {
                 const avgDailyGainEl = document.getElementById('avg-daily-gain');
                 const avgDailyGainSubEl = document.getElementById('avg-daily-gain-subtext');
                 const avgDailyGainTitleEl = document.getElementById('avg-daily-gain-title');
-                
+
                 try {
-                    // Calculate current epoch number
-                    const epochReferenceDate = new Date('2025-12-01T00:00:00Z');
-                    const epochReferenceNumber = 162;
-                    const now = new Date();
-                    const msPerWeek = 7 * 24 * 60 * 60 * 1000;
-                    const weeksDiff = Math.floor((now - epochReferenceDate) / msPerWeek);
-                    const currentEpoch = epochReferenceNumber + weeksDiff;
-                    
-                    console.log(`DEBUG: Current epoch: ${currentEpoch}, fetching backing data`);
-                    
-                    // Try to get the latest backing from TLA v3 data
-                    const tlaData = await fetchTlaData();
-                    let newestBacking = null;
-                    let newestTime = null;
-                    let newestEpoch = null;
-                    
-                    if (tlaData?.dashboard?.nft_backing_per_nft || tlaData?.nft_stats?.backing_per_nft) {
-                        const backing = tlaData.dashboard?.nft_backing_per_nft || tlaData.nft_stats?.backing_per_nft;
-                        newestBacking = backing.LUNA_equivalent;
-                        newestTime = new Date(tlaData.meta?.generated_at);
-                        newestEpoch = tlaData.meta?.epoch;
-                        console.log(`DEBUG: Got TLA v3 backing: ${newestBacking} LUNA from epoch ${newestEpoch}`);
-                    }
-                    
-                    // Also try adao_json_storage for newest completed epoch
-                    if (!newestBacking) {
-                        const newestCompletedEpoch = currentEpoch - 1;
-                        const baseUrl = 'https://raw.githubusercontent.com/defipatriot/adao_json_storage/main';
-                        const newestUrl = `${baseUrl}/adao-snapshot_${newestCompletedEpoch}_end.json`;
-                        const newestResponse = await fetch(newestUrl).catch(() => null);
-                        if (newestResponse?.ok) {
-                            const newestData = await newestResponse.json();
-                            newestBacking = newestData.backingPerNft_LUNA;
-                            newestTime = new Date(newestData.timestamp);
-                            newestEpoch = newestCompletedEpoch;
+                    // ── PRIMARY: use backing-data_2026 daily cron history ─────────────
+                    const history = await fetchBackingCronHistory();
+
+                    if (history && history.length >= 2) {
+                        const latest = history[history.length - 1];
+                        const prev   = history[history.length - 2];
+
+                        const backingDiff  = latest.backingInLuna - prev.backingInLuna;
+                        const timeDiffDays = (new Date(latest.date) - new Date(prev.date)) / (1000 * 60 * 60 * 24);
+                        const avgDailyGain = timeDiffDays > 0 ? backingDiff / timeDiffDays : 0;
+
+                        calculatedAvgDailyGain = avgDailyGain;
+                        console.log(`DEBUG: Backing cron ${prev.date}→${latest.date}: diff=${backingDiff.toFixed(6)}, gain/day=${avgDailyGain.toFixed(4)}`);
+
+                        if (avgDailyGainEl) {
+                            avgDailyGainEl.textContent = (avgDailyGain >= 0 ? '+' : '') + avgDailyGain.toFixed(4) + ' LUNA';
                         }
-                    }
-                    
-                    // Get last known good epoch (try 163, as 164 might be missing)
-                    let olderBacking = null;
-                    let olderTime = null;
-                    let olderEpoch = null;
-                    
-                    const baseUrl = 'https://raw.githubusercontent.com/defipatriot/adao_json_storage/main';
-                    // Try epochs in order: 163, 162, 161
-                    for (const tryEpoch of [163, 162, 161]) {
-                        if (tryEpoch >= newestEpoch) continue; // Skip if same or newer than our newest
-                        const olderUrl = `${baseUrl}/adao-snapshot_${tryEpoch}_end.json`;
-                        const olderResponse = await fetch(olderUrl).catch(() => null);
-                        if (olderResponse?.ok) {
-                            const olderData = await olderResponse.json();
-                            olderBacking = olderData.backingPerNft_LUNA;
-                            olderTime = new Date(olderData.timestamp);
-                            olderEpoch = tryEpoch;
-                            console.log(`DEBUG: Got older backing: ${olderBacking} LUNA from epoch ${tryEpoch}`);
-                            break;
+                        if (avgDailyGainSubEl) {
+                            avgDailyGainSubEl.textContent = `Live · ${prev.date} → ${latest.date}`;
                         }
+                        if (avgDailyGainTitleEl) {
+                            const existingDot = avgDailyGainTitleEl.querySelector('.pulse-dot, .static-dot-red');
+                            if (existingDot) existingDot.remove();
+                            const dot = document.createElement('span');
+                            dot.className = 'pulse-dot ml-1';
+                            avgDailyGainTitleEl.appendChild(dot);
+                        }
+                        return true;
                     }
-                    
-                    if (!newestBacking || !olderBacking) {
-                        console.warn("DEBUG: Could not get backing data from both epochs");
-                        throw new Error("Backing data fetch failed");
+
+                    // ── FALLBACK: only 1 day so far — show latest backing, no gain yet ─
+                    if (history && history.length === 1) {
+                        const latest = history[0];
+                        if (avgDailyGainEl) avgDailyGainEl.textContent = 'Building...';
+                        if (avgDailyGainSubEl) avgDailyGainSubEl.textContent = `1st snapshot ${latest.date} · check back tomorrow`;
+                        calculatedAvgDailyGain = null;
+                        return true;
                     }
-                    
-                    // Calculate backing difference
-                    const backingDiff = newestBacking - olderBacking;
-                    
-                    // Calculate time difference in days
-                    const timeDiffMs = newestTime - olderTime;
-                    const timeDiffDays = timeDiffMs / (1000 * 60 * 60 * 24);
-                    
-                    // Calculate average daily gain
-                    const avgDailyGain = timeDiffDays > 0 ? backingDiff / timeDiffDays : 0;
-                    
-                    // Store in global variable for snapshot export
-                    calculatedAvgDailyGain = avgDailyGain;
-                    
-                    console.log(`DEBUG: E${olderEpoch}→E${newestEpoch} Backing diff: ${backingDiff.toFixed(6)}, Days: ${timeDiffDays.toFixed(2)}, Avg Daily: ${avgDailyGain.toFixed(4)}`);
-                    
-                    // Update the tile with live data
-                    if (avgDailyGainEl) {
-                        const displayValue = avgDailyGain >= 0 ? `+${avgDailyGain.toFixed(2)} LUNA` : `${avgDailyGain.toFixed(2)} LUNA`;
-                        avgDailyGainEl.textContent = displayValue;
-                    }
-                    
-                    if (avgDailyGainSubEl) {
-                        const dayLabel = Math.round(timeDiffDays);
-                        avgDailyGainSubEl.textContent = `${dayLabel}d Avg (E${olderEpoch}→E${newestEpoch})`;
-                    }
-                    
-                    // Update the title with green pulse dot (live indicator)
-                    if (avgDailyGainTitleEl) {
-                        const existingDot = avgDailyGainTitleEl.querySelector('.pulse-dot, .static-dot-red');
-                        if (existingDot) existingDot.remove();
-                        const newDot = document.createElement('span');
-                        newDot.className = 'pulse-dot ml-1';
-                        avgDailyGainTitleEl.appendChild(newDot);
-                    }
-                    
-                    return true; // Success
+
+                    // ── FALLBACK: no cron data yet — use live backing vs static baseline ─
+                    console.log('DEBUG: No cron history yet — using live backing vs static baseline');
+                    throw new Error("No cron history available yet");
                     
                 } catch (error) {
                     console.error("DEBUG: Failed to fetch avg daily gain from GitHub:", error);
@@ -2784,16 +2744,42 @@ est. APR 58.53 %"></textarea>
                 
                 // Fetch data
                 const snapshots = await fetchAllSnapshots();
+
+                // For backing metrics: merge in daily cron data from backing-data_2026
+                const isBackingMetric = ['backingPerNft_LUNA', 'avgDailyGainPerNft_LUNA'].includes(metricKey);
+                let cronHistory = [];
+                if (isBackingMetric) {
+                    cronHistory = (await fetchBackingCronHistory()) || [];
+                }
+
                 loading.classList.add('hidden');
-                
-                if (snapshots.length === 0) {
+
+                if (snapshots.length === 0 && cronHistory.length === 0) {
                     noData.classList.remove('hidden');
                     return;
                 }
-                
+
                 // Build chart data - filter out missing epochs first
+                // For backing metrics, also inject daily cron data points
                 const validSnapshots = snapshots.filter(s => !s.missing);
-                const chartData = validSnapshots.map(s => {
+
+                // Convert cron history entries to snapshot-compatible format
+                const cronSnapshots = cronHistory.map(h => ({
+                    timestamp: h.date + 'T23:50:00Z',
+                    source: 'cron',
+                    backingPerNft_LUNA: h.backingInLuna,
+                    backingPerNft_ampLUNA: h.ampLunaPerNft,
+                    _cronEntry: h
+                }));
+
+                // Merge: epoch snapshots first, then cron daily — deduplicate by date
+                const epochDates = new Set(validSnapshots.map(s => s.timestamp?.slice(0,10)));
+                const newCronOnly = cronSnapshots.filter(c => !epochDates.has(c.timestamp.slice(0,10)));
+                const mergedSnapshots = isBackingMetric
+                    ? [...validSnapshots, ...newCronOnly].sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp))
+                    : validSnapshots;
+
+                const chartData = mergedSnapshots.map(s => {
                     let value = null;
                     let secondaryValue = null;
                     
@@ -2822,8 +2808,21 @@ est. APR 58.53 %"></textarea>
                             secondaryValue = (s.daodaoStaked / s.circulatingSupply) * 100;
                         }
                     } else if (metricKey === 'avgDailyGainPerNft_LUNA') {
+                        // For cron entries: compute daily gain vs previous snapshot
+                        if (s.source === 'cron' && s._cronEntry) {
+                            const cronIdx = mergedSnapshots.indexOf(s);
+                            if (cronIdx > 0) {
+                                const prev = mergedSnapshots[cronIdx - 1];
+                                const prevBacking = prev.backingPerNft_LUNA;
+                                if (prevBacking && s.backingPerNft_LUNA) {
+                                    const days = (new Date(s.timestamp) - new Date(prev.timestamp)) / 86400000;
+                                    value = days > 0 ? (s.backingPerNft_LUNA - prevBacking) / days : null;
+                                }
+                            }
+                        } else {
                         // Use stored value from snapshot (already calculated at snapshot time)
                         value = s.avgDailyGainPerNft_LUNA;
+                        }
                         // Show backing as secondary for context
                         secondaryValue = s.backingPerNft_LUNA;
                     } else {
@@ -9757,7 +9756,8 @@ est. APR 58.53 %"></textarea>
                         console.log(`DEBUG: Sales history loaded in ${((performance.now() - salesStartTime) / 1000).toFixed(2)}s`);
                     } catch (err) {
                         console.error('Sales history fetch error:', err);
-                        document.getElementById('recent-sales-container').innerHTML = 
+                        const errContainer = document.getElementById('recent-sales-container');
+                        if (errContainer) errContainer.innerHTML = 
                             '<div class="text-gray-500 text-sm text-center py-8 col-span-full">No sales data available</div>';
                     }
                 }
@@ -9860,9 +9860,10 @@ est. APR 58.53 %"></textarea>
                 
                 // Render recent sales
                 function renderRecentSales() {
+                    const container = document.getElementById('recent-sales-container');
+                    if (!container) return;  // Recent Sales section removed
                     if (!salesData?.sales) return;
                     
-                    const container = document.getElementById('recent-sales-container');
                     const loadMoreBtn = document.getElementById('load-more-sales');
                     
                     let allSales = [];
