@@ -111,6 +111,7 @@
   <div class="tabs">
     <div class="tab active" onclick="switchTab('members')">DAO Members</div>
     <div class="tab" onclick="switchTab('gov')">CAPA Governance</div>
+    <div class="tab" onclick="switchTab('influence')">Influence Map</div>
     <div class="tab" onclick="switchTab('capa')">CAPA Holders</div>
   </div>
 
@@ -195,6 +196,64 @@
     </div>
   </div>
 
+  <!-- INFLUENCE MAP PANEL -->
+  <div class="panel" id="panel-influence">
+    <div class="members-controls">
+      <span id="influence-status" style="font-size:10px;color:#6b6557;">Load both tabs to populate this view.</span>
+      <button class="btn btn-outline" id="influence-refresh-btn" onclick="buildInfluenceMap()" style="margin-left:auto">↻ REFRESH</button>
+    </div>
+
+    <!-- Summary cards -->
+    <div class="members-summary" id="influence-summary" style="display:none">
+      <div><div class="summary-item-label">Unique Wallets</div><div class="summary-item-val" id="inf-sum-wallets">—</div></div>
+      <div><div class="summary-item-label">DAODAO CAPA</div><div class="summary-item-val" id="inf-sum-daodao">—</div></div>
+      <div><div class="summary-item-label">Direct Gov CAPA</div><div class="summary-item-val" id="inf-sum-direct">—</div></div>
+      <div><div class="summary-item-label">In Both Systems</div><div class="summary-item-val" id="inf-sum-both">—</div></div>
+    </div>
+
+    <!-- Caveat note -->
+    <div id="influence-note" style="display:none;background:#0d0f14;border:1px solid #2a1f00;border-radius:8px;padding:12px 14px;font-size:10px;color:#9a8060;line-height:1.7;margin-bottom:14px;">
+      <span style="color:#f59e0b;font-weight:700;">⚠ DAODAO Majority-Vote Caveat:</span>
+      DAODAO votes as a single block in CAPA governance — the majority outcome determines how
+      <em>all</em> DAODAO ampCAPA votes. A minority DAODAO voter's preference may not be reflected
+      in the final CAPA governance outcome. Direct CAPA stakers always vote independently.
+      <br><span style="color:#4a4840;margin-top:4px;display:block;">
+      Columns show <em>potential max</em> influence per wallet assuming they are in the DAODAO majority.
+      </span>
+    </div>
+
+    <!-- Chart -->
+    <div id="influence-chart-wrap" style="display:none;background:#111318;border:1px solid #1e2028;border-radius:10px;padding:16px 18px;margin-bottom:14px;">
+      <div style="font-size:9px;color:#6b6557;letter-spacing:1.5px;text-transform:uppercase;font-weight:700;margin-bottom:12px;">
+        Top 20 Wallets by Combined CAPA Influence
+        <span style="float:right;font-size:9px;color:#4a4840;font-weight:400;letter-spacing:0;">
+          <span style="color:#a855f7">■</span> DAODAO (ampCAPA)&nbsp;&nbsp;
+          <span style="color:#38bdf8">■</span> Direct Gov (CAPA)
+        </span>
+      </div>
+      <div style="position:relative;height:340px;overflow-y:auto;" id="influence-chart-inner"></div>
+    </div>
+
+    <!-- Table -->
+    <div class="members-table-wrap">
+      <div class="progress-msg" id="influence-placeholder">Load DAO Members and CAPA Governance tabs first, then click Refresh.</div>
+      <table id="influence-table" style="display:none">
+        <thead>
+          <tr>
+            <th onclick="infSortBy('rank')">#</th>
+            <th onclick="infSortBy('address')">Address</th>
+            <th onclick="infSortBy('daodao')" title="CAPA equivalent from DAODAO ampCAPA position">DAODAO CAPA</th>
+            <th onclick="infSortBy('direct')" title="CAPA staked directly in governance">Direct Gov</th>
+            <th onclick="infSortBy('combined')">Combined ↓</th>
+            <th onclick="infSortBy('vp')">VP %</th>
+            <th>Systems</th>
+          </tr>
+        </thead>
+        <tbody id="influence-body"></tbody>
+      </table>
+    </div>
+  </div>
+
   <!-- CAPA Holders panel — inside container, centred like other panels -->
   <div class="panel" id="panel-capa">
     <div style="background:#111318;border:1px solid #1e2028;border-radius:10px;padding:40px 24px;text-align:center;margin-top:8px;">
@@ -217,7 +276,7 @@
 <div class="copy-toast" id="copy-toast">Address copied!</div>
 
 <script>
-  const LCD_ENDPOINTS  = ['https://terra-lcd.publicnode.com', 'https://phoenix-lcd.terra.dev'];
+  const LCD_ENDPOINTS  = ['https://terra.publicnode.com', 'https://terra-lcd.publicnode.com', 'https://phoenix-lcd.terra.dev'];
   const STAKING_CONTRACT = 'terra186rpfczl7l2kugdsqqedegl4es4hp624phfc7ddy8my02a4e8lgq5rlx7y';
   const VE3_CONTRACT     = 'terra1zly98gvcec54m3caxlqexce7rus6rzgplz7eketsdz7nh750h2rqvu8uzx';
   const VOTING_MODULE    = 'terra1juj3ymejnug9p92upphcq0prq4e0hpw6rcu20njf8tk7n9sl2wxqldr0mt';
@@ -246,10 +305,19 @@
 
   async function tryAll(address, query) {
     const ordered = activeLCD ? [activeLCD, ...LCD_ENDPOINTS.filter(e => e !== activeLCD)] : LCD_ENDPOINTS;
+    const errors = [];
     for (const lcd of ordered) {
-      try { const r = await queryContract(lcd, address, query); activeLCD = lcd; return r; } catch (_) {}
+      try {
+        const r = await queryContract(lcd, address, query);
+        activeLCD = lcd;
+        return r;
+      } catch (e) {
+        errors.push(`${lcd.replace('https://','')}: ${e.message}`);
+      }
     }
-    throw new Error('All LCD endpoints failed');
+    console.error('All LCD endpoints failed for', address.slice(0,20), JSON.stringify(query).slice(0,60));
+    console.error('Errors:', errors.join(' | '));
+    throw new Error('All LCD endpoints failed: ' + errors[0]);
   }
 
   function fmt(n, d = 2) { return n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }); }
@@ -262,17 +330,16 @@
   }
 
   function switchTab(name) {
-    // Update tab active state
-    const tabNames = ['members', 'gov', 'capa'];
+    const tabNames = ['members', 'gov', 'influence', 'capa'];
     document.querySelectorAll('.tab').forEach((t, i) => {
       t.classList.toggle('active', tabNames[i] === name);
     });
-
     document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
     const target = document.getElementById('panel-' + name);
     if (target) target.classList.add('active');
-    if (name === 'members' && allMembers.length === 0) fetchAllMembers();
-    if (name === 'gov'     && govStakers.length === 0) fetchGovStakers();
+    if (name === 'members'   && allMembers.length === 0)  fetchAllMembers();
+    if (name === 'gov'       && govStakers.length === 0)  fetchGovStakers();
+    if (name === 'influence') buildInfluenceMap();
   }
 
   async function fetchRates() {
@@ -365,8 +432,10 @@
       document.getElementById('fetch-status').textContent = `Loaded ${allMembers.length} stakers`;
       renderMembers();
     } catch(e) {
+      console.error('fetchAllMembers error:', e);
       document.getElementById('fetch-status').textContent = 'Error: ' + e.message;
-      document.getElementById('members-placeholder').textContent = 'Failed to load members.';
+      document.getElementById('members-placeholder').textContent =
+        'Failed to load — ' + e.message + '. Check console for details.';
     }
   }
 
@@ -576,13 +645,51 @@
            entry.account ?? entry.delegator ?? null;
   }
 
-  // Raw contract state scan — last resort when no query works
+  // ── bech32 encoder (needed to decode addresses from state keys) ─────────────
+  const BECH32_CHARSET = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
+  function bech32Polymod(v) {
+    const G = [0x3b6a57b2,0x26508e6d,0x1ea119fa,0x3d4233dd,0x2a1462b3];
+    let c = 1;
+    for (const d of v) { const b=c>>25; c=((c&0x1ffffff)<<5)^d; for(let i=0;i<5;i++) if((b>>i)&1) c^=G[i]; }
+    return c;
+  }
+  function bech32Encode(hrp, bytes) {
+    // convert 8-bit bytes → 5-bit groups
+    let acc=0, bits=0;
+    const d5=[];
+    for (const b of bytes) { acc=(acc<<8)|b; bits+=8; while(bits>=5){bits-=5;d5.push((acc>>bits)&31);} }
+    if (bits) d5.push((acc<<(5-bits))&31);
+    // checksum
+    const exp = [...hrp].flatMap(c=>[c.charCodeAt(0)>>5,0]).concat(0,...[...hrp].map(c=>c.charCodeAt(0)&31));
+    // Actually expand hrp properly
+    const hrpExp = [...hrp].map(c=>c.charCodeAt(0)>>5).concat(0,...[...hrp].map(c=>c.charCodeAt(0)&31));
+    const combined = [...d5,0,0,0,0,0,0];
+    const pm = bech32Polymod([...hrpExp,...combined])^1;
+    const cs = Array.from({length:6},(_,i)=>(pm>>(5*(5-i)))&31);
+    return hrp+'1'+[...d5,...cs].map(d=>BECH32_CHARSET[d]).join('');
+  }
+
+  // Decode state key → terra1 address
+  // Key format: [2-byte ns_len][ns_bytes]["bank"][20-byte addr]
+  function keyToAddress(hexKey) {
+    try {
+      const raw = Uint8Array.from(hexKey.match(/.{2}/g).map(b=>parseInt(b,16)));
+      const nsLen = (raw[0]<<8)|raw[1];
+      const ns    = String.fromCharCode(...raw.slice(2, 2+nsLen));
+      if (ns !== 'bank') return null;  // only process bank namespace entries
+      const addrBytes = raw.slice(2+nsLen);
+      if (addrBytes.length !== 20) return null;
+      return bech32Encode('terra', addrBytes);
+    } catch(_) { return null; }
+  }
+
+  // Raw contract state scan — decodes address from key, balance from value
   async function fetchGovViaStateEnum() {
-    document.getElementById('gov-status').textContent = 'Trying raw state scan…';
+    document.getElementById('gov-status').textContent = 'Scanning contract state…';
     const results = [];
     let nextKey = null;
     let pages = 0;
-    while (pages < 50) {
+    while (pages < 100) {
       pages++;
       let url = `${activeLCD}/cosmwasm/wasm/v1/contract/${CAPA_GOV_CONTRACT}/state?pagination.limit=100`;
       if (nextKey) url += `&pagination.key=${encodeURIComponent(nextKey)}`;
@@ -591,15 +698,18 @@
       const data = await res.json();
       for (const m of (data.models || [])) {
         try {
+          // Address is in the KEY (bank namespace), balance is in the VALUE
+          const addr = keyToAddress(m.key);
+          if (!addr) continue;
           const val = JSON.parse(atob(m.value));
-          const bal = val.balance ?? val.staked ?? val.amount ?? val.power ?? null;
-          const addr = val.address ?? val.staker ?? val.voter ?? null;
-          if (bal !== null && addr && !isNaN(parseFloat(bal))) {
-            results.push({ address: addr, capa: parseFloat(bal) / 1e6 });
+          const bal = parseFloat(val.staked_balance ?? val.balance ?? val.staked ?? val.amount ?? '0');
+          if (!isNaN(bal)) {
+            results.push({ address: addr, capa: bal / 1e6 });
           }
         } catch(_) {}
       }
-      document.getElementById('gov-status').textContent = `State scan p.${pages} (${results.length} found)…`;
+      document.getElementById('gov-status').textContent =
+        `Scanning p.${pages} — ${results.length} stakers found…`;
       nextKey = data.pagination?.next_key;
       if (!nextKey || (data.models || []).length === 0) break;
     }
@@ -615,50 +725,14 @@
     document.getElementById('gov-status').textContent = 'Detecting contract query interface…';
     govStakers = [];
 
-    const LIMIT = 30;
-    let workingFn = null;
-
-    // Probe each query pattern with a small limit
-    for (const fn of STAKER_QUERY_FNS) {
-      try {
-        const result = await tryAll(CAPA_GOV_CONTRACT, fn(5, null));
-        const entries = extractStakers(result);
-        if (entries !== null) { workingFn = fn; break; }
-      } catch(_) {}
-    }
-
-    if (workingFn) {
-      // Paginate with the working pattern
-      let startAfter = null, page = 0;
-      try {
-        while (true) {
-          page++;
-          document.getElementById('gov-status').textContent = `Fetching page ${page}… (${govStakers.length} so far)`;
-          document.getElementById('gov-placeholder').textContent = `Fetching page ${page}… (${govStakers.length} stakers loaded)`;
-          const result = await tryAll(CAPA_GOV_CONTRACT, workingFn(LIMIT, startAfter));
-          const entries = extractStakers(result) || [];
-          for (const e of entries) {
-            const addr = extractAddress(e);
-            const bal  = extractBalance(e);
-            if (addr) govStakers.push({ address: addr, capa: bal });
-          }
-          if (entries.length < LIMIT) break;
-          startAfter = extractAddress(entries[entries.length - 1]);
-        }
-      } catch(e) {
-        document.getElementById('gov-status').textContent = 'Pagination error: ' + e.message;
-      }
-    } else {
-      // Fallback: raw state scan
-      try {
-        govStakers = await fetchGovViaStateEnum();
-      } catch(e) {
-        document.getElementById('gov-status').textContent =
-          'All query methods failed. Contract may require an off-chain indexer. Error: ' + e.message;
-        document.getElementById('gov-placeholder').textContent =
-          'Unable to load CAPA governance stakers — contract interface not recognised.';
-        return;
-      }
+    // CAPA governance uses Anchor-fork contract: no list_stakers query exists.
+    // The only way to enumerate stakers is via raw state scan — decode addresses from keys.
+    try {
+      govStakers = await fetchGovViaStateEnum();
+    } catch(e) {
+      document.getElementById('gov-status').textContent = 'State scan failed: ' + e.message;
+      document.getElementById('gov-placeholder').textContent = 'Failed to load stakers.';
+      return;
     }
 
     if (govStakers.length === 0) {
@@ -729,6 +803,131 @@
     fetchRates().then(() => fetchAllMembers());
   });
   setInterval(fetchRates, 60000);
+  // ── INFLUENCE MAP ──────────────────────────────────────────────────────────────
+
+  let infSortCol = 'combined', infSortAsc = false;
+  let influenceData = [];
+
+  function infSortBy(col) {
+    if (infSortCol === col) infSortAsc = !infSortAsc;
+    else { infSortCol = col; infSortAsc = col === 'address'; }
+    renderInfluenceTable();
+  }
+
+  function buildInfluenceMap() {
+    const statusEl = document.getElementById('influence-status');
+
+    if (allMembers.length === 0 && govStakers.length === 0) {
+      statusEl.textContent = 'No data yet — open DAO Members and CAPA Governance tabs first.';
+      return;
+    }
+
+    statusEl.textContent = 'Building…';
+
+    // Merge both datasets by address
+    const map = {};
+
+    // DAODAO ampCAPA members — capa field is already CAPA equivalent
+    for (const m of allMembers) {
+      if (!map[m.address]) map[m.address] = { address: m.address, daodao: 0, direct: 0 };
+      map[m.address].daodao += m.capa;
+    }
+
+    // Direct CAPA gov stakers
+    for (const g of govStakers) {
+      if (!map[g.address]) map[g.address] = { address: g.address, daodao: 0, direct: 0 };
+      map[g.address].direct += g.capa;
+    }
+
+    // Build sorted array
+    influenceData = Object.values(map).map(w => ({
+      ...w,
+      combined: w.daodao + w.direct,
+      inBoth: w.daodao > 0 && w.direct > 0
+    }));
+
+    const totalCombined = influenceData.reduce((s, w) => s + w.combined, 0);
+    influenceData.forEach(w => { w.vpPct = totalCombined > 0 ? (w.combined / totalCombined) * 100 : 0; });
+    influenceData.sort((a, b) => b.combined - a.combined);
+
+    // Summary
+    const inBothCount = influenceData.filter(w => w.inBoth).length;
+    const totalDaodao  = influenceData.reduce((s, w) => s + w.daodao, 0);
+    const totalDirect  = influenceData.reduce((s, w) => s + w.direct, 0);
+
+    document.getElementById('inf-sum-wallets').textContent = influenceData.length.toLocaleString();
+    document.getElementById('inf-sum-daodao').textContent  = fmt(totalDaodao, 0);
+    document.getElementById('inf-sum-direct').textContent  = fmt(totalDirect, 0);
+    document.getElementById('inf-sum-both').textContent    = inBothCount;
+    document.getElementById('influence-summary').style.display = '';
+    document.getElementById('influence-note').style.display    = '';
+    document.getElementById('influence-chart-wrap').style.display = '';
+    document.getElementById('influence-placeholder').style.display = 'none';
+
+    statusEl.textContent = `${influenceData.length} wallets · ${allMembers.length} DAODAO · ${govStakers.length} direct gov`;
+
+    renderInfluenceChart();
+    renderInfluenceTable();
+  }
+
+  function renderInfluenceChart() {
+    const container = document.getElementById('influence-chart-inner');
+    const top20 = influenceData.slice(0, 20);
+    const maxCombined = top20[0]?.combined || 1;
+
+    container.innerHTML = top20.map((w, i) => {
+      const daodaoPct = (w.daodao / maxCombined) * 100;
+      const directPct = (w.direct / maxCombined) * 100;
+      const label = shortAddr(w.address);
+      const badge = w.inBoth
+        ? '<span style="font-size:8px;background:rgba(245,158,11,0.15);color:#f59e0b;border:1px solid rgba(245,158,11,0.3);border-radius:3px;padding:1px 4px;margin-left:4px;">BOTH</span>'
+        : (w.daodao > 0
+          ? '<span style="font-size:8px;background:rgba(168,85,247,0.12);color:#a855f7;border:1px solid rgba(168,85,247,0.25);border-radius:3px;padding:1px 4px;margin-left:4px;">DAODAO</span>'
+          : '<span style="font-size:8px;background:rgba(56,189,248,0.12);color:#38bdf8;border:1px solid rgba(56,189,248,0.25);border-radius:3px;padding:1px 4px;margin-left:4px;">DIRECT</span>');
+
+      return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px;font-size:10px;">
+        <div style="width:130px;color:#6b6557;text-align:right;flex-shrink:0;">${i+1}. ${label}${badge}</div>
+        <div style="flex:1;display:flex;height:14px;border-radius:3px;overflow:hidden;background:#0d0f14;">
+          ${w.daodao > 0 ? `<div style="width:${daodaoPct.toFixed(1)}%;background:#a855f7;opacity:0.8;" title="DAODAO: ${fmt(w.daodao,0)} CAPA"></div>` : ''}
+          ${w.direct > 0 ? `<div style="width:${directPct.toFixed(1)}%;background:#38bdf8;opacity:0.8;" title="Direct: ${fmt(w.direct,0)} CAPA"></div>` : ''}
+        </div>
+        <div style="width:80px;text-align:right;color:#b0a898;flex-shrink:0;">${fmt(w.combined,0)}</div>
+        <div style="width:44px;text-align:right;color:#4a4840;flex-shrink:0;">${w.vpPct.toFixed(2)}%</div>
+      </div>`;
+    }).join('');
+  }
+
+  function renderInfluenceTable() {
+    const tbody  = document.getElementById('influence-body');
+    const table  = document.getElementById('influence-table');
+
+    const sorted = [...influenceData].sort((a, b) => {
+      const key = infSortCol === 'vp' ? 'vpPct' : infSortCol === 'rank' ? 'combined' :
+                  infSortCol === 'daodao' ? 'daodao' : infSortCol === 'direct' ? 'direct' : 'combined';
+      if (key === 'address') return infSortAsc ? a.address.localeCompare(b.address) : b.address.localeCompare(a.address);
+      return infSortAsc ? a[key] - b[key] : b[key] - a[key];
+    });
+
+    tbody.innerHTML = sorted.map((w, i) => {
+      const systems = w.inBoth
+        ? '<span style="font-size:8px;background:rgba(245,158,11,0.15);color:#f59e0b;border:1px solid rgba(245,158,11,0.3);border-radius:3px;padding:1px 5px;">DAODAO + Direct</span>'
+        : (w.daodao > 0
+          ? '<span style="font-size:8px;background:rgba(168,85,247,0.12);color:#a855f7;border:1px solid rgba(168,85,247,0.25);border-radius:3px;padding:1px 5px;">DAODAO only</span>'
+          : '<span style="font-size:8px;background:rgba(56,189,248,0.12);color:#38bdf8;border:1px solid rgba(56,189,248,0.25);border-radius:3px;padding:1px 5px;">Direct only</span>');
+      return `<tr>
+        <td>${i+1}</td>
+        <td style="font-family:monospace;font-size:10px;">${shortAddr(w.address)}</td>
+        <td style="color:#a855f7">${w.daodao > 0 ? fmt(w.daodao, 2) : '<span style="color:#2a2522">—</span>'}</td>
+        <td style="color:#38bdf8">${w.direct > 0 ? fmt(w.direct, 2) : '<span style="color:#2a2522">—</span>'}</td>
+        <td style="color:#e8e4d9;font-weight:700">${fmt(w.combined, 2)}</td>
+        <td>${w.vpPct.toFixed(2)}%</td>
+        <td>${systems}</td>
+      </tr>`;
+    }).join('');
+
+    table.style.display = '';
+  }
+
 </script>
 </body>
 </html>
