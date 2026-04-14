@@ -82,6 +82,9 @@
   .snap-badge { font-size: 8px; color: #4a4840; margin-left: 6px; }
   .copy-toast { position: fixed; bottom: 24px; right: 24px; background: #1a0d2e; border: 1px solid #7c3aed; border-radius: 7px; color: #e879f9; font-size: 11px; padding: 8px 14px; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
   .copy-toast.show { opacity: 1; }
+  .sort-active { color: #a855f7 !important; }
+  th.sort-active::after { content: ' ↓'; font-size:8px; opacity:0.7; }
+  th.sort-active.asc::after { content: ' ↑'; font-size:8px; opacity:0.7; }
 </style>
 </head>
 <body>
@@ -108,16 +111,28 @@
     </div>
   </div>
 
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+    <span style="cursor:pointer;color:#6b6557;padding:4px 10px;border:1px solid #1e2028;border-radius:4px;font-family:'Space Mono',monospace;font-size:10px;letter-spacing:0.5px;"
+          onclick="buildDistributionChart()">📊 Distribution</span>
+    <span style="cursor:pointer;color:#6b6557;padding:4px 10px;border:1px solid #1e2028;border-radius:4px;font-family:'Space Mono',monospace;font-size:10px;letter-spacing:0.5px;"
+          onclick="document.getElementById('addr-lookup-overlay').style.display='flex'">🔍 Address Lookup</span>
+  </div>
   <div class="tabs">
     <div class="tab active" onclick="switchTab('members')">DAO Members</div>
     <div class="tab" onclick="switchTab('gov')">CAPA Governance</div>
     <div class="tab" onclick="switchTab('influence')">Influence Map</div>
-    <div class="tab" onclick="switchTab('capa')">CAPA Holders</div>
+    <div class="tab" onclick="switchTab('tla-lp')">CAPA in TLA LP</div>
+    <div class="tab" onclick="switchTab('whales')">CAPA Whales</div>
   </div>
 
-  <!-- CONVERTER TILE (always visible, inline below rates) -->
+  <!-- CONVERTER TILE (collapsible) -->
   <div class="input-block" style="margin-bottom:16px">
-    <label class="input-label">ampLP → CAPA Converter</label>
+    <label class="input-label" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"
+           onclick="document.getElementById('converter-body').style.display = document.getElementById('converter-body').style.display==='none' ? '' : 'none'; this.querySelector('.conv-toggle').textContent = document.getElementById('converter-body').style.display==='none' ? '▸' : '▾';">
+      ampLP → CAPA Converter
+      <span class="conv-toggle" style="color:#a855f7;font-size:12px;">▾</span>
+    </label>
+    <div id="converter-body">
     <div class="input-row">
       <input type="text" id="lp-input" placeholder="Paste your DAODAO ampLP balance…" />
       <button class="btn" onclick="calculate()">CALC</button>
@@ -129,6 +144,7 @@
       <div class="result-sub" id="result-sub"></div>
       <hr class="divider">
       <div class="calc-steps" id="calc-steps"></div>
+    </div>
     </div>
   </div>
 
@@ -254,20 +270,123 @@
     </div>
   </div>
 
-  <!-- CAPA Holders panel — inside container, centred like other panels -->
-  <div class="panel" id="panel-capa">
-    <div style="background:#111318;border:1px solid #1e2028;border-radius:10px;padding:40px 24px;text-align:center;margin-top:8px;">
-      <div style="width:52px;height:52px;border-radius:14px;background:rgba(168,85,247,0.1);border:1px solid rgba(168,85,247,0.25);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:1.5rem;color:#a855f7;">◎</div>
-      <div style="font-size:9px;color:#a855f7;letter-spacing:2px;text-transform:uppercase;font-weight:700;margin-bottom:8px;">SmartStake Analytics</div>
-      <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;color:#fff;margin-bottom:10px;">CAPA Token Holders</div>
-      <div style="font-size:11px;color:#6b6557;line-height:1.7;max-width:380px;margin:0 auto 24px;">Full holder distribution, top wallets, and on-chain analytics for the CAPA token — powered by SmartStake.</div>
-      <a href="https://analytics.smartstake.io/terra/tokens/CAPA" target="_blank" rel="noopener noreferrer"
-         style="display:inline-flex;align-items:center;gap:8px;background:#a855f7;color:#0a0c10;font-family:'Space Mono',monospace;font-size:11px;font-weight:700;letter-spacing:0.5px;padding:11px 24px;border-radius:7px;text-decoration:none;"
-         onmouseover="this.style.background='#b870ff'" onmouseout="this.style.background='#a855f7'">
-        ↗ OPEN SMARTSTAKE
-      </a>
-      <div style="font-size:9px;color:#3a3530;margin-top:14px;">Opens in a new tab</div>
+  <!-- CAPA WHALES PANEL -->
+  <div class="panel" id="panel-whales">
+    <div class="members-controls" style="flex-wrap:wrap;gap:8px;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:10px;color:#6b6557;">Min CAPA:</span>
+        <input id="whale-threshold" type="number" value="1000000" min="1"
+          style="width:110px;background:#0d0f14;border:1px solid #1e2028;border-radius:5px;
+                 color:#e8e4d9;font-family:'Space Mono',monospace;font-size:10px;padding:4px 8px;" />
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <input type="checkbox" id="whale-show-protocols" onchange="renderWhaleTable()"
+          style="width:13px;height:13px;cursor:pointer;accent-color:#f59e0b;" />
+        <label for="whale-show-protocols" style="font-size:10px;color:#6b6557;cursor:pointer;">Include Protocol Contracts</label>
+      </div>
+      <button class="btn" id="whale-scan-btn" onclick="scanCapaWhales()" style="font-size:10px;padding:6px 14px;">⛏ SCAN</button>
+      <button class="btn btn-outline" id="whale-export-btn" onclick="whaleExportCSV()" style="display:none;font-size:10px;padding:6px 14px;">EXPORT CSV</button>
+      <span id="whale-status" style="font-size:10px;color:#6b6557;margin-left:4px;"></span>
     </div>
+
+    <div class="members-summary" id="whale-summary" style="display:none">
+      <div><div class="summary-item-label">Wallets Found</div><div class="summary-item-val" id="wh-sum-wallets">—</div></div>
+      <div><div class="summary-item-label">Unengaged Whales</div><div class="summary-item-val" id="wh-sum-unengaged" style="color:#f87171">—</div></div>
+      <div><div class="summary-item-label">Partial (some staking)</div><div class="summary-item-val" id="wh-sum-partial" style="color:#f59e0b">—</div></div>
+      <div><div class="summary-item-label">Fully Engaged</div><div class="summary-item-val" id="wh-sum-engaged" style="color:#4ade80">—</div></div>
+    </div>
+
+    <div id="whale-note" style="display:none;background:#0d0f14;border:1px solid #1e2028;border-radius:8px;
+         padding:12px 14px;font-size:10px;color:#6b6557;line-height:1.7;margin-bottom:14px;">
+      Showing wallets holding ≥ threshold CAPA in any form, excluding known protocol contracts.
+      <span style="color:#f87171;font-weight:700;">Red = unengaged</span> (liquid only) ·
+      <span style="color:#f59e0b;font-weight:700;">Amber = partial</span> (some staking) ·
+      <span style="color:#4ade80;font-weight:700;">Green = engaged</span> (fully staked).
+      <span id="whale-lp-note" style="display:none;color:#f59e0b"> · Load <strong>CAPA in TLA LP</strong> tab first to populate 🟡 LP column.</span>
+      <span style="color:#4a4840;font-size:9px;display:block;margin-top:4px;">Note: All CAPA/LUNA LP is held by protocol contracts — Astroport Incentives (holds LP on behalf of incentivized users), DAODAO DAO, and Astroport pairs. Individual LP depositors who enable rewards have their LP auto-staked into the Astroport Incentives contract and cannot be enumerated via simple CW20 scan.</span>
+    </div>
+
+    <div class="members-table-wrap">
+      <div class="progress-msg" id="whale-placeholder">
+        Loading all CAPA holder data… this may take a moment.
+      </div>
+      <table id="whale-table" style="display:none">
+        <thead>
+          <tr>
+            <th onclick="whaleSortBy('rank')" style="width:40px">#</th>
+            <th onclick="whaleSortBy('address')" style="min-width:160px">Address</th>
+            <th onclick="whaleSortBy('liquid')" style="min-width:120px">Liquid CAPA</th>
+            <th onclick="whaleSortBy('daodao')" style="min-width:120px" title="CAPA equivalent from ampLP staked in DAODAO">ampCAPA LP</th>
+            <th onclick="whaleSortBy('gov')" style="min-width:100px" title="CAPA staked directly in governance">Gov Staked</th>
+            <th onclick="whaleSortBy('lp')" style="min-width:120px" title="Underlying CAPA from CAPA/LUNA Astroport LP tokens">CAPA/LUNA LP</th>
+            <th onclick="whaleSortBy('total')" style="min-width:120px">Total ↓</th>
+            <th style="min-width:100px">Status</th>
+          </tr>
+        </thead>
+        <tbody id="whale-body"></tbody>
+        <tfoot id="whale-tfoot" style="display:none">
+          <tr style="border-top:1px solid #1e2028;background:#0d0f14;">
+            <td style="color:#4a4840;font-size:9px;padding:6px 4px;">TOTAL</td>
+            <td></td>
+            <td id="wt-liquid" style="color:#e8e4d9;font-weight:700;font-size:10px;"></td>
+            <td id="wt-daodao" style="color:#a855f7;font-weight:700;font-size:10px;"></td>
+            <td id="wt-gov"    style="color:#38bdf8;font-weight:700;font-size:10px;"></td>
+            <td id="wt-lp"    style="color:#f59e0b;font-weight:700;font-size:10px;"></td>
+            <td id="wt-total"  style="color:#e8e4d9;font-weight:700;font-size:10px;"></td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+
+  </div>
+
+  <!-- CAPA IN TLA LP PANEL -->
+  <div class="panel" id="panel-tla-lp">
+    <div class="members-controls" style="flex-wrap:wrap;gap:8px;">
+      <span id="tla-lp-status" style="font-size:10px;color:#6b6557;">Loading LP data…</span>
+      <div style="display:flex;align-items:center;gap:6px;margin-left:auto;">
+        <input type="checkbox" id="tla-show-protocols" onchange="buildUnifiedLpTable()"
+          style="width:13px;height:13px;cursor:pointer;accent-color:#818cf8;" />
+        <label for="tla-show-protocols" style="font-size:10px;color:#6b6557;cursor:pointer;">Show Protocol Contracts</label>
+      </div>
+      <button class="btn btn-outline" id="tla-lp-refresh-btn" onclick="loadTlaLpHolders();loadVe3LpStakers()" style="display:none">↻ REFRESH</button>
+      <button class="btn btn-outline" id="tla-lp-export-btn" onclick="unifiedLpExportCSV()" style="display:none">EXPORT CSV</button>
+    </div>
+
+    <div class="members-summary" id="tla-lp-summary" style="display:none">
+      <div><div class="summary-item-label">Total Wallets</div><div class="summary-item-val" id="tla-lp-count">—</div></div>
+      <div><div class="summary-item-label">Pool CAPA</div><div class="summary-item-val" id="tla-lp-pool-capa">—</div></div>
+      <div><div class="summary-item-label">CAPA/LP Rate</div><div class="summary-item-val" id="tla-lp-rate">—</div></div>
+      <div><div class="summary-item-label">Direct + Incentivized</div><div class="summary-item-val" id="inc-status" style="color:#f59e0b">—</div></div>
+    </div>
+
+    <div class="members-table-wrap">
+      <div class="progress-msg" id="tla-lp-placeholder">Loading LP holder data…</div>
+      <table id="tla-unified-table" style="display:none;table-layout:fixed;width:100%">
+        <colgroup>
+          <col style="width:36px"><col style="width:18%">
+          <col style="width:14%"><col style="width:14%">
+          <col style="width:14%"><col style="width:10%"><col style="width:12%">
+        </colgroup>
+        <thead><tr>
+          <th onclick="unifiedSortBy('rank')">#</th>
+          <th onclick="unifiedSortBy('address')">Address</th>
+          <th onclick="unifiedSortBy('direct')" title="LP tokens held directly in wallet">Direct LP CAPA</th>
+          <th onclick="unifiedSortBy('incentivized')" title="LP staked via ve3 → Astroport Incentives">Incentivized LP CAPA</th>
+          <th onclick="unifiedSortBy('total')">Total ↓</th>
+          <th onclick="unifiedSortBy('pct')">Pool %</th>
+          <th>Also In</th>
+        </tr></thead>
+        <tbody id="tla-unified-body"></tbody>
+      </table>
+    </div>
+    <!-- Hidden elements needed by old functions -->
+    <div id="tla-lp-supply" style="display:none"></div>
+    <div id="inc-placeholder" style="display:none"></div>
+    <div id="inc-table" style="display:none"></div>
+    <div id="inc-body" style="display:none"></div>
   </div>
 
   <div class="footer-note" id="footer-note">Connecting to Terra LCD…</div>
@@ -322,6 +441,25 @@
 
   function fmt(n, d = 2) { return n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }); }
   function shortAddr(a) { return a.slice(0, 10) + '…' + a.slice(-6); }
+
+  // Clickable address cell: click → Chainscope, copy icon → clipboard
+  function makeAddrCell(addr, protocolLabel = null) {
+    const short = shortAddr(addr);
+    const chainLink = `https://chainsco.pe/terra2/address/${addr}`;
+    const label = protocolLabel
+      ? `<span style="color:#818cf8;font-size:10px;">${protocolLabel}</span> <span style="font-family:monospace;font-size:9px;color:#4a4840;">${short}</span>`
+      : `<span style="font-family:monospace;font-size:10px;">${short}</span>`;
+    return `<span style="display:inline-flex;align-items:center;gap:5px;">
+      <a href="${chainLink}" target="_blank" rel="noopener"
+         title="View on Chainscope"
+         style="text-decoration:none;color:inherit;">${label}</a>
+      <span onclick="navigator.clipboard.writeText('${addr}').then(()=>{
+          const t=document.getElementById('copy-toast');t.style.opacity='1';
+          setTimeout(()=>t.style.opacity='0',1500);})"
+        title="Copy address"
+        style="cursor:pointer;color:#4a4840;font-size:10px;flex-shrink:0;">&#9112;</span>
+    </span>`;
+  }
   function lpToCapa(raw) {
     const micro = raw / 1_000_000;
     const ampCapa = micro * rateVe3;
@@ -329,17 +467,61 @@
     return { micro, ampCapa, capa };
   }
 
-  function switchTab(name) {
-    const tabNames = ['members', 'gov', 'influence', 'capa'];
+  async function switchTab(name) {
+    const tabNames = ['members', 'gov', 'influence', 'tla-lp', 'whales'];
     document.querySelectorAll('.tab').forEach((t, i) => {
       t.classList.toggle('active', tabNames[i] === name);
     });
     document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
     const target = document.getElementById('panel-' + name);
     if (target) target.classList.add('active');
-    if (name === 'members'   && allMembers.length === 0)  fetchAllMembers();
-    if (name === 'gov'       && govStakers.length === 0)  fetchGovStakers();
-    if (name === 'influence') buildInfluenceMap();
+
+    if (name === 'members') {
+      // Load DAO members on first visit
+      if (allMembers.length === 0) fetchAllMembers();
+
+    } else if (name === 'gov') {
+      // Load gov stakers on first visit
+      if (govStakers.length === 0) fetchGovStakers();
+
+    } else if (name === 'influence') {
+      // Needs both DAO members + gov stakers — await both then build map
+      const infStatus = document.getElementById('influence-status');
+      const fetches = [];
+      if (allMembers.length === 0) fetches.push(fetchAllMembers());
+      if (govStakers.length === 0) fetches.push(fetchGovStakers());
+      if (fetches.length > 0) {
+        infStatus.textContent = 'Loading governance data…';
+        await Promise.all(fetches);
+      }
+      buildInfluenceMap();
+
+    } else if (name === 'tla-lp') {
+      // Start LP scans immediately — DAODAO/gov load in parallel for cross-ref tags
+      if (allMembers.length === 0) fetchAllMembers();
+      if (govStakers.length === 0) fetchGovStakers();
+      if (tlaLpData.length === 0)  loadTlaLpHolders();
+      if (incStakerData.length === 0) loadVe3LpStakers();
+
+    } else if (name === 'whales') {
+      // Load ALL data sources, then auto-scan at 1M threshold
+      const whStatus = document.getElementById('whale-status');
+      if (whaleData.length > 0) return; // already loaded
+      whStatus.textContent = 'Loading all data sources…';
+      const fetches = [];
+      if (allMembers.length === 0)   fetches.push(fetchAllMembers());
+      if (govStakers.length === 0)   fetches.push(fetchGovStakers());
+      if (tlaLpData.length === 0)    fetches.push(loadTlaLpHolders());
+      if (incStakerData.length === 0) fetches.push(loadVe3LpStakers());
+      if (fetches.length > 0) {
+        Promise.all(fetches).then(() => {
+          whStatus.textContent = 'All data loaded — scanning…';
+          scanCapaWhales();
+        });
+      } else {
+        scanCapaWhales();
+      }
+    }
   }
 
   async function fetchRates() {
@@ -572,6 +754,7 @@
     document.getElementById('members-table').style.display = 'table';
     document.getElementById('export-btn').style.display = '';
     document.getElementById('refresh-btn').style.display = '';
+    updateSortHeaders('members-table', sortCol, sortAsc);
   }
 
   function sortBy(col) {
@@ -840,6 +1023,10 @@
     }
 
     // Build sorted array
+    // Merge LP data if available
+    const lpMap = {};
+    for (const l of tlaLpData) lpMap[l.address] = l.capa;
+
     influenceData = Object.values(map).map(w => ({
       ...w,
       combined: w.daodao + w.direct,
@@ -878,7 +1065,7 @@
     container.innerHTML = top20.map((w, i) => {
       const daodaoPct = (w.daodao / maxCombined) * 100;
       const directPct = (w.direct / maxCombined) * 100;
-      const label = shortAddr(w.address);
+      const label = `<a href="https://chainsco.pe/terra2/address/${w.address}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;">${shortAddr(w.address)}</a>`;
       const badge = w.inBoth
         ? '<span style="font-size:8px;background:rgba(245,158,11,0.15);color:#f59e0b;border:1px solid rgba(245,158,11,0.3);border-radius:3px;padding:1px 4px;margin-left:4px;">BOTH</span>'
         : (w.daodao > 0
@@ -916,18 +1103,1188 @@
           : '<span style="font-size:8px;background:rgba(56,189,248,0.12);color:#38bdf8;border:1px solid rgba(56,189,248,0.25);border-radius:3px;padding:1px 5px;">Direct only</span>');
       return `<tr>
         <td>${i+1}</td>
-        <td style="font-family:monospace;font-size:10px;">${shortAddr(w.address)}</td>
+        <td>${makeAddrCell(w.address)}</td>
         <td style="color:#a855f7">${w.daodao > 0 ? fmt(w.daodao, 2) : '<span style="color:#2a2522">—</span>'}</td>
         <td style="color:#38bdf8">${w.direct > 0 ? fmt(w.direct, 2) : '<span style="color:#2a2522">—</span>'}</td>
         <td style="color:#e8e4d9;font-weight:700">${fmt(w.combined, 2)}</td>
-        <td>${w.vpPct.toFixed(2)}%</td>
+        <td title="${fmt(w.combined,0)} CAPA total">${w.vpPct.toFixed(2)}%</td>
         <td>${systems}</td>
+      </tr>`;
+    }).join('');
+
+    table.style.display = '';
+    updateSortHeaders('influence-table', infSortCol, infSortAsc);
+  }
+
+  // ── CAPA WHALE SCANNER ────────────────────────────────────────────────────────
+
+  const CAPA_TOKEN_CONTRACT  = 'terra1t4p3u8khpd7f8qzurwyafxt648dya6mp6vur3vaapswt6m24gkuqrfdhar';
+  const CAPA_LUNA_PAIR       = 'terra183wqgrwa2k0uvlz99j57c496gfuwgtaccrhv4stcjzv3ydacl9zq0hmf25';
+  const CAPA_LUNA_LP_TOKEN   = 'terra1cg9t08mqa88us074mpwpuu8lp5w4jwtye3vaazll45w27at52cpsq7c564';
+  const ASTRO_INCENTIVES     = 'terra1eywh4av8sln6r45pxq45ltj798htfy0cfcf7fy3pxc2gcv6uc07se4ch9x';
+  const VE3_ASSET_STAKING    = 'terra1awq6t7jfakg9wfjn40fk3wzwmd57mvrqtt3a39z9rmet7wdjj3ysgw3lpa';
+  const CW20_NS_PREFIX      = '000762616c616e6365'; // 0x0007 + "balance"
+
+  // Protocol/system contracts to exclude from results
+  // Protocol contracts: excluded from scan by default but can be toggled on
+  const PROTOCOL_CONTRACTS = {
+    'terra1lz00m57pleaq3j8f6qqpr20v7rd93hpnmlj44zdk0t03d7ajzw5smu50jv': 'CAPA Community',
+    'terra1sf66d5vap897xlvv2hlcp4l20y4pp42r6ala4snk8mgd246jvufqwe0cnm': 'CAPA Governance',
+    'terra186rpfczl7l2kugdsqqedegl4es4hp624phfc7ddy8my02a4e8lgq5rlx7y': 'Eris Staking Hub',
+    'terra183wqgrwa2k0uvlz99j57c496gfuwgtaccrhv4stcjzv3ydacl9zq0hmf25': 'Astroport Pair',
+    'terra15s4tyhuj4ewm887h9xfvgvll2yrvvdjx2stwesm07e6jek6p55nqc2ngu5': 'CAPA Vesting',
+    'terra1k8ug6dkzntczfzn76wsh24tdjmx944yj6mk063wum7n20cwd7lxq4lppjg': 'DAODAO DAO (1722847164406)',
+    'terra1rga2lt3tymfcnq4zq0ju8j9rjku8nqf6qyz4tgudv4kmdt749l3qjs2vqa': 'Staking Rewards',
+    'terra1tuuwm8yrj54qeg0c8xu00aha9ryatyhtczq8qq2q8tntuw0auzas9037wh': 've3 Bribe Manager',
+    'terra1a0druggg6c7u88ps37q03jxuexznjmq0xnhg8c8d7xnfaelq4t0qype5j3': 'Astroport Pair',
+    'terra1g6z93vtttdrwfdtj06ha2nwc6qdxsfy8appge5l5g7wenfzg5mjq8s3r9n': 'Astroport Pair',
+    'terra1zly98gvcec54m3caxlqexce7rus6rzgplz7eketsdz7nh750h2rqvu8uzx': 'VE3 Contract',
+    'terra1juj3ymejnug9p92upphcq0prq4e0hpw6rcu20njf8tk7n9sl2wxqldr0mt': 'Voting Module',
+    'terra1t4p3u8khpd7f8qzurwyafxt648dya6mp6vur3vaapswt6m24gkuqrfdhar': 'CAPA Token',
+    'terra1eywh4av8sln6r45pxq45ltj798htfy0cfcf7fy3pxc2gcv6uc07se4ch9x': 'Astroport Incentives',
+    'terra1awq6t7jfakg9wfjn40fk3wzwmd57mvrqtt3a39z9rmet7wdjj3ysgw3lpa': 've3 Asset Staking',
+  };
+  const CAPA_BLACKLIST = new Set(Object.keys(PROTOCOL_CONTRACTS));
+
+  // Decode CW20 balance state key → terra1 address
+  // CW20 stores addr as literal string bytes after the namespace prefix
+  // Note: API returns keys in mixed-case hex — normalize to lowercase first
+  function cw20KeyToAddress(hexKey) {
+    const lk = hexKey.toLowerCase();
+    if (!lk.startsWith(CW20_NS_PREFIX)) return null;
+    const addrHex = lk.slice(CW20_NS_PREFIX.length);
+    try {
+      const bytes = Uint8Array.from(addrHex.match(/.{2}/g).map(b => parseInt(b, 16)));
+      const addr = new TextDecoder().decode(bytes);
+      if (addr.startsWith('terra1') && addr.length >= 39) return addr;
+    } catch(_) {}
+    // Fallback: try as 20-byte canonical → bech32
+    const bytes = addrHex.match(/.{2}/g)?.map(b => parseInt(b, 16));
+    if (bytes?.length === 20) return bech32Encode('terra', bytes);
+    return null;
+  }
+
+  // Parse CW20 Uint128 value (stored as JSON string or raw number)
+  function parseCw20Balance(b64Value) {
+    try {
+      const raw = atob(b64Value);
+      const parsed = JSON.parse(raw);
+      return parseFloat(String(parsed)) / 1e6; // convert microCAPA → CAPA
+    } catch(_) { return 0; }
+  }
+
+  let whaleData = [];
+  let protocolData = {}; // addr → balance for protocol contracts
+  let whaleSortCol = 'total', whaleSortAsc = false;
+
+  function whaleSortBy(col) {
+    if (whaleSortCol === col) whaleSortAsc = !whaleSortAsc;
+    else { whaleSortCol = col; whaleSortAsc = col === 'address'; }
+    renderWhaleTable();
+  }
+
+  async function scanCapaWhales() {
+    const threshold = parseFloat(document.getElementById('whale-threshold').value) || 1000000;
+    const statusEl  = document.getElementById('whale-status');
+    const btn       = document.getElementById('whale-scan-btn');
+
+    btn.disabled = true;
+    btn.textContent = '⏳ Scanning…';
+    whaleData = [];
+    protocolData = {};
+    document.getElementById('whale-table').style.display = 'none';
+    document.getElementById('whale-placeholder').style.display = 'block';
+    document.getElementById('whale-placeholder').textContent = 'Scanning CW20 state…';
+    document.getElementById('whale-summary').style.display = 'none';
+    document.getElementById('whale-note').style.display = 'none';
+    document.getElementById('whale-export-btn').style.display = 'none';
+
+    // Build lookup maps from already-loaded data
+    const daodaoMap = {};
+    for (const m of allMembers) daodaoMap[m.address] = (daodaoMap[m.address] || 0) + m.capa;
+    const govMap = {};
+    for (const g of govStakers) govMap[g.address] = (govMap[g.address] || 0) + g.capa;
+
+    let nextKey = null, pages = 0, found = 0;
+    const LCD = activeLCD || 'https://terra.publicnode.com';
+
+    try {
+      while (pages < 60) {
+        pages++;
+        let url = `${LCD}/cosmwasm/wasm/v1/contract/${CAPA_TOKEN_CONTRACT}/state?pagination.limit=100`;
+        if (nextKey) url += `&pagination.key=${encodeURIComponent(nextKey)}`;
+
+        statusEl.textContent = `Page ${pages} — ${found} whales found…`;
+        document.getElementById('whale-placeholder').textContent =
+          `Scanning page ${pages}… (${found} wallets ≥ ${(threshold/1e6).toFixed(1)}M CAPA found)`;
+
+        const res = await fetch(url, { headers: { Accept: 'application/json' } });
+        if (!res.ok) throw new Error(`LCD HTTP ${res.status}`);
+        const data = await res.json();
+
+        for (const m of (data.models || [])) {
+          const addr = cw20KeyToAddress(m.key);
+          if (!addr) continue;                          // not a balance key
+          const liquid = parseCw20Balance(m.value);
+
+          if (CAPA_BLACKLIST.has(addr)) {
+            protocolData[addr] = liquid;                  // save for toggle
+            continue;
+          }
+
+          if (liquid < threshold) continue;             // below threshold
+
+          const daodao = daodaoMap[addr] || 0;
+          const gov    = govMap[addr]    || 0;
+          const total  = liquid + daodao + gov;
+
+          // Status: engaged if staked portion > 80% of total, partial if any staking
+          const stakedTotal = daodao + gov;
+          const status = stakedTotal === 0 ? 'unengaged'
+                       : (stakedTotal / total) >= 0.8 ? 'engaged'
+                       : 'partial';
+
+          whaleData.push({ address: addr, liquid, daodao, gov, total, status });
+          found++;
+        }
+
+        nextKey = data.pagination?.next_key;
+        if (!nextKey || (data.models || []).length === 0) break;
+      }
+
+      // ── Merge in engaged wallets (gov + DAODAO) not found in liquid scan ──────
+      // These wallets have large staked positions but liquid < threshold
+      const liquidAddresses = new Set(whaleData.map(w => w.address));
+
+      const mergedAddresses = new Set();
+      const allEngaged = [
+        ...govStakers.map(g => ({ address: g.address, govCapa: g.capa, daodaoCapa: daodaoMap[g.address] || 0 })),
+        ...allMembers.filter(m => !mergedAddresses.has(m.address) && !govStakers.find(g => g.address === m.address))
+                     .map(m => ({ address: m.address, govCapa: 0, daodaoCapa: m.capa }))
+      ];
+
+      for (const e of allEngaged) {
+        if (liquidAddresses.has(e.address)) {
+          // Already in whaleData from liquid scan — update gov/daodao fields
+          const w = whaleData.find(w => w.address === e.address);
+          if (w) { w.daodao = e.daodaoCapa; w.gov = e.govCapa; }
+          continue;
+        }
+        mergedAddresses.add(e.address);
+        const totalStaked = e.govCapa + e.daodaoCapa;
+        if (totalStaked < threshold) continue;  // below threshold even when staked
+        if (CAPA_BLACKLIST.has(e.address)) continue;
+
+        const stakedPct = 1; // all staked if no liquid found above threshold
+        whaleData.push({
+          address: e.address,
+          liquid: 0,
+          daodao: e.daodaoCapa,
+          gov: e.govCapa,
+          total: totalStaked,
+          status: 'engaged',
+          protocol: null
+        });
+        found++;
+      }
+
+      // Enrich existing entries with LP positions (direct wallet + incentivized stakers)
+      const lpLookup = {};
+      for (const l of tlaLpData)    lpLookup[l.address] = (lpLookup[l.address] || 0) + l.capa;
+      for (const l of incStakerData) lpLookup[l.address] = (lpLookup[l.address] || 0) + l.capa;
+
+      const whaleAddresses = new Set(whaleData.map(w => w.address));
+      for (const w of whaleData) {
+        w.lp    = lpLookup[w.address] || 0;
+        w.total = w.liquid + w.daodao + w.gov + w.lp;
+        const staked = w.daodao + w.gov + w.lp;
+        w.status = staked === 0 ? 'unengaged'
+                 : (staked / w.total) >= 0.8 ? 'engaged'
+                 : 'partial';
+      }
+
+      // Add LP-only wallets not found in liquid/gov scans (direct + incentivized)
+      const allLpEntries = [
+        ...tlaLpData,
+        ...incStakerData.filter(l => !tlaLpData.find(d => d.address === l.address))
+      ];
+      for (const l of allLpEntries) {
+        if (whaleAddresses.has(l.address)) continue;
+        if (CAPA_BLACKLIST.has(l.address)) continue;
+        const total = l.capa;
+        if (total < threshold) continue;
+        whaleData.push({
+          address: l.address,
+          liquid: 0, daodao: daodaoMap[l.address] || 0,
+          gov: govMap[l.address] || 0,
+          lp: l.capa,
+          total: l.capa + (daodaoMap[l.address] || 0) + (govMap[l.address] || 0),
+          status: 'engaged',  // staked in LP
+          protocol: null
+        });
+        found++;
+      }
+
+      whaleData.sort((a, b) => b.total - a.total);
+
+      // Summary
+      const unengaged = whaleData.filter(w => w.status === 'unengaged').length;
+      const partial   = whaleData.filter(w => w.status === 'partial').length;
+      const engaged   = whaleData.filter(w => w.status === 'engaged').length;
+
+      document.getElementById('wh-sum-wallets').textContent   = whaleData.length;
+      document.getElementById('wh-sum-unengaged').textContent = unengaged;
+      document.getElementById('wh-sum-partial').textContent   = partial;
+      document.getElementById('wh-sum-engaged').textContent   = engaged;
+      document.getElementById('whale-summary').style.display  = '';
+      document.getElementById('whale-note').style.display     = '';
+      document.getElementById('whale-placeholder').style.display = 'none';
+
+      if (whaleData.length > 0) {
+        document.getElementById('whale-export-btn').style.display = '';
+      }
+
+      statusEl.textContent = `Done — ${whaleData.length} wallets ≥ ${threshold.toLocaleString()} CAPA · ${pages} pages scanned`;
+      renderWhaleTable();
+
+    } catch(e) {
+      statusEl.textContent = 'Scan failed: ' + e.message;
+      document.getElementById('whale-placeholder').textContent = 'Scan failed — ' + e.message;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '⛏ SCAN';
+    }
+  }
+
+  function renderWhaleTable() {
+    const tbody = document.getElementById('whale-body');
+    const table = document.getElementById('whale-table');
+    const showProtocols = document.getElementById('whale-show-protocols')?.checked;
+
+    // Build display data: user wallets + optionally protocol contracts
+    let displayData = [...whaleData];
+    if (showProtocols) {
+      const existing = new Set(whaleData.map(w => w.address));
+      // Build LP lookup from both sources
+      const allLpMap = {};
+      for (const l of tlaLpData)     allLpMap[l.address] = (allLpMap[l.address]||0) + l.capa;
+      for (const l of incStakerData) allLpMap[l.address] = (allLpMap[l.address]||0) + l.capa;
+      for (const [addr, label] of Object.entries(PROTOCOL_CONTRACTS)) {
+        const liquid = protocolData[addr] ?? 0;
+        const lp     = allLpMap[addr] || 0;
+        const total  = liquid + lp;
+        if (!existing.has(addr)) {
+          displayData.push({
+            address: addr, liquid, daodao: 0, gov: 0, lp,
+            total, status: 'protocol', protocol: label
+          });
+        } else {
+          const w = displayData.find(d => d.address === addr);
+          if (w) {
+            w.protocol = label; w.liquid = liquid;
+            w.lp = lp; w.total = liquid + w.daodao + w.gov + lp;
+          }
+        }
+      }
+    }
+
+    const sorted = [...displayData].sort((a, b) => {
+      const key = whaleSortCol === 'rank'    ? 'total'
+                : whaleSortCol === 'total'   ? 'total'
+                : whaleSortCol === 'liquid'  ? 'liquid'
+                : whaleSortCol === 'daodao'  ? 'daodao'
+                : whaleSortCol === 'gov'     ? 'gov'
+                : whaleSortCol === 'lp'      ? 'lp'
+                : whaleSortCol === 'address' ? null : 'total';
+      if (whaleSortCol === 'address') {
+        return whaleSortAsc ? a.address.localeCompare(b.address) : b.address.localeCompare(a.address);
+      }
+      return whaleSortAsc ? a[key] - b[key] : b[key] - a[key];
+    });
+
+    tbody.innerHTML = sorted.map((w, i) => {
+      const statusBadge =
+        w.status === 'protocol'
+          ? `<span style="font-size:8px;background:rgba(99,102,241,0.15);color:#818cf8;border:1px solid rgba(99,102,241,0.3);border-radius:3px;padding:1px 5px;">${w.protocol}</span>`
+        : w.status === 'unengaged'
+          ? '<span style="font-size:8px;background:rgba(248,113,113,0.15);color:#f87171;border:1px solid rgba(248,113,113,0.3);border-radius:3px;padding:1px 5px;">Unengaged</span>'
+        : w.status === 'partial'
+          ? '<span style="font-size:8px;background:rgba(245,158,11,0.15);color:#f59e0b;border:1px solid rgba(245,158,11,0.3);border-radius:3px;padding:1px 5px;">Partial</span>'
+          : '<span style="font-size:8px;background:rgba(74,222,128,0.15);color:#4ade80;border:1px solid rgba(74,222,128,0.3);border-radius:3px;padding:1px 5px;">Engaged</span>';
+
+      const addrLink = makeAddrCell(w.address, w.protocol);
+
+      return `<tr>
+        <td>${i + 1}</td>
+        <td>${addrLink}</td>
+        <td style="color:#e8e4d9;font-weight:600">${w.liquid > 0 ? fmt(w.liquid, 0) : '<span style="color:#2a2522">0</span>'}</td>
+        <td style="color:#a855f7">${w.daodao > 0 ? fmt(w.daodao, 0) : '<span style="color:#2a2522">0</span>'}</td>
+        <td style="color:#38bdf8">${w.gov > 0 ? fmt(w.gov, 0) : '<span style="color:#2a2522">0</span>'}</td>
+        <td style="color:#f59e0b">${(w.lp||0) > 0 ? fmt(w.lp, 0) : '<span style="color:#2a2522">0</span>'}</td>
+        <td style="color:#b0a898;font-weight:700">${fmt(w.total, 0)}</td>
+        <td>${statusBadge}</td>
+      </tr>`;
+    }).join('');
+
+    table.style.display = '';
+    updateWhaleTotals(sorted);
+    updateSortHeaders('whale-table', whaleSortCol, whaleSortAsc);
+  }
+
+  function whaleExportCSV() {
+    const rows = [['Address','Liquid CAPA','DAODAO CAPA','Gov Staked','Total','Status']];
+    for (const w of whaleData) {
+      rows.push([w.address, w.liquid.toFixed(2), w.daodao.toFixed(2), w.gov.toFixed(2), w.total.toFixed(2), w.status]);
+    }
+    const csv = rows.map(r => r.join(',')).join('\n');
+    const a = document.createElement('a');
+    a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+    a.download = 'capa-whales.csv';
+    a.click();
+  }
+
+
+
+  // ── Fetch live CAPA/LUNA pool stats ──────────────────────────────────────────
+  async function fetchLpPoolStats() {
+    const LCD = activeLCD || 'https://terra.publicnode.com';
+    const url = `${LCD}/cosmwasm/wasm/v1/contract/${CAPA_LUNA_PAIR}/smart/${b64({ pool: {} })}`;
+    const res = await fetch(url, { headers: { Accept: 'application/json' } });
+    if (!res.ok) throw new Error(`Pool query HTTP ${res.status}`);
+    const d = await res.json();
+    const assets = d.data?.assets || [];
+    let capaReserve = 0, lunaReserve = 0;
+    for (const a of assets) {
+      if (a.info?.token?.contract_addr === CAPA_TOKEN_CONTRACT) {
+        capaReserve = parseFloat(a.amount);
+      } else if (a.info?.native_token?.denom === 'uluna') {
+        lunaReserve = parseFloat(a.amount);
+      }
+    }
+    const totalShare = parseFloat(d.data?.total_share || '0');
+    if (!totalShare) throw new Error('total_share is zero');
+    return {
+      capaReserve,
+      lunaReserve,
+      totalShare,
+      capaPerLp: capaReserve / totalShare,
+      lunaPerLp: lunaReserve / totalShare
+    };
+  }
+
+  // ── CAPA IN TLA LP — full LP holder scan (no threshold) ───────────────────────
+
+  let tlaLpData = [];
+  let tlaLpSortCol = 'capa', tlaLpSortAsc = false;
+  let incStakerData = [];
+  let incSortCol = 'capa', incSortAsc = false;
+
+  function incSortBy(col) {
+    if (incSortCol === col) incSortAsc = !incSortAsc;
+    else { incSortCol = col; incSortAsc = col === 'address'; }
+    renderIncTable();
+  }
+  let tlaLpPoolStats = { capaReserve: 0, lunaReserve: 0, totalShare: 0 };
+
+  function tlaLpSortBy(col) {
+    if (tlaLpSortCol === col) tlaLpSortAsc = !tlaLpSortAsc;
+    else { tlaLpSortCol = col; tlaLpSortAsc = col === 'address'; }
+    renderTlaLpTable();
+  }
+
+  async function loadTlaLpHolders() {
+    const statusEl = document.getElementById('tla-lp-status');
+    const phEl     = document.getElementById('tla-lp-placeholder');
+    const uTable = document.getElementById('tla-unified-table');
+    if (uTable) uTable.style.display = 'none';
+    const sumEl = document.getElementById('tla-lp-summary');
+    if (sumEl) sumEl.style.display = 'none';
+    if (phEl) { phEl.style.display = 'block'; phEl.textContent = 'Querying pool reserves…'; }
+    if (statusEl) statusEl.textContent = 'Querying pool reserves…';
+    tlaLpData = [];
+
+    const daodaoMap = {};
+    for (const m of allMembers)  daodaoMap[m.address] = (daodaoMap[m.address] || 0) + m.capa;
+    const govMap = {};
+    for (const g of govStakers)  govMap[g.address] = (govMap[g.address] || 0) + g.capa;
+
+    try {
+      // Live pool stats
+      statusEl.textContent = 'Fetching live pool reserves…';
+      tlaLpPoolStats = await fetchLpPoolStats();
+      const { capaPerLp, lunaPerLp, totalShare, capaReserve } = tlaLpPoolStats;
+
+      document.getElementById('tla-lp-pool-capa').textContent =
+        (capaReserve/1e6).toLocaleString('en-US',{maximumFractionDigits:0});
+      // tla-lp-supply removed from new unified layout
+      document.getElementById('tla-lp-rate').textContent =
+        (capaPerLp*1e6).toFixed(4) + ' CAPA';
+      document.getElementById('tla-lp-summary').style.display = '';
+
+      const LCD = activeLCD || 'https://terra.publicnode.com';
+      let nextKey = null, pages = 0, found = 0;
+
+      while (pages < 60) {
+        pages++;
+        let url = `${LCD}/cosmwasm/wasm/v1/contract/${CAPA_LUNA_LP_TOKEN}/state?pagination.limit=100`;
+        if (nextKey) url += `&pagination.key=${encodeURIComponent(nextKey)}`;
+
+        const runningCapa = tlaLpData.reduce((s, d) => s + d.capa, 0);
+        statusEl.textContent = `Page ${pages} — ${found} holders found (${runningCapa.toLocaleString('en-US',{maximumFractionDigits:0})} CAPA)`;
+        phEl.textContent = `Scanning page ${pages} of ~60… ${found} holders found so far`;
+
+        const res = await fetch(url, {headers:{Accept:'application/json'}});
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+
+        for (const m of (data.models || [])) {
+          const addr = cw20KeyToAddress(m.key);
+          if (!addr) continue;
+
+          let lpRaw = 0;
+          try { lpRaw = parseFloat(JSON.parse(atob(m.value))); } catch(_) { continue; }
+          if (!lpRaw || lpRaw <= 0) continue;
+
+          const underlyingCapa = (lpRaw * capaPerLp) / 1e6;
+          const underlyingLuna = (lpRaw * lunaPerLp) / 1e6;
+          const poolPct        = (lpRaw / totalShare) * 100;
+
+          tlaLpData.push({
+            address: addr,
+            lpBalance: lpRaw / 1e6,
+            capa:      parseFloat(underlyingCapa.toFixed(2)),
+            luna:      parseFloat(underlyingLuna.toFixed(4)),
+            poolPct:   parseFloat(poolPct.toFixed(4)),
+            inDaodao:  (daodaoMap[addr] || 0) > 0,
+            inGov:     (govMap[addr]    || 0) > 0,
+            daodaoCapa: daodaoMap[addr] || 0,
+            govCapa:    govMap[addr]    || 0,
+          });
+          found++;
+        }
+
+        nextKey = data.pagination?.next_key;
+        if (!nextKey || (data.models||[]).length === 0) break;
+      }
+
+      tlaLpData.sort((a, b) => b.capa - a.capa);
+      document.getElementById('tla-lp-refresh-btn').style.display = '';
+      phEl.style.display = 'none';
+      statusEl.textContent = `${tlaLpData.length} direct LP holders loaded`;
+      buildUnifiedLpTable();  // rebuild unified table
+
+    } catch(e) {
+      statusEl.textContent = 'Failed: ' + e.message;
+      phEl.textContent = 'Load failed — ' + e.message;
+    }
+  }
+
+  function renderTlaLpTable() {
+    buildUnifiedLpTable(); return; // unified table replaced individual renders
+    const tbody = document.getElementById('tla-lp-body');
+    const table = document.getElementById('tla-lp-table');
+    const showProtocols = document.getElementById('tla-show-protocols')?.checked;
+
+    // Filter out protocol contracts unless toggle is on
+    const displayData = showProtocols
+      ? tlaLpData
+      : tlaLpData.filter(w => !CAPA_BLACKLIST.has(w.address));
+
+    const sorted = [...displayData].sort((a, b) => {
+      const key = { rank:'capa', capa:'capa', luna:'luna', lp:'lpBalance', pct:'poolPct' }[tlaLpSortCol] || 'capa';
+      if (tlaLpSortCol === 'address')
+        return tlaLpSortAsc ? a.address.localeCompare(b.address) : b.address.localeCompare(a.address);
+      return tlaLpSortAsc ? a[key]-b[key] : b[key]-a[key];
+    });
+
+    tbody.innerHTML = sorted.map((w, i) => {
+      const tags = [];
+      if (w.inDaodao) tags.push(`<span style="font-size:8px;background:rgba(168,85,247,0.12);color:#a855f7;border:1px solid rgba(168,85,247,0.25);border-radius:3px;padding:1px 4px;" title="${fmt(w.daodaoCapa,0)} CAPA in DAODAO">DAODAO</span>`);
+      if (w.inGov)    tags.push(`<span style="font-size:8px;background:rgba(56,189,248,0.12);color:#38bdf8;border:1px solid rgba(56,189,248,0.25);border-radius:3px;padding:1px 4px;" title="${fmt(w.govCapa,0)} CAPA in Gov">Gov</span>`);
+      if (!tags.length) tags.push('<span style="font-size:8px;color:#4a4840;">LP only</span>');
+
+      return `<tr>
+        <td>${i+1}</td>
+        <td>${makeAddrCell(w.address)}</td>
+        <td style="color:#6b6557;">${fmt(w.lpBalance,4)}</td>
+        <td style="color:#e8e4d9;font-weight:700">${fmt(w.capa,0)}</td>
+        <td style="color:#6b6557;">${fmt(w.luna,2)}</td>
+        <td style="color:#4a4840;">${w.poolPct.toFixed(3)}%</td>
+        <td style="display:flex;gap:3px;flex-wrap:wrap;">${tags.join('')}</td>
+      </tr>`;
+    }).join('');
+    table.style.display = '';
+  }
+
+  function tlaLpExportCSV() {
+    const rows = [['Address','LP Balance','Underlying CAPA','Underlying LUNA','Pool %','In DAODAO','DAODAO CAPA','In Gov','Gov CAPA']];
+    for (const w of tlaLpData) {
+      rows.push([w.address, w.lpBalance.toFixed(4), w.capa.toFixed(2), w.luna.toFixed(4),
+                 w.poolPct.toFixed(4), w.inDaodao, w.daodaoCapa.toFixed(2), w.inGov, w.govCapa.toFixed(2)]);
+    }
+    const csv = rows.map(r => r.join(',')).join('\n');
+    const a = document.createElement('a');
+    a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+    a.download = 'capa-tla-lp-holders.csv';
+    a.click();
+  }
+
+
+  // ── VE3 ASSET STAKING — CAPA/LUNA LP individual staker scanner ───────────────
+  // Key: 0006+"shares"+002C+user_addr+0005+"cw20:"+lp_token
+  // Value: JSON Uint128 shares string
+
+  const VE3_SHARES_PREFIX = '0006736861726573'; // 0006 + "shares"
+  const VE3_CAPA_LP_SUFFIX = '0005637732303a' +
+    Array.from(new TextEncoder().encode(CAPA_LUNA_LP_TOKEN))
+         .map(b => b.toString(16).padStart(2,'0')).join('');
+
+  function ve3KeyToAddress(hexKey) {
+    const lk = hexKey.toLowerCase();
+    if (!lk.startsWith(VE3_SHARES_PREFIX)) return null;
+    if (!lk.endsWith(VE3_CAPA_LP_SUFFIX))  return null;
+    // After namespace prefix: 2-byte addr length + addr bytes
+    const afterNs  = lk.slice(VE3_SHARES_PREFIX.length);
+    const addrLen  = parseInt(afterNs.slice(0, 4), 16); // read length (handles 44 or 64 char addrs)
+    const addrHex  = afterNs.slice(4, 4 + addrLen * 2);
+    if (addrHex.length !== addrLen * 2) return null;
+    try {
+      const addr = new TextDecoder().decode(
+        Uint8Array.from(addrHex.match(/.{2}/g).map(b => parseInt(b,16)))
+      );
+      return addr.startsWith('terra1') ? addr : null;
+    } catch(_) { return null; }
+  }
+
+  function ve3SharesValue(b64Value) {
+    try { return parseFloat(JSON.parse(atob(b64Value))); }
+    catch(_) { return 0; }
+  }
+
+  async function loadVe3LpStakers() {
+    const statusEl = document.getElementById('inc-status');
+    const phEl     = document.getElementById('inc-placeholder');
+    if (!statusEl || !phEl) { incStakerData = []; return; } // panel not in DOM yet
+
+    try {
+      // Fetch live pool stats + ve3 pool totals
+      statusEl.textContent = 'Fetching pool data…';
+      const poolStats = tlaLpPoolStats?.totalShare
+        ? tlaLpPoolStats : await fetchLpPoolStats();
+      if (!tlaLpPoolStats?.totalShare) tlaLpPoolStats = poolStats;
+
+      // Get ve3 pool totals for CAPA/LUNA LP
+      const LCD = activeLCD || 'https://terra.publicnode.com';
+      let ve3TotalShares, ve3Amount;
+      try {
+        const pRes = await fetch(
+          `${LCD}/cosmwasm/wasm/v1/contract/${VE3_ASSET_STAKING}/smart/${b64({all_staked_balances:{limit:50}})}`,
+          { headers: { Accept: 'application/json' } }
+        );
+        if (!pRes.ok) throw new Error(`all_staked_balances HTTP ${pRes.status}`);
+        const pData = await pRes.json();
+        const poolEntry = (pData.data || []).find(
+          e => e.asset?.info?.cw20 === CAPA_LUNA_LP_TOKEN
+        );
+        if (!poolEntry) throw new Error('CAPA/LUNA LP not in ve3 pools');
+        ve3TotalShares = parseFloat(poolEntry.shares);
+        ve3Amount      = parseFloat(poolEntry.asset.amount);
+      } catch(e2) {
+        // Fallback: use known values (change slowly due to 10%/yr take rate)
+        // From all_staked_balances query on 2026-04-14:
+        ve3TotalShares = 3163232207680;
+        ve3Amount      = 2754182260048;
+        statusEl.textContent = 'Using cached pool totals (ve3 query temporarily unavailable)';
+      }
+
+      // Share → LP → CAPA conversion
+      // user_lp = (user_shares / ve3TotalShares) * (ve3Amount / 1e6)
+      // user_capa = user_lp * capaPerLp
+      const capaPerLp = poolStats.capaPerLp;
+      const lunaPerLp = poolStats.lunaPerLp;
+
+      const daodaoMap = {};
+      for (const m of allMembers)  daodaoMap[m.address] = (daodaoMap[m.address]||0) + m.capa;
+      const govMap = {};
+      for (const g of govStakers)  govMap[g.address]    = (govMap[g.address]||0)    + g.capa;
+
+      // State scan of ve3 contract — find "shares" keys for CAPA/LUNA LP
+      let nextKey = null, pages = 0;
+      incStakerData = [];
+
+      while (pages < 30) {
+        pages++;
+        let url = `${LCD}/cosmwasm/wasm/v1/contract/${VE3_ASSET_STAKING}/state?pagination.limit=100`;
+        if (nextKey) url += `&pagination.key=${encodeURIComponent(nextKey)}`;
+
+        phEl.textContent = `Scanning ve3 state page ${pages}… (${incStakerData.length} stakers)`;
+        statusEl.textContent = `Page ${pages}…`;
+
+        const res  = await fetch(url, { headers: { Accept: 'application/json' } });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+
+        for (const m of (data.models || [])) {
+          const addr = ve3KeyToAddress(m.key);
+          if (!addr) continue;
+
+          const userShares = ve3SharesValue(m.value);
+          if (!userShares || userShares <= 0) continue;
+
+          const userLp   = (userShares / ve3TotalShares) * (ve3Amount / 1e6);
+          const userCapa = userLp * capaPerLp;
+          const userLuna = userLp * lunaPerLp;
+          const poolPct  = (userShares / ve3TotalShares) * 100;
+
+          incStakerData.push({
+            address:    addr,
+            lpBalance:  userLp,
+            capa:       parseFloat(userCapa.toFixed(2)),
+            luna:       parseFloat(userLuna.toFixed(4)),
+            poolPct:    parseFloat(poolPct.toFixed(4)),
+            inDaodao:   (daodaoMap[addr]||0) > 0,
+            inGov:      (govMap[addr]||0)    > 0,
+            daodaoCapa: daodaoMap[addr] || 0,
+            govCapa:    govMap[addr]    || 0,
+          });
+        }
+
+        nextKey = data.pagination?.next_key;
+        if (!nextKey || !(data.models||[]).length) break;
+        // Stop if we've passed the 0006 namespace (entered 0007 or higher)
+        const lastKey = (data.models||[]).slice(-1)[0]?.key?.toLowerCase() || '';
+        if (lastKey && !lastKey.startsWith(VE3_SHARES_PREFIX)) break;
+      }
+
+      incStakerData.sort((a, b) => b.capa - a.capa);
+      statusEl.textContent = `${incStakerData.length} ve3 stakers found · checking direct Astroport stakers…`;
+      await loadDirectAstroStakers(); // also add terra17k9-type direct stakers
+      buildUnifiedLpTable();  // rebuild unified table
+
+    } catch(e) {
+      statusEl.textContent  = 'Failed: ' + e.message;
+      phEl.textContent = 'Load failed — ' + e.message;
+    }
+  }
+
+
+  async function loadIncentivizedStakers() {
+    const statusEl = document.getElementById('inc-status');
+    const phEl     = document.getElementById('inc-placeholder');
+    incStakerData  = [];
+    document.getElementById('inc-table').style.display = 'none';
+    phEl.style.display = 'block';
+    phEl.textContent = 'Querying pool reserves…';
+    statusEl.textContent = '';
+
+    const daodaoMap = {};
+    for (const m of allMembers)  daodaoMap[m.address] = (daodaoMap[m.address] || 0) + m.capa;
+    const govMap = {};
+    for (const g of govStakers)  govMap[g.address]    = (govMap[g.address]    || 0) + g.capa;
+
+    try {
+      // Use existing pool stats if already loaded, otherwise fetch fresh
+      let poolStats = tlaLpPoolStats;
+      if (!poolStats || !poolStats.totalShare) {
+        statusEl.textContent = 'Fetching pool reserves…';
+        poolStats = await fetchLpPoolStats();
+        tlaLpPoolStats = poolStats;
+      }
+      const { capaPerLp, lunaPerLp, totalShare } = poolStats;
+
+      const LCD = activeLCD || 'https://terra.publicnode.com';
+      let startAfter = null, pages = 0;
+
+      while (pages < 20) {
+        pages++;
+        const q = { pool_stakers: { lp_token: CAPA_LUNA_LP_TOKEN, limit: 100 } };
+        if (startAfter) q.pool_stakers.start_after = startAfter;
+
+        phEl.textContent = `Page ${pages} — ${incStakerData.length} stakers found…`;
+        statusEl.textContent = `Page ${pages}…`;
+
+        const url = `${LCD}/cosmwasm/wasm/v1/contract/${ASTRO_INCENTIVES}/smart/${b64(q)}`;
+        const res  = await fetch(url, { headers: { Accept: 'application/json' } });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const stakers = data.data || [];
+
+        for (const [addr, lpRawStr] of stakers) {
+          const lpRaw  = parseFloat(lpRawStr);
+          const capa   = (lpRaw * capaPerLp) / 1e6;
+          const luna   = (lpRaw * lunaPerLp) / 1e6;
+          const poolPct = (lpRaw / totalShare) * 100;
+          incStakerData.push({
+            address: addr, lpBalance: lpRaw / 1e6, capa, luna,
+            poolPct: parseFloat(poolPct.toFixed(4)),
+            inDaodao:   (daodaoMap[addr] || 0) > 0,
+            inGov:      (govMap[addr]    || 0) > 0,
+            daodaoCapa: daodaoMap[addr]  || 0,
+            govCapa:    govMap[addr]     || 0,
+          });
+          startAfter = addr;
+        }
+
+        if (stakers.length < 100) break;
+      }
+
+      incStakerData.sort((a, b) => b.capa - a.capa);
+      phEl.style.display = 'none';
+      statusEl.textContent = `${incStakerData.length} incentivized stakers · live pool rate`;
+      renderIncTable();
+
+    } catch(e) {
+      statusEl.textContent = 'Failed: ' + e.message;
+      phEl.textContent = 'Load failed — ' + e.message;
+    }
+  }
+
+  function renderIncTable() {
+    buildUnifiedLpTable(); return; // unified table replaced individual renders
+    const tbody = document.getElementById('inc-body');
+    const table = document.getElementById('inc-table');
+    if (!tbody || !table) return;
+    const showProtocols = document.getElementById('tla-show-protocols')?.checked;
+
+    const incDisplay = showProtocols
+      ? incStakerData
+      : incStakerData.filter(w => !CAPA_BLACKLIST.has(w.address));
+
+    const sorted = [...incDisplay].sort((a, b) => {
+      const key = { rank:'capa', capa:'capa', luna:'luna', lp:'lpBalance', pct:'poolPct' }[incSortCol] || 'capa';
+      if (incSortCol === 'address')
+        return incSortAsc ? a.address.localeCompare(b.address) : b.address.localeCompare(a.address);
+      return incSortAsc ? a[key]-b[key] : b[key]-a[key];
+    });
+
+    tbody.innerHTML = sorted.map((w, i) => {
+      const tags = [];
+      if (w.inDaodao) tags.push(`<span style="font-size:8px;background:rgba(168,85,247,0.12);color:#a855f7;border:1px solid rgba(168,85,247,0.25);border-radius:3px;padding:1px 4px;" title="${fmt(w.daodaoCapa,0)} CAPA in DAODAO">DAODAO</span>`);
+      if (w.inGov)    tags.push(`<span style="font-size:8px;background:rgba(56,189,248,0.12);color:#38bdf8;border:1px solid rgba(56,189,248,0.25);border-radius:3px;padding:1px 4px;" title="${fmt(w.govCapa,0)} CAPA in Gov">Gov</span>`);
+      if (!tags.length) tags.push('<span style="font-size:8px;color:#4a4840;">LP only</span>');
+
+      return `<tr>
+        <td>${i+1}</td>
+        <td>${makeAddrCell(w.address, PROTOCOL_CONTRACTS[w.address] || null)}</td>
+        <td style="color:#6b6557">${fmt(w.lpBalance,4)}</td>
+        <td style="color:#f59e0b;font-weight:700">${fmt(w.capa,0)}</td>
+        <td style="color:#6b6557">${fmt(w.luna,2)}</td>
+        <td style="color:#4a4840">${w.poolPct.toFixed(3)}%</td>
+        <td style="display:flex;gap:3px;flex-wrap:wrap">${tags.join('')}</td>
       </tr>`;
     }).join('');
 
     table.style.display = '';
   }
 
+  // ── UNIFIED CAPA/LUNA LP TABLE ────────────────────────────────────────────────
+  // Merges: direct LP holders (CW20) + ve3/incentivized stakers
+
+  let unifiedLpData  = [];
+  let unifiedSortCol = 'total', unifiedSortAsc = false;
+
+  function unifiedSortBy(col) {
+    if (unifiedSortCol === col) unifiedSortAsc = !unifiedSortAsc;
+    else { unifiedSortCol = col; unifiedSortAsc = col === 'address'; }
+    renderUnifiedLpTable();
+  }
+
+  function buildUnifiedLpTable() {
+    const showProtocols = document.getElementById('tla-show-protocols')?.checked;
+    const daodaoMap = {};
+    for (const m of allMembers)  daodaoMap[m.address] = (daodaoMap[m.address]||0) + m.capa;
+    const govMap = {};
+    for (const g of govStakers)  govMap[g.address]    = (govMap[g.address]||0) + g.capa;
+
+    const map = {};
+
+    // Direct holders (CW20 scan)
+    for (const l of tlaLpData) {
+      if (!showProtocols && CAPA_BLACKLIST.has(l.address)) continue;
+      if (!map[l.address]) map[l.address] = { address: l.address, direct: 0, incentivized: 0 };
+      map[l.address].direct += l.capa;
+    }
+
+    // Incentivized (ve3 state scan)
+    for (const l of incStakerData) {
+      if (!showProtocols && CAPA_BLACKLIST.has(l.address)) continue;
+      if (!map[l.address]) map[l.address] = { address: l.address, direct: 0, incentivized: 0 };
+      map[l.address].incentivized += l.capa;
+    }
+
+    const totalShare = tlaLpPoolStats?.totalShare || 1;
+    const capaPerLp  = tlaLpPoolStats?.capaPerLp  || 0;
+
+    unifiedLpData = Object.values(map).map(w => {
+      const totalCapa = w.direct + w.incentivized;
+      // Pool % based on underlying CAPA vs total pool CAPA
+      const poolPct = tlaLpPoolStats?.capaReserve
+        ? (totalCapa / (tlaLpPoolStats.capaReserve / 1e6)) * 100 : 0;
+      return {
+        ...w,
+        total:   totalCapa,
+        poolPct: parseFloat(poolPct.toFixed(4)),
+        protocol: PROTOCOL_CONTRACTS[w.address] || null,
+        inDaodao: (daodaoMap[w.address]||0) > 0,
+        inGov:    (govMap[w.address]||0)    > 0,
+        daodaoCapa: daodaoMap[w.address] || 0,
+        govCapa:    govMap[w.address]    || 0,
+      };
+    });
+
+    unifiedLpData.sort((a, b) => b.total - a.total);
+
+    document.getElementById('tla-lp-count').textContent = unifiedLpData.length;
+    document.getElementById('tla-lp-summary').style.display = '';
+    document.getElementById('tla-lp-export-btn').style.display = '';
+
+    // Update status
+    const directCount = unifiedLpData.filter(w => w.direct > 0 && !w.incentivized).length;
+    const incCount    = unifiedLpData.filter(w => w.incentivized > 0).length;
+    const both        = unifiedLpData.filter(w => w.direct > 0 && w.incentivized > 0).length;
+    const st = document.getElementById('inc-status');
+    if (st) st.textContent = `${directCount} direct · ${incCount} incentivized${both ? ` · ${both} both` : ''}`;
+
+    document.getElementById('tla-lp-placeholder').style.display = 'none';
+    renderUnifiedLpTable();
+  }
+
+  function renderUnifiedLpTable() {
+    const tbody = document.getElementById('tla-unified-body');
+    const table = document.getElementById('tla-unified-table');
+    if (!tbody || !table) return;
+
+    const sorted = [...unifiedLpData].sort((a, b) => {
+      const key = { rank:'total', total:'total', direct:'direct',
+                    incentivized:'incentivized', pct:'poolPct' }[unifiedSortCol] || 'total';
+      if (unifiedSortCol === 'address')
+        return unifiedSortAsc ? a.address.localeCompare(b.address) : b.address.localeCompare(a.address);
+      return unifiedSortAsc ? a[key]-b[key] : b[key]-a[key];
+    });
+
+    tbody.innerHTML = sorted.map((w, i) => {
+      const tags = [];
+      if (w.inDaodao) tags.push(`<span style="font-size:8px;background:rgba(168,85,247,0.12);color:#a855f7;border:1px solid rgba(168,85,247,0.25);border-radius:3px;padding:1px 4px;" title="${fmt(w.daodaoCapa,0)} in DAODAO">DAODAO</span>`);
+      if (w.inGov)    tags.push(`<span style="font-size:8px;background:rgba(56,189,248,0.12);color:#38bdf8;border:1px solid rgba(56,189,248,0.25);border-radius:3px;padding:1px 4px;" title="${fmt(w.govCapa,0)} in Gov">Gov</span>`);
+      if (!tags.length && !w.protocol) tags.push('<span style="font-size:8px;color:#4a4840;">LP only</span>');
+
+      const directCell = w.direct > 0
+        ? `<span style="color:#38bdf8">${fmt(w.direct,0)}</span>`
+        : `<span style="color:#2a2522">0</span>`;
+      const incCell = w.incentivized > 0
+        ? `<span style="color:#f59e0b">${fmt(w.incentivized,0)}</span>`
+        : `<span style="color:#2a2522">0</span>`;
+
+      return `<tr>
+        <td>${i+1}</td>
+        <td>${makeAddrCell(w.address, w.protocol)}</td>
+        <td>${directCell}</td>
+        <td>${incCell}</td>
+        <td style="color:#e8e4d9;font-weight:700">${fmt(w.total,0)}</td>
+        <td style="color:#4a4840">${w.poolPct.toFixed(3)}%</td>
+        <td style="display:flex;gap:3px;flex-wrap:wrap">${tags.join('')}</td>
+      </tr>`;
+    }).join('');
+
+    table.style.display = '';
+  }
+
+  function unifiedLpExportCSV() {
+    const rows = [['Address','Protocol','Direct LP CAPA','Incentivized LP CAPA','Total CAPA','Pool %','In DAODAO','In Gov']];
+    for (const w of unifiedLpData) {
+      rows.push([w.address, w.protocol||'', w.direct.toFixed(2), w.incentivized.toFixed(2),
+                 w.total.toFixed(2), w.poolPct.toFixed(4), w.inDaodao, w.inGov]);
+    }
+    const csv = rows.map(r => r.join(',')).join('\n');
+    const a = document.createElement('a');
+    a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+    a.download = 'capa-tla-lp-unified.csv';
+    a.click();
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // SORT INDICATORS
+  // ══════════════════════════════════════════════════════════════
+  function updateSortHeaders(tableId, sortCol, sortAsc) {
+    const table = document.getElementById(tableId);
+    if (!table) return;
+    table.querySelectorAll('th').forEach(th => {
+      const col = th.getAttribute('onclick')?.match(/SortBy\('([^']+)'/)?.[1];
+      th.classList.toggle('sort-active', col === sortCol);
+      th.classList.toggle('asc', col === sortCol && sortAsc);
+    });
+  }
+
+  // sort indicators updated inside each render function
+
+  // ══════════════════════════════════════════════════════════════
+  // TOTALS ROW — updates after renderWhaleTable
+  // ══════════════════════════════════════════════════════════════
+  function updateWhaleTotals(displayData) {
+    const tfoot = document.getElementById('whale-tfoot');
+    if (!tfoot || !displayData?.length) return;
+    const totals = displayData.filter(w => w.status !== 'protocol')
+      .reduce((acc, w) => ({
+        liquid: acc.liquid + (w.liquid||0),
+        daodao: acc.daodao + (w.daodao||0),
+        gov:    acc.gov    + (w.gov||0),
+        lp:     acc.lp     + (w.lp||0),
+        total:  acc.total  + (w.total||0),
+      }), { liquid:0, daodao:0, gov:0, lp:0, total:0 });
+
+    document.getElementById('wt-liquid').textContent = fmt(totals.liquid, 0);
+    document.getElementById('wt-daodao').textContent = fmt(totals.daodao, 0);
+    document.getElementById('wt-gov').textContent    = fmt(totals.gov, 0);
+    document.getElementById('wt-lp').textContent     = fmt(totals.lp, 0);
+    document.getElementById('wt-total').textContent  = fmt(totals.total, 0);
+    tfoot.style.display = '';
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // VP ABSOLUTE — show raw CAPA in VP% column tooltip
+  // ══════════════════════════════════════════════════════════════
+  // (applied inline in renderInfluenceTable rows below)
+
+  // ══════════════════════════════════════════════════════════════
+  // CAPA DISTRIBUTION DONUT CHART
+  // ══════════════════════════════════════════════════════════════
+  function buildDistributionChart() {
+    const modal = document.getElementById('dist-chart-modal');
+    if (modal) modal.style.display = 'flex';
+
+    // Gather data from all sources
+    const daodaoTotal  = allMembers.reduce((s, m) => s + m.capa, 0);
+    const govTotal     = govStakers.reduce((s, g) => s + g.capa, 0);
+    const lpDirect     = tlaLpData.filter(l => !CAPA_BLACKLIST.has(l.address)).reduce((s, l) => s + l.capa, 0);
+    const lpIncentive  = incStakerData.filter(l => !CAPA_BLACKLIST.has(l.address)).reduce((s, l) => s + l.capa, 0);
+    const liquidWhales = whaleData.reduce((s, w) => s + (w.liquid||0), 0);
+
+    // Protocol contract known amounts (from last scan)
+    const TOTAL_SUPPLY = 500000000;
+    const known = daodaoTotal + govTotal + lpDirect + lpIncentive + liquidWhales;
+    const untracked = Math.max(0, TOTAL_SUPPLY - known - 657000000 - 172000000 - 243700000);
+    // 657M roughly in protocol contracts
+
+    const segments = [
+      { label: 'DAODAO (ampCAPA)', value: daodaoTotal, color: '#a855f7' },
+      { label: 'Direct Gov',      value: govTotal,     color: '#38bdf8' },
+      { label: 've3 LP Stakers',  value: lpIncentive,  color: '#f59e0b' },
+      { label: 'Direct LP',       value: lpDirect,     color: '#fb923c' },
+      { label: 'Liquid Whales',   value: liquidWhales, color: '#f87171' },
+      { label: 'Protocol/Other',  value: 643700000,    color: '#374151' },
+    ].filter(s => s.value > 0);
+
+    const total = segments.reduce((s, seg) => s + seg.value, 0);
+
+    // Build SVG donut
+    const cx = 120, cy = 120, r = 90, stroke = 40;
+    let startAngle = -Math.PI / 2;
+    let paths = '';
+    segments.forEach(seg => {
+      const angle = (seg.value / total) * 2 * Math.PI;
+      const x1 = cx + r * Math.cos(startAngle);
+      const y1 = cy + r * Math.sin(startAngle);
+      const x2 = cx + r * Math.cos(startAngle + angle);
+      const y2 = cy + r * Math.sin(startAngle + angle);
+      const large = angle > Math.PI ? 1 : 0;
+      paths += `<path d="M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} Z"
+                      fill="${seg.color}" opacity="0.85" />`;
+      startAngle += angle;
+    });
+
+    // Cutout
+    paths += `<circle cx="${cx}" cy="${cy}" r="${r - stroke}" fill="#111318"/>`;
+
+    const legendItems = segments.map(seg =>
+      `<div style="display:flex;align-items:center;gap:6px;font-size:10px;margin-bottom:4px;">
+        <div style="width:10px;height:10px;border-radius:2px;background:${seg.color};flex-shrink:0;"></div>
+        <span style="color:#b0a898;">${seg.label}</span>
+        <span style="color:#6b6557;margin-left:auto;">${(seg.value/1e6).toFixed(1)}M</span>
+        <span style="color:#4a4840;">(${(seg.value/total*100).toFixed(1)}%)</span>
+      </div>`
+    ).join('');
+
+    document.getElementById('dist-chart-inner').innerHTML = `
+      <div style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;">
+        <svg width="240" height="240" viewBox="0 0 240 240" style="flex-shrink:0;">${paths}
+          <text x="${cx}" y="${cy - 8}" text-anchor="middle" fill="#e8e4d9" font-size="13" font-weight="700">${(total/1e6).toFixed(1)}M</text>
+          <text x="${cx}" y="${cy + 10}" text-anchor="middle" fill="#6b6557" font-size="9">CAPA tracked</text>
+        </svg>
+        <div style="flex:1;min-width:200px;">${legendItems}</div>
+      </div>`;
+  }
+
+  function closeLookup() {
+    document.getElementById('addr-lookup-overlay').style.display = 'none';
+  }
+
+  // Close on overlay click
+  document.getElementById('addr-lookup-overlay')?.addEventListener('click', function(e) {
+    if (e.target === this) closeLookup();
+  });
+
+  // ══════════════════════════════════════════════════════════════
+  // ADDRESS LOOKUP
+  // ══════════════════════════════════════════════════════════════
+  async function runLookup() {
+    const addr = document.getElementById('lookup-input').value.trim();
+    const result = document.getElementById('lookup-result');
+    if (!addr.startsWith('terra1') || addr.length < 30) {
+      result.innerHTML = '<span style="color:#f87171">Enter a valid terra1 address</span>';
+      return;
+    }
+
+    result.innerHTML = '<span style="color:#6b6557">Searching all sources…</span>';
+
+    // Check all loaded data sources
+    const daodaoEntry  = allMembers.find(m => m.address === addr);
+    const govEntry     = govStakers.find(g => g.address === addr);
+    const lpDirectEntry= tlaLpData.find(l => l.address === addr);
+    const lpIncEntry   = incStakerData.find(l => l.address === addr);
+    const whaleEntry   = whaleData.find(w => w.address === addr);
+
+    // Try to query liquid CAPA directly if not in whale scan
+    let liquidCapa = whaleEntry?.liquid || 0;
+    if (!liquidCapa) {
+      try {
+        const LCD = activeLCD || 'https://terra.publicnode.com';
+        const q = btoa(JSON.stringify({balance:{address:addr}}));
+        const res = await fetch(`${LCD}/cosmwasm/wasm/v1/contract/${CAPA_TOKEN_CONTRACT}/smart/${q}`,
+          {headers:{Accept:'application/json'}});
+        if (res.ok) {
+          const d = await res.json();
+          liquidCapa = parseFloat(d.data?.balance || '0') / 1e6;
+        }
+      } catch(_) {}
+    }
+
+    const daodaoCapa  = daodaoEntry?.capa || 0;
+    const govCapa     = govEntry?.capa || 0;
+    const lpDirect    = lpDirectEntry?.capa || 0;
+    const lpInc       = lpIncEntry?.capa || 0;
+    const totalCapa   = daodaoCapa + govCapa + lpDirect + lpInc + liquidCapa;
+    const isProtocol  = PROTOCOL_CONTRACTS[addr];
+
+    const row = (label, value, color, note = '') => value > 0 ? `
+      <div style="display:flex;align-items:baseline;gap:8px;padding:6px 0;border-bottom:1px solid #1a1c22;">
+        <span style="color:#6b6557;font-size:10px;width:140px;flex-shrink:0;">${label}</span>
+        <span style="color:${color};font-weight:700;font-family:'Space Mono',monospace;">${fmt(value,2)}</span>
+        <span style="color:#4a4840;font-size:9px;margin-left:auto;">${note}</span>
+      </div>` : '';
+
+    const notLoadedNote = (name) => `<div style="color:#4a4840;font-size:9px;margin-top:4px;">
+      Load ${name} tab first for complete data</div>`;
+
+    result.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+        <a href="https://chainsco.pe/terra2/address/${addr}" target="_blank"
+           style="font-family:monospace;font-size:11px;color:#a855f7;text-decoration:none;">
+          ${addr}</a>
+        ${isProtocol ? `<span style="font-size:8px;background:rgba(99,102,241,0.15);color:#818cf8;border:1px solid rgba(99,102,241,0.3);border-radius:3px;padding:1px 5px;">${isProtocol}</span>` : ''}
+      </div>
+      ${row('DAODAO (ampCAPA LP)', daodaoCapa, '#a855f7', daodaoCapa ? `${((daodaoCapa / (allMembers.reduce((s,m)=>s+m.capa,0)||1))*100).toFixed(2)}% DAODAO VP` : '')}
+      ${row('Direct Gov Staked', govCapa, '#38bdf8', govEntry ? `${govEntry.vpPct?.toFixed(2)||0}% gov VP` : '')}
+      ${row('LP: Direct (wallet)', lpDirect, '#fb923c', lpDirectEntry ? `${lpDirectEntry.poolPct?.toFixed(3)||0}% pool` : '')}
+      ${row('LP: Incentivized (ve3)', lpInc, '#f59e0b', lpIncEntry ? `${lpIncEntry.poolPct?.toFixed(3)||0}% pool` : '')}
+      ${row('Liquid CAPA (CW20)', liquidCapa, '#e8e4d9')}
+      ${totalCapa > 0 ? `
+        <div style="display:flex;align-items:baseline;gap:8px;padding:8px 0;margin-top:4px;">
+          <span style="color:#b0a898;font-size:10px;width:140px;flex-shrink:0;">TOTAL CAPA</span>
+          <span style="color:#e8e4d9;font-weight:700;font-size:14px;font-family:'Space Mono',monospace;">${fmt(totalCapa,2)}</span>
+        </div>` : '<div style="color:#6b6557;padding:12px 0;">No CAPA found for this address in loaded data.</div>'}
+      ${!allMembers.length ? notLoadedNote('DAO Members') : ''}
+      ${!govStakers.length ? notLoadedNote('CAPA Governance') : ''}
+      ${!tlaLpData.length  ? notLoadedNote('CAPA in TLA LP') : ''}`;
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // DIRECT ASTROPORT LP STAKERS (terra17k9 fix)
+  // ══════════════════════════════════════════════════════════════
+  async function loadDirectAstroStakers() {
+    // Query Astroport Incentives pool_stakers, exclude ve3 contract
+    try {
+      const LCD = activeLCD || 'https://terra.publicnode.com';
+      let startAfter = null, pages = 0;
+      const daodaoMap = {};
+      for (const m of allMembers)  daodaoMap[m.address] = (daodaoMap[m.address]||0) + m.capa;
+      const govMap = {};
+      for (const g of govStakers)  govMap[g.address] = (govMap[g.address]||0) + g.capa;
+
+      const poolStats = tlaLpPoolStats?.totalShare ? tlaLpPoolStats : await fetchLpPoolStats();
+      const { capaPerLp, lunaPerLp, totalShare } = poolStats;
+
+      while (pages < 10) {
+        pages++;
+        const q = { pool_stakers: { lp_token: CAPA_LUNA_LP_TOKEN, limit: 100 } };
+        if (startAfter) q.pool_stakers.start_after = startAfter;
+        const url = `${LCD}/cosmwasm/wasm/v1/contract/${ASTRO_INCENTIVES}/smart/${b64(q)}`;
+        const res  = await fetch(url, {headers:{Accept:'application/json'}});
+        if (!res.ok) break;
+        const data = await res.json();
+        const stakers = data.data || [];
+
+        for (const [addr, lpRawStr] of stakers) {
+          if (addr === VE3_ASSET_STAKING) { startAfter = addr; continue; } // skip ve3 contract
+          if (incStakerData.find(l => l.address === addr)) { startAfter = addr; continue; } // already in ve3
+          const lpRaw = parseFloat(lpRawStr);
+          const capa  = (lpRaw * capaPerLp) / 1e6;
+          const luna  = (lpRaw * lunaPerLp) / 1e6;
+          const poolPct = (lpRaw / totalShare) * 100;
+          incStakerData.push({
+            address: addr, lpBalance: lpRaw/1e6, capa, luna,
+            poolPct: parseFloat(poolPct.toFixed(4)),
+            inDaodao: (daodaoMap[addr]||0) > 0,
+            inGov:    (govMap[addr]||0)    > 0,
+            daodaoCapa: daodaoMap[addr]||0, govCapa: govMap[addr]||0,
+          });
+          startAfter = addr;
+        }
+        if (stakers.length < 100) break;
+      }
+      incStakerData.sort((a, b) => b.capa - a.capa);
+      buildUnifiedLpTable();
+    } catch(_) {}
+  }
+
 </script>
+
+  <!-- DISTRIBUTION CHART MODAL -->
+  <div id="dist-chart-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;
+       background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;"
+       onclick="if(event.target===this)this.style.display='none'">
+    <div style="background:#111318;border:1px solid #2a2028;border-radius:14px;padding:28px 32px;
+                width:min(600px,92vw);position:relative;">
+      <button onclick="document.getElementById('dist-chart-modal').style.display='none'"
+              style="position:absolute;top:14px;right:16px;background:none;border:none;color:#6b6557;font-size:18px;cursor:pointer;">✕</button>
+      <div style="font-size:9px;color:#a855f7;letter-spacing:2px;text-transform:uppercase;font-weight:700;margin-bottom:16px;">
+        CAPA Distribution
+      </div>
+      <div id="dist-chart-inner"></div>
+      <div style="font-size:9px;color:#4a4840;margin-top:12px;">Based on loaded data. Load all tabs for complete picture.</div>
+    </div>
+  </div>
+
+  <!-- ADDRESS LOOKUP MODAL -->
+  <div id="addr-lookup-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;
+       background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;"
+       onclick="if(event.target===this)this.style.display='none'">
+    <div style="background:#111318;border:1px solid #2a2028;border-radius:14px;padding:28px 32px;
+                width:min(640px,92vw);max-height:80vh;overflow-y:auto;position:relative;">
+      <button onclick="closeLookup()" style="position:absolute;top:14px;right:16px;background:none;
+              border:none;color:#6b6557;font-size:18px;cursor:pointer;">✕</button>
+      <div style="font-size:9px;color:#a855f7;letter-spacing:2px;text-transform:uppercase;font-weight:700;margin-bottom:10px;">
+        Address Lookup
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:16px;">
+        <input id="lookup-input" type="text" placeholder="terra1…"
+          style="flex:1;background:#0d0f14;border:1px solid #1e2028;border-radius:6px;
+                 color:#e8e4d9;font-family:'Space Mono',monospace;font-size:11px;padding:9px 12px;"
+          onkeydown="if(event.key==='Enter') runLookup()" />
+        <button class="btn" onclick="runLookup()" style="padding:9px 18px;">LOOK UP</button>
+      </div>
+      <div id="lookup-result" style="font-size:11px;"></div>
+    </div>
+  </div>
+
 </body>
 </html>
