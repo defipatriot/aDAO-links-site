@@ -249,7 +249,27 @@
     <script>
         const TLA_URL = 'https://raw.githubusercontent.com/defipatriot/tla_json_storage/main';
         const PROPS_URL = 'https://raw.githubusercontent.com/defipatriot/adao_json_storage/main/adao_props.json';
-        const AVAILABLE_EPOCHS = [165, 166];
+        
+        // Dynamically compute the list of epochs to probe.
+        // Anchor: epoch 162 = Dec 1, 2025; each epoch is 1 week.
+        // Probe from the anchor up to currentEpoch+1. fetchEpoch() handles 404s gracefully,
+        // so missing files are skipped without errors.
+        function computeCurrentEpoch() {
+            const refDate = new Date('2025-12-01T00:00:00Z');
+            const refEpoch = 162;
+            const msPerWeek = 7 * 24 * 60 * 60 * 1000;
+            const weeksDiff = Math.floor((Date.now() - refDate.getTime()) / msPerWeek);
+            return refEpoch + weeksDiff;
+        }
+        function buildAvailableEpochs() {
+            const refEpoch = 162;
+            const currentEpoch = computeCurrentEpoch();
+            const epochs = [];
+            for (let e = refEpoch; e <= currentEpoch + 1; e++) epochs.push(e);
+            return epochs;
+        }
+        const AVAILABLE_EPOCHS = buildAvailableEpochs();
+        const CURRENT_EPOCH = computeCurrentEpoch();
         const COLORS = {LUNA:'#ffd83d',ampLUNA:'#2dd4bf',CAPA:'#6366f1',ampCAPA:'#818cf8',ROAR:'#f59e0b',ampROAR:'#d97706',xASTRO:'#a78bfa'};
         
         let currentData=null, compareData=null, tokenPrices={}, lpPositions=[], tokenBalances=[], history=[], chart=null;
@@ -345,12 +365,13 @@
                 });
             });
             
-            // Sort by date, most recent first
+            // Sort newest-first by numeric proposal ID. Same approach as dao_treasury.html:
+            // IDs are sequential and monotonic with creation time, so this works reliably
+            // even for props whose executedAt hasn't yet been populated by the registry script.
             props.sort((a, b) => {
-                if (a.executedAt && b.executedAt) {
-                    return new Date(b.executedAt) - new Date(a.executedAt);
-                }
-                return (b.epoch || 0) - (a.epoch || 0);
+                const aId = parseInt(String(a.id).replace(/\D/g, ''), 10) || 0;
+                const bId = parseInt(String(b.id).replace(/\D/g, ''), 10) || 0;
+                return bId - aId;
             });
             
             return props;
@@ -414,7 +435,9 @@
         // Fetch DAO proposals
         async function fetchDaoProps() {
             try {
-                const r = await fetch(PROPS_URL);
+                // Cache-buster ensures freshly uploaded adao_props.json is picked up
+                // without waiting for GitHub raw / browser cache to expire.
+                const r = await fetch(`${PROPS_URL}?t=${Date.now()}`);
                 if (r.ok) {
                     const data = await r.json();
                     daoProps = data.proposals || {};
@@ -854,7 +877,7 @@
             
             document.getElementById('epoch-badge').textContent=`E${compareData?.meta?.epoch||'--'} → ${currentData.meta?.epoch||'--'}`;
             
-            const actualCurrent=167;
+            const actualCurrent=CURRENT_EPOCH;
             if(actualCurrent>(currentData.meta?.epoch||0)){
                 document.getElementById('live-note').classList.remove('hidden');
                 document.getElementById('current-epoch').textContent=actualCurrent;
