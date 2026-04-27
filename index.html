@@ -1480,8 +1480,8 @@
                         <!-- Current VP -->
                         <div class="text-center">
                             <p class="text-sm text-gray-400 mb-1">Current VP (Static)</p>
-                            <p class="text-3xl font-bold text-white">638,880</p>
-                            <p class="text-xs text-gray-500">Locked Sep 7, 2025</p>
+                            <p id="vp-current-total" class="text-3xl font-bold text-white">--</p>
+                            <p id="vp-lock-date" class="text-xs text-gray-500">--</p>
                         </div>
                         
                         <!-- Arrow & Gain -->
@@ -1518,7 +1518,7 @@
                             <div id="vp-potential-bar" class="absolute h-full bg-green-500/30 border-r-2 border-green-400 rounded-full transition-all duration-500" style="width: 100%"></div>
                             <!-- Labels on bar -->
                             <div class="absolute inset-0 flex items-center justify-between px-3 text-xs font-bold">
-                                <span class="text-white">638.9K</span>
+                                <span id="vp-bar-current" class="text-white">--</span>
                                 <span id="vp-bar-potential" class="text-green-300">--</span>
                             </div>
                         </div>
@@ -4649,6 +4649,8 @@ est. APR 58.53 %"></textarea>
                  const contractUrl = `https://terra.publicnode.com/cosmwasm/wasm/v1/contract/terra1phr9fngjv7a8an4dhmhd0u0f98wazxfnzccqtyheq4zqrrp4fpuqw3apw9/smart/${contractRewardsQuery}`;
                  const ampLunaRateQuery = btoa(JSON.stringify({ exchange_rates: {} }));
                  const ampLunaRateUrl = `https://terra.publicnode.com/cosmwasm/wasm/v1/contract/terra10788fkzah89xrdm27zkj5yvhj9x3494lxawzm5qq3vvxcqz2yzaqyd3enk/smart/${ampLunaRateQuery}`;
+                 const arbLunaRateQuery = btoa(JSON.stringify({ state: {} }));
+                 const arbLunaRateUrl = `https://terra.publicnode.com/cosmwasm/wasm/v1/contract/terra1r9gls56glvuc4jedsvc3uwh6vj95mqm9efc7hnweqxa2nlme5cyqxygy5m/smart/${arbLunaRateQuery}`;
                  const treasuryWalletAddress = 'terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm';
                  const nativeBalancesUrl = `https://terra.publicnode.com/cosmos/bank/v1beta1/balances/${treasuryWalletAddress}`;
                  const neededGeckoIds = new Set(['terra-luna-2', 'eris-amplified-luna']);
@@ -4677,10 +4679,11 @@ est. APR 58.53 %"></textarea>
                     // Start LST ratios fetch early (runs in parallel with primary APIs)
                     const lstRatiosPromise = loadLstRatiosFromExt();
                     
-                    const [statsResponse, contractResponse, ampLunaRateResponse, priceResponse] = await Promise.all([ /* ... fetches ... */ 
+                    const [statsResponse, contractResponse, ampLunaRateResponse, arbLunaRateResponse, priceResponse] = await Promise.all([ /* ... fetches ... */ 
                         fetch(onChainStatsUrl).catch(e => { console.error("Stats Fetch Error:", e); return null; }),
                         fetch(contractUrl).catch(e => { console.error("Contract Fetch Error:", e); return null; }),
                         fetch(ampLunaRateUrl).catch(e => { console.error("ampLUNA Rate Fetch Error:", e); return null; }),
+                        fetch(arbLunaRateUrl).catch(e => { console.error("arbLUNA Rate Fetch Error:", e); return null; }),
                         fetch(priceUrl).catch(e => { console.error("Price Fetch Error:", e); return null; })
                     ]);
                     console.log("DEBUG: Primary API fetches completed."); 
@@ -4770,6 +4773,36 @@ est. APR 58.53 %"></textarea>
                             ampLunaDisplay.className = 'block text-green-400 font-mono';
                         }
                     } 
+
+                    // Live arbLUNA rate fetch (Eris arb-vault contract).
+                    // Optional - failure falls back to TLA ext file or hardcoded default.
+                    // Note: arbLUNA uses {state:{}} query and returns data.exchange_rate (single value),
+                    // unlike ampLUNA which uses {exchange_rates:{}} returning data.exchange_rates[0][1].
+                    try {
+                        if (arbLunaRateResponse?.ok) {
+                            const arbLunaRateData = await arbLunaRateResponse.json();
+                            const arbLunaToLunaRate = parseFloat(arbLunaRateData?.data?.exchange_rate);
+                            if (!isNaN(arbLunaToLunaRate) && arbLunaToLunaRate > 0) {
+                                window.cachedArbLunaRate = arbLunaToLunaRate;
+                                if (window.lstRatios) {
+                                    window.lstRatios.arbLUNA = arbLunaToLunaRate;
+                                    window.lstRatios.ratioSources.arbLUNA = 'live';
+                                    const arbLunaDisplay = document.getElementById('lst-ratio-display-arbLUNA');
+                                    if (arbLunaDisplay) {
+                                        arbLunaDisplay.textContent = arbLunaToLunaRate.toFixed(4) + ' ✓';
+                                        arbLunaDisplay.className = 'block text-green-400 font-mono';
+                                    }
+                                }
+                                console.log("DEBUG: arbLUNA live rate OK:", arbLunaToLunaRate);
+                            } else {
+                                console.warn("DEBUG: arbLUNA rate parse returned invalid value, using fallback");
+                            }
+                        } else {
+                            console.warn("DEBUG: arbLUNA rate response not ok, using fallback");
+                        }
+                    } catch (arbErr) {
+                        console.warn("DEBUG: arbLUNA live rate fetch failed (using fallback):", arbErr);
+                    }
 
                     // --- Calculations for Snapshot & UI ---
                     const daodaoStakers = nfts.filter(nft => nft.daodao === true);
@@ -6256,9 +6289,10 @@ est. APR 58.53 %"></textarea>
                     const currentEpoch = await getCurrentEpoch();
                     tlaDataMeta.currentEpoch = currentEpoch;
                     
-                    // For TLA data, we want previous epoch (completed) since current is in progress
-                    // Try: previous epoch first (most recent completed), then go back further
-                    const epochsToTry = [currentEpoch - 1, currentEpoch - 2, currentEpoch - 3];
+                    // Try newest first: currentEpoch+1 (just in case), currentEpoch (uploaded early),
+                    // currentEpoch-1 (typical: last completed), then fall back to older epochs.
+                    // This ensures a freshly uploaded epoch file is picked up immediately.
+                    const epochsToTry = [currentEpoch + 1, currentEpoch, currentEpoch - 1, currentEpoch - 2, currentEpoch - 3];
                     
                     for (let i = 0; i < epochsToTry.length; i++) {
                         const tryEpoch = epochsToTry[i];
@@ -6268,16 +6302,19 @@ est. APR 58.53 %"></textarea>
                             if (response.ok) {
                                 cachedTlaData = await response.json();
                                 tlaDataMeta.loadedEpoch = tryEpoch;
-                                tlaDataMeta.epochsOld = i; // 0 = previous epoch (expected), 1+ = stale
-                                tlaDataMeta.isStale = i > 0; // Stale if we had to go back more than 1
-                                console.log(`TLA Data loaded from epoch ${tryEpoch} (${i > 0 ? 'STALE - ' + i + ' epochs old' : 'current'})`);
+                                // epochsBehind: how far behind currentEpoch-1 (the expected "last completed") we are.
+                                // Negative = ahead (very fresh), 0 = expected, positive = stale.
+                                const epochsBehind = (currentEpoch - 1) - tryEpoch;
+                                tlaDataMeta.epochsOld = epochsBehind;
+                                tlaDataMeta.isStale = epochsBehind > 0;
+                                console.log(`TLA Data loaded from epoch ${tryEpoch} (${tlaDataMeta.isStale ? 'STALE - ' + epochsBehind + ' epochs old' : 'current'})`);
                                 return cachedTlaData;
                             }
                         } catch (e) {
                             continue; // Try next epoch
                         }
                     }
-                    throw new Error('TLA data not found in last 3 epochs');
+                    throw new Error('TLA data not found in nearby epochs');
                 } catch (error) {
                     console.error('Failed to fetch TLA data:', error);
                     return null;
@@ -6635,10 +6672,36 @@ est. APR 58.53 %"></textarea>
                     const currentBarEl = document.getElementById('vp-current-bar');
                     const potentialBarEl = document.getElementById('vp-potential-bar');
                     const barPotentialEl = document.getElementById('vp-bar-potential');
+                    const currentTotalEl = document.getElementById('vp-current-total');
+                    const lockDateEl = document.getElementById('vp-lock-date');
+                    const barCurrentEl = document.getElementById('vp-bar-current');
                     
                     if (potentialGainEl) potentialGainEl.textContent = `+${vpGain.toLocaleString()} VP`;
                     if (potentialGainPctEl) potentialGainPctEl.textContent = `+${vpGainPct}%`;
                     if (potentialTotalEl) potentialTotalEl.textContent = potentialVp.toLocaleString();
+                    
+                    // Update Current VP (Static) value + subtitle from the loaded TLA file
+                    if (currentTotalEl) currentTotalEl.textContent = Math.round(totalStaticVp).toLocaleString();
+                    if (barCurrentEl) barCurrentEl.textContent = (totalStaticVp / 1000).toFixed(1) + 'K';
+                    if (lockDateEl) {
+                        const epochNum = tlaData?.meta?.epoch;
+                        const lastUpdated = tlaData?.meta?.site_status?.last_updated;
+                        let subtitle = '';
+                        if (epochNum) subtitle += `Epoch ${epochNum}`;
+                        if (lastUpdated) {
+                            const parts = String(lastUpdated).split('-');
+                            if (parts.length === 3) {
+                                const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                                const y = parseInt(parts[0], 10);
+                                const m = parseInt(parts[1], 10);
+                                const d = parseInt(parts[2], 10);
+                                if (months[m-1] && d && y) {
+                                    subtitle += (subtitle ? ' · ' : '') + `${months[m-1]} ${d}, ${y}`;
+                                }
+                            }
+                        }
+                        lockDateEl.textContent = subtitle || '--';
+                    }
                     
                     // Update progress bars
                     if (currentBarEl && potentialBarEl) {
