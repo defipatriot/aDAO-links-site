@@ -199,7 +199,7 @@
                 <!-- Right: Token Changes -->
                 <div class="bg-gray-800/20 rounded-lg p-3">
                     <p class="text-xs font-medium text-white mb-2"><i class="fas fa-chart-bar text-yellow-400 mr-1"></i>Token Changes <span class="text-gray-500 text-[10px]">(price | amt | value)</span></p>
-                    <div id="price-changes-list" class="space-y-0.5 text-xs max-h-48 overflow-y-auto">
+                    <div id="price-changes-list" class="space-y-0.5 text-xs max-h-48 overflow-y-auto pr-3">
                         <div class="text-gray-500">Loading...</div>
                     </div>
                 </div>
@@ -210,11 +210,18 @@
         
         <!-- Balance History Chart - Full Width Below Summary Cards -->
         <div class="stat-card rounded-xl p-4 mb-6">
-            <div class="flex items-center justify-between mb-4">
-                <h2 class="text-lg font-bold text-white">
-                    <i class="fas fa-chart-line text-green-400 mr-2"></i>Balance History
-                    <span id="chart-epoch-count" class="text-xs text-gray-500 font-normal ml-2"></span>
-                </h2>
+            <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+                <div class="flex items-center gap-3 flex-wrap">
+                    <h2 class="text-lg font-bold text-white">
+                        <i class="fas fa-chart-line text-green-400 mr-2"></i>Balance History
+                        <span id="chart-epoch-count" class="text-xs text-gray-500 font-normal ml-2"></span>
+                    </h2>
+                    <div id="chart-range-tabs" class="items-center gap-1" style="display: none;">
+                        <button data-range="30d" class="range-btn px-2.5 py-1 text-xs rounded bg-gray-800 text-gray-400 hover:bg-gray-700 transition-colors">30d</button>
+                        <button data-range="90d" class="range-btn px-2.5 py-1 text-xs rounded bg-cyan-600 text-white transition-colors">90d</button>
+                        <button data-range="180d" class="range-btn px-2.5 py-1 text-xs rounded bg-gray-800 text-gray-400 hover:bg-gray-700 transition-colors">180d</button>
+                    </div>
+                </div>
                 <div id="chart-token-badge" class="text-sm text-gray-400 hidden">
                     Showing: <span id="chart-token-name" class="text-cyan-400 font-medium">--</span>
                 </div>
@@ -240,7 +247,7 @@
                         <p id="stat-current" class="text-lg font-bold text-white">--</p>
                     </div>
                     <div class="bg-gray-800/50 rounded-lg p-3">
-                        <p class="text-xs text-gray-500">Change (30d)</p>
+                        <p id="stat-change-label" class="text-xs text-gray-500">Change (90d)</p>
                         <p id="stat-change" class="text-lg font-bold text-green-400">--</p>
                     </div>
                     <div class="bg-gray-800/50 rounded-lg p-3">
@@ -426,6 +433,7 @@
         let historicalSnapshots = [];
         let balanceChart = null;
         let selectedToken = null;
+        let selectedRange = '90d'; // Time range for balance chart: '30d', '90d', '180d'
         let currentTlaData = null;
         let currentView = 'treasury'; // 'treasury', 'staked', 'council', 'total'
         let daoProps = {}; // DAO proposals with treasury impact
@@ -514,7 +522,9 @@
         // Fetch DAO proposals
         async function fetchDaoProps() {
             try {
-                const response = await fetch(PROPS_URL);
+                // Append timestamp cache-buster so freshly uploaded adao_props.json is picked up
+                // immediately, bypassing any GitHub raw / browser cache.
+                const response = await fetch(`${PROPS_URL}?t=${Date.now()}`);
                 if (response.ok) {
                     const data = await response.json();
                     daoProps = data.proposals || {};
@@ -657,6 +667,28 @@
             });
             
             return { received, sent, netByToken };
+        }
+        
+        // Filter chart data points to only those within the selected time range.
+        // Range '30d'/'90d'/'180d' = days back from now. Anything else returns all points.
+        function applyRangeFilter(dataPoints, range) {
+            const daysMap = { '30d': 30, '90d': 90, '180d': 180 };
+            const days = daysMap[range];
+            if (!days) return dataPoints;
+            const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+            return dataPoints.filter(d => d.x.getTime() >= cutoff);
+        }
+        
+        // Find executed proposals that touched the given token between fromDate and toDate.
+        // Used to mark prop-event points on the balance chart.
+        function getPropsAffectingTokenInRange(tokenName, fromDate, toDate) {
+            const normalizedTarget = normalizeToken(tokenName);
+            return getExecutedPropsWithImpact().filter(prop => {
+                if (!prop.executedAt) return false;
+                const propDate = new Date(prop.executedAt);
+                if (propDate <= fromDate || propDate > toDate) return false;
+                return Object.keys(prop.netByToken || {}).some(t => normalizeToken(t) === normalizedTarget);
+            });
         }
         
         // ==================== View Switching ====================
@@ -988,12 +1020,14 @@
             
             countEl.textContent = `${propsWithImpact.length} total`;
             
-            // Sort by executedAt date (most recent first), fallback to block
+            // Sort newest-first by numeric proposal ID. IDs are sequential (a1, a2, ..., A33)
+            // and monotonic with creation time, so this works reliably even for newly-added
+            // props that don't yet have executedAt or executionTx.block populated by the
+            // upstream registry build script.
             propsWithImpact.sort((a, b) => {
-                if (a.executedAt && b.executedAt) {
-                    return new Date(b.executedAt) - new Date(a.executedAt);
-                }
-                return (b.block || 0) - (a.block || 0);
+                const aId = parseInt(String(a.id).replace(/\D/g, ''), 10) || 0;
+                const bId = parseInt(String(b.id).replace(/\D/g, ''), 10) || 0;
+                return bId - aId;
             });
             
             // Render last 10
@@ -1561,6 +1595,10 @@
             document.getElementById('chart-token-badge').classList.remove('hidden');
             document.getElementById('chart-token-name').textContent = `${positionName} (Staked)`;
             
+            // Hide range tabs (not applicable to staked-position view)
+            const rangeTabs = document.getElementById('chart-range-tabs');
+            if (rangeTabs) rangeTabs.style.display = 'none';
+            
             // For staked positions, show the position details instead of a chart for now
             renderStakedPositionChart(positionName);
         }
@@ -1978,6 +2016,10 @@
             document.getElementById('chart-token-badge').classList.remove('hidden');
             document.getElementById('chart-token-name').textContent = `${tokenName} (${walletType === 'dao' ? 'DAO' : 'Council'})`;
             
+            // Show range tabs (only relevant for token balance charts)
+            const rangeTabs = document.getElementById('chart-range-tabs');
+            if (rangeTabs) rangeTabs.style.display = 'flex';
+            
             renderBalanceChart(tokenName, walletType);
         }
         
@@ -2020,14 +2062,34 @@
             
             console.log(`Found ${dataPoints.length} data points for ${tokenName}`);
             
-            // Update epoch count display
-            const epochCount = dataPoints.filter(d => d.epoch !== 'Live').length;
-            if (epochCountEl) {
-                epochCountEl.textContent = `(${epochCount} epochs${dataPoints.some(d => d.epoch === 'Live') ? ' + Live' : ''})`;
+            // Apply selected time range filter (30d / 90d / 180d).
+            // Stats and the chart only consider the filtered subset.
+            const filteredPoints = applyRangeFilter(dataPoints, selectedRange);
+            
+            // Annotate each filtered point with proposals that affected this token
+            // between the previous point's date and this point's date.
+            // For the first filtered point, look back to the earliest available data point
+            // so prop activity that happened just outside the visible range is still captured.
+            const earliestDate = dataPoints.length > 0 ? dataPoints[0].x : new Date(0);
+            for (let i = 0; i < filteredPoints.length; i++) {
+                const fromDate = i > 0 ? filteredPoints[i - 1].x : earliestDate;
+                const toDate = filteredPoints[i].x;
+                filteredPoints[i].propEvents = getPropsAffectingTokenInRange(tokenName, fromDate, toDate);
             }
             
-            if (dataPoints.length < 1) {
-                // No data at all
+            // Update Change label to match selected range
+            const labelMap = { '30d': 'Change (30d)', '90d': 'Change (90d)', '180d': 'Change (180d)' };
+            const labelEl = document.getElementById('stat-change-label');
+            if (labelEl) labelEl.textContent = labelMap[selectedRange] || 'Change';
+            
+            // Update epoch count display (based on what's actually shown)
+            const epochCount = filteredPoints.filter(d => d.epoch !== 'Live').length;
+            if (epochCountEl) {
+                epochCountEl.textContent = `(${epochCount} epochs${filteredPoints.some(d => d.epoch === 'Live') ? ' + Live' : ''})`;
+            }
+            
+            if (filteredPoints.length < 1) {
+                // No data in selected range
                 chartWrapper.classList.add('hidden');
                 noHistoryMsg.classList.remove('hidden');
                 if (epochCountEl) epochCountEl.textContent = '';
@@ -2037,18 +2099,18 @@
             chartWrapper.classList.remove('hidden');
             noHistoryMsg.classList.add('hidden');
             
-            // Calculate stats
-            const currentBalance = dataPoints[dataPoints.length - 1].y;
-            const oldestBalance = dataPoints.length > 1 ? dataPoints[0].y : currentBalance;
+            // Calculate stats over filtered range
+            const currentBalance = filteredPoints[filteredPoints.length - 1].y;
+            const oldestBalance = filteredPoints.length > 1 ? filteredPoints[0].y : currentBalance;
             const change = currentBalance - oldestBalance;
             const changePercent = oldestBalance > 0 ? (change / oldestBalance * 100) : 0;
-            const avgWeeklyGain = dataPoints.length > 1 ? change / (dataPoints.length - 1) : 0;
+            const avgWeeklyGain = filteredPoints.length > 1 ? change / (filteredPoints.length - 1) : 0;
             
             // Update stats display
             document.getElementById('stat-current').textContent = currentBalance.toLocaleString(undefined, { maximumFractionDigits: 2 });
             
             const changeEl = document.getElementById('stat-change');
-            if (dataPoints.length > 1) {
+            if (filteredPoints.length > 1) {
                 changeEl.textContent = `${change >= 0 ? '+' : ''}${change.toLocaleString(undefined, { maximumFractionDigits: 2 })} (${changePercent.toFixed(1)}%)`;
                 changeEl.className = `text-lg font-bold ${change >= 0 ? 'text-green-400' : 'text-red-400'}`;
             } else {
@@ -2056,7 +2118,7 @@
                 changeEl.className = 'text-lg font-bold text-gray-500';
             }
             
-            document.getElementById('stat-avg').textContent = dataPoints.length > 1 
+            document.getElementById('stat-avg').textContent = filteredPoints.length > 1 
                 ? `${avgWeeklyGain >= 0 ? '+' : ''}${avgWeeklyGain.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
                 : 'N/A';
             
@@ -2075,15 +2137,16 @@
                 data: {
                     datasets: [{
                         label: tokenName + ' Balance',
-                        data: dataPoints,
+                        data: filteredPoints,
                         borderColor: color,
                         backgroundColor: color + '20',
                         fill: true,
                         tension: 0.3,
-                        pointRadius: 4,
-                        pointHoverRadius: 6,
-                        pointBackgroundColor: color,
-                        pointBorderColor: '#1a1a1a',
+                        // Highlight points that line up with one or more proposals affecting this token
+                        pointRadius: filteredPoints.map(d => (d.propEvents && d.propEvents.length > 0) ? 7 : 4),
+                        pointHoverRadius: filteredPoints.map(d => (d.propEvents && d.propEvents.length > 0) ? 9 : 6),
+                        pointBackgroundColor: filteredPoints.map(d => (d.propEvents && d.propEvents.length > 0) ? '#fbbf24' : color),
+                        pointBorderColor: filteredPoints.map(d => (d.propEvents && d.propEvents.length > 0) ? '#ffffff' : '#1a1a1a'),
                         pointBorderWidth: 2
                     }]
                 },
@@ -2119,13 +2182,29 @@
                                     
                                     // Show change from previous point
                                     if (idx > 0) {
-                                        const prevValue = dataPoints[idx - 1].y;
+                                        const prevValue = filteredPoints[idx - 1].y;
                                         const diff = value - prevValue;
                                         const pctDiff = prevValue > 0 ? ((diff / prevValue) * 100) : 0;
                                         const sign = diff >= 0 ? '+' : '';
                                         label += ` (${sign}${diff.toLocaleString(undefined, { maximumFractionDigits: 2 })} | ${sign}${pctDiff.toFixed(1)}%)`;
                                     }
                                     return label;
+                                },
+                                afterBody: function(items) {
+                                    // List any executed proposals that affected this token
+                                    // between the previous point and this point.
+                                    const idx = items[0].dataIndex;
+                                    const events = filteredPoints[idx]?.propEvents;
+                                    if (!events || events.length === 0) return null;
+                                    const lines = ['', '⚑ Proposal events:'];
+                                    events.forEach(p => {
+                                        const idStr = String(p.id);
+                                        const finalId = (idStr.toUpperCase().startsWith('A')) ? idStr : 'A' + idStr;
+                                        const rawTitle = p.title || '';
+                                        const title = rawTitle.length > 50 ? rawTitle.slice(0, 50) + '…' : rawTitle;
+                                        lines.push(`• ${finalId}: ${title}`);
+                                    });
+                                    return lines;
                                 }
                             }
                         }
@@ -2311,6 +2390,30 @@
             console.log(`DAO Assets: ${daoAssets.length}, Staked Positions: ${stakedPositions.length}, Council Assets: ${councilAssets.length}`);
             console.log(`Historical snapshots: ${historicalSnapshots.length}`);
         }
+        
+        // Wire up range-tab clicks (30d / 90d / 180d).
+        // Updates active styling and re-renders the chart for the currently selected token.
+        document.querySelectorAll('#chart-range-tabs .range-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const range = btn.dataset.range;
+                if (!range || range === selectedRange) return;
+                selectedRange = range;
+                
+                // Update active button styling
+                document.querySelectorAll('#chart-range-tabs .range-btn').forEach(b => {
+                    if (b.dataset.range === selectedRange) {
+                        b.className = 'range-btn px-2.5 py-1 text-xs rounded bg-cyan-600 text-white transition-colors';
+                    } else {
+                        b.className = 'range-btn px-2.5 py-1 text-xs rounded bg-gray-800 text-gray-400 hover:bg-gray-700 transition-colors';
+                    }
+                });
+                
+                // Re-render chart only if a token chart (not a staked position) is currently shown
+                if (selectedToken && (selectedToken.wallet === 'dao' || selectedToken.wallet === 'council')) {
+                    renderBalanceChart(selectedToken.name, selectedToken.wallet);
+                }
+            });
+        });
         
         // Start
         init();
