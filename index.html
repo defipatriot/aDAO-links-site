@@ -686,7 +686,7 @@
              
              <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                  <!-- Deposit Rewards -->
-                 <div id="deposit-rewards-section" class="bg-gray-800/50 p-4 rounded-lg cursor-pointer hover:bg-gray-700/50 transition-colors group">
+                 <div id="deposit-rewards-section" class="bg-gray-800/50 p-4 rounded-lg transition-colors group">
                      <div class="flex justify-between items-start mb-2">
                          <h4 class="text-sm font-bold text-green-400"><i class="fas fa-piggy-bank mr-1"></i> Deposit Rewards</h4>
                          <button id="deposit-rewards-chart-btn" type="button" class="text-gray-500 hover:text-cyan-400 text-xs transition-colors" title="View chart history">
@@ -702,7 +702,7 @@
                  </div>
                  
                  <!-- Vote Rewards -->
-                 <div id="vote-rewards-section" class="bg-gray-800/50 p-4 rounded-lg cursor-pointer hover:bg-gray-700/50 transition-colors group relative">
+                 <div id="vote-rewards-section" class="bg-gray-800/50 p-4 rounded-lg transition-colors group relative">
                      <div class="flex justify-between items-start mb-2">
                          <h4 class="text-sm font-bold text-orange-400"><i class="fas fa-vote-yea mr-1"></i> Vote Rewards</h4>
                          <button id="vote-rewards-chart-btn" type="button" class="text-gray-500 hover:text-cyan-400 text-xs transition-colors" title="View chart history">
@@ -723,15 +723,15 @@
                  </div>
                  
                  <!-- Rebase -->
-                 <div id="rebase-rewards-section" class="bg-gray-800/50 p-4 rounded-lg cursor-pointer hover:bg-gray-700/50 transition-colors group">
+                 <div id="rebase-rewards-section" class="bg-gray-800/50 p-4 rounded-lg transition-colors group">
                      <div class="flex justify-between items-start mb-2">
                          <h4 class="text-sm font-bold text-cyan-400"><i class="fas fa-sync-alt mr-1"></i> Rebase</h4>
                          <button id="rebase-rewards-chart-btn" type="button" class="text-gray-500 hover:text-cyan-400 text-xs transition-colors" title="View chart history">
                              <i class="fas fa-chart-line"></i>
                          </button>
                      </div>
-                     <p id="rebase-ampluna-value" class="text-xl font-bold text-white">--</p>
-                     <p id="rebase-usd-value" class="text-sm text-gray-400">-- USD</p>
+                     <p id="rebase-usd-value" class="text-xl font-bold text-white">--</p>
+                     <p id="rebase-ampluna-value" class="text-sm text-gray-400">-- ampLUNA</p>
                      <div class="mt-2 h-8"><canvas id="rebase-sparkline" class="w-full h-full"></canvas></div>
                      <div class="mt-2 pt-2 border-t border-gray-700">
                          <p class="text-xs text-gray-500">Last: <span id="rebase-last-claim" class="text-gray-400">A-26 (Sep 7)</span></p>
@@ -753,9 +753,16 @@
                      <span class="text-white ml-2">#600 (arbLUNA) + #711 (ampLUNA)</span>
                      <span id="locks-total-vp" class="text-cyan-400 ml-2"><i class="fas fa-spinner fa-spin text-xs"></i></span>
                  </div>
-                 <button id="view-full-details-btn" class="text-xs bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-1 rounded transition-colors">
-                     View Full Details
-                 </button>
+                 <div class="flex items-center gap-2">
+                     <a href="https://daodao.zone/dao/terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm/apps?url=https%3A%2F%2Fwww.erisprotocol.com" target="_blank" rel="noopener noreferrer" class="text-xs bg-cyan-700 hover:bg-cyan-600 text-white px-3 py-1 rounded transition-colors inline-flex items-center gap-1">
+                         <i class="fas fa-wallet text-[10px]"></i>
+                         <span>DAO TLA Wallet</span>
+                         <i class="fas fa-external-link-alt text-[9px] opacity-70"></i>
+                     </a>
+                     <button id="view-full-details-btn" class="text-xs bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-1 rounded transition-colors">
+                         View Full Details
+                     </button>
+                 </div>
              </div>
         </div>
 
@@ -1978,6 +1985,9 @@ est. APR 58.53 %"></textarea>
                     <option value="treasuryTotal_USD">Treasury (USD)</option>
                     <option value="tlaDepositsTotal_USD">TLA Deposits (USD)</option>
                     <option value="tlaVpTotal_LUNA">TLA Voting Power</option>
+                    <option value="depositRewardsTotal_USD">Unclaimed Deposit Rewards (USD)</option>
+                    <option value="voteRewardsTotal_USD">Unclaimed Vote Rewards (USD)</option>
+                    <option value="rebaseTotal_USD">Unclaimed Rebase (USD)</option>
                     <option value="daodaoStaked">DAODAO Staked</option>
                     <option value="enterpriseStaked">Enterprise Staked</option>
                     <option value="daoMembers">DAO Members</option>
@@ -7289,8 +7299,9 @@ est. APR 58.53 %"></textarea>
                 // LIVE USD recomputed from current prices, not stored value
                 const rebaseUsd = rebase * ampLunaLivePrice;
                 
+                // USD prominent (matches other two tiles' layout), ampLUNA subtitle
+                document.getElementById('rebase-usd-value').textContent = `$${rebaseUsd.toLocaleString('en-US', {maximumFractionDigits: 0})}`;
                 document.getElementById('rebase-ampluna-value').textContent = `${rebase.toLocaleString('en-US', {maximumFractionDigits: 2})} ampLUNA`;
-                document.getElementById('rebase-usd-value').textContent = `~$${rebaseUsd.toLocaleString('en-US', {maximumFractionDigits: 0})} USD`;
                 
                 // Render mini sparklines from snapshot history (fire-and-forget)
                 renderUnclaimedSparklines();
@@ -7615,6 +7626,11 @@ est. APR 58.53 %"></textarea>
                 const depositSection = document.getElementById('deposit-rewards-section');
                 if (depositSection) {
                     depositSection.addEventListener('click', async (e) => {
+                        // Details popup removed by user request - tile body click is a no-op.
+                        // Chart history is reachable via the chart-line icon button at top-right.
+                        // The remaining code is dead but kept so any references to existing IDs
+                        // in other parts of the codebase don't break.
+                        return;
                         const tlaData = await fetchTlaData();
                         // Support both old (dao.rewards) and new (dashboard.unclaimed_rewards) format
                         const rewards = tlaData?.dashboard?.unclaimed_rewards || tlaData?.dao?.rewards || {};
@@ -7680,6 +7696,9 @@ est. APR 58.53 %"></textarea>
                 const voteSection = document.getElementById('vote-rewards-section');
                 if (voteSection) {
                     voteSection.addEventListener('click', async (e) => {
+                        // Details popup removed by user request. Chart icon handles chart open;
+                        // "Show tokens" toggle handles inline expansion.
+                        return;
                         const tlaData = await fetchTlaData();
                         // Support both old (dao.vote_rewards) and new (dashboard.vote_rewards.by_token) format
                         const voteRewards = tlaData?.dashboard?.vote_rewards?.by_token || tlaData?.dao?.vote_rewards || {};
@@ -7766,6 +7785,8 @@ est. APR 58.53 %"></textarea>
                 const rebaseSection = document.getElementById('rebase-rewards-section');
                 if (rebaseSection) {
                     rebaseSection.addEventListener('click', async (e) => {
+                        // Details popup removed by user request. Chart icon handles chart open.
+                        return;
                         const tlaData = await fetchTlaData();
                         // Support both old (vote.rebase) and new (dashboard.rebase.ampLUNA) format
                         const rebaseAmount = tlaData?.dashboard?.rebase?.ampLUNA || tlaData?.vote?.rebase || 0;
