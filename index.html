@@ -693,6 +693,7 @@
                      </div>
                      <p id="deposit-usd-value" class="text-xl font-bold text-white">--</p>
                      <p id="deposit-ampluna-value" class="text-sm text-gray-400">-- ampLUNA</p>
+                     <div class="mt-2 h-8"><canvas id="deposit-sparkline" class="w-full h-full"></canvas></div>
                      <div class="mt-2 pt-2 border-t border-gray-700">
                          <p class="text-xs text-gray-500">Last: <span id="deposit-last-claim" class="text-gray-400">A-28 (Dec 17)</span></p>
                      </div>
@@ -704,8 +705,14 @@
                          <h4 class="text-sm font-bold text-orange-400"><i class="fas fa-vote-yea mr-1"></i> Vote Rewards</h4>
                          <i class="fas fa-info-circle text-gray-500 group-hover:text-cyan-400 text-xs"></i>
                      </div>
-                     <p id="vote-token-count" class="text-xl font-bold text-white">-- tokens</p>
-                     <p id="vote-epochs-count" class="text-sm text-orange-400">-- epochs unclaimed</p>
+                     <p id="vote-usd-value" class="text-xl font-bold text-white">--</p>
+                     <p id="vote-token-count" class="text-sm text-gray-400">-- tokens</p>
+                     <p id="vote-epochs-count" class="text-xs text-orange-400">-- epochs unclaimed</p>
+                     <!-- Inline token list toggle - clicking expands to show breakdown without opening popup -->
+                     <button id="vote-tokens-toggle" type="button" class="mt-1 text-xs text-cyan-400 hover:text-cyan-300 underline-offset-2 hover:underline">
+                         <i class="fas fa-chevron-down text-[10px] mr-0.5"></i>Show tokens
+                     </button>
+                     <div id="vote-tokens-list" class="hidden mt-1 text-[10px] text-gray-300 space-y-0.5 max-h-24 overflow-y-auto pr-1"></div>
                      <div class="mt-2 pt-2 border-t border-gray-700">
                          <p class="text-xs text-gray-500">Last: <span id="vote-last-claim" class="text-gray-400">A-29 (Dec 17)</span></p>
                      </div>
@@ -719,6 +726,7 @@
                      </div>
                      <p id="rebase-ampluna-value" class="text-xl font-bold text-white">--</p>
                      <p id="rebase-usd-value" class="text-sm text-gray-400">-- USD</p>
+                     <div class="mt-2 h-8"><canvas id="rebase-sparkline" class="w-full h-full"></canvas></div>
                      <div class="mt-2 pt-2 border-t border-gray-700">
                          <p class="text-xs text-gray-500">Last: <span id="rebase-last-claim" class="text-gray-400">A-26 (Sep 7)</span></p>
                      </div>
@@ -7131,10 +7139,30 @@ est. APR 58.53 %"></textarea>
                 const lunaPriceUSD = window.cachedPriceData?.['terra-luna-2']?.usd || 0.166;
                 const ampLunaRatio = window.cachedAmpLunaRate || 1.9008;
                 
+                // Live ampLUNA price = (live LUNA price) × (live ampLUNA→LUNA ratio).
+                // Used to recompute Deposit & Rebase USD values from current prices instead of
+                // showing stale snapshot values.
+                const ampLunaLivePrice = lunaPriceUSD * ampLunaRatio;
+                
+                // Token name → Coingecko ID. Used by Vote Rewards to recompute live USD per token.
+                const tokenGeckoIds = {
+                    'LUNA': 'terra-luna-2',
+                    'ASTRO': 'astroport-fi',
+                    'CAPA': 'capapult',
+                    'ROAR': 'lion-dao',
+                    'SOLID': 'solid-2',
+                    'wBTC': 'eureka-bridged-wbtc-terra',
+                    'wBTC.atom': 'eureka-bridged-wbtc-terra',
+                    'ampLUNA': 'eris-amplified-luna',
+                    'FUEL': 'fuel-network'
+                };
+                
                 // Deposit Rewards - support both old (dao.rewards) and new (dashboard.unclaimed_rewards) format
                 const depositRewards = tlaData.dashboard?.unclaimed_rewards || tlaData.dao?.rewards || {};
                 const depositAmpLuna = depositRewards.ampLUNA || 0;
-                const depositUsd = depositRewards.deposit_rewards_usd || depositRewards.usd || 0;
+                // LIVE USD = ampLUNA × ampLUNA price (recomputed from current prices,
+                // not the stale stored snapshot value)
+                const depositUsd = depositAmpLuna * ampLunaLivePrice;
                 const depositZAssets = depositRewards.zAssets || 0;
                 
                 document.getElementById('deposit-usd-value').textContent = `$${depositUsd.toLocaleString('en-US', {maximumFractionDigits: 0})}`;
@@ -7142,22 +7170,178 @@ est. APR 58.53 %"></textarea>
                 
                 // Vote Rewards - support both old (dao.vote_rewards) and new (dashboard.vote_rewards.by_token) format
                 const voteRewards = tlaData.dashboard?.vote_rewards?.by_token || tlaData.dao?.vote_rewards || {};
-                const voteTokenCount = Object.keys(voteRewards).filter(k => {
-                    const val = voteRewards[k];
+                const tokensWithBalance = Object.entries(voteRewards).filter(([, val]) => {
                     return typeof val === 'number' ? val > 0 : (val?.amount > 0 || val?.usd > 0);
-                }).length;
+                });
+                const voteTokenCount = tokensWithBalance.length;
                 const unclaimedPeriods = tlaData.dashboard?.vote_rewards?.periods || tlaData.dao?.vote_reward_periods || [];
                 
+                // Compute live USD across all tokens. Falls back to snapshot USD per-token
+                // when a token isn't in the price feed.
+                let voteLiveUsdTotal = 0;
+                const voteTokenRows = tokensWithBalance.map(([token, val]) => {
+                    const amount = typeof val === 'number' ? val : (val?.amount || 0);
+                    const snapUsd = typeof val === 'object' ? (val?.usd || 0) : 0;
+                    const geckoId = tokenGeckoIds[token];
+                    const livePrice = geckoId ? window.cachedPriceData?.[geckoId]?.usd : null;
+                    const liveUsd = livePrice ? amount * livePrice : snapUsd;
+                    voteLiveUsdTotal += liveUsd;
+                    
+                    // Compact amount formatting: 1.2M / 12.5K / 12.34
+                    const fmtAmount = amount >= 1e6 ? (amount/1e6).toFixed(2) + 'M'
+                                  : amount >= 1e3 ? (amount/1e3).toFixed(2) + 'K'
+                                  : amount < 0.01 ? amount.toFixed(6)
+                                  : amount.toFixed(2);
+                    const fmtUsd = liveUsd >= 1 ? '$' + liveUsd.toFixed(0) : '$' + liveUsd.toFixed(2);
+                    return `<div class="flex justify-between gap-2"><span class="text-white">${token}</span><span class="text-gray-400">${fmtAmount}</span><span class="text-green-400 font-mono">${fmtUsd}</span></div>`;
+                }).join('');
+                
+                document.getElementById('vote-usd-value').textContent = `$${voteLiveUsdTotal.toLocaleString('en-US', {maximumFractionDigits: 0})}`;
                 document.getElementById('vote-token-count').textContent = `${voteTokenCount} tokens`;
-                document.getElementById('vote-epochs-count').textContent = `${unclaimedPeriods.length} epochs (${unclaimedPeriods[0] || '?'}-${unclaimedPeriods[unclaimedPeriods.length-1] || '?'})`;
+                const epochsRangeText = unclaimedPeriods.length > 0
+                    ? `${unclaimedPeriods.length} epochs (${unclaimedPeriods[0]}-${unclaimedPeriods[unclaimedPeriods.length-1]})`
+                    : '0 epochs';
+                document.getElementById('vote-epochs-count').textContent = epochsRangeText;
+                const tokensListEl = document.getElementById('vote-tokens-list');
+                if (tokensListEl) tokensListEl.innerHTML = voteTokenRows || '<span class="text-gray-500">No tokens</span>';
                 
                 // Rebase - support both old (vote.rebase) and new (dashboard.rebase.ampLUNA) format
                 const rebase = tlaData.dashboard?.rebase?.ampLUNA || tlaData.vote?.rebase || 0;
-                const rebaseUsd = tlaData.dashboard?.rebase?.usd || (rebase * ampLunaRatio * lunaPriceUSD);
+                // LIVE USD recomputed from current prices, not stored value
+                const rebaseUsd = rebase * ampLunaLivePrice;
                 
                 document.getElementById('rebase-ampluna-value').textContent = `${rebase.toLocaleString('en-US', {maximumFractionDigits: 2})} ampLUNA`;
                 document.getElementById('rebase-usd-value').textContent = `~$${rebaseUsd.toLocaleString('en-US', {maximumFractionDigits: 0})} USD`;
+                
+                // Render mini sparklines from snapshot history (fire-and-forget)
+                renderUnclaimedSparklines();
             }
+            
+            // Track the chart instances so re-renders don't accumulate
+            let depositSparkChart = null;
+            let rebaseSparkChart = null;
+            
+            // Draw mini sparklines on Deposit Rewards and Rebase tiles using snapshot history.
+            // Uses LIVE prices to compute USD per epoch (consistent with how the tile face shows
+            // its current value - see processUnclaimedRewards above). Async because snapshot
+            // history may still be fetching when this is first called.
+            async function renderUnclaimedSparklines() {
+                const depositCanvas = document.getElementById('deposit-sparkline');
+                const rebaseCanvas = document.getElementById('rebase-sparkline');
+                if (!depositCanvas && !rebaseCanvas) return;
+                if (typeof Chart === 'undefined') return; // Chart.js not loaded yet
+                
+                // Pull snapshot history (cached after first fetch by fetchAllSnapshots)
+                let snapshots;
+                try {
+                    snapshots = await fetchAllSnapshots();
+                } catch (e) {
+                    return;
+                }
+                if (!snapshots || snapshots.length === 0) return;
+                
+                // Live ampLUNA price from current rates (consistent with tile face)
+                const lunaPriceUSD = window.cachedPriceData?.['terra-luna-2']?.usd || 0.166;
+                const ampLunaRatio = window.cachedAmpLunaRate || 1.9008;
+                const ampLunaLivePrice = lunaPriceUSD * ampLunaRatio;
+                
+                // Take only the most recent N epochs for a cleaner sparkline
+                const SPARK_EPOCHS = 12;
+                const valid = snapshots.filter(s => !s.missing).slice(-SPARK_EPOCHS);
+                if (valid.length < 2) return; // Need at least 2 points to draw a line
+                
+                // Common minimal Chart.js options for sparklines
+                const sparkOptions = {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: '#1a1a1a',
+                            borderColor: '#374151',
+                            borderWidth: 1,
+                            titleColor: '#fff',
+                            bodyColor: '#9ca3af',
+                            displayColors: false,
+                            callbacks: {
+                                title: (items) => `E${valid[items[0].dataIndex]?.epoch ?? '?'}`,
+                                label: (ctx) => '$' + Number(ctx.raw).toLocaleString('en-US', { maximumFractionDigits: 2 })
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { display: false },
+                        y: { display: false, beginAtZero: false }
+                    },
+                    elements: { point: { radius: 0, hoverRadius: 3 } },
+                    animation: false
+                };
+                
+                // Deposit Rewards sparkline: ampLUNA amount × live ampLUNA price per epoch
+                if (depositCanvas) {
+                    const depositValues = valid.map(s => {
+                        const amt = s.dao?.rewards?.ampLUNA ?? s.dashboard?.unclaimed_rewards?.ampLUNA ?? 0;
+                        return amt * ampLunaLivePrice;
+                    });
+                    if (depositSparkChart) depositSparkChart.destroy();
+                    depositSparkChart = new Chart(depositCanvas.getContext('2d'), {
+                        type: 'line',
+                        data: {
+                            labels: valid.map(s => s.epoch),
+                            datasets: [{
+                                data: depositValues,
+                                borderColor: '#22c55e',
+                                backgroundColor: 'rgba(34, 197, 94, 0.15)',
+                                fill: true,
+                                tension: 0.3,
+                                borderWidth: 1.5
+                            }]
+                        },
+                        options: sparkOptions
+                    });
+                }
+                
+                // Rebase sparkline: ampLUNA × live ampLUNA price per epoch (vote.rebase or dashboard.rebase.ampLUNA)
+                if (rebaseCanvas) {
+                    const rebaseValues = valid.map(s => {
+                        const amt = s.dashboard?.rebase?.ampLUNA ?? s.vote?.rebase ?? 0;
+                        return amt * ampLunaLivePrice;
+                    });
+                    if (rebaseSparkChart) rebaseSparkChart.destroy();
+                    rebaseSparkChart = new Chart(rebaseCanvas.getContext('2d'), {
+                        type: 'line',
+                        data: {
+                            labels: valid.map(s => s.epoch),
+                            datasets: [{
+                                data: rebaseValues,
+                                borderColor: '#06b6d4',
+                                backgroundColor: 'rgba(6, 182, 212, 0.15)',
+                                fill: true,
+                                tension: 0.3,
+                                borderWidth: 1.5
+                            }]
+                        },
+                        options: sparkOptions
+                    });
+                }
+            }
+            
+            // Wire up the "Show tokens / Hide tokens" toggle on the Vote Rewards tile.
+            // Click stops propagation so the parent tile's click-to-open-popup handler doesn't fire.
+            document.addEventListener('DOMContentLoaded', () => {
+                const toggleBtn = document.getElementById('vote-tokens-toggle');
+                const listEl = document.getElementById('vote-tokens-list');
+                if (toggleBtn && listEl) {
+                    toggleBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const willShow = listEl.classList.contains('hidden');
+                        listEl.classList.toggle('hidden');
+                        toggleBtn.innerHTML = willShow
+                            ? '<i class="fas fa-chevron-up text-[10px] mr-0.5"></i>Hide tokens'
+                            : '<i class="fas fa-chevron-down text-[10px] mr-0.5"></i>Show tokens';
+                    });
+                }
+            });
             
             function showMiniPopup(title, content, anchorEl) {
                 // Remove any existing mini popup
