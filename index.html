@@ -689,7 +689,9 @@
                  <div id="deposit-rewards-section" class="bg-gray-800/50 p-4 rounded-lg cursor-pointer hover:bg-gray-700/50 transition-colors group">
                      <div class="flex justify-between items-start mb-2">
                          <h4 class="text-sm font-bold text-green-400"><i class="fas fa-piggy-bank mr-1"></i> Deposit Rewards</h4>
-                         <i class="fas fa-info-circle text-gray-500 group-hover:text-cyan-400 text-xs"></i>
+                         <button id="deposit-rewards-chart-btn" type="button" class="text-gray-500 hover:text-cyan-400 text-xs transition-colors" title="View chart history">
+                             <i class="fas fa-chart-line"></i>
+                         </button>
                      </div>
                      <p id="deposit-usd-value" class="text-xl font-bold text-white">--</p>
                      <p id="deposit-ampluna-value" class="text-sm text-gray-400">-- ampLUNA</p>
@@ -724,7 +726,9 @@
                  <div id="rebase-rewards-section" class="bg-gray-800/50 p-4 rounded-lg cursor-pointer hover:bg-gray-700/50 transition-colors group">
                      <div class="flex justify-between items-start mb-2">
                          <h4 class="text-sm font-bold text-cyan-400"><i class="fas fa-sync-alt mr-1"></i> Rebase</h4>
-                         <i class="fas fa-info-circle text-gray-500 group-hover:text-cyan-400 text-xs"></i>
+                         <button id="rebase-rewards-chart-btn" type="button" class="text-gray-500 hover:text-cyan-400 text-xs transition-colors" title="View chart history">
+                             <i class="fas fa-chart-line"></i>
+                         </button>
                      </div>
                      <p id="rebase-ampluna-value" class="text-xl font-bold text-white">--</p>
                      <p id="rebase-usd-value" class="text-sm text-gray-400">-- USD</p>
@@ -734,6 +738,13 @@
                      </div>
                  </div>
              </div>
+             
+             <!-- Snapshot disclaimer: makes it clear this section is from end-of-prior-epoch data,
+                  not live. New epoch's rewards (e.g. just-paid voter rewards) won't appear until
+                  the next snapshot is uploaded. -->
+             <p class="text-[11px] text-gray-500 mt-2 italic">
+                 <i class="fas fa-info-circle mr-1"></i>Snapshot taken at end of epoch <span id="unclaimed-snapshot-epoch">--</span>. New rewards earned this epoch are not yet reflected here.
+             </p>
              
              <!-- Lock Status Summary -->
              <div class="mt-4 pt-4 border-t border-gray-700 flex justify-between items-center">
@@ -2628,6 +2639,26 @@ est. APR 58.53 %"></textarea>
                     secondaryColor: '#f97316',
                     secondaryFormat: (v) => '$' + v.toFixed(4)
                 },
+                'depositRewardsTotal_USD': {
+                    label: 'Unclaimed Deposit Rewards (USD)',
+                    format: (v) => '$' + v.toLocaleString('en-US', {maximumFractionDigits: 0}),
+                    color: '#22c55e', // green
+                    tileId: 'deposit-usd-value',
+                    secondaryKey: 'lunaPrice_USD',
+                    secondaryLabel: 'LUNA Price',
+                    secondaryColor: '#f97316',
+                    secondaryFormat: (v) => '$' + v.toFixed(4)
+                },
+                'rebaseTotal_USD': {
+                    label: 'Unclaimed Rebase (USD)',
+                    format: (v) => '$' + v.toLocaleString('en-US', {maximumFractionDigits: 0}),
+                    color: '#06b6d4', // cyan
+                    tileId: 'rebase-usd-value',
+                    secondaryKey: 'lunaPrice_USD',
+                    secondaryLabel: 'LUNA Price',
+                    secondaryColor: '#f97316',
+                    secondaryFormat: (v) => '$' + v.toFixed(4)
+                },
                 'tlaVpTotal_LUNA': {
                     label: 'TLA Voting Power',
                     format: (v) => v.toLocaleString('en-US', {maximumFractionDigits: 0}) + ' VP',
@@ -2817,6 +2848,12 @@ est. APR 58.53 %"></textarea>
                                                 return sum + usd;
                                             }, 0);
                                         })(),
+                                        // Deposit rewards & Rebase USD at snapshot time. Both use the snapshot's
+                                        // stored values - the chart shows historical accumulated USD across epochs.
+                                        depositRewardsTotal_USD: data.dashboard?.unclaimed_rewards?.deposit_rewards_usd
+                                            || data.dashboard?.unclaimed_rewards?.usd
+                                            || 0,
+                                        rebaseTotal_USD: data.dashboard?.rebase?.usd || 0,
                                         // NFT Stats
                                         daodaoStaked: staking.daodao_staked,
                                         enterpriseStaked: staking.enterprise_staked,
@@ -4995,6 +5032,14 @@ est. APR 58.53 %"></textarea>
                     console.log("DEBUG: ampLUNA rate OK:", ampLunaToLunaRate);
                     window.cachedAmpLunaRate = ampLunaToLunaRate; // Store globally for unclaimed rewards
                     
+                    // Retry the unclaimed rewards USD recalculation now that live LUNA price and
+                    // ampLUNA rate are both available. The initial call from setupUnclaimedRewards()
+                    // can run before these are fetched, so without this retry the tile would stay
+                    // at placeholder values until next page load.
+                    if (typeof updateUnclaimedRewardsTile === 'function') {
+                        try { updateUnclaimedRewardsTile(); } catch(e) { console.log('updateUnclaimedRewardsTile retry error:', e); }
+                    }
+                    
                     // Update global lstRatios with LIVE ampLUNA rate (from Eris contract)
                     if (window.lstRatios) {
                         window.lstRatios.ampLUNA = ampLunaToLunaRate;
@@ -7156,13 +7201,26 @@ est. APR 58.53 %"></textarea>
                     });
                 }
                 
-                // Get LUNA price for USD calculations
-                const lunaPriceUSD = window.cachedPriceData?.['terra-luna-2']?.usd || 0.166;
-                const ampLunaRatio = window.cachedAmpLunaRate || 1.9008;
+                // Populate the snapshot epoch in the disclaimer line below the tiles
+                const snapshotEpochEl = document.getElementById('unclaimed-snapshot-epoch');
+                if (snapshotEpochEl) snapshotEpochEl.textContent = meta.loadedEpoch || '--';
+                
+                // Get LUNA price for USD calculations.
+                // IMPORTANT: If cachedPriceData isn't loaded yet, do NOT proceed - earlier we used
+                // 0.166 as a fallback which is actually around the ampLUNA price (not LUNA), causing
+                // 2800.43 × 0.166 × 1.9008 = $884 instead of the correct ~$378.
+                // Better to leave the placeholder than show a wildly wrong number.
+                const livePriceData = window.cachedPriceData?.['terra-luna-2'];
+                const ampLunaRatio = window.cachedAmpLunaRate;
+                if (!livePriceData?.usd || !ampLunaRatio) {
+                    // Prices not ready yet - skip the recalculation, retry on next snapshot/refresh
+                    console.log('DEBUG: Unclaimed rewards skipping USD calc - prices not loaded yet');
+                    return;
+                }
+                const lunaPriceUSD = livePriceData.usd;
                 
                 // Live ampLUNA price = (live LUNA price) × (live ampLUNA→LUNA ratio).
-                // Used to recompute Deposit & Rebase USD values from current prices instead of
-                // showing stale snapshot values.
+                // Recomputes Deposit & Rebase USD values from current live prices.
                 const ampLunaLivePrice = lunaPriceUSD * ampLunaRatio;
                 
                 // Token name → Coingecko ID. Used by Vote Rewards to recompute live USD per token.
@@ -7373,6 +7431,30 @@ est. APR 58.53 %"></textarea>
                         e.preventDefault();
                         if (typeof openChartModal === 'function') {
                             openChartModal('voteRewardsTotal_USD');
+                        }
+                    });
+                }
+                
+                // Deposit Rewards chart icon - same pattern as Vote Rewards.
+                const depositChartBtn = document.getElementById('deposit-rewards-chart-btn');
+                if (depositChartBtn) {
+                    depositChartBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        if (typeof openChartModal === 'function') {
+                            openChartModal('depositRewardsTotal_USD');
+                        }
+                    });
+                }
+                
+                // Rebase chart icon - same pattern.
+                const rebaseChartBtn = document.getElementById('rebase-rewards-chart-btn');
+                if (rebaseChartBtn) {
+                    rebaseChartBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        if (typeof openChartModal === 'function') {
+                            openChartModal('rebaseTotal_USD');
                         }
                     });
                 }
