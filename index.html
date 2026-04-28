@@ -822,13 +822,23 @@
                          <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Luna.webp?raw=true" alt="LUNA" class="h-8 w-8" onerror="this.src='https://placehold.co/32x32/1f2937/EAEAEA?text=L'; this.onerror=null;">
                     </div>
                 </div>
-                <p id="live-ampluna-price-luna" class="subtext text-xs font-semibold mt-1 text-gray-500">&nbsp;</p> </div>
+                <p id="live-luna-price" class="subtext text-xs font-semibold mt-1 text-gray-500"><i class="fas fa-spinner fa-spin text-gray-500"></i></p> </div>
             <div class="stat-card p-6 rounded-xl text-center">
                 <div>
-                    <h3 id="backing-usd-title" class="text-md font-medium text-gray-400 flex justify-center items-center gap-2">Backing in USD</h3>
-                    <p id="backing-per-nft-usd" class="text-3xl font-bold text-white mt-2"><i class="fas fa-spinner fa-spin text-cyan-400 text-2xl"></i></p>
+                    <h3 id="backing-usd-title" class="text-md font-medium text-gray-400 flex justify-center items-center gap-2">Backing / Floor (USD)</h3>
+                    <div class="flex justify-center items-baseline gap-3 mt-2">
+                        <div>
+                            <p id="backing-per-nft-usd" class="text-2xl font-bold text-white"><i class="fas fa-spinner fa-spin text-cyan-400 text-xl"></i></p>
+                            <p class="text-[10px] uppercase tracking-wider text-gray-500 mt-0.5">Backing</p>
+                        </div>
+                        <span class="text-gray-600 text-xl font-light">/</span>
+                        <div>
+                            <p id="unbroken-floor-usd" class="text-2xl font-bold text-yellow-400"><i class="fas fa-spinner fa-spin text-yellow-400 text-xl"></i></p>
+                            <p class="text-[10px] uppercase tracking-wider text-gray-500 mt-0.5">Floor</p>
+                        </div>
+                    </div>
                 </div>
-                <p id="live-luna-price" class="subtext text-xs font-semibold mt-1 text-gray-500"><i class="fas fa-spinner fa-spin text-gray-500"></i></p>
+                <p id="unbroken-floor-bluna-subtext" class="subtext text-xs font-semibold mt-1 text-gray-500">&nbsp;</p>
             </div>
             <div class="stat-card p-6 rounded-xl text-center">
                  <div>
@@ -2320,6 +2330,58 @@ est. APR 58.53 %"></textarea>
                     return null;
                 }
             }
+            
+            // LUNA staking APR history. Source: tla-ext_json_storage/Staking APR.csv
+            // Format: "title","apr"\n"YYYY-MM-DD","XX.XXXX"\n... where APR is a percentage (e.g. 24.2235).
+            // Returns a Map<dateString, aprNumber> for O(1) lookup. Cached after first fetch.
+            const STAKING_APR_URL = 'https://raw.githubusercontent.com/defipatriot/tla-ext_json_storage/main/Staking%20APR.csv';
+            let stakingAprMap = null;
+            
+            async function fetchStakingAprHistory() {
+                if (stakingAprMap) return stakingAprMap;
+                try {
+                    const r = await fetch(STAKING_APR_URL);
+                    if (!r.ok) {
+                        console.warn('Staking APR CSV fetch failed: HTTP ' + r.status);
+                        return null;
+                    }
+                    const text = await r.text();
+                    const map = new Map();
+                    // Strip BOM if present, split by line, skip header.
+                    const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/);
+                    for (let i = 1; i < lines.length; i++) {
+                        const line = lines[i].trim();
+                        if (!line) continue;
+                        // Format is "YYYY-MM-DD","APR" - quotes optional in some exports.
+                        const m = line.match(/"?(\d{4}-\d{2}-\d{2})"?\s*,\s*"?(-?\d+(?:\.\d+)?)"?/);
+                        if (m) {
+                            const apr = parseFloat(m[2]);
+                            if (!isNaN(apr)) map.set(m[1], apr);
+                        }
+                    }
+                    stakingAprMap = map;
+                    console.log(`Loaded ${map.size} staking APR entries`);
+                    return stakingAprMap;
+                } catch (e) {
+                    console.warn('Staking APR fetch failed:', e.message);
+                    return null;
+                }
+            }
+            
+            // Look up APR for a given timestamp. Tries exact date match first,
+            // then walks back up to 7 days to find the closest prior daily reading.
+            // Returns null if no value found in window.
+            function lookupStakingApr(timestamp) {
+                if (!stakingAprMap || !timestamp) return null;
+                const d = new Date(timestamp);
+                if (isNaN(d.getTime())) return null;
+                for (let i = 0; i < 8; i++) {
+                    const probe = new Date(d.getTime() - i * 86400000);
+                    const key = probe.toISOString().slice(0, 10);
+                    if (stakingAprMap.has(key)) return stakingAprMap.get(key);
+                }
+                return null;
+            }
 
             async function fetchAvgDailyGainFromGitHub() {
                 const avgDailyGainEl = document.getElementById('avg-daily-gain');
@@ -2500,8 +2562,10 @@ est. APR 58.53 %"></textarea>
                     secondaryLabel: 'LUNA Price',
                     secondaryColor: '#f97316', // orange
                     secondaryFormat: (v) => '$' + v.toFixed(4),
-                    tertiaryKey: 'backingPerNft_LUNA',
-                    tertiaryLabel: 'LUNA Amount',
+                    tertiaryKey: 'floorPerNft_USD',
+                    tertiaryLabel: 'Unbroken Floor (USD)',
+                    tertiaryColor: '#fbbf24', // amber/yellow
+                    tertiaryFormat: (v) => '$' + v.toFixed(2),
                     showLunaPriceInTable: true
                 },
                 'backingPerNft_ampLUNA': {
@@ -2667,6 +2731,18 @@ est. APR 58.53 %"></textarea>
                                     const totalVp = locks.total_vp || 638890;
                                     const vpInLuna = totalVp / 10;
                                     
+                                    // Unbroken floor across marketplaces - lower of bbl vs boost.
+                                    // Either can be null when no unbroken listings exist on that marketplace.
+                                    const marketplaces = data.nft_stats?.marketplaces || {};
+                                    const bblFloorUsd = marketplaces.bbl?.floor_price?.unbroken?.usd ?? null;
+                                    const boostFloorUsd = marketplaces.boost?.floor_price?.unbroken?.usd ?? null;
+                                    let floorPerNft_USD = null;
+                                    if (bblFloorUsd != null && boostFloorUsd != null) {
+                                        floorPerNft_USD = Math.min(bblFloorUsd, boostFloorUsd);
+                                    } else {
+                                        floorPerNft_USD = bblFloorUsd ?? boostFloorUsd;
+                                    }
+                                    
                                     return {
                                         epoch,
                                         timestamp: data.meta?.generated_at,
@@ -2675,6 +2751,8 @@ est. APR 58.53 %"></textarea>
                                         backingPerNft_LUNA: backing.LUNA_equivalent,
                                         backingPerNft_USD: backing.USD,
                                         backingPerNft_ampLUNA: backing.ampLUNA,
+                                        // Unbroken floor (cheaper of BBL/Boost). Null when no unbroken listings exist.
+                                        floorPerNft_USD: floorPerNft_USD,
                                         // TLA Deposits
                                         tlaDeposits: {
                                             totalDeposit: tlaDeposits.total_usd,
@@ -2768,39 +2846,25 @@ est. APR 58.53 %"></textarea>
                 // Fetch data
                 const snapshots = await fetchAllSnapshots();
 
-                // For backing metrics: merge in daily cron data from backing-data_2026
-                const isBackingMetric = ['backingPerNft_LUNA', 'avgDailyGainPerNft_LUNA'].includes(metricKey);
-                let cronHistory = [];
-                if (isBackingMetric) {
-                    cronHistory = (await fetchBackingCronHistory()) || [];
-                }
-
                 loading.classList.add('hidden');
 
-                if (snapshots.length === 0 && cronHistory.length === 0) {
+                if (snapshots.length === 0) {
                     noData.classList.remove('hidden');
                     return;
                 }
 
-                // Build chart data - filter out missing epochs first
-                // For backing metrics, also inject daily cron data points
-                const validSnapshots = snapshots.filter(s => !s.missing);
-
-                // Convert cron history entries to snapshot-compatible format
-                const cronSnapshots = cronHistory.map(h => ({
-                    timestamp: h.date + 'T23:50:00Z',
-                    source: 'cron',
-                    backingPerNft_LUNA: h.backingInLuna,
-                    backingPerNft_ampLUNA: h.ampLunaPerNft,
-                    _cronEntry: h
-                }));
-
-                // Merge: epoch snapshots first, then cron daily — deduplicate by date
-                const epochDates = new Set(validSnapshots.map(s => s.timestamp?.slice(0,10)));
-                const newCronOnly = cronSnapshots.filter(c => !epochDates.has(c.timestamp.slice(0,10)));
-                const mergedSnapshots = isBackingMetric
-                    ? [...validSnapshots, ...newCronOnly].sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp))
-                    : validSnapshots;
+                // Use only weekly epoch snapshots in the chart - no daily cron data.
+                // Daily cron is still used for the live tile via fetchAvgDailyGainFromGitHub(),
+                // but mixing daily and weekly points on one chart was visually noisy and
+                // some derived USD fields are only present on epoch snapshots anyway.
+                const mergedSnapshots = snapshots.filter(s => !s.missing);
+                
+                // For the ampLUNA backing chart, prefetch the staking APR CSV so each
+                // chart data point can carry the APR value for its epoch date.
+                // Cached after first fetch, so this is fast on subsequent chart opens.
+                if (metricKey === 'backingPerNft_ampLUNA') {
+                    await fetchStakingAprHistory();
+                }
 
                 const chartData = mergedSnapshots.map(s => {
                     let value = null;
@@ -2831,20 +2895,18 @@ est. APR 58.53 %"></textarea>
                             secondaryValue = (s.daodaoStaked / s.circulatingSupply) * 100;
                         }
                     } else if (metricKey === 'avgDailyGainPerNft_LUNA') {
-                        // For cron entries: compute daily gain vs previous snapshot
-                        if (s.source === 'cron' && s._cronEntry) {
-                            const cronIdx = mergedSnapshots.indexOf(s);
-                            if (cronIdx > 0) {
-                                const prev = mergedSnapshots[cronIdx - 1];
-                                const prevBacking = prev.backingPerNft_LUNA;
-                                if (prevBacking && s.backingPerNft_LUNA) {
-                                    const days = (new Date(s.timestamp) - new Date(prev.timestamp)) / 86400000;
-                                    value = days > 0 ? (s.backingPerNft_LUNA - prevBacking) / days : null;
-                                }
+                        // Compute avg daily gain from consecutive epoch backing values.
+                        // gain/day = (this_backing - prev_backing) / days_between
+                        // The first epoch has no previous point, so its value stays null
+                        // and gets filtered out downstream.
+                        const idx = mergedSnapshots.indexOf(s);
+                        if (idx > 0 && s.backingPerNft_LUNA) {
+                            const prev = mergedSnapshots[idx - 1];
+                            const prevBacking = prev.backingPerNft_LUNA;
+                            if (prevBacking) {
+                                const days = (new Date(s.timestamp) - new Date(prev.timestamp)) / 86400000;
+                                value = days > 0 ? (s.backingPerNft_LUNA - prevBacking) / days : null;
                             }
-                        } else {
-                        // Use stored value from snapshot (already calculated at snapshot time)
-                        value = s.avgDailyGainPerNft_LUNA;
                         }
                         // Show backing as secondary for context
                         secondaryValue = s.backingPerNft_LUNA;
@@ -2872,18 +2934,33 @@ est. APR 58.53 %"></textarea>
                         timestamp: s.timestamp,
                         value: value,
                         secondaryValue: secondaryValue,
+                        tertiaryValue: metric.tertiaryKey ? (s[metric.tertiaryKey] ?? null) : null,
                         lunaPrice: s.lunaPrice_USD, // Store LUNA price for reference
                         estApr: s.tlaDeposits?.estApr || null, // Store APR for TLA Deposits toggle
+                        stakingApr: lookupStakingApr(s.timestamp), // LUNA staking APR (%) for ampLUNA chart toggle
                         unmintedCount: s.unmintedCount || s.statusSliders?.mint?.unMinted // Store unminted count for market value calc
                     };
                 }).filter(d => d.value !== null && d.value !== undefined);
                 
-                // Show/hide secondary axis toggle for TLA Deposits
+                // Show/hide secondary axis toggle. Two metrics use it:
+                //   - tlaDepositsTotal_USD: toggles between Est APR and LUNA Price
+                //   - backingPerNft_ampLUNA: toggles between Staking APR and ampLUNA Ratio
                 const toggleEl = document.getElementById('chart-secondary-toggle');
                 if (toggleEl) {
+                    const aprBtn = document.getElementById('toggle-apr');
+                    const lunaBtn = document.getElementById('toggle-luna');
                     if (metricKey === 'tlaDepositsTotal_USD') {
                         toggleEl.classList.remove('hidden');
+                        if (aprBtn) aprBtn.textContent = 'Est APR';
+                        if (lunaBtn) lunaBtn.textContent = 'LUNA Price';
                         // Default to APR
+                        window.chartSecondaryMode = 'apr';
+                        updateToggleButtons('apr');
+                    } else if (metricKey === 'backingPerNft_ampLUNA') {
+                        toggleEl.classList.remove('hidden');
+                        if (aprBtn) aprBtn.textContent = 'Staking APR';
+                        if (lunaBtn) lunaBtn.textContent = 'ampLUNA Ratio';
+                        // Default to Staking APR overlay
                         window.chartSecondaryMode = 'apr';
                         updateToggleButtons('apr');
                     } else {
@@ -2970,6 +3047,12 @@ est. APR 58.53 %"></textarea>
                 
                 // Build chart data - filter out missing epochs first
                 const validSnapshots = snapshots.filter(s => !s.missing);
+                
+                // For the ampLUNA backing chart, prefetch staking APR (cached after first load).
+                if (metricKey === 'backingPerNft_ampLUNA') {
+                    await fetchStakingAprHistory();
+                }
+                
                 const chartData = validSnapshots.map(s => {
                     let value = null;
                     let secondaryValue = null;
@@ -3018,15 +3101,27 @@ est. APR 58.53 %"></textarea>
                         value: value,
                         secondaryValue: secondaryValue,
                         lunaPrice: s.lunaPrice_USD,
-                        estApr: s.tlaDeposits?.estApr || null
+                        estApr: s.tlaDeposits?.estApr || null,
+                        stakingApr: lookupStakingApr(s.timestamp)
                     };
                 }).filter(d => d.value !== null && d.value !== undefined);
                 
-                // Show/hide secondary axis toggle for TLA Deposits
+                // Show/hide secondary axis toggle. Two metrics use it (kept in sync with the
+                // main chart-build path above): tlaDepositsTotal_USD and backingPerNft_ampLUNA.
                 const toggleEl = document.getElementById('chart-secondary-toggle');
                 if (toggleEl) {
+                    const aprBtn = document.getElementById('toggle-apr');
+                    const lunaBtn = document.getElementById('toggle-luna');
                     if (metricKey === 'tlaDepositsTotal_USD') {
                         toggleEl.classList.remove('hidden');
+                        if (aprBtn) aprBtn.textContent = 'Est APR';
+                        if (lunaBtn) lunaBtn.textContent = 'LUNA Price';
+                        window.chartSecondaryMode = 'apr';
+                        updateToggleButtons('apr');
+                    } else if (metricKey === 'backingPerNft_ampLUNA') {
+                        toggleEl.classList.remove('hidden');
+                        if (aprBtn) aprBtn.textContent = 'Staking APR';
+                        if (lunaBtn) lunaBtn.textContent = 'ampLUNA Ratio';
                         window.chartSecondaryMode = 'apr';
                         updateToggleButtons('apr');
                     } else {
@@ -3092,6 +3187,15 @@ est. APR 58.53 %"></textarea>
                 }
             }
             
+            // Format an epoch label for chart points and table rows.
+            // Cron daily snapshots (from backing-data_2026) have no epoch field, so display 'Daily'
+            // instead of the broken 'Eundefined' that shows up when interpolating undefined into 'E${...}'.
+            function formatEpochLabel(d) {
+                const e = d?.epoch;
+                if (e === null || e === undefined || e === '') return 'Daily';
+                return 'E' + e;
+            }
+            
             // --- Build Chart.js chart ---
             function buildChart(data, metric) {
                 const ctx = document.getElementById('historyChart').getContext('2d');
@@ -3103,7 +3207,7 @@ est. APR 58.53 %"></textarea>
                 
                 const labels = data.map(d => {
                     const date = new Date(d.timestamp);
-                    return `E${d.epoch} (${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})`;
+                    return `${formatEpochLabel(d)} (${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})`;
                 });
                 
                 // For VP metrics, use the FIXED VP from TLA file (same for all epochs)
@@ -3126,7 +3230,10 @@ est. APR 58.53 %"></textarea>
                 
                 // For TLA Deposits, check toggle mode to determine secondary axis
                 const isTlaDeposits = metric.label.includes('TLA Deposits');
+                const isAmpLunaBacking = (metric.tileId === 'backing-per-nft-ampluna');
                 const useAprAsSecondary = isTlaDeposits && window.chartSecondaryMode === 'apr';
+                // For ampLUNA chart: 'apr' = Staking APR overlay (default), anything else = ampLUNA ratio
+                const useStakingAprAsSecondary = isAmpLunaBacking && window.chartSecondaryMode === 'apr';
                 
                 // Determine secondary config based on toggle mode
                 let secondaryLabel, secondaryColor, secondaryFormat, actualSecondaryValues;
@@ -3143,6 +3250,12 @@ est. APR 58.53 %"></textarea>
                     } else {
                         actualSecondaryValues = data.map(d => d.estApr);
                     }
+                } else if (useStakingAprAsSecondary) {
+                    // Use LUNA staking APR as secondary line on ampLUNA chart
+                    secondaryLabel = 'LUNA Staking APR';
+                    secondaryColor = '#06b6d4'; // cyan
+                    secondaryFormat = (v) => v.toFixed(2) + '%';
+                    actualSecondaryValues = data.map(d => d.stakingApr ?? null);
                 } else {
                     // Use LUNA Price or default secondary
                     secondaryLabel = isTlaDeposits ? 'LUNA Price' : (metric.usdLabel || metric.secondaryLabel || 'Secondary');
@@ -3237,6 +3350,32 @@ est. APR 58.53 %"></textarea>
                         borderDash: [5, 5],
                         yAxisID: 'y1'
                     });
+                }
+                
+                // Add tertiary dataset as a SOLID line (e.g., unbroken floor for backing chart).
+                // Plotted on primary y-axis since it's the same unit as the primary metric.
+                // Skipped for VP metrics (which use their own potential-VP line) and when there's no real data.
+                if (metric.tertiaryKey && !isVpMetric) {
+                    const tertiaryValues = data.map(d => d.tertiaryValue ?? null);
+                    const hasTertiary = tertiaryValues.some(v => v !== null && v > 0);
+                    if (hasTertiary) {
+                        const tertiaryColor = metric.tertiaryColor || '#fbbf24';
+                        datasets.push({
+                            label: metric.tertiaryLabel || 'Tertiary',
+                            data: tertiaryValues,
+                            borderColor: tertiaryColor,
+                            backgroundColor: tertiaryColor + '20',
+                            fill: false,
+                            tension: 0.3,
+                            pointRadius: 4,
+                            pointHoverRadius: 8,
+                            pointBackgroundColor: tertiaryColor,
+                            pointBorderColor: '#1a1a1a',
+                            pointBorderWidth: 2,
+                            spanGaps: true, // Draw across null points - some early epochs may not have floor data
+                            yAxisID: 'y'
+                        });
+                    }
                 }
                 
                 // Build scales
@@ -3526,7 +3665,7 @@ est. APR 58.53 %"></textarea>
                         
                         html += `
                             <tr class="border-t border-gray-700 hover:bg-gray-800/50 cursor-pointer ${isLatest ? 'bg-gray-800/30' : ''}" data-index="${reversedData.length - 1 - i}" onclick="handlePointClick(chartDataGlobal[${reversedData.length - 1 - i}], ${reversedData.length - 1 - i})">
-                                <td class="p-2 text-cyan-400 font-medium">E${d.epoch}</td>
+                                <td class="p-2 text-cyan-400 font-medium">${formatEpochLabel(d)}</td>
                                 <td class="p-2 text-gray-300">${date.toLocaleDateString()}</td>
                                 <td class="p-2 text-right font-mono">
                                     <span class="text-purple-300">${(currentVp / 1000).toFixed(1)}K</span>
@@ -3637,7 +3776,7 @@ est. APR 58.53 %"></textarea>
                         if (isTlaDeposits) {
                             html += `
                                 <tr class="border-t border-gray-700 hover:bg-gray-800/50 ${isLatest ? 'bg-gray-800/30' : ''}" data-index="${originalIdx}" data-epoch="${d.epoch}">
-                                    <td class="p-2 text-cyan-400 font-medium cursor-pointer" onclick="handlePointClick(chartDataGlobal[${originalIdx}], ${originalIdx})">E${d.epoch}</td>
+                                    <td class="p-2 text-cyan-400 font-medium cursor-pointer" onclick="handlePointClick(chartDataGlobal[${originalIdx}], ${originalIdx})">${formatEpochLabel(d)}</td>
                                     <td class="p-2 text-gray-300">${date.toLocaleDateString()}</td>
                                     <td class="p-2 text-right font-mono"><span class="text-white">${metric.format(d.value)}</span> ${changeStr}</td>
                                     <td class="p-2 text-right font-mono">${aprDisplay}</td>
@@ -3651,7 +3790,7 @@ est. APR 58.53 %"></textarea>
                         } else {
                             html += `
                                 <tr class="border-t border-gray-700 hover:bg-gray-800/50 ${isLatest ? 'bg-gray-800/30' : ''}" data-index="${originalIdx}" data-epoch="${d.epoch}">
-                                    <td class="p-2 text-cyan-400 font-medium cursor-pointer" onclick="handlePointClick(chartDataGlobal[${originalIdx}], ${originalIdx})">E${d.epoch}</td>
+                                    <td class="p-2 text-cyan-400 font-medium cursor-pointer" onclick="handlePointClick(chartDataGlobal[${originalIdx}], ${originalIdx})">${formatEpochLabel(d)}</td>
                                     <td class="p-2 text-gray-300">${date.toLocaleDateString()}</td>
                                     <td class="p-2 text-right font-mono"><span class="text-white">${metric.format(d.value)}</span> ${changeStr}</td>
                                     <td class="p-2 text-right font-mono">${lunaPriceDisplay}</td>
@@ -3761,7 +3900,7 @@ est. APR 58.53 %"></textarea>
                         
                         html += `
                             <tr class="border-t border-gray-700 hover:bg-gray-800/50 cursor-pointer ${isLatest ? 'bg-gray-800/30' : ''}" data-index="${originalIdx}" onclick="handlePointClick(chartDataGlobal[${originalIdx}], ${originalIdx})">
-                                <td class="p-2 text-cyan-400 font-medium">E${d.epoch}</td>
+                                <td class="p-2 text-cyan-400 font-medium">${formatEpochLabel(d)}</td>
                                 <td class="p-2 text-gray-300">${date.toLocaleDateString()}</td>
                                 <td class="p-2 text-right font-mono text-white">${metric.format(d.value)}</td>
                                 ${secondaryDisplay}
@@ -4980,8 +5119,8 @@ est. APR 58.53 %"></textarea>
                      }
 
                     updateTile('backing-per-nft-ampluna', liveAmpLunaBacking.toFixed(4), true, { titleId: 'backing-ampluna-title', subtextId: 'backing-per-nft-change', subtext: `Ratio: ${ampLunaToLunaRate.toFixed(4)}` }); 
-                    updateTile('backing-per-nft-luna-live', backingInLunaLive.toFixed(4), true, { titleId: 'backing-luna-live-title'}); 
-                    updateTile('backing-per-nft-usd', `$${backingInUSD.toFixed(2)}`, true, { titleId: 'backing-usd-title', subtextId: 'live-luna-price', subtext: `@ $${lunaPriceUSD.toFixed(4)} / LUNA` });
+                    updateTile('backing-per-nft-luna-live', backingInLunaLive.toFixed(4), true, { titleId: 'backing-luna-live-title', subtextId: 'live-luna-price', subtext: `@ $${lunaPriceUSD.toFixed(4)} / LUNA` }); 
+                    updateTile('backing-per-nft-usd', `$${backingInUSD.toFixed(2)}`, true, { titleId: 'backing-usd-title' });
                     updateTile('unminted-nft-backing-luna', `${unmintedBackingLuna.toLocaleString('en-US', {maximumFractionDigits: 0})} LUNA`, true, { titleId: 'unminted-nft-backing-title' });
                      const unmintedNftBackingUsdEl = document.getElementById('unminted-nft-backing-usd');
                      if (unmintedNftBackingUsdEl) unmintedNftBackingUsdEl.textContent = `$${unmintedBackingUSD.toLocaleString('en-US', {maximumFractionDigits: 0})} USD`;
@@ -5018,8 +5157,8 @@ est. APR 58.53 %"></textarea>
                      updateTile('dao-members', keyMetrics.daoMembers.toLocaleString(), false);
                      updateTile('enterprise-staked-holder', keyMetrics.enterpriseStakedHolder.toLocaleString(), false, { titleId: 'enterprise-staked-title'});
                      updateTile('backing-per-nft-ampluna', 'Error', false, { titleId: 'backing-ampluna-title', subtextId: 'backing-per-nft-change', subtext: 'Ratio: Error' });
-                     updateTile('backing-per-nft-luna-live', keyMetrics.backingInLuna.toFixed(2), false, { titleId: 'backing-luna-live-title'});
-                     updateTile('backing-per-nft-usd', 'Error', false, { titleId: 'backing-usd-title', subtextId: 'live-luna-price', subtext: 'Price Error' });
+                     updateTile('backing-per-nft-luna-live', keyMetrics.backingInLuna.toFixed(2), false, { titleId: 'backing-luna-live-title', subtextId: 'live-luna-price', subtext: 'Price Error' });
+                     updateTile('backing-per-nft-usd', 'Error', false, { titleId: 'backing-usd-title' });
                      updateTile('unminted-nft-backing-luna', 'Error', false, { titleId: 'unminted-nft-backing-title' });
                       const unmintedNftBackingUsdEl = document.getElementById('unminted-nft-backing-usd'); if (unmintedNftBackingUsdEl) unmintedNftBackingUsdEl.textContent = 'Error';
                       const unmintedModalBackingLuna = document.getElementById('unminted-modal-backing-luna'); const unmintedModalBackingUsd = document.getElementById('unminted-modal-backing-usd'); const unmintedModalTotalLuna = document.getElementById('unminted-modal-total-luna'); const unmintedModalTotalUsd = document.getElementById('unminted-modal-total-usd');
@@ -7884,6 +8023,25 @@ est. APR 58.53 %"></textarea>
                     const listings = data.nfts;
                     const totalListings = data.pagination?.totalResults || listings.length;
                     const blunaPrice = window.tokenPrices?.bLUNA || 0;
+                    
+                    // Sync unbroken floor to the Backing / Floor (USD) tile (alliance_dao only).
+                    // Listings come back price-asc so the first non-BROKEN entry is the unbroken floor.
+                    if (collectionKey === 'alliance_dao') {
+                        const floorEl = document.getElementById('unbroken-floor-usd');
+                        const floorSubEl = document.getElementById('unbroken-floor-bluna-subtext');
+                        const firstUnbroken = listings.find(n => n.special_trait !== 'BROKEN');
+                        if (floorEl) {
+                            if (firstUnbroken && firstUnbroken.auction?.reserve_price && blunaPrice > 0) {
+                                const ubFloorBluna = parseInt(firstUnbroken.auction.reserve_price) / 1000000;
+                                const ubFloorUsd = ubFloorBluna * blunaPrice;
+                                floorEl.innerHTML = `$${ubFloorUsd.toFixed(2)}`;
+                                if (floorSubEl) floorSubEl.textContent = `${ubFloorBluna.toFixed(0)} bLUNA`;
+                            } else {
+                                floorEl.textContent = '--';
+                                if (floorSubEl) floorSubEl.textContent = 'No unbroken listings';
+                            }
+                        }
+                    }
                     
                     // Update summary
                     if (summary) {
