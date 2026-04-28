@@ -2681,6 +2681,9 @@ est. APR 58.53 %"></textarea>
                 
                 const baseUrl = 'https://raw.githubusercontent.com/defipatriot/adao_json_storage/main';
                 const tlaBaseUrl = 'https://raw.githubusercontent.com/defipatriot/tla_json_storage/main';
+                // Ext file is a separate repo containing votion ratios, lst_ratios, dex_performance, etc.
+                // The main TLA epoch file has only summary stats in its ext_data field, not the actual ratios.
+                const tlaExtBaseUrl = 'https://raw.githubusercontent.com/defipatriot/tla-ext_json_storage/main';
                 const epochReferenceDate = new Date('2025-12-01T00:00:00Z');
                 const epochReferenceNumber = 162;
                 const now = new Date();
@@ -2709,9 +2712,30 @@ est. APR 58.53 %"></textarea>
                             
                             // Then try tla_json_storage (v3 format)
                             try {
-                                const res = await fetch(`${tlaBaseUrl}/tla-data-epoch-${epoch}-end.json`);
+                                // Fetch data file and ext file in parallel - ext file has the real votion ratios
+                                const [res, extRes] = await Promise.all([
+                                    fetch(`${tlaBaseUrl}/tla-data-epoch-${epoch}-end.json`),
+                                    fetch(`${tlaExtBaseUrl}/tla-ext-epoch-${epoch}-end.json`).catch(() => null)
+                                ]);
                                 if (res.ok) {
                                     const data = await res.json();
+                                    // Parse ext file if available - failures here are silent (some epochs may not have an ext file)
+                                    let extData = null;
+                                    if (extRes && extRes.ok) {
+                                        try { extData = await extRes.json(); } catch (e) {}
+                                    }
+                                    // Resolve historical LST ratios from ext file. Two equivalent paths:
+                                    //   votion.ratios.{ampLUNA,arbLUNA} (legacy path)
+                                    //   lst_ratios.tokens.{ampLUNA,arbLUNA}.ratio (canonical path)
+                                    // Prefer canonical path, fall back to legacy.
+                                    const extLstTokens = extData?.lst_ratios?.tokens || {};
+                                    const extVotionRatios = extData?.votion?.ratios || {};
+                                    const histLstRatios = {
+                                        ampLUNA: extLstTokens.ampLUNA?.ratio ?? extVotionRatios.ampLUNA ?? null,
+                                        arbLUNA: extLstTokens.arbLUNA?.ratio ?? extVotionRatios.arbLUNA ?? null,
+                                        bLUNA: extLstTokens.bLUNA?.ratio ?? null
+                                    };
+                                    
                                     // Convert v3 format to chart-compatible format
                                     const backing = data.dashboard?.nft_backing_per_nft || data.nft_stats?.backing_per_nft || {};
                                     const tlaDeposits = data.dashboard?.tla_deposits || {};
@@ -2761,7 +2785,7 @@ est. APR 58.53 %"></textarea>
                                         tlaDeposits: {
                                             totalDeposit: tlaDeposits.total_usd,
                                             estApr: tlaDeposits.apr,
-                                            lstRatios: data.ext_data?.votion?.ratios || {}
+                                            lstRatios: histLstRatios
                                         },
                                         tlaDepositsTotal_USD: tlaDeposits.total_usd,
                                         // NFT Stats
@@ -2781,8 +2805,9 @@ est. APR 58.53 %"></textarea>
                                         unmintedTotalBacking_USD: unminted.total_USD,
                                         // LUNA price
                                         lunaPrice_USD: lunaPrice,
-                                        // LST ratios from ext_data if available
-                                        lstRatios: data.ext_data?.votion?.ratios || {}
+                                        // LST ratios resolved from the tla-ext-epoch file (votion.ratios
+                                        // or lst_ratios.tokens). Used by the ampLUNA chart's secondary line.
+                                        lstRatios: histLstRatios
                                     };
                                 }
                             } catch (e) {}
