@@ -700,10 +700,12 @@
                  </div>
                  
                  <!-- Vote Rewards -->
-                 <div id="vote-rewards-section" class="bg-gray-800/50 p-4 rounded-lg cursor-pointer hover:bg-gray-700/50 transition-colors group">
+                 <div id="vote-rewards-section" class="bg-gray-800/50 p-4 rounded-lg cursor-pointer hover:bg-gray-700/50 transition-colors group relative">
                      <div class="flex justify-between items-start mb-2">
                          <h4 class="text-sm font-bold text-orange-400"><i class="fas fa-vote-yea mr-1"></i> Vote Rewards</h4>
-                         <i class="fas fa-info-circle text-gray-500 group-hover:text-cyan-400 text-xs"></i>
+                         <button id="vote-rewards-chart-btn" type="button" class="text-gray-500 hover:text-cyan-400 text-xs transition-colors" title="View chart history">
+                             <i class="fas fa-chart-line"></i>
+                         </button>
                      </div>
                      <p id="vote-usd-value" class="text-xl font-bold text-white">--</p>
                      <p id="vote-token-count" class="text-sm text-gray-400">-- tokens</p>
@@ -2616,6 +2618,16 @@ est. APR 58.53 %"></textarea>
                     secondaryColor: '#f97316',
                     secondaryFormat: (v) => '$' + v.toFixed(4)
                 },
+                'voteRewardsTotal_USD': {
+                    label: 'Unclaimed Vote Rewards (USD)',
+                    format: (v) => '$' + v.toLocaleString('en-US', {maximumFractionDigits: 0}),
+                    color: '#fb923c', // orange
+                    tileId: 'vote-usd-value',
+                    secondaryKey: 'lunaPrice_USD',
+                    secondaryLabel: 'LUNA Price',
+                    secondaryColor: '#f97316',
+                    secondaryFormat: (v) => '$' + v.toFixed(4)
+                },
                 'tlaVpTotal_LUNA': {
                     label: 'TLA Voting Power',
                     format: (v) => v.toLocaleString('en-US', {maximumFractionDigits: 0}) + ' VP',
@@ -2796,6 +2808,15 @@ est. APR 58.53 %"></textarea>
                                             lstRatios: histLstRatios
                                         },
                                         tlaDepositsTotal_USD: tlaDeposits.total_usd,
+                                        // Vote rewards accumulated USD - sum of stored snap USD values
+                                        // across all tokens at the time of the snapshot.
+                                        voteRewardsTotal_USD: (() => {
+                                            const byToken = data.dashboard?.vote_rewards?.by_token || {};
+                                            return Object.values(byToken).reduce((sum, t) => {
+                                                const usd = (typeof t === 'object' && t?.usd) ? t.usd : 0;
+                                                return sum + usd;
+                                            }, 0);
+                                        })(),
                                         // NFT Stats
                                         daodaoStaked: staking.daodao_staked,
                                         enterpriseStaked: staking.enterprise_staked,
@@ -7339,6 +7360,20 @@ est. APR 58.53 %"></textarea>
                         toggleBtn.innerHTML = willShow
                             ? '<i class="fas fa-chevron-up text-[10px] mr-0.5"></i>Hide tokens'
                             : '<i class="fas fa-chevron-down text-[10px] mr-0.5"></i>Show tokens';
+                    });
+                }
+                
+                // Vote Rewards chart icon - replaces the old (i) info icon.
+                // Opens the same chart modal used by other tiles, with the new
+                // voteRewardsTotal_USD metric showing historical accumulated USD.
+                const chartBtn = document.getElementById('vote-rewards-chart-btn');
+                if (chartBtn) {
+                    chartBtn.addEventListener('click', (e) => {
+                        e.stopPropagation(); // Don't trigger the tile's existing click-to-open-popup handler
+                        e.preventDefault();
+                        if (typeof openChartModal === 'function') {
+                            openChartModal('voteRewardsTotal_USD');
+                        }
                     });
                 }
             });
