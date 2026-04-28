@@ -2563,7 +2563,7 @@ est. APR 58.53 %"></textarea>
                     secondaryColor: '#f97316', // orange
                     secondaryFormat: (v) => '$' + v.toFixed(4),
                     tertiaryKey: 'floorPerNft_USD',
-                    tertiaryLabel: 'Unbroken Floor (USD)',
+                    tertiaryLabel: 'Market Premium (Floor)',
                     tertiaryColor: '#fbbf24', // amber/yellow
                     tertiaryFormat: (v) => '$' + v.toFixed(2),
                     showLunaPriceInTable: true
@@ -2747,9 +2747,13 @@ est. APR 58.53 %"></textarea>
                                         epoch,
                                         timestamp: data.meta?.generated_at,
                                         source: 'tla_v3',
-                                        // Backing
-                                        backingPerNft_LUNA: backing.LUNA_equivalent,
-                                        backingPerNft_USD: backing.USD,
+                                        // Backing fields - sanitize zeros to null so bad snapshots
+                                        // (e.g. epoch 171 where LUNA price was missing at snapshot time,
+                                        // producing LUNA_equivalent=0 and USD=0) don't draw a phantom drop
+                                        // to zero on the chart. ampLUNA value is independent of LUNA price
+                                        // so it stays valid even when LUNA-derived fields are bad.
+                                        backingPerNft_LUNA: (backing.LUNA_equivalent && backing.LUNA_equivalent > 0) ? backing.LUNA_equivalent : null,
+                                        backingPerNft_USD: (backing.USD && backing.USD > 0) ? backing.USD : null,
                                         backingPerNft_ampLUNA: backing.ampLUNA,
                                         // Unbroken floor (cheaper of BBL/Boost). Null when no unbroken listings exist.
                                         floorPerNft_USD: floorPerNft_USD,
@@ -3352,29 +3356,47 @@ est. APR 58.53 %"></textarea>
                     });
                 }
                 
-                // Add tertiary dataset as a SOLID line (e.g., unbroken floor for backing chart).
-                // Plotted on its own right-side y-axis (y2) when present, so a high-magnitude floor
-                // (~$120) doesn't compress a low-magnitude backing line (~$10) into a flat line.
-                // Skipped for VP metrics (which use their own potential-VP line) and when there's no real data.
+                // Floor visualization: shaded "Market Premium" zone between Backing and Floor.
+                // Instead of a separate line that dwarfs backing (~$120 vs ~$10), we draw:
+                //   1. A faint "Unbroken Floor" line at the top of the zone (low opacity)
+                //   2. A semi-transparent amber fill from backing line UP to floor line
+                // This visually says: "backing is the real value (solid green), the gap above
+                // is market premium that requires a buyer to realize."
+                // 
+                // Chart.js trick: { target: '-1' } fills between THIS dataset and the previous one.
+                // Order matters - backing must be added first (it is, as primary dataset[0]).
+                // Both datasets share the primary y-axis so the gap is visually proportional.
                 if (metric.tertiaryKey && !isVpMetric) {
                     const tertiaryValues = data.map(d => d.tertiaryValue ?? null);
                     const hasTertiary = tertiaryValues.some(v => v !== null && v > 0);
                     if (hasTertiary) {
                         const tertiaryColor = metric.tertiaryColor || '#fbbf24';
+                        // For each point: if both backing value and floor exist, use floor; else null
+                        // so the fill correctly skips epochs without floor data.
+                        const primaryValues = values; // backing values (already computed above)
+                        const cappedFloor = tertiaryValues.map((floor, i) => {
+                            if (floor === null || floor === undefined || floor <= 0) return null;
+                            const backing = primaryValues[i];
+                            if (backing === null || backing === undefined) return null;
+                            return floor;
+                        });
+                        
+                        // Faint floor cap line (top of the premium zone)
                         datasets.push({
-                            label: metric.tertiaryLabel || 'Tertiary',
-                            data: tertiaryValues,
-                            borderColor: tertiaryColor,
-                            backgroundColor: tertiaryColor + '20',
-                            fill: false,
+                            label: metric.tertiaryLabel || 'Unbroken Floor',
+                            data: cappedFloor,
+                            borderColor: tertiaryColor + 'BB', // ~73% opacity
+                            backgroundColor: tertiaryColor + '25', // ~15% opacity for the fill
+                            fill: '-1', // Fill DOWN to the previous dataset (backing line)
                             tension: 0.3,
-                            pointRadius: 4,
-                            pointHoverRadius: 8,
+                            pointRadius: 3,
+                            pointHoverRadius: 6,
                             pointBackgroundColor: tertiaryColor,
                             pointBorderColor: '#1a1a1a',
                             pointBorderWidth: 2,
-                            spanGaps: true, // Draw across null points - some early epochs may not have floor data
-                            yAxisID: 'y2'
+                            borderWidth: 1.5,
+                            spanGaps: true,
+                            yAxisID: 'y' // Same axis as backing - the GAP is the story
                         });
                     }
                 }
@@ -3467,34 +3489,9 @@ est. APR 58.53 %"></textarea>
                     };
                 }
                 
-                // Add third Y axis for tertiary data (e.g., unbroken floor on backing chart).
-                // Positioned right and offset from y1 if both exist, so the two right-side axes
-                // don't visually merge. Auto-scales independently so a $120 floor doesn't compress
-                // a $10 backing line.
-                const hasTertiaryDataset = datasets.some(d => d.yAxisID === 'y2');
-                if (hasTertiaryDataset) {
-                    const tertiaryColor = metric.tertiaryColor || '#fbbf24';
-                    scales.y2 = {
-                        type: 'linear',
-                        display: true,
-                        position: 'right',
-                        // Offset from y1 if it's also rendered, otherwise sit flush right
-                        offset: !!scales.y1,
-                        grid: { drawOnChartArea: false },
-                        ticks: {
-                            color: tertiaryColor,
-                            callback: (value) => {
-                                if (value >= 1000) return '$' + (value/1000).toFixed(1) + 'K';
-                                return '$' + value.toFixed(0);
-                            }
-                        },
-                        title: {
-                            display: true,
-                            text: metric.tertiaryLabel || 'Tertiary',
-                            color: tertiaryColor
-                        }
-                    };
-                }
+                // Note: tertiary (floor) dataset uses primary y-axis 'y' for the premium-zone
+                // visualization, so no separate y2 axis registration is needed.
+                
                 
                 historyChart = new Chart(ctx, {
                     type: 'line',
@@ -3541,12 +3538,25 @@ est. APR 58.53 %"></textarea>
                                         }
                                     },
                                     afterBody: (tooltipItems) => {
-                                        // Add LUNA price context if available
                                         const index = tooltipItems[0].dataIndex;
+                                        const lines = [];
+                                        // Add LUNA price context if available
                                         if (data[index].lunaPrice && !metric.secondaryKey?.includes('lunaPrice')) {
-                                            return ['', 'LUNA: $' + data[index].lunaPrice.toFixed(4)];
+                                            lines.push('', 'LUNA: $' + data[index].lunaPrice.toFixed(4));
                                         }
-                                        return [];
+                                        // For backing chart with floor: show floor value AND the premium delta.
+                                        // The chart visualizes this as a shaded zone, but the tooltip
+                                        // makes the numbers explicit on hover.
+                                        const floor = data[index].tertiaryValue;
+                                        const backing = data[index].value;
+                                        if (floor && backing && metric.tertiaryKey) {
+                                            const premium = floor - backing;
+                                            const premiumPct = backing > 0 ? (premium / backing * 100) : 0;
+                                            lines.push('');
+                                            lines.push('Floor: $' + floor.toFixed(2));
+                                            lines.push(`Premium: +$${premium.toFixed(2)} (${premiumPct.toFixed(0)}% above)`);
+                                        }
+                                        return lines;
                                     }
                                 }
                             }
