@@ -695,7 +695,6 @@
                      </div>
                      <p id="deposit-usd-value" class="text-xl font-bold text-white">--</p>
                      <p id="deposit-ampluna-value" class="text-sm text-gray-400">-- ampLUNA</p>
-                     <div class="mt-2 h-8"><canvas id="deposit-sparkline" class="w-full h-full"></canvas></div>
                      <div class="mt-2 pt-2 border-t border-gray-700">
                          <p class="text-xs text-gray-500">Last: <span id="deposit-last-claim" class="text-gray-400">A-28 (Dec 17)</span></p>
                      </div>
@@ -732,7 +731,6 @@
                      </div>
                      <p id="rebase-usd-value" class="text-xl font-bold text-white">--</p>
                      <p id="rebase-ampluna-value" class="text-sm text-gray-400">-- ampLUNA</p>
-                     <div class="mt-2 h-8"><canvas id="rebase-sparkline" class="w-full h-full"></canvas></div>
                      <div class="mt-2 pt-2 border-t border-gray-700">
                          <p class="text-xs text-gray-500">Last: <span id="rebase-last-claim" class="text-gray-400">A-26 (Sep 7)</span></p>
                      </div>
@@ -7416,60 +7414,63 @@ est. APR 58.53 %"></textarea>
                 }
             }
             
-            // Wire up the "Show tokens / Hide tokens" toggle on the Vote Rewards tile.
-            // Click stops propagation so the parent tile's click-to-open-popup handler doesn't fire.
-            document.addEventListener('DOMContentLoaded', () => {
-                const toggleBtn = document.getElementById('vote-tokens-toggle');
-                const listEl = document.getElementById('vote-tokens-list');
-                if (toggleBtn && listEl) {
-                    toggleBtn.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        const willShow = listEl.classList.contains('hidden');
-                        listEl.classList.toggle('hidden');
-                        toggleBtn.innerHTML = willShow
-                            ? '<i class="fas fa-chevron-up text-[10px] mr-0.5"></i>Hide tokens'
-                            : '<i class="fas fa-chevron-down text-[10px] mr-0.5"></i>Show tokens';
-                    });
-                }
-                
-                // Vote Rewards chart icon - replaces the old (i) info icon.
-                // Opens the same chart modal used by other tiles, with the new
-                // voteRewardsTotal_USD metric showing historical accumulated USD.
-                const chartBtn = document.getElementById('vote-rewards-chart-btn');
-                if (chartBtn) {
-                    chartBtn.addEventListener('click', (e) => {
-                        e.stopPropagation(); // Don't trigger the tile's existing click-to-open-popup handler
-                        e.preventDefault();
-                        if (typeof openChartModal === 'function') {
-                            openChartModal('voteRewardsTotal_USD');
+            // Wire up clicks on the unclaimed-rewards tile interactive elements.
+            // Don't wrap in DOMContentLoaded - this script runs after the HTML elements are
+            // already parsed (it's near the end of the document), and DOMContentLoaded may
+            // have already fired by the time this script runs, in which case the listener
+            // would never execute. Instead, attach directly with a small setTimeout fallback
+            // for safety in case any element isn't ready yet.
+            (function wireUnclaimedRewardsButtons() {
+                const tryWire = () => {
+                    // "Show tokens / Hide tokens" inline toggle on Vote Rewards tile
+                    const toggleBtn = document.getElementById('vote-tokens-toggle');
+                    const listEl = document.getElementById('vote-tokens-list');
+                    if (toggleBtn && listEl && !toggleBtn.dataset.wired) {
+                        toggleBtn.dataset.wired = '1';
+                        toggleBtn.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            const willShow = listEl.classList.contains('hidden');
+                            listEl.classList.toggle('hidden');
+                            toggleBtn.innerHTML = willShow
+                                ? '<i class="fas fa-chevron-up text-[10px] mr-0.5"></i>Hide tokens'
+                                : '<i class="fas fa-chevron-down text-[10px] mr-0.5"></i>Show tokens';
+                        });
+                    }
+                    
+                    // Chart icon buttons - one per tile, each opens chart modal with the right metric
+                    const chartButtons = [
+                        { id: 'vote-rewards-chart-btn', metric: 'voteRewardsTotal_USD' },
+                        { id: 'deposit-rewards-chart-btn', metric: 'depositRewardsTotal_USD' },
+                        { id: 'rebase-rewards-chart-btn', metric: 'rebaseTotal_USD' }
+                    ];
+                    chartButtons.forEach(({ id, metric }) => {
+                        const btn = document.getElementById(id);
+                        if (btn && !btn.dataset.wired) {
+                            btn.dataset.wired = '1';
+                            btn.addEventListener('click', (e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                if (typeof openChartModal === 'function') {
+                                    openChartModal(metric);
+                                } else {
+                                    console.warn('openChartModal not yet defined when chart button clicked');
+                                }
+                            });
                         }
                     });
-                }
+                };
                 
-                // Deposit Rewards chart icon - same pattern as Vote Rewards.
-                const depositChartBtn = document.getElementById('deposit-rewards-chart-btn');
-                if (depositChartBtn) {
-                    depositChartBtn.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        if (typeof openChartModal === 'function') {
-                            openChartModal('depositRewardsTotal_USD');
-                        }
-                    });
+                // Try wiring now (script is at end of body, DOM should be ready).
+                // If the elements aren't available yet for some reason, retry after a tick.
+                tryWire();
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', tryWire);
+                } else {
+                    // DOM already parsed - retry once more after current execution stack
+                    // in case other scripts are still running
+                    setTimeout(tryWire, 0);
                 }
-                
-                // Rebase chart icon - same pattern.
-                const rebaseChartBtn = document.getElementById('rebase-rewards-chart-btn');
-                if (rebaseChartBtn) {
-                    rebaseChartBtn.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        if (typeof openChartModal === 'function') {
-                            openChartModal('rebaseTotal_USD');
-                        }
-                    });
-                }
-            });
+            })();
             
             function showMiniPopup(title, content, anchorEl) {
                 // Remove any existing mini popup
