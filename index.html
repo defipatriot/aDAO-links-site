@@ -78,116 +78,136 @@
         .pwa-only { display: none; }
         .pwa-mode .pwa-only { display: flex; }
         
-        /* --- Mobile tightening: reduce padding/font sizes on small screens --- */
+        /* ============================================================
+           MOBILE STYLES — single coherent block (≤640px)
+           Approach:
+           - Hide the section-jump pill bar (info-cards serve as nav)
+           - Top info-cards: compact 4-col grid, all 7 same size
+           - Stat tiles: light touch — tighter padding, smaller fonts,
+             no min/max-height, no flex centering, no chart-icon tricks
+           - Status sliders: leave alone (they were fine in stock layout)
+           - Unclaimed Rewards: 3-col grid stays, just shrink fonts
+           - Marketplace tabs: segmented control (was working)
+           - Live Activity rows: 2-line layout (was working)
+           ============================================================ */
+        
         @media (max-width: 640px) {
-            /* Stat tiles — uniform compact appearance (covers BOTH .stat-card and .stat-card-link) */
-            .stat-card,
-            .stat-card-link { 
-                padding: 0.6rem !important; 
-                padding-top: 1.5rem !important; /* room for chart-icon top-right */
-                min-height: 95px !important;
-                max-height: 130px !important;
-                overflow: hidden;
-                word-break: break-word;
-                position: relative;
-            }
-            .stat-card h3,
-            .stat-card-link h3 { 
-                font-size: 0.7rem !important; 
-                line-height: 0.9rem !important; 
-                margin-bottom: 0.25rem !important;
-                white-space: nowrap !important;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                padding-right: 1.5rem; /* avoid chart-icon */
-            }
-            .stat-card .text-3xl,
-            .stat-card-link .text-3xl { font-size: 1.1rem !important; line-height: 1.3rem !important; margin-top: 0.25rem !important; }
-            .stat-card .text-2xl,
-            .stat-card-link .text-2xl { font-size: 1rem !important; line-height: 1.2rem !important; }
-            .stat-card .text-xl,
-            .stat-card-link .text-xl { font-size: 0.9rem !important; line-height: 1.15rem !important; }
-            .stat-card .text-base,
-            .stat-card-link .text-base { font-size: 0.65rem !important; line-height: 0.85rem !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-            .stat-card .text-md,
-            .stat-card-link .text-md { font-size: 0.65rem !important; }
-            .stat-card .subtext,
-            .stat-card-link .subtext { font-size: 0.55rem !important; line-height: 0.7rem !important; margin-top: 0.15rem !important; }
-            .stat-card img,
-            .stat-card-link img { max-height: 1.1rem !important; max-width: 1.1rem !important; }
-            .stat-card .pulse-dot, .stat-card .static-dot-red,
-            .stat-card-link .pulse-dot, .stat-card-link .static-dot-red { width: 5px !important; height: 5px !important; }
+            /* Page edges tighter on mobile */
+            main { padding-left: 0.5rem !important; padding-right: 0.5rem !important; }
             
-            /* Chart icon: smaller AND positioned cleanly inside the new padding-top */
-            .stat-card .chart-icon,
-            .stat-card-link .chart-icon { 
-                width: 18px !important; 
-                height: 18px !important; 
-                top: 4px !important; 
-                right: 4px !important;
-                z-index: 5;
-            }
-            .stat-card .chart-icon i,
-            .stat-card-link .chart-icon i { font-size: 0.55rem !important; }
-            
-            /* Top nav info-cards — switch to horizontal scrollable tiles on mobile.
-               This avoids the 4×2 grid awkwardness and makes the section ~80% shorter. */
-            .info-card { 
-                padding: 0.5rem !important; 
-                min-height: 70px;
-                max-height: 70px;
+            /* TOP INFO CARDS — compact 4-col grid (4 + 3 layout) */
+            .info-card {
+                padding: 0.6rem 0.4rem !important;
+                min-height: 75px;
                 display: flex !important;
                 flex-direction: column !important;
                 align-items: center !important;
                 justify-content: center !important;
                 text-align: center;
                 overflow: hidden;
-                flex-shrink: 0;
             }
-            .info-card .icon { font-size: 1.1rem !important; margin-bottom: 0.2rem !important; }
-            .info-card h3 { 
-                font-size: 0.7rem !important; 
-                line-height: 0.85rem !important; 
+            .info-card .icon { font-size: 1.1rem !important; margin-bottom: 0.3rem !important; }
+            .info-card h3 {
+                font-size: 0.65rem !important;
+                line-height: 0.85rem !important;
                 margin: 0 !important;
                 white-space: nowrap;
                 overflow: hidden;
                 text-overflow: ellipsis;
                 max-width: 100%;
             }
-            .info-card p,
-            .info-card .link-text { display: none !important; }
+            /* Hide the long ALLY paragraph + "Learn More" — all cards become uniform icon+title */
+            .info-card p, .info-card .link-text { display: none !important; }
             
-            /* Convert the top grid to a compact 4-col grid on mobile so all 7 cards
-               sit in 2 rows (4+3) — visually balanced, no awkward span tricks. */
+            /* The grid: 4 cols on mobile so all 7 cards fit in 2 rows (4+3, last cell empty) */
             .top-info-grid {
-                display: grid !important;
                 grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
                 gap: 0.4rem !important;
             }
-            .top-info-grid > .flex.flex-col.gap-4 {
-                display: contents !important;
-            }
-            .top-info-grid .info-card {
-                min-height: 65px !important;
-                max-height: 65px !important;
-                padding: 0.35rem !important;
-            }
-            .top-info-grid .info-card .icon {
-                font-size: 0.95rem !important;
-                margin-bottom: 0.1rem !important;
-            }
-            .top-info-grid .info-card h3 {
-                font-size: 0.55rem !important;
-                line-height: 0.7rem !important;
-            }
+            /* Dissolve the .flex.flex-col.gap-4 wrappers so their children become direct grid items */
+            .top-info-grid > .flex.flex-col.gap-4 { display: contents !important; }
             
-            /* Page edges */
-            main, section { padding-left: 0.5rem !important; padding-right: 0.5rem !important; }
+            /* STAT TILES — light touch only */
+            .stat-card,
+            .stat-card-link {
+                padding: 0.7rem 0.6rem !important;
+            }
+            .stat-card h3,
+            .stat-card-link h3 {
+                font-size: 0.7rem !important;
+                line-height: 0.9rem !important;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                padding-right: 1.5rem; /* leave room for chart-icon top-right */
+            }
+            .stat-card .text-3xl,
+            .stat-card-link .text-3xl { font-size: 1.25rem !important; line-height: 1.5rem !important; margin-top: 0.25rem !important; }
+            .stat-card .text-2xl,
+            .stat-card-link .text-2xl { font-size: 1.1rem !important; line-height: 1.3rem !important; }
+            .stat-card .text-xl,
+            .stat-card-link .text-xl { font-size: 1rem !important; line-height: 1.25rem !important; }
+            .stat-card .text-base,
+            .stat-card-link .text-base { font-size: 0.7rem !important; line-height: 0.9rem !important; }
+            .stat-card .subtext,
+            .stat-card-link .subtext { font-size: 0.6rem !important; line-height: 0.75rem !important; }
+            .stat-card img,
+            .stat-card-link img { max-height: 1.25rem !important; max-width: 1.25rem !important; }
             
-            /* Section headings (Marketplace, etc.) */
-            section h2, div > h2.text-xl, div > h2.text-2xl { font-size: 1rem !important; }
+            /* Chart icon — smaller and tucked in corner */
+            .stat-card .chart-icon,
+            .stat-card-link .chart-icon {
+                width: 20px !important;
+                height: 20px !important;
+                top: 6px !important;
+                right: 6px !important;
+            }
+            .stat-card .chart-icon i,
+            .stat-card-link .chart-icon i { font-size: 0.6rem !important; }
             
-            /* Marketplace tabs on mobile - segmented-control style: full-width, equal split */
+            /* DAO STATS GRID — tighter gap */
+            #dao-stats { gap: 0.5rem !important; }
+            
+            /* SECTION HEADINGS */
+            section h2,
+            div > h2.text-xl,
+            div > h2.text-2xl { font-size: 1rem !important; }
+            
+            /* UNCLAIMED REWARDS — keep 3-col grid, just shrink fonts */
+            #unclaimed-rewards-card { padding: 0.75rem !important; }
+            #unclaimed-rewards-card > .flex.flex-col {
+                margin-bottom: 0.5rem !important;
+            }
+            #unclaimed-rewards-card h3 { font-size: 0.95rem !important; }
+            #unclaimed-rewards-card .icon { font-size: 1.25rem !important; }
+            #deposit-rewards-section,
+            #vote-rewards-section,
+            #rebase-rewards-section { padding: 0.5rem !important; }
+            #deposit-rewards-section h4,
+            #vote-rewards-section h4,
+            #rebase-rewards-section h4 {
+                font-size: 0.6rem !important;
+                line-height: 0.75rem !important;
+                white-space: normal !important;
+            }
+            #deposit-rewards-section .text-xl,
+            #vote-rewards-section .text-xl,
+            #rebase-rewards-section .text-xl { font-size: 0.95rem !important; line-height: 1.1rem !important; }
+            #deposit-rewards-section .text-sm,
+            #vote-rewards-section .text-sm,
+            #rebase-rewards-section .text-sm { font-size: 0.6rem !important; line-height: 0.75rem !important; }
+            #deposit-rewards-section .text-xs,
+            #vote-rewards-section .text-xs,
+            #rebase-rewards-section .text-xs { font-size: 0.55rem !important; line-height: 0.7rem !important; }
+            #deposit-rewards-section button,
+            #vote-rewards-section button,
+            #rebase-rewards-section button { font-size: 0.55rem !important; }
+            #vote-tokens-toggle, #vote-tokens-list { display: none !important; }
+            #unclaimed-stale-banner { padding: 0.5rem !important; }
+            #unclaimed-stale-banner .text-sm { font-size: 0.75rem !important; }
+            #unclaimed-stale-banner .text-xs { font-size: 0.65rem !important; line-height: 0.85rem !important; }
+            
+            /* MARKETPLACE TABS — segmented control */
             #nft-marketplace-section > div:first-child > .flex.gap-2 {
                 width: 100%;
                 gap: 0.25rem !important;
@@ -195,258 +215,69 @@
                 background: rgba(31, 41, 55, 0.4);
                 border-radius: 0.5rem;
             }
-            .collection-tab { 
+            .collection-tab {
                 flex: 1;
                 justify-content: center;
-                padding: 0.4rem 0.4rem !important; 
+                padding: 0.4rem !important;
                 font-size: 0.7rem !important;
                 gap: 0.25rem !important;
                 white-space: nowrap;
                 border-radius: 0.4rem !important;
                 background: transparent !important;
             }
-            .collection-tab.active {
-                background: rgba(6, 182, 212, 0.2) !important;
-            }
-            .collection-tab img {
-                width: 0.85rem !important;
-                height: 0.85rem !important;
-            }
-            
-            /* Unclaimed rewards inner sections - super compact */
-            #deposit-rewards-section,
-            #vote-rewards-section,
-            #rebase-rewards-section { overflow: hidden; }
-            #deposit-rewards-section h4, 
-            #vote-rewards-section h4, 
-            #rebase-rewards-section h4 { 
-                font-size: 0.6rem !important; 
-                line-height: 0.8rem !important;
-                white-space: normal !important;
-            }
-            #deposit-rewards-section .text-xl, 
-            #vote-rewards-section .text-xl, 
-            #rebase-rewards-section .text-xl { font-size: 0.9rem !important; line-height: 1.1rem !important; }
-            #deposit-rewards-section .text-sm, 
-            #vote-rewards-section .text-sm, 
-            #rebase-rewards-section .text-sm { font-size: 0.55rem !important; line-height: 0.7rem !important; }
-            #deposit-rewards-section .text-xs, 
-            #vote-rewards-section .text-xs, 
-            #rebase-rewards-section .text-xs { font-size: 0.5rem !important; line-height: 0.65rem !important; }
-            #deposit-rewards-section button,
-            #vote-rewards-section button,
-            #rebase-rewards-section button { font-size: 0.5rem !important; }
-            
-            /* Marketplace cards & live activity - tighter */
+            .collection-tab.active { background: rgba(6, 182, 212, 0.2) !important; }
+            .collection-tab img { width: 0.85rem !important; height: 0.85rem !important; }
             .marketplace-section { padding: 0.75rem !important; }
             .marketplace-header h3 { font-size: 0.85rem !important; }
             .marketplace-header img { width: 1rem !important; height: 1rem !important; }
             
-            /* Live Activity rows — proper 2-line layout to prevent overlap */
-            .activity-row { 
-                gap: 0.5rem !important; 
+            /* LIVE ACTIVITY ROWS — 2-line layout */
+            .activity-row {
+                gap: 0.5rem !important;
                 padding: 0.5rem !important;
                 font-size: 0.75rem !important;
             }
             .activity-row .activity-img,
-            .activity-row img.activity-img { 
-                width: 2rem !important; 
-                height: 2rem !important; 
+            .activity-row img.activity-img {
+                width: 2rem !important;
+                height: 2rem !important;
                 flex-shrink: 0;
             }
-            .activity-row .activity-info { 
-                min-width: 0 !important; 
+            .activity-row .activity-info {
+                min-width: 0 !important;
                 flex: 1 1 auto;
             }
             .activity-row .activity-info > div { gap: 0.25rem !important; }
             .activity-row .activity-info .text-sm { font-size: 0.75rem !important; }
             .activity-row .activity-info .text-xs { font-size: 0.65rem !important; }
-            .activity-event { 
-                font-size: 0.55rem !important; 
+            .activity-event {
+                font-size: 0.55rem !important;
                 padding: 1px 5px !important;
                 min-width: auto !important;
                 flex-shrink: 0;
             }
             .activity-time { font-size: 0.6rem !important; }
+            #live-activity-section .marketplace-header h3 { font-size: 0.95rem !important; gap: 0.5rem !important; }
             
-            /* Live Activity header */
-            #live-activity-section .marketplace-header h3 { 
-                font-size: 0.95rem !important; 
-                gap: 0.5rem !important;
-            }
-            #live-activity-section .activity-filter,
-            #live-activity-section button[id*="activity-filter"],
-            #live-activity-section .bg-purple-600 { 
-                font-size: 0.65rem !important; 
-                padding: 0.25rem 0.6rem !important;
-                white-space: nowrap;
-            }
-            
-            /* Coingecko banner — ensure it has room to render */
-            gecko-coin-price-marquee-widget { 
-                display: block !important;
-                min-height: 36px;
-                width: 100% !important;
-            }
-            
-            /* Status slider cards (Mint Status / Broken Status) need different treatment —
-               they're wider tiles with multi-column content, not single-value tiles */
-            .grid.sm\:grid-cols-2 > .stat-card.p-4 {
-                padding: 0.5rem !important;
-                padding-top: 0.5rem !important;
-                min-height: auto !important;
-                max-height: none !important;
-            }
-            .grid.sm\:grid-cols-2 > .stat-card.p-4 h3 {
-                font-size: 0.75rem !important;
-                line-height: 1rem !important;
-                padding-right: 0 !important;
-                white-space: nowrap !important;
-            }
-            .grid.sm\:grid-cols-2 > .stat-card.p-4 span {
-                font-size: 0.7rem !important;
-            }
-            .grid.sm\:grid-cols-2 > .stat-card.p-4 .text-base {
-                font-size: 0.7rem !important;
-                white-space: normal !important;
-            }
-            .grid.sm\:grid-cols-2 > .stat-card.p-4 .slider-bar {
-                margin-top: 0.4rem !important;
-                margin-bottom: 0.4rem !important;
-            }
-            
-            /* Unclaimed Rewards card — completely different mobile layout.
-               Desktop: 3 columns of vertical mini-tiles.
-               Mobile: vertical stack of horizontal rows (icon + label | value).
-               Looks like a clean list, fits more compactly. */
-            #unclaimed-rewards-card .grid.grid-cols-3 {
-                grid-template-columns: 1fr !important;
-                gap: 0.4rem !important;
-            }
-            #deposit-rewards-section,
-            #vote-rewards-section,
-            #rebase-rewards-section { 
-                padding: 0.6rem 0.75rem !important;
-                overflow: hidden;
-                position: relative;
-            }
-            /* Reorganize each sub-card into a horizontal row layout */
-            #deposit-rewards-section > .flex.justify-between,
-            #vote-rewards-section > .flex.justify-between,
-            #rebase-rewards-section > .flex.justify-between { 
-                margin-bottom: 0.25rem !important;
-            }
-            #deposit-rewards-section h4, 
-            #vote-rewards-section h4, 
-            #rebase-rewards-section h4 { 
-                font-size: 0.75rem !important; 
-                line-height: 1rem !important;
-                white-space: nowrap !important;
-                margin: 0 !important;
-            }
-            /* Value rows: smaller fonts, tighter spacing */
-            #deposit-rewards-section .text-xl, 
-            #vote-rewards-section .text-xl, 
-            #rebase-rewards-section .text-xl { 
-                font-size: 1.1rem !important; 
-                line-height: 1.3rem !important;
-                margin-top: 0 !important;
-            }
-            #deposit-rewards-section .text-sm, 
-            #vote-rewards-section .text-sm, 
-            #rebase-rewards-section .text-sm { 
-                font-size: 0.65rem !important; 
-                line-height: 0.85rem !important; 
-            }
-            #deposit-rewards-section .text-xs, 
-            #vote-rewards-section .text-xs, 
-            #rebase-rewards-section .text-xs { 
-                font-size: 0.6rem !important; 
-                line-height: 0.75rem !important; 
-            }
-            /* Hide the divider line + "Last:" line on mobile to save space — info still in modal */
-            #deposit-rewards-section > .mt-2.pt-2.border-t,
-            #rebase-rewards-section > .mt-2.pt-2.border-t,
-            #vote-rewards-section > .mt-2.pt-2.border-t { 
-                display: none !important; 
-            }
-            /* Hide the "Show tokens" toggle on mobile (still accessible via modal) */
-            #vote-tokens-toggle, #vote-tokens-list { display: none !important; }
-            /* Stale banner: tighter on mobile */
-            #unclaimed-stale-banner { padding: 0.5rem !important; margin-bottom: 0.5rem !important; }
-            #unclaimed-stale-banner .text-sm { font-size: 0.75rem !important; }
-            #unclaimed-stale-banner .text-xs { font-size: 0.65rem !important; line-height: 0.85rem !important; }
-            
-            /* General tightening: cards and inner sections */
-            .stat-card .p-4, .stat-card .p-6 { padding: 0.5rem !important; }
+            /* COINGECKO BANNER */
+            gecko-coin-price-marquee-widget { display: block !important; min-height: 36px; width: 100% !important; }
         }
         
-        /* Smaller phones - even more aggressive */
+        /* Smaller phones — tighten further */
         @media (max-width: 380px) {
-            .stat-card,
-            .stat-card-link { padding: 0.5rem !important; padding-top: 1.4rem !important; min-height: 88px !important; }
-            .stat-card .text-3xl,
-            .stat-card-link .text-3xl { font-size: 1rem !important; }
-            .stat-card h3, .stat-card .text-md,
-            .stat-card-link h3, .stat-card-link .text-md { font-size: 0.6rem !important; line-height: 0.8rem !important; }
-            .stat-card .subtext,
-            .stat-card-link .subtext { font-size: 0.5rem !important; }
-            .info-card { min-height: 62px; max-height: 62px; padding: 0.4rem !important; }
-            .info-card h3 { font-size: 0.65rem !important; }
+            .info-card { min-height: 68px; padding: 0.5rem 0.3rem !important; }
+            .info-card h3 { font-size: 0.6rem !important; }
             .info-card .icon { font-size: 1rem !important; }
+            .stat-card,
+            .stat-card-link { padding: 0.6rem 0.5rem !important; }
+            .stat-card .text-3xl,
+            .stat-card-link .text-3xl { font-size: 1.1rem !important; }
+            .stat-card h3,
+            .stat-card-link h3 { font-size: 0.65rem !important; }
         }
         
-        /* --- Mobile sticky quick-nav bar — app-style segmented tab bar --- */
-        .mobile-quicknav {
-            display: none;
-            position: sticky;
-            top: 0;
-            z-index: 40;
-            background: rgba(10, 11, 15, 0.92);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border-bottom: 1px solid rgba(34, 211, 238, 0.15);
-            padding: 0.4rem 0.5rem;
-            margin: -0.5rem -0.75rem 0.75rem -0.75rem;
-        }
-        .mobile-quicknav-inner {
-            display: grid;
-            grid-template-columns: repeat(5, 1fr);
-            gap: 0.25rem;
-            width: 100%;
-        }
-        .mobile-quicknav a {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 0.1rem;
-            padding: 0.4rem 0.2rem;
-            background: rgba(255, 255, 255, 0.04);
-            border: 1px solid rgba(255, 255, 255, 0.06);
-            border-radius: 0.5rem;
-            font-size: 0.6rem;
-            font-weight: 600;
-            color: #9ca3af;
-            text-decoration: none;
-            transition: all 0.15s;
-            min-height: 44px;
-            line-height: 1;
-        }
-        .mobile-quicknav a:hover, .mobile-quicknav a:active {
-            background: rgba(34, 211, 238, 0.1);
-            border-color: rgba(34, 211, 238, 0.3);
-            color: #67e8f9;
-        }
-        .mobile-quicknav a i {
-            font-size: 0.85rem;
-            color: #22d3ee;
-            margin-bottom: 0.05rem;
-        }
-        @media (max-width: 768px) {
-            .mobile-quicknav { display: block; }
-        }
-        
+        /* Smooth scroll for anchor jumps */
+        html { scroll-behavior: smooth; scroll-padding-top: 60px; }
         /* Smooth scroll for anchor jumps */
         html { scroll-behavior: smooth; scroll-padding-top: 60px; }
         body {
@@ -1007,17 +838,6 @@
             </span>
         </div>
         
-        <!-- Mobile quick-nav: sticky app-style tab bar (hidden on desktop) -->
-        <nav class="mobile-quicknav" aria-label="Page sections">
-            <div class="mobile-quicknav-inner">
-                <a href="#top" data-quicknav-top="1"><i class="fas fa-home"></i><span>Top</span></a>
-                <a href="#unclaimed-rewards-card"><i class="fas fa-coins"></i><span>Rewards</span></a>
-                <a href="#dao-stats"><i class="fas fa-chart-pie"></i><span>Stats</span></a>
-                <a href="#nft-marketplace-section"><i class="fas fa-store"></i><span>Market</span></a>
-                <a href="#live-activity-section"><i class="fas fa-bolt"></i><span>Activity</span></a>
-            </div>
-        </nav>
-
         <div class="top-info-grid grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-6 sm:mb-8">
             <a href="ally.html" class="stat-card info-card rounded-xl group">
                 <i class="fas fa-layer-group icon"></i>
@@ -2735,15 +2555,6 @@ est. APR 58.53 %"></textarea>
                     }
                 });
             }
-            
-            // Mobile quick-nav: handle "Top" link (no #top element exists, so scroll to top)
-            var topLinks = document.querySelectorAll('[data-quicknav-top="1"]');
-            topLinks.forEach(function(link) {
-                link.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                });
-            });
             
             // App info modal open/close
             var modal = document.getElementById('appInfoModal');
