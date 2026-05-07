@@ -142,6 +142,21 @@
             .marketplace-header h3 { font-size: 0.85rem !important; }
             .marketplace-header img { width: 1rem !important; height: 1rem !important; }
             
+            /* Live Activity rows — prevent overlap, tighten spacing */
+            .activity-row { 
+                gap: 0.4rem !important; 
+                padding: 0.4rem 0.5rem !important;
+                font-size: 0.75rem !important;
+            }
+            .activity-row img { width: 1.75rem !important; height: 1.75rem !important; flex-shrink: 0; }
+            .activity-row > div, .activity-row > span { min-width: 0; }
+            .activity-event { 
+                font-size: 0.55rem !important; 
+                padding: 1px 4px !important;
+                min-width: 40px !important;
+                flex-shrink: 0;
+            }
+            
             /* General tightening: cards and inner sections */
             .stat-card .p-4, .stat-card .p-6 { padding: 0.5rem !important; }
         }
@@ -934,20 +949,20 @@
              </p>
              
              <!-- Lock Status Summary -->
-             <div class="mt-4 pt-4 border-t border-gray-700 flex justify-between items-center">
-                 <div class="text-sm">
+             <div class="mt-4 pt-4 border-t border-gray-700 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+                 <div class="text-sm text-center sm:text-left">
                      <span class="text-gray-500">Locks:</span>
                      <span class="text-white ml-2">#600 (arbLUNA) + #711 (ampLUNA)</span>
                      <span id="locks-total-vp" class="text-cyan-400 ml-2"><i class="fas fa-spinner fa-spin text-xs"></i></span>
                  </div>
-                 <div class="flex items-center gap-2">
-                     <a href="https://daodao.zone/dao/terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm/apps?url=https%3A%2F%2Fwww.erisprotocol.com" target="_blank" rel="noopener noreferrer" class="text-xs bg-cyan-700 hover:bg-cyan-600 text-white px-3 py-1 rounded transition-colors inline-flex items-center gap-1">
+                 <div class="flex items-center gap-2 justify-center sm:justify-end flex-shrink-0">
+                     <a href="https://daodao.zone/dao/terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm/apps?url=https%3A%2F%2Fwww.erisprotocol.com" target="_blank" rel="noopener noreferrer" class="text-xs bg-cyan-700 hover:bg-cyan-600 text-white px-3 py-1.5 rounded transition-colors inline-flex items-center gap-1 whitespace-nowrap">
                          <i class="fas fa-wallet text-[10px]"></i>
-                         <span>DAO TLA Wallet</span>
+                         <span>TLA Wallet</span>
                          <i class="fas fa-external-link-alt text-[9px] opacity-70"></i>
                      </a>
-                     <button id="view-full-details-btn" class="text-xs bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-1 rounded transition-colors">
-                         View Full Details
+                     <button id="view-full-details-btn" class="text-xs bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-1.5 rounded transition-colors whitespace-nowrap">
+                         Full Details
                      </button>
                  </div>
              </div>
@@ -6267,9 +6282,17 @@ est. APR 58.53 %"></textarea>
                     `;
                 }
                 
-                // Update tile with combined total (only if we have alliance or council data)
-                if (tileEl && (allianceValue > 0 || councilValue > 0)) {
+                // Update tile with combined total — but ONLY if main token holdings successfully priced.
+                // Showing council+alliance alone (without token holdings) misleads users into thinking
+                // that's the full treasury when it's just a partial sum.
+                const tokenHoldingsLoaded = typeof window.liveTreasuryUsd === 'number' && window.liveTreasuryUsd > 0;
+                if (tileEl && tokenHoldingsLoaded && (allianceValue > 0 || councilValue > 0)) {
                     tileEl.textContent = '$' + combined.toLocaleString(undefined, {maximumFractionDigits: 0});
+                } else if (tileEl && !tokenHoldingsLoaded) {
+                    // Token holdings not loaded → show em-dash, don't show partial sum
+                    if (!tileEl.innerHTML.includes('fa-spinner')) {
+                        tileEl.textContent = '—';
+                    }
                 }
                 
                 // Store combined total globally
@@ -6689,23 +6712,22 @@ est. APR 58.53 %"></textarea>
                  const snapshotDateEl = document.getElementById('tla-snapshot-date');
                  const tokensContainer = document.getElementById('tla-tokens-container');
                  
-                 // Freshness check: TLA data is from weekly epoch snapshots — anything older than 14 days is stale and should not display
-                 var snapshotAgeMs = null;
-                 if (tlaData && tlaData.snapshotDate) {
-                     var snapshotMs = new Date(tlaData.snapshotDate).getTime();
-                     if (!isNaN(snapshotMs)) snapshotAgeMs = Date.now() - snapshotMs;
-                 }
-                 var STALE_THRESHOLD_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
-                 var isFresh = snapshotAgeMs !== null && snapshotAgeMs < STALE_THRESHOLD_MS;
+                 // Use the system's epoch-based staleness check (more accurate than date check)
+                 var tlaMeta = (typeof getTlaDataMeta === 'function') ? getTlaDataMeta() : { isStale: true };
+                 var dataIsStale = tlaMeta.isStale === true;
                  
-                 if (!hasValidTlaData || !isFresh) {
+                 if (!hasValidTlaData || dataIsStale) {
                      // No valid/fresh TLA data — show blank state
                      if (totalValueTileEl) totalValueTileEl.textContent = '—';
-                     if (aprTileEl) aprTileEl.textContent = isFresh === false && hasValidTlaData ? 'Snapshot stale' : 'Awaiting Snapshot';
-                     if (modalTotalUsdEl) modalTotalUsdEl.textContent = isFresh === false && hasValidTlaData ? 'Snapshot too old to display' : 'Awaiting Snapshot Data';
+                     if (aprTileEl) {
+                         aprTileEl.textContent = dataIsStale && hasValidTlaData
+                             ? 'Snapshot ' + (tlaMeta.epochsOld || '?') + ' epoch(s) stale'
+                             : 'Awaiting Snapshot';
+                     }
+                     if (modalTotalUsdEl) modalTotalUsdEl.textContent = dataIsStale ? 'Snapshot too old to display' : 'Awaiting Snapshot Data';
                      if (modalTotalAprEl) modalTotalAprEl.textContent = '';
                      if (snapshotDateEl) snapshotDateEl.textContent = '—';
-                     if (tokensContainer) tokensContainer.innerHTML = '<p class="text-center text-gray-500 p-4">No TLA data available yet.</p>';
+                     if (tokensContainer) tokensContainer.innerHTML = '<p class="text-center text-gray-500 p-4">No fresh TLA data available.</p>';
                      updateTile('dao-tla-total', null, false, { titleId: 'dao-tla-title' }); 
                      return;
                  }
@@ -7138,14 +7160,12 @@ est. APR 58.53 %"></textarea>
                 
                 // Fetch TLA data from GitHub
                 fetchTlaData().then(tlaData => {
-                    // Freshness check: TLA data is from weekly epoch snapshots — blank if stale
-                    const tlaSnapshotDate = tlaData?.snapshotDate || tlaData?.meta?.generated_at;
-                    const STALE_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
-                    const snapshotMs = tlaSnapshotDate ? new Date(tlaSnapshotDate).getTime() : NaN;
-                    const isFresh = !isNaN(snapshotMs) && (Date.now() - snapshotMs) < STALE_MS;
-                    if (!isFresh) {
+                    // Use the system's own epoch-based staleness check (more accurate than date check —
+                    // file's `generated_at` can be recent even when data inside is from old epochs).
+                    var meta = (typeof getTlaDataMeta === 'function') ? getTlaDataMeta() : { isStale: true };
+                    if (!tlaData || meta.isStale) {
                         mainTileValueEl.textContent = '—';
-                        mainTileUsdEl.textContent = tlaSnapshotDate ? 'Snapshot stale' : 'No data';
+                        mainTileUsdEl.textContent = meta.epochsOld > 0 ? 'Snapshot ' + meta.epochsOld + ' epoch(s) stale' : 'No fresh data';
                         if (container) container.innerHTML = '<p class="text-center text-gray-500 p-4">No fresh TLA VP data available.</p>';
                         if (modalLunaEl) modalLunaEl.textContent = '—';
                         if (modalUsdEl) modalUsdEl.textContent = '—';
