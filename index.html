@@ -3,6 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- PWA: detect standalone mode + redirect to user's preferred default page on launch -->
+    <script>
+    (function() {
+        var isStandalone = window.matchMedia('(display-mode: standalone)').matches
+                        || window.navigator.standalone === true;
+        if (isStandalone) {
+            document.documentElement.classList.add('pwa-mode');
+            // Only redirect on initial launch (root path) and only once per session
+            var path = window.location.pathname;
+            var isHome = (path === '/' || path === '/index.html');
+            if (isHome && !sessionStorage.getItem('aDAO_launched')) {
+                sessionStorage.setItem('aDAO_launched', '1');
+                var pref = localStorage.getItem('aDAO_default_page');
+                if (pref && pref !== '/') {
+                    window.location.replace(pref);
+                }
+            }
+        }
+    })();
+    </script>
+    
     <title>Alliance DAO Dashboard</title>
     
     <!-- Favicons -->
@@ -11,11 +33,32 @@
     <link rel="icon" type="image/png" sizes="16x16" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/favicon-16x16.png">
     <link rel="apple-touch-icon" sizes="180x180" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/apple-touch-icon.png">
     
+    <!-- PWA manifest — enables "Install app" / "Add to Home Screen" -->
+    <link rel="manifest" href="site.webmanifest">
+    
+    <!-- Canonical URL — critical for dual-domain setup (theadao.com forwards here) -->
+    <link rel="canonical" href="https://www.thealliancedao.com/">
+    
     <!-- SEO -->
-    <meta name="description" content="Alliance DAO Dashboard - Track treasury, TLA deposits, NFT backing, and governance.">
+    <meta name="description" content="Live community dashboard for Alliance DAO on Terra. Track treasury holdings, TLA deposits, NFT backing, governance proposals, and on-chain stats in real time.">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#0a0b0f">
+    
+    <!-- Open Graph (Facebook, LinkedIn, Discord, etc.) -->
     <meta property="og:title" content="Alliance DAO Dashboard">
-    <meta property="og:description" content="Community dashboard for Alliance DAO on Terra blockchain.">
+    <meta property="og:description" content="Live community dashboard for Alliance DAO on Terra. Track treasury, TLA deposits, NFT backing, and governance.">
     <meta property="og:image" content="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/android-chrome-512x512.png">
+    <meta property="og:image:width" content="512">
+    <meta property="og:image:height" content="512">
+    <meta property="og:url" content="https://www.thealliancedao.com/">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Alliance DAO">
+    
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Alliance DAO Dashboard">
+    <meta name="twitter:description" content="Live community dashboard for Alliance DAO on Terra. Track treasury, TLA deposits, NFT backing, and governance.">
+    <meta name="twitter:image" content="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/android-chrome-512x512.png">
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -30,6 +73,10 @@
     
     <style>
         /* --- Base Styles --- */
+        
+        /* PWA: only show "app launch settings" UI when running as installed app */
+        .pwa-only { display: none; }
+        .pwa-mode .pwa-only { display: flex; }
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
             background-color: #0a0b0f;
@@ -2202,12 +2249,31 @@ est. APR 58.53 %"></textarea>
 
     <footer class="border-t border-gray-800 mt-12 py-8">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-gray-500 text-sm">
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-8">
                 <div><h4 class="font-bold text-gray-300 mb-2">Disclaimer</h4><p>This website is for informational purposes only and does not constitute financial advice. All data is provided "as is" without warranty. Please do your own research.</p></div>
                 <div><h4 class="font-bold text-gray-300 mb-2">Project Origin</h4><p>This site is built and maintained by a council member, not at the direction of the council, but as a passionate community member looking to improve the optics of the collection.</p></div>
                 <div><h4 class="font-bold text-gray-300 mb-2">Data Source</h4><p>Data on this site is a mix of live on-chain data and static snapshots. See the banner at the top for details.</p>
                 </div>
                 <div><h4 class="font-bold text-gray-300 mb-2">Transparency</h4><p>The plan is for the script used to retrieve on-chain data to be open-source. You will be able to view the public repository to see how information is retrieved.</p><a href="https://github.com/defipatriot" target="_blank" rel="noopener noreferrer" class="text-cyan-400 hover:underline mt-2 inline-block">View on GitHub</a></div>
+                <div>
+                    <h4 class="font-bold text-gray-300 mb-2"><i class="fas fa-mobile-alt text-cyan-400 mr-1"></i> Install as App</h4>
+                    <p class="text-xs mb-2"><strong class="text-cyan-400">iPhone:</strong> Open in Safari → tap Share <i class="fas fa-arrow-up-from-bracket text-[10px]"></i> → "Add to Home Screen"</p>
+                    <p class="text-xs mb-2"><strong class="text-cyan-400">Android:</strong> Open in Chrome → tap menu <i class="fas fa-ellipsis-vertical text-[10px]"></i> → "Install app" (or accept the install banner when it appears)</p>
+                    <p class="text-xs text-gray-600 mt-3 leading-relaxed">Opens fullscreen with no browser bar. <span class="text-cyan-500/80">Android only:</span> long-press the app icon on your home screen for quick-launch shortcuts to NFT Explorer, TLA Stats, and DAO Governance.</p>
+                    
+                    <!-- App-only: choose default landing page on launch -->
+                    <div class="pwa-only mt-4 flex-col items-center gap-2 text-xs text-gray-500 pt-3 border-t border-gray-800">
+                        <span class="block mb-1">App opens to:</span>
+                        <div class="flex items-center justify-center gap-2">
+                            <select id="pwa-default-page" class="bg-transparent border border-gray-700 rounded px-2 py-1 text-gray-300 hover:border-gray-500 focus:outline-none focus:border-cyan-500 cursor-pointer text-xs">
+                                <option value="/">Dashboard</option>
+                                <option value="/nft-explorer-index.html">NFT Explorer</option>
+                                <option value="/dao_governance.html">DAO Governance</option>
+                            </select>
+                            <span id="pwa-pref-saved" class="text-cyan-500 opacity-0 transition-opacity">✓ saved</span>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </footer>
@@ -2221,13 +2287,31 @@ est. APR 58.53 %"></textarea>
             <div class="flex flex-wrap justify-center items-center space-x-6 text-sm">
                 <a href="tutorials.html" class="hover:text-white hover:underline transition-colors">Tutorials</a>
                 <a href="links.html" class="hover:text-white hover:underline transition-colors">Official Links</a>
-                <a href="#" id="logo-modal-trigger" class="hover:text-white hover:underline transition-colors cursor-pointer">Logos</a>
                 <a href="https://chainsco.pe/terra2/address/terra1phr9fngjv7a8an4dhmhd0u0f98wazxfnzccqtyheq4zqrrp4fpuqw3apw9" target="_blank" rel="noopener noreferrer" class="hover:text-white hover:underline transition-colors">NFT Contract</a>
                 <a href="https://github.com/SCV-Security/PublicReports/blob/b819ec669f81e603caca261931e2a4aaca1cddf7/Alliance/Alliance%20DAO%20-%20NFT%20Collection%20Contract%20-%20Audit%20Report%20v1.0.pdf" target="_blank" rel="noopener noreferrer" class="hover:text-white hover:underline transition-colors">Contract Audit</a>
-                <a href="test-page.html" class="text-gray-600 hover:text-gray-400 transition-colors text-xs opacity-50 hover:opacity-100" title="Dev Test Page">•</a>
             </div>
         </div>
     </footer>
+    
+    <!-- App-only: wire up the default-page preference selector -->
+    <script>
+    (function() {
+        document.addEventListener('DOMContentLoaded', function() {
+            var sel = document.getElementById('pwa-default-page');
+            var saved = document.getElementById('pwa-pref-saved');
+            if (!sel) return;
+            var current = localStorage.getItem('aDAO_default_page') || '/';
+            sel.value = current;
+            sel.addEventListener('change', function() {
+                localStorage.setItem('aDAO_default_page', sel.value);
+                if (saved) {
+                    saved.style.opacity = '1';
+                    setTimeout(function() { saved.style.opacity = '0'; }, 1500);
+                }
+            });
+        });
+    })();
+    </script>
 
     <!-- Top 10 Sales Modal -->
     <div id="top10Modal" class="modal fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50 hidden opacity-0">
@@ -2320,23 +2404,26 @@ est. APR 58.53 %"></textarea>
             console.log('DEBUG: DOMContentLoaded - starting page initialization...');
 
             // --- CENTRAL DATA OBJECT ---
+            // Snapshot values intentionally null — site shows "—" when live fetches fail
+            // so broken data sources are immediately visible instead of being masked by
+            // stale snapshot data. To restore snapshots, populate these from live values.
             const dashboardData = {
-              "lastUpdated": "2025-09-11T16:02:00Z",
+              "lastUpdated": null,
               "statusSliders": {
-                "mint": { "unMinted": 5828, "minted": 4172, "percentMinted": "41.72%" },
-                "broken": { "unBroken": 8924, "broken": 1076, "percentBroken": "10.76%" }
+                "mint": { "unMinted": null, "minted": null, "percentMinted": null },
+                "broken": { "unBroken": null, "broken": null, "percentBroken": null }
               },
               "keyMetrics": {
-                "daodaoStaked": 1476, 
-                "daoMembers": 160,
-                "enterpriseStakedHolder": 415,
-                "backingInLuna": 109.97,
-                "avgDailyGain": 0.21,
+                "daodaoStaked": null, 
+                "daoMembers": null,
+                "enterpriseStakedHolder": null,
+                "backingInLuna": null,
+                "avgDailyGain": null,
               },
               "tlaDeposits": {
                 "snapshotDate": null,
-                "totalDeposit": 0,
-                "estApr": 0,
+                "totalDeposit": null,
+                "estApr": null,
                 "tokenBalances": []
               }
             };
@@ -2464,13 +2551,12 @@ est. APR 58.53 %"></textarea>
                 } catch (error) {
                     console.error("DEBUG: Failed to fetch avg daily gain from GitHub:", error);
                     
-                    // Fall back to static snapshot value
-                    const { keyMetrics } = dashboardData;
+                    // Show em-dash instead of snapshot fallback when live fetch fails
                     if (avgDailyGainEl && avgDailyGainEl.innerHTML.includes('fa-spinner')) {
-                        avgDailyGainEl.textContent = `+${keyMetrics.avgDailyGain} LUNA`;
+                        avgDailyGainEl.textContent = '—';
                     }
                     if (avgDailyGainSubEl && avgDailyGainSubEl.innerHTML.includes('fa-spinner')) {
-                        avgDailyGainSubEl.textContent = '(Snapshot)';
+                        avgDailyGainSubEl.textContent = 'No live data';
                     }
                     // Update with red static dot (snapshot indicator)
                     if (avgDailyGainTitleEl) {
@@ -2544,9 +2630,9 @@ est. APR 58.53 %"></textarea>
                     // and new v3 format (dashboard.tla_deposits)
                     const deposits = tlaData.dashboard?.tla_deposits || tlaData;
                     
-                    // Update the dashboardData with fetched TLA data
-                    dashboardData.tlaDeposits.totalDeposit = deposits.total_usd || tlaData.totalDeposit || tlaData.totalDeposit_USD || dashboardData.tlaDeposits.totalDeposit;
-                    dashboardData.tlaDeposits.estApr = deposits.apr || tlaData.estApr || dashboardData.tlaDeposits.estApr;
+                    // Update the dashboardData with fetched TLA data (no chain-fallback to old snapshot value — null means broken)
+                    dashboardData.tlaDeposits.totalDeposit = deposits.total_usd ?? tlaData.totalDeposit ?? tlaData.totalDeposit_USD ?? null;
+                    dashboardData.tlaDeposits.estApr = deposits.apr ?? tlaData.estApr ?? null;
                     dashboardData.tlaDeposits.snapshotDate = tlaResult.timestamp;
                     
                     // Token balances - new format uses 'tokens' with 'symbol', old uses 'tokenBalances' with 'name'
@@ -4891,7 +4977,7 @@ est. APR 58.53 %"></textarea>
             // --- UI UPDATE FUNCTION ---
             function updateUI() {
                 const lastUpdatedEl = document.getElementById('last-updated');
-                if (lastUpdatedEl) lastUpdatedEl.textContent = new Date(dashboardData.lastUpdated).toUTCString();
+                if (lastUpdatedEl) lastUpdatedEl.textContent = dashboardData.lastUpdated ? new Date(dashboardData.lastUpdated).toUTCString() : '—';
                 
                  // Mint Slider (Update with static data initially)
                 const mintSliderEl = document.getElementById('mint-slider');
@@ -4900,11 +4986,19 @@ est. APR 58.53 %"></textarea>
                 const mintedPercentEl = document.getElementById('minted-percent');
 
                 if (mintSliderEl && unmintedCountEl && mintedCountEl && mintedPercentEl) {
-                    const percentMintedNum = parseFloat(dashboardData.statusSliders.mint.percentMinted);
-                    mintSliderEl.innerHTML = `<div class="slider-fill-blue" style="width: ${100 - percentMintedNum}%;"></div><div class="slider-fill-gray" style="width: ${percentMintedNum}%;"></div>`;
-                    if (unmintedCountEl.innerHTML.includes('fa-spinner')) unmintedCountEl.textContent = dashboardData.statusSliders.mint.unMinted.toLocaleString();
-                    if (mintedCountEl.innerHTML.includes('fa-spinner')) mintedCountEl.textContent = dashboardData.statusSliders.mint.minted.toLocaleString();
-                    if (mintedPercentEl.innerHTML.includes('fa-spinner')) mintedPercentEl.textContent = `${dashboardData.statusSliders.mint.percentMinted} Minted`;
+                    // Show empty bar if snapshot data not available — live data will populate when fetch succeeds
+                    const percentMintedNum = dashboardData.statusSliders.mint.percentMinted != null
+                        ? parseFloat(dashboardData.statusSliders.mint.percentMinted)
+                        : null;
+                    if (percentMintedNum != null && !isNaN(percentMintedNum)) {
+                        mintSliderEl.innerHTML = `<div class="slider-fill-blue" style="width: ${100 - percentMintedNum}%;"></div><div class="slider-fill-gray" style="width: ${percentMintedNum}%;"></div>`;
+                    } else {
+                        mintSliderEl.innerHTML = '<div class="slider-fill-gray" style="width: 100%; opacity: 0.3;"></div>';
+                    }
+                    // When live fetch is broken, show em-dash instead of snapshot fallback values
+                    if (unmintedCountEl.innerHTML.includes('fa-spinner')) unmintedCountEl.textContent = '—';
+                    if (mintedCountEl.innerHTML.includes('fa-spinner')) mintedCountEl.textContent = '—';
+                    if (mintedPercentEl.innerHTML.includes('fa-spinner')) mintedPercentEl.textContent = '—';
                 }
                 
                  // --- FIX: Removed redundant static update for Avg Daily Gain ---
@@ -5967,8 +6061,8 @@ est. APR 58.53 %"></textarea>
                 // Get NFT type (default to unbroken)
                 const nftType = window.unmintedNftType || 'unbroken';
                 
-                // Get unminted count
-                const unmintedCount = dashboardData.statusSliders?.mint?.unMinted || 5828;
+                // Get unminted count (no fallback — calculator will produce 0 if live data unavailable, which makes breakage visible)
+                const unmintedCount = dashboardData.statusSliders?.mint?.unMinted;
                 
                 // Get token prices from cached CoinGecko data
                 const prices = window.cachedPriceData || {};
@@ -6011,8 +6105,8 @@ est. APR 58.53 %"></textarea>
                 const effectivePrice = priceInUsd * (1 - discount / 100);
                 const totalMarketValue = effectivePrice * unmintedCount;
                 
-                // Get baseline backing value for comparison
-                const backingPerNftLuna = dashboardData.keyMetrics?.backingInLuna || 137;
+                // Get baseline backing value for comparison (no fallback — see comment above re: visible breakage)
+                const backingPerNftLuna = dashboardData.keyMetrics?.backingInLuna;
                 const backingPerNftUsd = backingPerNftLuna * lunaPrice;
                 const totalBackingUsd = backingPerNftUsd * unmintedCount;
                 const vsBackingMultiple = totalBackingUsd > 0 ? totalMarketValue / totalBackingUsd : 0;
@@ -6078,7 +6172,7 @@ est. APR 58.53 %"></textarea>
                 
                 // 3. TLA Deposits - SNAPSHOT ONLY (may be stale)
                 const tlaDataMeta = getTlaDataMeta();
-                const tlaDepositsUsd = dashboardData.tlaDeposits?.totalDeposit || 0;
+                const tlaDepositsUsd = dashboardData.tlaDeposits?.totalDeposit;
                 const depositsAreStale = tlaDataMeta.isStale;
                 
                 // Calculate totals
@@ -6183,7 +6277,7 @@ est. APR 58.53 %"></textarea>
                 resultDiv?.classList.remove('hidden');
                 
                 const nftType = window.chartNftType || 'unbroken';
-                const unmintedCount = dashboardData.statusSliders?.mint?.unMinted || 5828;
+                const unmintedCount = dashboardData.statusSliders?.mint?.unMinted;
                 const prices = window.cachedPriceData || {};
                 const lunaPrice = prices['terra-luna-2']?.usd || 0;
                 const lstRatios = window.lstRatios || {};
@@ -6202,7 +6296,7 @@ est. APR 58.53 %"></textarea>
                 
                 const effectivePrice = priceInUsd * (1 - discount / 100);
                 const totalMarketValue = effectivePrice * unmintedCount;
-                const backingPerNftLuna = dashboardData.keyMetrics?.backingInLuna || 137;
+                const backingPerNftLuna = dashboardData.keyMetrics?.backingInLuna;
                 const backingPerNftUsd = backingPerNftLuna * lunaPrice;
                 const totalBackingUsd = backingPerNftUsd * unmintedCount;
                 const vsBackingMultiple = totalBackingUsd > 0 ? totalMarketValue / totalBackingUsd : 0;
@@ -6238,7 +6332,7 @@ est. APR 58.53 %"></textarea>
                 const liveTreasury = window.liveTreasuryUsd || 0;
                 const liveLocksUsd = window.tlaVpData?.totalUsd || 0;
                 const tlaDataMeta = getTlaDataMeta();
-                const tlaDepositsUsd = dashboardData.tlaDeposits?.totalDeposit || 0;
+                const tlaDepositsUsd = dashboardData.tlaDeposits?.totalDeposit;
                 const depositsAreStale = tlaDataMeta.isStale;
                 
                 const currentTreasuryUsd = liveTreasury + liveLocksUsd + tlaDepositsUsd;
