@@ -130,7 +130,7 @@
             .stat-card .chart-icon i,
             .stat-card-link .chart-icon i { font-size: 0.55rem !important; }
             
-            /* Top nav info-cards — equalize heights via grid auto-rows + force compact mode */
+            /* Top nav info-cards — all uniform compact tiles on mobile */
             .info-card { 
                 padding: 0.5rem !important; 
                 min-height: 70px;
@@ -152,33 +152,18 @@
                 text-overflow: ellipsis;
                 max-width: 100%;
             }
-            /* Hide the long ALLY Rewards paragraph + Learn More on mobile to match other cards */
+            /* Hide paragraph + Learn More on ALL info-cards on mobile (including ALLY)
+               so every tile is a uniform compact icon+title card */
             .info-card p,
             .info-card .link-text { display: none !important; }
             
-            /* The ALLY card sits alone in its grid cell, while siblings have 2-card stacks.
-               On mobile, make it span 2 rows so the visual heights match. */
-            .grid > a.stat-card.info-card:first-child {
-                grid-row: span 2;
-                min-height: 150px !important;
-                max-height: 150px !important;
+            /* CRITICAL: The top grid uses a mix of single .info-card items and column-wrappers
+               (.flex.flex-col.gap-4) that contain 2 cards each. This creates uneven layout on mobile.
+               Solution: dissolve those wrappers via display: contents — their child cards become
+               direct grid items and flow naturally as a single 2-col grid of 7 equal tiles. */
+            .grid > .flex.flex-col.gap-4 { 
+                display: contents !important; 
             }
-            /* Restore the paragraph just for the ALLY card so it has something to fill the taller space */
-            .grid > a.stat-card.info-card:first-child p {
-                display: block !important;
-                font-size: 0.6rem !important;
-                line-height: 0.85rem !important;
-                margin-top: 0.25rem !important;
-                padding: 0 0.25rem;
-            }
-            .grid > a.stat-card.info-card:first-child .link-text {
-                display: inline-block !important;
-                font-size: 0.6rem !important;
-                margin-top: 0.35rem !important;
-            }
-            
-            /* The 4 column-pair wrappers — uniform vertical gap on mobile */
-            .grid > .flex.flex-col.gap-4 { gap: 0.6rem !important; }
             
             /* Page edges */
             main, section { padding-left: 0.5rem !important; padding-right: 0.5rem !important; }
@@ -269,6 +254,32 @@
                 display: block !important;
                 min-height: 36px;
                 width: 100% !important;
+            }
+            
+            /* Status slider cards (Mint Status / Broken Status) need different treatment —
+               they're wider tiles with multi-column content, not single-value tiles */
+            .grid.sm\:grid-cols-2 > .stat-card.p-4 {
+                padding: 0.5rem !important;
+                padding-top: 0.5rem !important;
+                min-height: auto !important;
+                max-height: none !important;
+            }
+            .grid.sm\:grid-cols-2 > .stat-card.p-4 h3 {
+                font-size: 0.75rem !important;
+                line-height: 1rem !important;
+                padding-right: 0 !important;
+                white-space: nowrap !important;
+            }
+            .grid.sm\:grid-cols-2 > .stat-card.p-4 span {
+                font-size: 0.7rem !important;
+            }
+            .grid.sm\:grid-cols-2 > .stat-card.p-4 .text-base {
+                font-size: 0.7rem !important;
+                white-space: normal !important;
+            }
+            .grid.sm\:grid-cols-2 > .stat-card.p-4 .slider-bar {
+                margin-top: 0.4rem !important;
+                margin-bottom: 0.4rem !important;
             }
             
             /* General tightening: cards and inner sections */
@@ -985,14 +996,14 @@
         </div>
 
         <div id="unclaimed-rewards-card" class="stat-card rounded-xl p-3 sm:p-6 mb-6 sm:mb-8">
-             <div class="flex items-center justify-between mb-4">
+             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
                  <div class="flex items-center">
                      <i class="fas fa-coins icon mr-3 text-2xl text-yellow-400"></i>
-                     <h3 class="text-xl font-bold text-white">DAO Unclaimed Rewards</h3>
+                     <h3 class="text-base sm:text-xl font-bold text-white">DAO Unclaimed Rewards</h3>
                  </div>
-                 <div class="flex items-center gap-2">
-                     <span id="unclaimed-data-status" class="text-xs text-gray-500">Data from TLA Snapshot</span>
-                     <span id="unclaimed-stale-warning" class="hidden text-xs bg-red-600/80 text-white px-2 py-0.5 rounded-full">
+                 <div class="flex items-center gap-2 flex-shrink-0">
+                     <span id="unclaimed-data-status" class="text-[10px] sm:text-xs text-gray-500 whitespace-nowrap">Data from TLA Snapshot</span>
+                     <span id="unclaimed-stale-warning" class="hidden text-[10px] sm:text-xs bg-red-600/80 text-white px-2 py-0.5 rounded-full whitespace-nowrap">
                          <i class="fas fa-exclamation-triangle mr-1"></i>Stale Data
                      </span>
                  </div>
