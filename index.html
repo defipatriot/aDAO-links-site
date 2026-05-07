@@ -130,7 +130,8 @@
             .stat-card .chart-icon i,
             .stat-card-link .chart-icon i { font-size: 0.55rem !important; }
             
-            /* Top nav info-cards — all uniform compact tiles on mobile */
+            /* Top nav info-cards — switch to horizontal scrollable tiles on mobile.
+               This avoids the 4×2 grid awkwardness and makes the section ~80% shorter. */
             .info-card { 
                 padding: 0.5rem !important; 
                 min-height: 70px;
@@ -141,6 +142,7 @@
                 justify-content: center !important;
                 text-align: center;
                 overflow: hidden;
+                flex-shrink: 0;
             }
             .info-card .icon { font-size: 1.1rem !important; margin-bottom: 0.2rem !important; }
             .info-card h3 { 
@@ -152,17 +154,31 @@
                 text-overflow: ellipsis;
                 max-width: 100%;
             }
-            /* Hide paragraph + Learn More on ALL info-cards on mobile (including ALLY)
-               so every tile is a uniform compact icon+title card */
             .info-card p,
             .info-card .link-text { display: none !important; }
             
-            /* CRITICAL: The top grid uses a mix of single .info-card items and column-wrappers
-               (.flex.flex-col.gap-4) that contain 2 cards each. This creates uneven layout on mobile.
-               Solution: dissolve those wrappers via display: contents — their child cards become
-               direct grid items and flow naturally as a single 2-col grid of 7 equal tiles. */
-            .grid > .flex.flex-col.gap-4 { 
-                display: contents !important; 
+            /* Convert the top grid to a compact 4-col grid on mobile so all 7 cards
+               sit in 2 rows (4+3) — visually balanced, no awkward span tricks. */
+            .top-info-grid {
+                display: grid !important;
+                grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+                gap: 0.4rem !important;
+            }
+            .top-info-grid > .flex.flex-col.gap-4 {
+                display: contents !important;
+            }
+            .top-info-grid .info-card {
+                min-height: 65px !important;
+                max-height: 65px !important;
+                padding: 0.35rem !important;
+            }
+            .top-info-grid .info-card .icon {
+                font-size: 0.95rem !important;
+                margin-bottom: 0.1rem !important;
+            }
+            .top-info-grid .info-card h3 {
+                font-size: 0.55rem !important;
+                line-height: 0.7rem !important;
             }
             
             /* Page edges */
@@ -171,13 +187,30 @@
             /* Section headings (Marketplace, etc.) */
             section h2, div > h2.text-xl, div > h2.text-2xl { font-size: 1rem !important; }
             
-            /* Marketplace tabs on mobile - smaller */
+            /* Marketplace tabs on mobile - segmented-control style: full-width, equal split */
+            #nft-marketplace-section > div:first-child > .flex.gap-2 {
+                width: 100%;
+                gap: 0.25rem !important;
+                padding: 0.25rem;
+                background: rgba(31, 41, 55, 0.4);
+                border-radius: 0.5rem;
+            }
             .collection-tab { 
-                padding: 0.3rem 0.6rem !important; 
+                flex: 1;
+                justify-content: center;
+                padding: 0.4rem 0.4rem !important; 
                 font-size: 0.7rem !important;
                 gap: 0.25rem !important;
                 white-space: nowrap;
-                flex-shrink: 0;
+                border-radius: 0.4rem !important;
+                background: transparent !important;
+            }
+            .collection-tab.active {
+                background: rgba(6, 182, 212, 0.2) !important;
+            }
+            .collection-tab img {
+                width: 0.85rem !important;
+                height: 0.85rem !important;
             }
             
             /* Unclaimed rewards inner sections - super compact */
@@ -282,6 +315,68 @@
                 margin-bottom: 0.4rem !important;
             }
             
+            /* Unclaimed Rewards card — completely different mobile layout.
+               Desktop: 3 columns of vertical mini-tiles.
+               Mobile: vertical stack of horizontal rows (icon + label | value).
+               Looks like a clean list, fits more compactly. */
+            #unclaimed-rewards-card .grid.grid-cols-3 {
+                grid-template-columns: 1fr !important;
+                gap: 0.4rem !important;
+            }
+            #deposit-rewards-section,
+            #vote-rewards-section,
+            #rebase-rewards-section { 
+                padding: 0.6rem 0.75rem !important;
+                overflow: hidden;
+                position: relative;
+            }
+            /* Reorganize each sub-card into a horizontal row layout */
+            #deposit-rewards-section > .flex.justify-between,
+            #vote-rewards-section > .flex.justify-between,
+            #rebase-rewards-section > .flex.justify-between { 
+                margin-bottom: 0.25rem !important;
+            }
+            #deposit-rewards-section h4, 
+            #vote-rewards-section h4, 
+            #rebase-rewards-section h4 { 
+                font-size: 0.75rem !important; 
+                line-height: 1rem !important;
+                white-space: nowrap !important;
+                margin: 0 !important;
+            }
+            /* Value rows: smaller fonts, tighter spacing */
+            #deposit-rewards-section .text-xl, 
+            #vote-rewards-section .text-xl, 
+            #rebase-rewards-section .text-xl { 
+                font-size: 1.1rem !important; 
+                line-height: 1.3rem !important;
+                margin-top: 0 !important;
+            }
+            #deposit-rewards-section .text-sm, 
+            #vote-rewards-section .text-sm, 
+            #rebase-rewards-section .text-sm { 
+                font-size: 0.65rem !important; 
+                line-height: 0.85rem !important; 
+            }
+            #deposit-rewards-section .text-xs, 
+            #vote-rewards-section .text-xs, 
+            #rebase-rewards-section .text-xs { 
+                font-size: 0.6rem !important; 
+                line-height: 0.75rem !important; 
+            }
+            /* Hide the divider line + "Last:" line on mobile to save space — info still in modal */
+            #deposit-rewards-section > .mt-2.pt-2.border-t,
+            #rebase-rewards-section > .mt-2.pt-2.border-t,
+            #vote-rewards-section > .mt-2.pt-2.border-t { 
+                display: none !important; 
+            }
+            /* Hide the "Show tokens" toggle on mobile (still accessible via modal) */
+            #vote-tokens-toggle, #vote-tokens-list { display: none !important; }
+            /* Stale banner: tighter on mobile */
+            #unclaimed-stale-banner { padding: 0.5rem !important; margin-bottom: 0.5rem !important; }
+            #unclaimed-stale-banner .text-sm { font-size: 0.75rem !important; }
+            #unclaimed-stale-banner .text-xs { font-size: 0.65rem !important; line-height: 0.85rem !important; }
+            
             /* General tightening: cards and inner sections */
             .stat-card .p-4, .stat-card .p-6 { padding: 0.5rem !important; }
         }
@@ -301,43 +396,42 @@
             .info-card .icon { font-size: 1rem !important; }
         }
         
-        /* --- Mobile sticky quick-nav bar --- */
+        /* --- Mobile sticky quick-nav bar — app-style segmented tab bar --- */
         .mobile-quicknav {
             display: none;
             position: sticky;
             top: 0;
             z-index: 40;
-            background: rgba(10, 11, 15, 0.95);
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
+            background: rgba(10, 11, 15, 0.92);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
             border-bottom: 1px solid rgba(34, 211, 238, 0.15);
-            padding: 0.5rem;
+            padding: 0.4rem 0.5rem;
             margin: -0.5rem -0.75rem 0.75rem -0.75rem;
-            overflow-x: auto;
-            scrollbar-width: none;
-            -ms-overflow-style: none;
         }
-        .mobile-quicknav::-webkit-scrollbar { display: none; }
         .mobile-quicknav-inner {
-            display: flex;
-            gap: 0.4rem;
-            padding: 0 0.25rem;
-            width: max-content;
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 0.25rem;
+            width: 100%;
         }
         .mobile-quicknav a {
-            display: inline-flex;
+            display: flex;
+            flex-direction: column;
             align-items: center;
-            gap: 0.35rem;
-            padding: 0.4rem 0.75rem;
+            justify-content: center;
+            gap: 0.1rem;
+            padding: 0.4rem 0.2rem;
             background: rgba(255, 255, 255, 0.04);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 9999px;
-            font-size: 0.75rem;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 0.5rem;
+            font-size: 0.6rem;
             font-weight: 600;
-            color: #d1d5db;
-            white-space: nowrap;
+            color: #9ca3af;
             text-decoration: none;
             transition: all 0.15s;
+            min-height: 44px;
+            line-height: 1;
         }
         .mobile-quicknav a:hover, .mobile-quicknav a:active {
             background: rgba(34, 211, 238, 0.1);
@@ -345,8 +439,9 @@
             color: #67e8f9;
         }
         .mobile-quicknav a i {
-            font-size: 0.7rem;
+            font-size: 0.85rem;
             color: #22d3ee;
+            margin-bottom: 0.05rem;
         }
         @media (max-width: 768px) {
             .mobile-quicknav { display: block; }
@@ -912,18 +1007,18 @@
             </span>
         </div>
         
-        <!-- Mobile quick-nav: sticky pill bar for jumping to sections (hidden on desktop) -->
+        <!-- Mobile quick-nav: sticky app-style tab bar (hidden on desktop) -->
         <nav class="mobile-quicknav" aria-label="Page sections">
             <div class="mobile-quicknav-inner">
-                <a href="#top" data-quicknav-top="1"><i class="fas fa-home"></i> Top</a>
-                <a href="#unclaimed-rewards-card"><i class="fas fa-coins"></i> Rewards</a>
-                <a href="#dao-stats"><i class="fas fa-chart-pie"></i> Stats</a>
-                <a href="#nft-marketplace-section"><i class="fas fa-store"></i> Marketplace</a>
-                <a href="#live-activity-section"><i class="fas fa-bolt"></i> Activity</a>
+                <a href="#top" data-quicknav-top="1"><i class="fas fa-home"></i><span>Top</span></a>
+                <a href="#unclaimed-rewards-card"><i class="fas fa-coins"></i><span>Rewards</span></a>
+                <a href="#dao-stats"><i class="fas fa-chart-pie"></i><span>Stats</span></a>
+                <a href="#nft-marketplace-section"><i class="fas fa-store"></i><span>Market</span></a>
+                <a href="#live-activity-section"><i class="fas fa-bolt"></i><span>Activity</span></a>
             </div>
         </nav>
 
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-6 sm:mb-8">
+        <div class="top-info-grid grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-6 sm:mb-8">
             <a href="ally.html" class="stat-card info-card rounded-xl group">
                 <i class="fas fa-layer-group icon"></i>
                 <h3 class="group-hover:text-teal-400">ALLY Rewards</h3>
