@@ -80,37 +80,50 @@
         
         /* --- Mobile tightening: reduce padding/font sizes on small screens --- */
         @media (max-width: 640px) {
-            /* Stat tiles — uniform compact appearance */
-            .stat-card { 
+            /* Stat tiles — uniform compact appearance (covers BOTH .stat-card and .stat-card-link) */
+            .stat-card,
+            .stat-card-link { 
                 padding: 0.5rem !important; 
-                min-height: 90px;
+                min-height: 90px !important;
+                max-height: 130px !important;
                 overflow: hidden;
                 word-break: break-word;
+                display: flex !important;
+                flex-direction: column !important;
+                justify-content: center !important;
+                align-items: center !important;
             }
-            .stat-card h3 { 
+            .stat-card > div,
+            .stat-card-link > div { width: 100%; }
+            .stat-card h3,
+            .stat-card-link h3 { 
                 font-size: 0.7rem !important; 
                 line-height: 0.9rem !important; 
                 margin-bottom: 0.25rem !important;
-                white-space: normal;
-            }
-            /* Single-line title for cards with short titles where stacking is ugly */
-            .stat-card .text-md.font-medium { 
                 white-space: nowrap !important;
                 overflow: hidden;
                 text-overflow: ellipsis;
-                font-size: 0.7rem !important;
             }
-            .stat-card .text-3xl { font-size: 1.1rem !important; line-height: 1.3rem !important; margin-top: 0.25rem !important; }
-            .stat-card .text-2xl { font-size: 1rem !important; line-height: 1.2rem !important; }
-            .stat-card .text-xl { font-size: 0.9rem !important; line-height: 1.15rem !important; }
-            .stat-card .text-base { font-size: 0.65rem !important; line-height: 0.85rem !important; }
-            .stat-card .text-md { font-size: 0.65rem !important; }
-            .stat-card .subtext { font-size: 0.55rem !important; line-height: 0.7rem !important; margin-top: 0.15rem !important; }
-            .stat-card img { max-height: 1.1rem !important; max-width: 1.1rem !important; }
-            .stat-card .pulse-dot, .stat-card .static-dot-red { width: 5px !important; height: 5px !important; }
-            .stat-card p[id*="-title"] { font-size: 0.7rem !important; }
-            .stat-card .chart-icon { transform: scale(0.7); right: 0.25rem !important; top: 0.25rem !important; }
-            .stat-card .fas, .stat-card .fab { font-size: 0.85rem; }
+            .stat-card .text-3xl,
+            .stat-card-link .text-3xl { font-size: 1.1rem !important; line-height: 1.3rem !important; margin-top: 0.25rem !important; }
+            .stat-card .text-2xl,
+            .stat-card-link .text-2xl { font-size: 1rem !important; line-height: 1.2rem !important; }
+            .stat-card .text-xl,
+            .stat-card-link .text-xl { font-size: 0.9rem !important; line-height: 1.15rem !important; }
+            .stat-card .text-base,
+            .stat-card-link .text-base { font-size: 0.65rem !important; line-height: 0.85rem !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .stat-card .text-md,
+            .stat-card-link .text-md { font-size: 0.65rem !important; }
+            .stat-card .subtext,
+            .stat-card-link .subtext { font-size: 0.55rem !important; line-height: 0.7rem !important; margin-top: 0.15rem !important; }
+            .stat-card img,
+            .stat-card-link img { max-height: 1.1rem !important; max-width: 1.1rem !important; }
+            .stat-card .pulse-dot, .stat-card .static-dot-red,
+            .stat-card-link .pulse-dot, .stat-card-link .static-dot-red { width: 5px !important; height: 5px !important; }
+            .stat-card .chart-icon,
+            .stat-card-link .chart-icon { transform: scale(0.7); right: 0.25rem !important; top: 0.25rem !important; }
+            .stat-card .fas, .stat-card .fab,
+            .stat-card-link .fas, .stat-card-link .fab { font-size: 0.85rem; }
             
             /* Top nav info-cards */
             .info-card { padding: 0.6rem !important; }
@@ -2836,14 +2849,10 @@ est. APR 58.53 %"></textarea>
                 } catch (error) {
                     console.error("DEBUG: Failed to fetch avg daily gain from GitHub:", error);
                     
-                    // Show em-dash instead of snapshot fallback when live fetch fails
-                    if (avgDailyGainEl && avgDailyGainEl.innerHTML.includes('fa-spinner')) {
-                        avgDailyGainEl.textContent = '—';
-                    }
-                    if (avgDailyGainSubEl && avgDailyGainSubEl.innerHTML.includes('fa-spinner')) {
-                        avgDailyGainSubEl.textContent = 'No live data';
-                    }
-                    // Update with red static dot (snapshot indicator)
+                    // Leave spinner spinning on failure — consistent with rest of dashboard
+                    // (don't replace with — or "No live data" text)
+                    
+                    // Update with red static dot (data source unhealthy indicator)
                     if (avgDailyGainTitleEl) {
                         const existingDot = avgDailyGainTitleEl.querySelector('.pulse-dot, .static-dot-red');
                         if (existingDot) existingDot.remove();
@@ -5271,19 +5280,16 @@ est. APR 58.53 %"></textarea>
                 const mintedPercentEl = document.getElementById('minted-percent');
 
                 if (mintSliderEl && unmintedCountEl && mintedCountEl && mintedPercentEl) {
-                    // Show empty bar if snapshot data not available — live data will populate when fetch succeeds
+                    // Leave spinners spinning if no live data — matches broken-slider behavior.
+                    // The slider bar shows a neutral empty state until live data populates it.
                     const percentMintedNum = dashboardData.statusSliders.mint.percentMinted != null
                         ? parseFloat(dashboardData.statusSliders.mint.percentMinted)
                         : null;
                     if (percentMintedNum != null && !isNaN(percentMintedNum)) {
                         mintSliderEl.innerHTML = `<div class="slider-fill-blue" style="width: ${100 - percentMintedNum}%;"></div><div class="slider-fill-gray" style="width: ${percentMintedNum}%;"></div>`;
-                    } else {
-                        mintSliderEl.innerHTML = '<div class="slider-fill-gray" style="width: 100%; opacity: 0.3;"></div>';
                     }
-                    // When live fetch is broken, show em-dash instead of snapshot fallback values
-                    if (unmintedCountEl.innerHTML.includes('fa-spinner')) unmintedCountEl.textContent = '—';
-                    if (mintedCountEl.innerHTML.includes('fa-spinner')) mintedCountEl.textContent = '—';
-                    if (mintedPercentEl.innerHTML.includes('fa-spinner')) mintedPercentEl.textContent = '—';
+                    // Do NOT replace spinners with em-dashes here — when fetchLiveOnChainData succeeds
+                    // it will write real values; if it fails the spinners stay (consistent UX with broken slider).
                 }
                 
                  // --- FIX: Removed redundant static update for Avg Daily Gain ---
@@ -5718,11 +5724,8 @@ est. APR 58.53 %"></textarea>
                            }
                        });
                        
-                       // No fallback values for DAO broken/held — show '—' if no live data
-                       const daoBrokenTotalEl = document.getElementById('dao-broken-total'); 
-                       if (daoBrokenTotalEl && daoBrokenTotalEl.innerHTML.includes('fa-spinner')) daoBrokenTotalEl.textContent = '—'; 
-                       const supplyDaoControlledEl = document.getElementById('supply-dao-controlled'); 
-                       if (supplyDaoControlledEl && supplyDaoControlledEl.innerHTML.includes('fa-spinner')) supplyDaoControlledEl.textContent = '—'; 
+                       // No fallback values for DAO broken/held — leave spinner if no live data
+                       // (consistent UX: tiles either show real live data or keep loading)
                        console.log("DEBUG: Finished static tile update check."); 
                 }
             }
@@ -5921,7 +5924,12 @@ est. APR 58.53 %"></textarea>
                  // Only show treasury total if we successfully priced ALL assets (no partial totals — they mislead)
                  const allAssetsPriced = priceData !== null && unvaluedAssets.length === 0 && valuedAssets.length > 0;
                  if (totalValueEl.innerHTML.includes('fa-spinner') || !allAssetsPriced) {
-                     totalValueEl.textContent = allAssetsPriced ? '$' + totalLiveUsd.toLocaleString('en-US', {maximumFractionDigits: 0}) : '—';
+                     if (allAssetsPriced) {
+                         totalValueEl.textContent = '$' + totalLiveUsd.toLocaleString('en-US', {maximumFractionDigits: 0});
+                     } else if (!totalValueEl.innerHTML.includes('fa-spinner')) {
+                         // Restore spinner if value was set previously but we now know data is incomplete
+                         totalValueEl.innerHTML = '<i class="fas fa-spinner fa-spin text-cyan-400 text-2xl"></i>';
+                     }
                  }
                  updateTile('dao-treasury-total', null, priceData !== null, { titleId: 'dao-treasury-title' });
                  
@@ -6322,16 +6330,16 @@ est. APR 58.53 %"></textarea>
                     `;
                 }
                 
-                // Update tile with combined total — but ONLY if main token holdings successfully priced.
+                 // Update tile with combined total — but ONLY if main token holdings successfully priced.
                 // Showing council+alliance alone (without token holdings) misleads users into thinking
                 // that's the full treasury when it's just a partial sum.
                 const tokenHoldingsLoaded = typeof window.liveTreasuryUsd === 'number' && window.liveTreasuryUsd > 0;
                 if (tileEl && tokenHoldingsLoaded && (allianceValue > 0 || councilValue > 0)) {
                     tileEl.textContent = '$' + combined.toLocaleString(undefined, {maximumFractionDigits: 0});
                 } else if (tileEl && !tokenHoldingsLoaded) {
-                    // Token holdings not loaded → show em-dash, don't show partial sum
+                    // Token holdings not loaded → show spinner, don't show partial sum
                     if (!tileEl.innerHTML.includes('fa-spinner')) {
-                        tileEl.textContent = '—';
+                        tileEl.innerHTML = '<i class="fas fa-spinner fa-spin text-cyan-400 text-2xl"></i>';
                     }
                 }
                 
@@ -6757,17 +6765,15 @@ est. APR 58.53 %"></textarea>
                  var dataIsStale = tlaMeta.isStale === true;
                  
                  if (!hasValidTlaData || dataIsStale) {
-                     // No valid/fresh TLA data — show blank state
-                     if (totalValueTileEl) totalValueTileEl.textContent = '—';
-                     if (aprTileEl) {
-                         aprTileEl.textContent = dataIsStale && hasValidTlaData
-                             ? 'Snapshot ' + (tlaMeta.epochsOld || '?') + ' epoch(s) stale'
-                             : 'Awaiting Snapshot';
-                     }
-                     if (modalTotalUsdEl) modalTotalUsdEl.textContent = dataIsStale ? 'Snapshot too old to display' : 'Awaiting Snapshot Data';
-                     if (modalTotalAprEl) modalTotalAprEl.textContent = '';
-                     if (snapshotDateEl) snapshotDateEl.textContent = '—';
-                     if (tokensContainer) tokensContainer.innerHTML = '<p class="text-center text-gray-500 p-4">No fresh TLA data available.</p>';
+                     // No valid/fresh TLA data — show consistent spinner state (not — / "stale" text)
+                     var spinner3xl = '<i class="fas fa-spinner fa-spin text-cyan-400 text-2xl"></i>';
+                     var spinnerBase = '<i class="fas fa-spinner fa-spin text-gray-300"></i>';
+                     if (totalValueTileEl) totalValueTileEl.innerHTML = spinner3xl;
+                     if (aprTileEl) aprTileEl.innerHTML = spinnerBase;
+                     if (modalTotalUsdEl) modalTotalUsdEl.innerHTML = '<i class="fas fa-spinner fa-spin text-white text-2xl"></i>';
+                     if (modalTotalAprEl) modalTotalAprEl.innerHTML = spinnerBase;
+                     if (snapshotDateEl) snapshotDateEl.innerHTML = spinnerBase;
+                     if (tokensContainer) tokensContainer.innerHTML = '<p class="text-center text-gray-500 p-4"><i class="fas fa-spinner fa-spin mr-2"></i>Loading TLA data...</p>';
                      updateTile('dao-tla-total', null, false, { titleId: 'dao-tla-title' }); 
                      return;
                  }
@@ -7204,11 +7210,12 @@ est. APR 58.53 %"></textarea>
                     // file's `generated_at` can be recent even when data inside is from old epochs).
                     var meta = (typeof getTlaDataMeta === 'function') ? getTlaDataMeta() : { isStale: true };
                     if (!tlaData || meta.isStale) {
-                        mainTileValueEl.textContent = '—';
-                        mainTileUsdEl.textContent = meta.epochsOld > 0 ? 'Snapshot ' + meta.epochsOld + ' epoch(s) stale' : 'No fresh data';
-                        if (container) container.innerHTML = '<p class="text-center text-gray-500 p-4">No fresh TLA VP data available.</p>';
-                        if (modalLunaEl) modalLunaEl.textContent = '—';
-                        if (modalUsdEl) modalUsdEl.textContent = '—';
+                        // No fresh data — show consistent spinner (not "stale" text)
+                        mainTileValueEl.innerHTML = '<i class="fas fa-spinner fa-spin text-cyan-400 text-xl"></i>';
+                        mainTileUsdEl.innerHTML = '<i class="fas fa-spinner fa-spin text-gray-300"></i>';
+                        if (container) container.innerHTML = '<p class="text-center text-gray-500 p-4"><i class="fas fa-spinner fa-spin mr-2"></i>Loading TLA VP data...</p>';
+                        if (modalLunaEl) modalLunaEl.innerHTML = '<i class="fas fa-spinner fa-spin text-white"></i>';
+                        if (modalUsdEl) modalUsdEl.innerHTML = '<i class="fas fa-spinner fa-spin text-white"></i>';
                         return;
                     }
                     
@@ -7272,12 +7279,12 @@ est. APR 58.53 %"></textarea>
                         });
                         totalStaticVp = locks.reduce((sum, lock) => sum + (lock.staticVp || 0), 0);
                     } else {
-                        // No fallback — if TLA data unavailable, show blank state
-                        mainTileValueEl.textContent = '—';
-                        mainTileUsdEl.textContent = 'No data';
-                        if (container) container.innerHTML = '<p class="text-center text-gray-500 p-4">No TLA VP data available.</p>';
-                        if (modalLunaEl) modalLunaEl.textContent = '—';
-                        if (modalUsdEl) modalUsdEl.textContent = '—';
+                        // No data — show spinner state for consistency
+                        mainTileValueEl.innerHTML = '<i class="fas fa-spinner fa-spin text-cyan-400 text-xl"></i>';
+                        mainTileUsdEl.innerHTML = '<i class="fas fa-spinner fa-spin text-gray-300"></i>';
+                        if (container) container.innerHTML = '<p class="text-center text-gray-500 p-4"><i class="fas fa-spinner fa-spin mr-2"></i>Loading TLA VP data...</p>';
+                        if (modalLunaEl) modalLunaEl.innerHTML = '<i class="fas fa-spinner fa-spin text-white"></i>';
+                        if (modalUsdEl) modalUsdEl.innerHTML = '<i class="fas fa-spinner fa-spin text-white"></i>';
                         return;
                     }
                     
@@ -7554,13 +7561,20 @@ est. APR 58.53 %"></textarea>
                  if (value !== null && value !== undefined && el) {
                      if (el.innerHTML.includes('fa-spinner') || value === 'Error') { el.textContent = value; }
                  }
-                 // CRITICAL: If data is marked as NOT live (snapshot/stale), blank the displayed value.
-                 // Showing snapshot values misleads users into thinking they're seeing live data.
-                 // The red dot was previously the only indicator — now we also clear the number.
-                 if (!isLive && el && !el.innerHTML.includes('fa-spinner')) {
+                 // CRITICAL: If data is marked as NOT live (snapshot/stale), restore loading spinner.
+                 // Showing snapshot values misleads users; showing "—" implies the system has confirmed
+                 // there's no data. A spinner more honestly says "trying to load" — and per user pref,
+                 // is the consistent visual for any tile without fresh live data.
+                 if (!isLive && el) {
                      var current = el.textContent.trim();
-                     if (current && current !== '—' && current !== 'Error' && current !== '...') {
-                         el.textContent = '—';
+                     // Only replace if currently showing a stale-looking value (not already a spinner)
+                     if (!el.innerHTML.includes('fa-spinner') && current !== '' && current !== '...' && current !== 'Error') {
+                         // Match the original spinner style based on current font-size class
+                         var sizeClass = el.classList.contains('text-3xl') ? 'text-2xl'
+                                       : el.classList.contains('text-2xl') ? 'text-xl'
+                                       : el.classList.contains('text-xl') ? 'text-xl'
+                                       : '';
+                         el.innerHTML = '<i class="fas fa-spinner fa-spin text-cyan-400 ' + sizeClass + '"></i>';
                      }
                  }
                 const titleId = options.titleId || `${elementId}-title`;
