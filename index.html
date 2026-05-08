@@ -181,7 +181,8 @@
             .info-card-dropdown h3 {
                 font-size: 0.7rem !important;
                 line-height: 0.85rem !important;
-                margin: 0 !important;
+                margin: 0 auto !important;
+                text-align: center !important;
                 /* Allow up to 2 lines of wrapping so full text fits */
                 white-space: normal;
                 overflow: hidden;
@@ -334,7 +335,22 @@
             #live-activity-section .marketplace-header h3 { font-size: 0.95rem !important; gap: 0.5rem !important; }
             
             /* COINGECKO BANNER */
-            gecko-coin-price-marquee-widget { display: block !important; min-height: 36px; width: 100% !important; }
+            /* CoinGecko banner — slimmer on mobile (~half height) */
+            gecko-coin-price-marquee-widget { 
+                display: block !important; 
+                width: 100% !important;
+                font-size: 0.7rem !important;
+                --gecko-widget-height: 32px;
+            }
+            gecko-coin-price-marquee-widget::part(card) {
+                padding: 0.25rem 0.5rem !important;
+            }
+            /* Outer wrapper around the widget */
+            .coingecko-banner-wrapper {
+                padding-top: 0.25rem !important;
+                padding-bottom: 0.25rem !important;
+                min-height: 32px !important;
+            }
         }
         
         /* Smaller phones — tighten further */
@@ -1020,7 +1036,7 @@
         </div>
     </header>
 
-    <div class="py-2 border-b border-gray-800" style="min-height: 50px;">
+    <div class="coingecko-banner-wrapper py-2 border-b border-gray-800" style="min-height: 50px;">
         <script src="https://widgets.coingecko.com/gecko-coin-price-marquee-widget.js"></script>
 <gecko-coin-price-marquee-widget locale="en" dark-mode="true" outlined="true" coin-ids="terra-luna-2,eris-amplified-luna,eris-arbitrage-luna,backbone-labs-staked-luna,lion-dao,capapult,solid-2,astroport-fi,eureka-bridged-wbtc-terra,cosmos,ethereum" initial-currency="usd"></gecko-coin-price-marquee-widget>
     </div>
@@ -1543,38 +1559,110 @@
                         All Current Listings
                         <span id="listings-total-count" class="text-sm font-normal text-gray-400 ml-2">--</span>
                     </h3>
-                    <div class="flex gap-2 items-center flex-wrap">
+                    <div class="flex gap-2 items-center">
                         <span class="text-xs text-gray-500 mr-1">Show:</span>
-                        <button id="listings-filter-adao" class="collection-filter-btn active text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all" data-collection="alliance_dao">
-                            <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/logo_stamp_primary.png" class="w-4 h-4 rounded">
-                            <span>aDAO</span>
-                        </button>
-                        <button id="listings-filter-pixelions" class="collection-filter-btn text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all" data-collection="pixelions">
-                            <img src="https://pbs.twimg.com/profile_images/1529419694846246913/mvdFbqRe_400x400.jpg" class="w-4 h-4 rounded" onerror="this.style.display='none'">
-                            <span>pixeLions</span>
-                        </button>
-                        <button id="listings-filter-tla" class="collection-filter-btn text-xs px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all" data-collection="tla_locks">
-                            <i class="fas fa-lock text-xs"></i>
-                            <span>TLA Locks</span>
-                        </button>
+                        <div class="collection-dropdown" id="collection-dropdown">
+                            <button type="button" class="collection-dropdown-btn" id="collection-dropdown-btn" aria-haspopup="listbox" aria-expanded="false">
+                                <img id="collection-dropdown-icon" src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Alliance%20DAO%20Logo.png" alt="aDAO logo" class="collection-icon-img">
+                                <span id="collection-dropdown-label">aDAO</span>
+                                <i class="fas fa-chevron-down text-[10px] opacity-60 ml-1"></i>
+                            </button>
+                            <ul class="collection-dropdown-menu" id="collection-dropdown-menu" role="listbox">
+                                <li role="option" data-collection="alliance_dao" class="collection-dropdown-item active">
+                                    <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Alliance%20DAO%20Logo.png" alt="aDAO logo" class="collection-icon-img">
+                                    <span>aDAO</span>
+                                </li>
+                                <li role="option" data-collection="pixelions" class="collection-dropdown-item">
+                                    <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/pixelions-pfp.webp" alt="pixeLions logo" class="collection-icon-img">
+                                    <span>pixeLions</span>
+                                </li>
+                                <li role="option" data-collection="tla_locks" class="collection-dropdown-item">
+                                    <span class="collection-icon-img collection-icon-tla"><i class="fas fa-lock"></i></span>
+                                    <span>TLA Locks</span>
+                                </li>
+                            </ul>
+                        </div>
                     </div>
                 </div>
                 <style>
-                    .collection-filter-btn.active {
-                        background: rgba(6, 182, 212, 0.2);
-                        color: #22d3ee;
-                        border: 1px solid rgba(6, 182, 212, 0.5);
+                    /* Collection selector dropdown */
+                    .collection-dropdown { position: relative; display: inline-block; }
+                    .collection-dropdown-btn {
+                        display: inline-flex;
+                        align-items: center;
+                        gap: 0.4rem;
+                        background: rgba(6, 182, 212, 0.12);
+                        color: #67e8f9;
+                        border: 1px solid rgba(6, 182, 212, 0.4);
+                        border-radius: 0.5rem;
+                        padding: 0.35rem 0.75rem;
+                        font-size: 0.75rem;
+                        font-weight: 600;
+                        cursor: pointer;
+                        transition: background 0.15s, border-color 0.15s;
+                        min-width: 130px;
                     }
-                    .collection-filter-btn:not(.active) {
-                        background: rgba(55, 65, 81, 0.5);
-                        color: #6b7280;
-                        border: 1px solid transparent;
+                    .collection-dropdown-btn:hover {
+                        background: rgba(6, 182, 212, 0.18);
+                        border-color: rgba(6, 182, 212, 0.6);
                     }
-                    .collection-filter-btn:not(.active):hover {
-                        color: #9ca3af;
+                    .collection-dropdown-btn .fa-chevron-down {
+                        margin-left: auto;
+                        transition: transform 0.15s;
                     }
-                    .collection-filter-btn:not(.active) img {
-                        opacity: 0.5;
+                    .collection-dropdown.open .collection-dropdown-btn .fa-chevron-down {
+                        transform: rotate(180deg);
+                    }
+                    .collection-dropdown-menu {
+                        position: absolute;
+                        top: calc(100% + 4px);
+                        right: 0;
+                        min-width: 100%;
+                        background: #0f1117;
+                        border: 1px solid rgba(45, 212, 191, 0.3);
+                        border-radius: 0.5rem;
+                        list-style: none;
+                        padding: 0.25rem;
+                        margin: 0;
+                        z-index: 30;
+                        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+                        display: none;
+                    }
+                    .collection-dropdown.open .collection-dropdown-menu { display: block; }
+                    .collection-dropdown-item {
+                        display: flex;
+                        align-items: center;
+                        gap: 0.5rem;
+                        padding: 0.5rem 0.75rem;
+                        border-radius: 0.4rem;
+                        font-size: 0.8rem;
+                        color: #d1d5db;
+                        cursor: pointer;
+                        white-space: nowrap;
+                        transition: background 0.1s;
+                    }
+                    .collection-dropdown-item:hover {
+                        background: rgba(45, 212, 191, 0.1);
+                        color: #67e8f9;
+                    }
+                    .collection-dropdown-item.active {
+                        background: rgba(6, 182, 212, 0.15);
+                        color: #67e8f9;
+                    }
+                    .collection-icon-img {
+                        width: 18px;
+                        height: 18px;
+                        border-radius: 4px;
+                        object-fit: cover;
+                        flex-shrink: 0;
+                        display: inline-flex;
+                        align-items: center;
+                        justify-content: center;
+                    }
+                    .collection-icon-tla {
+                        background: rgba(255, 130, 30, 0.15);
+                        color: #ff7e1d; /* LUNA orange */
+                        font-size: 11px;
                     }
                     /* Toggle groups */
                     .listings-toggle-group { display: flex; background: rgba(31,41,55,0.8); border: 1px solid rgba(75,85,99,0.4); border-radius: 8px; overflow: hidden; }
@@ -10813,35 +10901,83 @@ est. APR 58.53 %"></textarea>
                     window.currentListings = allListings;
                 }
                 
-                // Setup listings collection filter buttons
+                // Setup listings collection filter dropdown
                 function setupListingsFilters() {
-                    const filterButtons = {
-                        alliance_dao: document.getElementById('listings-filter-adao'),
-                        pixelions: document.getElementById('listings-filter-pixelions'),
-                        tla_locks: document.getElementById('listings-filter-tla')
-                    };
+                    const dropdown = document.getElementById('collection-dropdown');
+                    const dropdownBtn = document.getElementById('collection-dropdown-btn');
+                    const dropdownMenu = document.getElementById('collection-dropdown-menu');
+                    const dropdownLabel = document.getElementById('collection-dropdown-label');
+                    const dropdownIcon = document.getElementById('collection-dropdown-icon');
                     const loadMoreBtn = document.getElementById('load-more-listings');
                     
-                    // Setup click handlers for each collection filter
-                    Object.entries(filterButtons).forEach(([collectionKey, btn]) => {
-                        if (!btn) return;
-                        
-                        btn.addEventListener('click', () => {
-                            // Toggle filter
-                            collectionFilters[collectionKey] = !collectionFilters[collectionKey];
-                            
-                            // Update button appearance
-                            if (collectionFilters[collectionKey]) {
-                                btn.classList.add('active');
-                            } else {
-                                btn.classList.remove('active');
-                            }
-                            
-                            // Re-render listings
-                            displayedListingsCount = 12;
-                            renderCombinedListings();
+                    // Collection metadata for dropdown display
+                    const collectionMeta = {
+                        alliance_dao: {
+                            label: 'aDAO',
+                            iconHtml: '<img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Alliance%20DAO%20Logo.png" alt="aDAO logo" class="collection-icon-img">'
+                        },
+                        pixelions: {
+                            label: 'pixeLions',
+                            iconHtml: '<img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/pixelions-pfp.webp" alt="pixeLions logo" class="collection-icon-img">'
+                        },
+                        tla_locks: {
+                            label: 'TLA Locks',
+                            iconHtml: '<span class="collection-icon-img collection-icon-tla"><i class="fas fa-lock"></i></span>'
+                        }
+                    };
+                    
+                    if (dropdown && dropdownBtn) {
+                        // Toggle dropdown open/close
+                        dropdownBtn.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            dropdown.classList.toggle('open');
+                            dropdownBtn.setAttribute('aria-expanded', dropdown.classList.contains('open'));
                         });
-                    });
+                        
+                        // Close on click outside
+                        document.addEventListener('click', (e) => {
+                            if (!dropdown.contains(e.target)) {
+                                dropdown.classList.remove('open');
+                                dropdownBtn.setAttribute('aria-expanded', 'false');
+                            }
+                        });
+                        
+                        // Item selection — single-select; only one collection active at a time
+                        dropdownMenu.querySelectorAll('.collection-dropdown-item').forEach(item => {
+                            item.addEventListener('click', () => {
+                                const collectionKey = item.dataset.collection;
+                                const meta = collectionMeta[collectionKey];
+                                if (!meta) return;
+                                
+                                // Update collectionFilters: only the chosen one is active
+                                Object.keys(collectionFilters).forEach(k => {
+                                    collectionFilters[k] = (k === collectionKey);
+                                });
+                                
+                                // Update dropdown UI
+                                dropdownMenu.querySelectorAll('.collection-dropdown-item').forEach(i => i.classList.remove('active'));
+                                item.classList.add('active');
+                                
+                                // Update button face (icon + label)
+                                if (dropdownLabel) dropdownLabel.textContent = meta.label;
+                                // Replace icon: rebuild from iconHtml so we get either an <img> or the lock <span>
+                                const oldIcon = dropdown.querySelector('.collection-dropdown-btn .collection-icon-img');
+                                if (oldIcon) {
+                                    const wrap = document.createElement('div');
+                                    wrap.innerHTML = meta.iconHtml.trim();
+                                    oldIcon.replaceWith(wrap.firstChild);
+                                }
+                                
+                                // Close dropdown
+                                dropdown.classList.remove('open');
+                                dropdownBtn.setAttribute('aria-expanded', 'false');
+                                
+                                // Re-render listings
+                                displayedListingsCount = 12;
+                                renderCombinedListings();
+                            });
+                        });
+                    }
                     
                     // Load more button
                     loadMoreBtn?.addEventListener('click', () => {
