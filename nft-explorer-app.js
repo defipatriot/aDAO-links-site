@@ -112,7 +112,7 @@ let walletMobileSearchMode = 'full';
 
 // --- Config ---
 const METADATA_URL = "https://cdn.jsdelivr.net/gh/defipatriot/nft-metadata/all_nfts_metadata.json";
-const STATUS_DATA_URL = "https://deving.zone/en/nfts/alliance_daos.json";
+const STATUS_DATA_URL = "https://deving.zone/nfts/alliance_daos.json";
 const MEMBERS_CSV_URL = "https://raw.githubusercontent.com/defipatriot/adao_json_storage/main/members.csv";
 const DAO_WALLET_ADDRESS = "terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm";
 const DAO_LOCKED_WALLET_SUFFIXES = ["8ywv", "417v", "6ugw"]; // Added from previous logic
