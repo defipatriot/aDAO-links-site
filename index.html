@@ -180,17 +180,16 @@
             .info-card h3,
             .info-card-dropdown h3 {
                 font-size: 0.7rem !important;
-                line-height: 0.85rem !important;
+                line-height: 0.95rem !important;
                 margin: 0 auto !important;
                 text-align: center !important;
-                /* Allow up to 2 lines of wrapping so full text fits */
+                /* Simple 2-line wrap that respects text-align (line-clamp would override it) */
                 white-space: normal;
                 overflow: hidden;
-                display: -webkit-box;
-                -webkit-line-clamp: 2;
-                -webkit-box-orient: vertical;
                 max-width: 100%;
+                max-height: 1.9rem; /* ~2 lines at 0.95rem line-height */
                 word-break: break-word;
+                width: 100%;
             }
             /* Hide the long ALLY paragraph + "Learn More" — all cards become uniform icon+title */
             .info-card p, .info-card .link-text,
@@ -1672,7 +1671,8 @@
                     .listings-toggle-divider { width: 1px; background: rgba(75,85,99,0.4); align-self: stretch; }
                 </style>
                 <!-- Sub-filters row -->
-                <div class="flex items-center gap-3 mb-3 flex-wrap">
+                <!-- Desktop: button groups (hidden on mobile) -->
+                <div class="flex items-center gap-3 mb-3 flex-wrap hide-on-mobile">
                     <span class="text-xs text-gray-500">Condition:</span>
                     <div class="listings-toggle-group" id="condition-toggle">
                         <button class="listings-toggle-btn active" data-condition="unbroken">Unbroken</button>
@@ -1691,6 +1691,110 @@
                     </div>
                     <span class="text-xs text-gray-500 ml-auto"><i class="fas fa-sort-amount-up mr-1"></i>Sorted by USD price (lowest first)</span>
                 </div>
+                
+                <!-- Mobile: 2 dropdowns side-by-side (hidden on desktop) -->
+                <div class="show-only-on-mobile mb-3 grid grid-cols-2 gap-2">
+                    <div class="filter-dropdown" data-filter="condition">
+                        <button type="button" class="filter-dropdown-btn" aria-haspopup="listbox" aria-expanded="false">
+                            <span class="filter-label">Condition:</span>
+                            <span class="filter-value">Unbroken</span>
+                            <i class="fas fa-chevron-down text-[10px] opacity-60"></i>
+                        </button>
+                        <ul class="filter-dropdown-menu" role="listbox">
+                            <li role="option" data-condition="unbroken" class="filter-dropdown-item active">Unbroken</li>
+                            <li role="option" data-condition="both" class="filter-dropdown-item">Both</li>
+                            <li role="option" data-condition="broken" class="filter-dropdown-item">Broken</li>
+                        </ul>
+                    </div>
+                    <div class="filter-dropdown" data-filter="marketplace">
+                        <button type="button" class="filter-dropdown-btn" aria-haspopup="listbox" aria-expanded="false">
+                            <span class="filter-label">Marketplace:</span>
+                            <span class="filter-value">Both</span>
+                            <i class="fas fa-chevron-down text-[10px] opacity-60"></i>
+                        </button>
+                        <ul class="filter-dropdown-menu" role="listbox">
+                            <li role="option" data-mp="both" class="filter-dropdown-item active">Both</li>
+                            <li role="option" data-mp="bbl" class="filter-dropdown-item">BBL</li>
+                            <li role="option" data-mp="boost" class="filter-dropdown-item">Boost</li>
+                        </ul>
+                    </div>
+                </div>
+                <style>
+                    /* Mobile-only filter dropdowns (Condition / Marketplace) */
+                    .show-only-on-mobile { display: none; }
+                    @media (max-width: 640px) {
+                        .show-only-on-mobile { display: grid !important; }
+                    }
+                    .filter-dropdown { position: relative; }
+                    .filter-dropdown-btn {
+                        width: 100%;
+                        display: flex;
+                        align-items: center;
+                        gap: 0.4rem;
+                        background: rgba(31, 41, 55, 0.6);
+                        border: 1px solid rgba(75, 85, 99, 0.4);
+                        border-radius: 0.5rem;
+                        padding: 0.45rem 0.65rem;
+                        font-size: 0.7rem;
+                        color: #d1d5db;
+                        cursor: pointer;
+                        transition: border-color 0.15s, background 0.15s;
+                    }
+                    .filter-dropdown-btn:hover {
+                        border-color: rgba(34, 211, 238, 0.4);
+                        background: rgba(31, 41, 55, 0.8);
+                    }
+                    .filter-dropdown-btn .filter-label {
+                        color: #6b7280;
+                        font-weight: 500;
+                    }
+                    .filter-dropdown-btn .filter-value {
+                        color: #67e8f9;
+                        font-weight: 700;
+                        flex: 1;
+                        text-align: left;
+                    }
+                    .filter-dropdown-btn .fa-chevron-down {
+                        transition: transform 0.15s;
+                    }
+                    .filter-dropdown.open .filter-dropdown-btn .fa-chevron-down {
+                        transform: rotate(180deg);
+                    }
+                    .filter-dropdown-menu {
+                        position: absolute;
+                        top: calc(100% + 4px);
+                        left: 0;
+                        right: 0;
+                        background: #0f1117;
+                        border: 1px solid rgba(45, 212, 191, 0.3);
+                        border-radius: 0.5rem;
+                        list-style: none;
+                        padding: 0.25rem;
+                        margin: 0;
+                        z-index: 25;
+                        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+                        display: none;
+                    }
+                    .filter-dropdown.open .filter-dropdown-menu { display: block; }
+                    .filter-dropdown-item {
+                        padding: 0.5rem 0.65rem;
+                        border-radius: 0.4rem;
+                        font-size: 0.75rem;
+                        color: #d1d5db;
+                        cursor: pointer;
+                        white-space: nowrap;
+                        transition: background 0.1s;
+                    }
+                    .filter-dropdown-item:hover {
+                        background: rgba(45, 212, 191, 0.1);
+                        color: #67e8f9;
+                    }
+                    .filter-dropdown-item.active {
+                        background: rgba(6, 182, 212, 0.15);
+                        color: #67e8f9;
+                        font-weight: 600;
+                    }
+                </style>
                 <div id="combined-listings-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[600px] overflow-y-auto pr-2" style="scrollbar-width: thin; scrollbar-color: #4b5563 #1f2937;">
                     <div class="text-gray-500 text-sm text-center py-8 col-span-full">
                         <i class="fas fa-spinner fa-spin text-gray-600"></i> 
@@ -11004,6 +11108,60 @@ est. APR 58.53 %"></textarea>
                             listingMarketplaceFilter = btn.dataset.mp;
                             displayedListingsCount = 12;
                             renderCombinedListings();
+                        });
+                    });
+                    
+                    // Mobile filter dropdowns (Condition + Marketplace) — updates same state as desktop buttons
+                    document.querySelectorAll('.filter-dropdown').forEach(dd => {
+                        const btn = dd.querySelector('.filter-dropdown-btn');
+                        const valueEl = dd.querySelector('.filter-value');
+                        const filterType = dd.dataset.filter; // 'condition' or 'marketplace'
+                        
+                        // Toggle open/close
+                        btn?.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            // Close any other open filter dropdowns first
+                            document.querySelectorAll('.filter-dropdown.open').forEach(other => {
+                                if (other !== dd) other.classList.remove('open');
+                            });
+                            dd.classList.toggle('open');
+                            btn.setAttribute('aria-expanded', dd.classList.contains('open'));
+                        });
+                        
+                        // Item selection
+                        dd.querySelectorAll('.filter-dropdown-item').forEach(item => {
+                            item.addEventListener('click', () => {
+                                // Visual update — mark this item active
+                                dd.querySelectorAll('.filter-dropdown-item').forEach(i => i.classList.remove('active'));
+                                item.classList.add('active');
+                                if (valueEl) valueEl.textContent = item.textContent.trim();
+                                
+                                // Update underlying state + sync desktop button group + re-render
+                                if (filterType === 'condition') {
+                                    listingConditionFilter = item.dataset.condition;
+                                    // Sync desktop button group for consistency if user switches to landscape
+                                    document.querySelectorAll('#condition-toggle .listings-toggle-btn').forEach(b => {
+                                        b.classList.toggle('active', b.dataset.condition === listingConditionFilter);
+                                    });
+                                } else if (filterType === 'marketplace') {
+                                    listingMarketplaceFilter = item.dataset.mp;
+                                    document.querySelectorAll('#marketplace-toggle .listings-toggle-btn').forEach(b => {
+                                        b.classList.toggle('active', b.dataset.mp === listingMarketplaceFilter);
+                                    });
+                                }
+                                
+                                dd.classList.remove('open');
+                                btn?.setAttribute('aria-expanded', 'false');
+                                displayedListingsCount = 12;
+                                renderCombinedListings();
+                            });
+                        });
+                    });
+                    
+                    // Click outside closes any open filter dropdown
+                    document.addEventListener('click', (e) => {
+                        document.querySelectorAll('.filter-dropdown.open').forEach(dd => {
+                            if (!dd.contains(e.target)) dd.classList.remove('open');
                         });
                     });
                 }
