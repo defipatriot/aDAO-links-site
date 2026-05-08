@@ -2976,7 +2976,7 @@ est. APR 58.53 %"></textarea>
             </div>
             <div class="mt-4 text-xs text-gray-500">
                 <button id="changelog-trigger" class="hover:text-cyan-400 transition-colors cursor-pointer">
-                    <span class="font-mono">Rev 3.25</span>
+                    <span class="font-mono">Rev 3.26</span>
                     <span class="opacity-60 mx-1">·</span>
                     <span>Changelog</span>
                 </button>
@@ -6143,9 +6143,27 @@ est. APR 58.53 %"></textarea>
                     const daoEnterpriseWallet = 'terra1nn7yrgjzj6zvle7ms9vlpg4cj3kaxjls4g6ugw';
                     const enterpriseStakers = nfts.filter(nft => nft.enterprise === true && nft.owner !== daoEnterpriseWallet);
                     const enterpriseStakedByHolder = enterpriseStakers.length;
-                    const mintedCount = dashboardData.statusSliders.mint.minted; // From static data
-                    const unmintedCount = dashboardData.statusSliders.mint.unMinted; // From static data
-                    const circulatingSupply = Math.max(0, mintedCount - 1000); // Assuming 1000 DAO broken
+                    
+                    // Derive mintedCount / unmintedCount from live nfts array (was previously
+                    // pulled from static snapshot fallback which Rev 3.21 honest-data cleanup removed,
+                    // leaving these as null and crashing .toLocaleString() further down — Rev 3.26 fix).
+                    // Strategy: NFTs held by the DAO main wallet are "unminted" (not yet distributed).
+                    const DAO_MAIN_WALLET = 'terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm';
+                    let mintedCount = null;
+                    let unmintedCount = null;
+                    if (Array.isArray(nfts) && nfts.length > 0) {
+                        if (typeof nfts[0].minted === 'boolean') {
+                            // Preferred: explicit `minted` flag on each NFT if API provides it
+                            mintedCount = nfts.filter(n => n.minted).length;
+                            unmintedCount = nfts.length - mintedCount;
+                        } else {
+                            // Fallback: NFTs owned by DAO main wallet are unminted
+                            unmintedCount = nfts.filter(n => n.owner === DAO_MAIN_WALLET).length;
+                            mintedCount = nfts.length - unmintedCount;
+                        }
+                        console.log(`DEBUG: Derived from nfts: minted=${mintedCount} unminted=${unmintedCount} (total=${nfts.length})`);
+                    }
+                    const circulatingSupply = mintedCount != null ? Math.max(0, mintedCount - 1000) : null; // Assuming 1000 DAO broken
                     const rewardsAttribute = contractJson?.data?.info?.extension?.attributes?.find(attr => attr.trait_type === 'rewards');
                     const rewardsValue = rewardsAttribute?.value;
                     const liveAmpLunaBacking = rewardsValue ? Number(rewardsValue) / 1000000 : 0; 
@@ -6290,12 +6308,14 @@ est. APR 58.53 %"></textarea>
                      const supplyDaodaoStakedEl = document.getElementById('supply-daodao-staked');
                      const supplyEnterpriseStakedEl = document.getElementById('supply-enterprise-staked');
                      const daodaoModalHolderCountEl = document.getElementById('daodao-modal-holder-count');
-                     if(supplyMintedEl) supplyMintedEl.textContent = mintedCount.toLocaleString();
-                     if(supplyCirculatingEl) supplyCirculatingEl.textContent = circulatingSupply.toLocaleString();
-                     if(supplyLiquidEl) supplyLiquidEl.textContent = liquidSupply.toLocaleString();
-                     if(supplyDaodaoStakedEl) supplyDaodaoStakedEl.textContent = daodaoCount.toLocaleString();
-                     if(supplyEnterpriseStakedEl) supplyEnterpriseStakedEl.textContent = enterpriseStakedByHolder.toLocaleString();
-                     if(daodaoModalHolderCountEl) daodaoModalHolderCountEl.textContent = daodaoCount.toLocaleString();
+                     // Helper: format integer for display, or '—' if null/undefined (Rev 3.26 null-safety)
+                     const fmt = (v) => (v == null) ? '—' : v.toLocaleString();
+                     if(supplyMintedEl) supplyMintedEl.textContent = fmt(mintedCount);
+                     if(supplyCirculatingEl) supplyCirculatingEl.textContent = fmt(circulatingSupply);
+                     if(supplyLiquidEl) supplyLiquidEl.textContent = fmt(liquidSupply);
+                     if(supplyDaodaoStakedEl) supplyDaodaoStakedEl.textContent = fmt(daodaoCount);
+                     if(supplyEnterpriseStakedEl) supplyEnterpriseStakedEl.textContent = fmt(enterpriseStakedByHolder);
+                     if(daodaoModalHolderCountEl) daodaoModalHolderCountEl.textContent = fmt(daodaoCount);
 
                      const unbrokenCountEl = document.getElementById('unbroken-count');
                      const brokenCountEl = document.getElementById('broken-count');
@@ -6323,8 +6343,8 @@ est. APR 58.53 %"></textarea>
                      const unmintedModalBackingUsd = document.getElementById('unminted-modal-backing-usd');
                      const unmintedModalTotalLuna = document.getElementById('unminted-modal-total-luna');
                      const unmintedModalTotalUsd = document.getElementById('unminted-modal-total-usd');
-                     if(unmintedModalCount1) unmintedModalCount1.textContent = unmintedCount.toLocaleString();
-                     if(unmintedModalCount2) unmintedModalCount2.textContent = unmintedCount.toLocaleString();
+                     if(unmintedModalCount1) unmintedModalCount1.textContent = fmt(unmintedCount);
+                     if(unmintedModalCount2) unmintedModalCount2.textContent = fmt(unmintedCount);
                      if(unmintedModalBackingLuna) unmintedModalBackingLuna.textContent = backingInLunaLive.toFixed(4);
                      if(unmintedModalBackingUsd) unmintedModalBackingUsd.textContent = backingInUSD.toFixed(4);
                      if(unmintedModalTotalLuna) unmintedModalTotalLuna.textContent = `${unmintedBackingLuna.toLocaleString('en-US', {maximumFractionDigits: 0})} LUNA`;
