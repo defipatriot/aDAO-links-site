@@ -98,8 +98,9 @@
             /* Utility: hide elements only on mobile */
             .hide-on-mobile { display: none !important; }
             
-            /* TOP INFO CARDS — compact 3-col grid (6 cards = clean 3+3 layout after hiding Tutorials) */
-            .info-card {
+            /* TOP INFO CARDS — compact 3-col grid (7 visible on mobile = clean 3+3+1, last solo) */
+            .info-card,
+            .info-card-dropdown {
                 padding: 0.6rem 0.4rem !important;
                 min-height: 80px;
                 display: flex !important;
@@ -109,12 +110,14 @@
                 text-align: center;
                 overflow: hidden;
             }
-            .info-card .icon { font-size: 1.25rem !important; margin-bottom: 0.35rem !important; }
-            .info-card h3 {
+            .info-card .icon,
+            .info-card-dropdown .icon { font-size: 1.25rem !important; margin-bottom: 0.35rem !important; }
+            .info-card h3,
+            .info-card-dropdown h3 {
                 font-size: 0.7rem !important;
                 line-height: 0.85rem !important;
                 margin: 0 !important;
-                /* Allow up to 2 lines of wrapping so full text fits ("ALLY Rewards", "NFT Release History", etc.) */
+                /* Allow up to 2 lines of wrapping so full text fits */
                 white-space: normal;
                 overflow: hidden;
                 display: -webkit-box;
@@ -124,15 +127,14 @@
                 word-break: break-word;
             }
             /* Hide the long ALLY paragraph + "Learn More" — all cards become uniform icon+title */
-            .info-card p, .info-card .link-text { display: none !important; }
+            .info-card p, .info-card .link-text,
+            .info-card-tall .ally-desc, .info-card-tall .ally-cta { display: none !important; }
             
-            /* The grid: 3 cols on mobile so 6 visible cards fit in 2 rows (3+3) */
+            /* The grid: 3 cols on mobile */
             .top-info-grid {
                 grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
                 gap: 0.5rem !important;
             }
-            /* Dissolve the .flex.flex-col.gap-4 wrappers so their children become direct grid items */
-            .top-info-grid > .flex.flex-col.gap-4 { display: contents !important; }
             
             /* STAT TILES — light touch only */
             .stat-card,
@@ -530,6 +532,134 @@
             border: 1px solid rgba(45, 212, 191, 0.3);
         }
         
+        /* --- ALLY Rewards "tall" tile: spans 2 rows on desktop only --- */
+        .info-card-tall .ally-desc,
+        .info-card-tall .ally-cta {
+            display: none;
+        }
+        @media (min-width: 1024px) {
+            .info-card-tall {
+                grid-row: span 2;
+                /* Show description + CTA on desktop since the tile is taller */
+            }
+            .info-card-tall .ally-desc,
+            .info-card-tall .ally-cta {
+                display: block;
+            }
+            .info-card-tall .ally-cta {
+                display: inline-block;
+            }
+        }
+        
+        /* --- Top Nav Tab Styles --- */
+        .top-nav-tab {
+            min-width: 110px;
+        }
+        @media (min-width: 768px) {
+            .top-nav-tab {
+                min-width: 140px;
+            }
+        }
+        
+        /* --- Info-card dropdown trigger (DAO Links / Contract tiles) --- */
+        .info-card-dropdown {
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(255, 255, 255, 0.03);
+            transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            font-family: inherit;
+        }
+        .info-card-dropdown:hover {
+            background: rgba(255, 255, 255, 0.06);
+            border-color: rgba(45, 212, 191, 0.4);
+            transform: translateY(-2px);
+        }
+        
+        /* --- Info-card dropdown menu (modal-style overlay) --- */
+        .info-dropdown-menu {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+            z-index: 100;
+            animation: fadeIn 0.15s ease;
+        }
+        .info-dropdown-menu.hidden { display: none; }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .info-dropdown-content {
+            background: #0f1117;
+            border: 1px solid rgba(45, 212, 191, 0.3);
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            max-width: 400px;
+            width: 100%;
+            max-height: 85vh;
+            overflow-y: auto;
+            position: relative;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+        .info-dropdown-close {
+            position: absolute;
+            top: 0.75rem;
+            right: 0.75rem;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #9ca3af;
+            background: transparent;
+            border: none;
+            font-size: 1rem;
+            cursor: pointer;
+            border-radius: 0.375rem;
+            transition: all 0.15s;
+        }
+        .info-dropdown-close:hover {
+            color: white;
+            background: rgba(255, 255, 255, 0.05);
+        }
+        .info-dropdown-section-title {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #d1d5db;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            padding: 0 0.5rem 0.5rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            margin-bottom: 0.5rem;
+        }
+        .info-dropdown-content a {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.65rem 0.75rem;
+            color: #d1d5db;
+            text-decoration: none;
+            border-radius: 0.5rem;
+            transition: all 0.15s;
+            font-size: 0.9rem;
+        }
+        .info-dropdown-content a:hover {
+            background: rgba(45, 212, 191, 0.1);
+            color: #67e8f9;
+        }
+        .info-dropdown-content a i:first-child {
+            width: 1rem;
+            color: #22d3ee;
+            font-size: 0.85rem;
+        }
+        
         /* --- Nav Dropdown Styles --- */
         .nav-dropdown {
             position: relative;
@@ -800,22 +930,20 @@
             </div>
 
             <!-- Navigation: Mobile Order 3 (New Row). Full width on mobile. Desktop Order 2 (Center). -->
-            <nav class="flex-1 w-full md:w-auto flex justify-center items-center gap-3 order-3 md:order-2 mt-4 md:mt-0">
-                <!-- NFT Dropdown -->
-                <div class="nav-dropdown">
-                    <a href="nft-explorer-index.html" class="nav-dropdown-btn bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-8 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center">
-                        NFT Explorer
-                        <i class="fas fa-chevron-down text-[10px] opacity-60"></i>
-                    </a>
-                    <div class="nav-dropdown-content">
-                        <a href="nft-explorer-index.html"><i class="fas fa-images"></i>NFT Explorer</a>
-                        <a href="planet-map.html"><i class="fas fa-globe"></i>Galaxy Map</a>
-                    </div>
-                </div>
-                <a href="tla-stats.html" class="bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-8 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center">
-                    TLA Stats
+            <nav class="flex-1 w-full md:w-auto flex justify-center items-center gap-2 sm:gap-3 order-3 md:order-2 mt-4 md:mt-0">
+                <a href="nft-explorer-index.html" class="top-nav-tab bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-4 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center flex-1 md:flex-initial">
+                    <span class="md:hidden">Explorer</span>
+                    <span class="hidden md:inline">NFT Explorer</span>
                 </a>
-                <a href="dao_governance.html" class="bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-8 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center">
+                <a href="planet-map.html" class="top-nav-tab bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-4 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center flex-1 md:flex-initial">
+                    <span class="md:hidden">Lore</span>
+                    <span class="hidden md:inline">aDAO Lore</span>
+                </a>
+                <a href="tla-stats.html" class="top-nav-tab bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-4 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center flex-1 md:flex-initial">
+                    <span class="md:hidden">TLA</span>
+                    <span class="hidden md:inline">TLA Stats</span>
+                </a>
+                <a href="dao_governance.html" class="top-nav-tab bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-4 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center flex-1 md:flex-initial">
                     DAO
                 </a>
             </nav>
@@ -835,50 +963,77 @@
 
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
-        <div id="disclaimer-banner" class="hide-on-mobile bg-yellow-500/10 border border-yellow-400/30 text-yellow-300 px-4 py-3 rounded-lg relative mb-8 text-center" role="alert">
-            <strong class="font-bold">Please Note:</strong>
-            <span class="block sm:inline">Tiles with a <span class="inline-block w-2.5 h-2.5 rounded-full bg-red-500 mx-1 align-middle"></span> are from a snapshot. Tiles with a <span class="inline-block w-2.5 h-2.5 rounded-full bg-green-400 mx-1 align-middle"></span> are from a live feed.</span>
-            <span id="close-banner" class="absolute top-0 bottom-0 right-0 px-4 py-3 cursor-pointer">
-                <svg class="fill-current h-6 w-6 text-yellow-400" role="button" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><title>Close</title><path d="M14.348 14.849a1.2 1.2 0 0 1-1.697 0L10 11.819l-2.651 3.029a1.2 1.2 0 1 1-1.697-1.697l2.758-3.15-2.759-3.152a1.2 1.2 0 1 1-1.697-1.697L10 8.183l2.651-3.031a1.2 1.2 0 1 1-1.697 1.697l-2.758 3.152 2.758 3.15a1.2 1.2 0 0 1 0 1.698z"/></svg>
-            </span>
-        </div>
-        
-        <div class="top-info-grid grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-6 sm:mb-8">
-            <a href="ally.html" class="stat-card info-card rounded-xl group">
+        <div class="top-info-grid grid grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 mb-6 sm:mb-8">
+            <!-- ALLY Rewards: large tile, spans 2 rows on desktop, single tile on mobile -->
+            <a href="ally.html" class="stat-card info-card info-card-tall rounded-xl group">
                 <i class="fas fa-layer-group icon"></i>
                 <h3 class="group-hover:text-teal-400">ALLY Rewards</h3>
-                <p>A pioneering collection backed by LUNA staking rewards. Your share of the pool grows as others claim theirs.</p>
-                <span class="link-text link-group">Learn More &rarr;</span>
+                <p class="ally-desc">A pioneering collection backed by LUNA staking rewards. Your share of the pool grows as others claim theirs.</p>
+                <span class="link-text link-group ally-cta">Learn More &rarr;</span>
             </a>
-            <div class="flex flex-col gap-4">
-                 <a href="tutorials.html" class="stat-card info-card rounded-xl group flex-1 hide-on-mobile">
-                      <i class="fas fa-video icon !mb-2"></i>
-                      <h3 class="group-hover:text-teal-400 !mb-0">Tutorials & Guides</h3>
-                 </a>
-                 <a href="tools.html" class="stat-card info-card rounded-xl group flex-1">
-                      <i class="fas fa-wrench icon !mb-2"></i>
-                      <h3 class="group-hover:text-teal-400 !mb-0">Tools</h3>
-                 </a>
+            
+            <a href="tutorials.html" class="stat-card info-card rounded-xl group">
+                <i class="fas fa-video icon"></i>
+                <h3 class="group-hover:text-teal-400">Tutorials</h3>
+            </a>
+            <a href="tools.html" class="stat-card info-card rounded-xl group">
+                <i class="fas fa-wrench icon"></i>
+                <h3 class="group-hover:text-teal-400">Tools</h3>
+            </a>
+            <a href="rarity-explained.html" class="stat-card info-card rounded-xl group">
+                <i class="fas fa-gem icon"></i>
+                <h3 class="group-hover:text-teal-400">Rarity Info</h3>
+            </a>
+            <a href="release-history.html" class="stat-card info-card rounded-xl group">
+                <i class="fas fa-stream icon"></i>
+                <h3 class="group-hover:text-teal-400">NFT Releases</h3>
+            </a>
+            
+            <a href="links.html" class="stat-card info-card rounded-xl group">
+                <i class="fas fa-link icon"></i>
+                <h3 class="group-hover:text-teal-400">Official Links</h3>
+            </a>
+            <a href="alliances.html" class="stat-card info-card rounded-xl group">
+                <i class="fas fa-handshake icon"></i>
+                <h3 class="group-hover:text-teal-400">Alliances</h3>
+            </a>
+            <button type="button" data-dropdown-trigger="dao-links-menu" class="info-card-dropdown stat-card info-card rounded-xl group cursor-pointer text-center">
+                <i class="fas fa-landmark icon"></i>
+                <h3 class="group-hover:text-teal-400">DAO Links <i class="fas fa-chevron-down text-[10px] opacity-60 ml-1"></i></h3>
+            </button>
+            <button type="button" data-dropdown-trigger="contract-menu" class="info-card-dropdown stat-card info-card rounded-xl group cursor-pointer text-center">
+                <i class="fas fa-file-contract icon"></i>
+                <h3 class="group-hover:text-teal-400">Contract <i class="fas fa-chevron-down text-[10px] opacity-60 ml-1"></i></h3>
+            </button>
+        </div>
+        
+        <!-- DAO Links dropdown menu (hidden by default, opened by tile click) -->
+        <div id="dao-links-menu" class="info-dropdown-menu hidden">
+            <div class="info-dropdown-content">
+                <button type="button" class="info-dropdown-close" aria-label="Close"><i class="fas fa-times"></i></button>
+                <h4 class="info-dropdown-section-title"><i class="fas fa-users-rectangle text-cyan-400 mr-2"></i>Main DAO</h4>
+                <a href="https://daodao.zone/dao/terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm/home?url=https%3A%2F%2Fwww.erisprotocol.com" target="_blank" rel="noopener noreferrer"><i class="fas fa-house"></i>DAO Home</a>
+                <a href="https://daodao.zone/dao/terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm/proposals" target="_blank" rel="noopener noreferrer"><i class="fas fa-vote-yea"></i>DAO Proposals</a>
+                <a href="https://daodao.zone/dao/terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm/treasury" target="_blank" rel="noopener noreferrer"><i class="fas fa-vault"></i>DAO Treasury</a>
+                <a href="https://daodao.zone/dao/terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm/members" target="_blank" rel="noopener noreferrer"><i class="fas fa-users"></i>DAO Members</a>
+                <a href="https://daodao.zone/dao/terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm/collection" target="_blank" rel="noopener noreferrer"><i class="fas fa-images"></i>DAO NFTs</a>
+                <a href="https://daodao.zone/dao/terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm/apps?url=https%3A%2F%2Fwww.erisprotocol.com" target="_blank" rel="noopener noreferrer"><i class="fas fa-bolt"></i>DAO Eris Protocol</a>
+                
+                <h4 class="info-dropdown-section-title mt-3"><i class="fas fa-shield-halved text-cyan-400 mr-2"></i>Council DAO</h4>
+                <a href="https://daodao.zone/dao/terra1yqv0af22675wlcmgflxk4ve07vt8qlm999gk0cuw5l64r5xxgadsyg8ywv/home" target="_blank" rel="noopener noreferrer"><i class="fas fa-house"></i>Council Home</a>
+                <a href="https://daodao.zone/dao/terra1yqv0af22675wlcmgflxk4ve07vt8qlm999gk0cuw5l64r5xxgadsyg8ywv/proposals" target="_blank" rel="noopener noreferrer"><i class="fas fa-vote-yea"></i>Council Proposals</a>
+                <a href="https://daodao.zone/dao/terra1yqv0af22675wlcmgflxk4ve07vt8qlm999gk0cuw5l64r5xxgadsyg8ywv/treasury" target="_blank" rel="noopener noreferrer"><i class="fas fa-vault"></i>Council Treasury</a>
+                <a href="https://daodao.zone/dao/terra1yqv0af22675wlcmgflxk4ve07vt8qlm999gk0cuw5l64r5xxgadsyg8ywv/members" target="_blank" rel="noopener noreferrer"><i class="fas fa-users"></i>Council Members</a>
             </div>
-             <div class="flex flex-col gap-4">
-                <a href="rarity-explained.html" class="stat-card info-card rounded-xl group flex-1">
-                     <i class="fas fa-gem icon !mb-2"></i>
-                     <h3 class="group-hover:text-teal-400 !mb-0">Rarity Info</h3>
-                </a>
-                <a href="release-history.html" class="stat-card info-card rounded-xl group flex-1">
-                     <i class="fas fa-stream icon !mb-2"></i>
-                     <h3 class="group-hover:text-teal-400 !mb-0">NFT Release History</h3>
-                </a>
-            </div>
-            <div class="flex flex-col gap-4">
-                <a href="links.html" class="stat-card info-card rounded-xl group flex-1">
-                     <i class="fas fa-link icon !mb-2"></i>
-                     <h3 class="group-hover:text-teal-400 !mb-0">Official Links</h3>
-                </a>
-                <a href="alliances.html" class="stat-card info-card rounded-xl group flex-1">
-                     <i class="fas fa-handshake icon !mb-2"></i>
-                     <h3 class="group-hover:text-teal-400 !mb-0">Our Alliances</h3>
-                </a>
+        </div>
+        
+        <!-- Contract dropdown menu (hidden by default) -->
+        <div id="contract-menu" class="info-dropdown-menu hidden">
+            <div class="info-dropdown-content">
+                <button type="button" class="info-dropdown-close" aria-label="Close"><i class="fas fa-times"></i></button>
+                <h4 class="info-dropdown-section-title"><i class="fas fa-file-contract text-cyan-400 mr-2"></i>Contract</h4>
+                <a href="https://chainsco.pe/terra2/address/terra1phr9fngjv7a8an4dhmhd0u0f98wazxfnzccqtyheq4zqrrp4fpuqw3apw9" target="_blank" rel="noopener noreferrer"><i class="fas fa-magnifying-glass"></i>NFT Contract</a>
+                <a href="https://github.com/SCV-Security/PublicReports/blob/b819ec669f81e603caca261931e2a4aaca1cddf7/Alliance/Alliance%20DAO%20-%20NFT%20Collection%20Contract%20-%20Audit%20Report%20v1.0.pdf" target="_blank" rel="noopener noreferrer"><i class="fas fa-shield-check"></i>Contract Audit</a>
             </div>
         </div>
         
@@ -2596,6 +2751,40 @@ est. APR 58.53 %"></textarea>
                     if (e.key === 'Escape' && !modal.classList.contains('hidden')) closeModal();
                 });
             }
+            
+            // Info-card dropdown menus (DAO Links / Contract tiles)
+            var dropdownTriggers = document.querySelectorAll('[data-dropdown-trigger]');
+            dropdownTriggers.forEach(function(btn) {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    var menuId = btn.getAttribute('data-dropdown-trigger');
+                    var menu = document.getElementById(menuId);
+                    if (menu) menu.classList.remove('hidden');
+                });
+            });
+            // Close handlers for info dropdowns
+            document.querySelectorAll('.info-dropdown-menu').forEach(function(menu) {
+                // Click outside content area closes
+                menu.addEventListener('click', function(e) {
+                    if (e.target === menu) menu.classList.add('hidden');
+                });
+                // Close button inside content closes
+                var closeButton = menu.querySelector('.info-dropdown-close');
+                if (closeButton) {
+                    closeButton.addEventListener('click', function() {
+                        menu.classList.add('hidden');
+                    });
+                }
+            });
+            // Escape key closes any open info dropdown
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    document.querySelectorAll('.info-dropdown-menu:not(.hidden)').forEach(function(menu) {
+                        menu.classList.add('hidden');
+                    });
+                }
+            });
         });
     })();
     </script>
