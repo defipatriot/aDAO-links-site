@@ -2976,7 +2976,7 @@ est. APR 58.53 %"></textarea>
             </div>
             <div class="mt-4 text-xs text-gray-500">
                 <button id="changelog-trigger" class="hover:text-cyan-400 transition-colors cursor-pointer">
-                    <span class="font-mono">Rev 3.31</span>
+                    <span class="font-mono">Rev 3.32</span>
                     <span class="opacity-60 mx-1">·</span>
                     <span>Changelog</span>
                 </button>
@@ -7646,7 +7646,10 @@ est. APR 58.53 %"></textarea>
                  if (aprTileEl) { 
                      aprTileEl.textContent = `Est. APR ${tlaData.estApr.toFixed(2)}%`; 
                  }
-                 updateTile('dao-tla-total', null, false, { titleId: 'dao-tla-title' }); 
+                 // Rev 3.32 — DON'T call updateTile() here. updateTile with isLive=false
+                 // restores a spinner (line 8529 logic), which wiped the dollar value we
+                 // just wrote at line 7644. The dot is owned by applyTlaStaleness now anyway.
+                 // Was: updateTile('dao-tla-total', null, false, { titleId: 'dao-tla-title' });
                  
                  // Update modal header
                  if (modalTotalUsdEl) modalTotalUsdEl.textContent = `$${tlaData.totalDeposit.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
@@ -7852,6 +7855,15 @@ est. APR 58.53 %"></textarea>
             function showStaleDataModal(meta) {
                 const modal = document.getElementById('staleDataModal');
                 if (!modal) return;
+                // Rev 3.32 — gate against double-fire: if any prior call already showed
+                // the modal in this lifecycle, don't show it again. sessionStorage alone
+                // wasn't enough because applyTlaStaleness can fire twice (once from the
+                // early updateUI call at ~500ms, once from the late finally block at
+                // ~15s) — if the user dismisses the first AFTER the second is already
+                // queued, the second still shows.
+                if (window._staleModalShown) return;
+                window._staleModalShown = true;
+
                 const loadedEl = document.getElementById('stale-modal-loaded-epoch');
                 const currentEl = document.getElementById('stale-modal-current-epoch');
                 const behindEl = document.getElementById('stale-modal-epochs-behind');
@@ -7859,7 +7871,15 @@ est. APR 58.53 %"></textarea>
                 if (currentEl) currentEl.textContent = meta.currentEpoch;
                 if (behindEl) behindEl.textContent = meta.epochsOld;
                 modal.classList.remove('hidden');
+                // Rev 3.32 — opacity cascade fix. Tailwind's opacity-0 and opacity-100
+                // are both regular utilities (no !important), so adding opacity-100
+                // doesn't beat the existing opacity-0. Result: invisible button below
+                // a translucent overlay. Click-through "broke" because the inner
+                // .modal-content was transparent to clicks until the user clicked
+                // somewhere (which triggered a redraw that resolved the cascade).
+                // Fix: explicitly remove opacity-0 on both the backdrop and content.
                 requestAnimationFrame(() => {
+                    modal.classList.remove('opacity-0');
                     modal.classList.add('opacity-100');
                     const content = modal.querySelector('.modal-content');
                     if (content) {
