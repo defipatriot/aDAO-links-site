@@ -2976,7 +2976,7 @@ est. APR 58.53 %"></textarea>
             </div>
             <div class="mt-4 text-xs text-gray-500">
                 <button id="changelog-trigger" class="hover:text-cyan-400 transition-colors cursor-pointer">
-                    <span class="font-mono">Rev 3.26</span>
+                    <span class="font-mono">Rev 3.29</span>
                     <span class="opacity-60 mx-1">·</span>
                     <span>Changelog</span>
                 </button>
@@ -3526,47 +3526,94 @@ est. APR 58.53 %"></textarea>
             }
             
             // --- Function to fetch TLA data from GitHub snapshots ---
+            // Rev 3.29 — Parallel epoch-fallback fetch with per-request timeout and in-memory cache.
+            //
+            // Why this exists: previously this function tried exactly one URL (currentEpoch-1)
+            // and gave up on 404. If the user missed a Sunday-night snapshot capture, the
+            // dashboard's TLA tiles spun forever even though older snapshots were available.
+            // The TLA Stats page already had this fallback logic (fetchTlaData, line ~7700)
+            // but walked epochs sequentially — slow on miss.
+            //
+            // This version:
+            //   - Tries currentEpoch+1 through currentEpoch-4 in PARALLEL (one round-trip
+            //     wall-time regardless of which one wins)
+            //   - 5s per-fetch timeout via AbortController (no hung requests)
+            //   - Caches result for the lifetime of currentEpoch (auto-invalidates on
+            //     Sunday 23:59 UTC when the epoch number rolls)
+            //   - Returns {data, epoch, currentEpoch, epochsBehind, isStale} so the caller
+            //     can render the right dot color and show the stale banner
+            //
+            // Staleness convention: epoch (currentEpoch-1) is the healthy expected state
+            // (last completed epoch). Epoch (currentEpoch-2) or older is stale.
+            let _adaoSnapshotCache = { epochKey: null, result: null };
+
             async function fetchTlaFromGitHub() {
                 try {
-                    // Calculate current epoch number (same logic as avg daily gain)
                     const epochReferenceDate = new Date('2025-12-01T00:00:00Z');
                     const epochReferenceNumber = 162;
                     const now = new Date();
                     const msPerWeek = 7 * 24 * 60 * 60 * 1000;
                     const weeksDiff = Math.floor((now - epochReferenceDate) / msPerWeek);
                     const currentEpoch = epochReferenceNumber + weeksDiff;
-                    const newestCompletedEpoch = currentEpoch - 1;
-                    
-                    console.log(`DEBUG: Fetching TLA data from epoch ${newestCompletedEpoch}`);
-                    
+
+                    // Cache hit — same currentEpoch as last fetch within this session
+                    if (_adaoSnapshotCache.epochKey === currentEpoch && _adaoSnapshotCache.result) {
+                        console.log(`DEBUG: adao snapshot — cache hit (epoch ${_adaoSnapshotCache.result.epoch})`);
+                        return _adaoSnapshotCache.result;
+                    }
+
+                    // Candidate epochs, newest first. +1 covers the rare case of a snapshot
+                    // uploaded a few hours before the epoch boundary; the rest cover normal
+                    // and stale-fallback cases.
+                    const candidates = [
+                        currentEpoch + 1, currentEpoch, currentEpoch - 1,
+                        currentEpoch - 2, currentEpoch - 3, currentEpoch - 4
+                    ];
                     const baseUrl = 'https://raw.githubusercontent.com/defipatriot/adao_json_storage/main';
-                    const snapshotUrl = `${baseUrl}/adao-snapshot_${newestCompletedEpoch}_end.json`;
-                    console.log(`DEBUG: TLA fetch URL: ${snapshotUrl}`);
-                    
-                    const response = await fetch(snapshotUrl);
-                    console.log(`DEBUG: TLA fetch response status: ${response?.status}`);
-                    
-                    if (!response?.ok) {
-                        console.warn("DEBUG: Could not fetch TLA snapshot");
+                    console.log(`DEBUG: adao snapshot — parallel fetch for epochs ${candidates.join(', ')}`);
+
+                    const fetchOne = async (epoch) => {
+                        const controller = new AbortController();
+                        const timeoutId = setTimeout(() => controller.abort(), 5000);
+                        try {
+                            const r = await fetch(`${baseUrl}/adao-snapshot_${epoch}_end.json`, { signal: controller.signal });
+                            clearTimeout(timeoutId);
+                            if (!r.ok) return { epoch, ok: false };
+                            const data = await r.json();
+                            return { epoch, ok: true, data };
+                        } catch (e) {
+                            clearTimeout(timeoutId);
+                            return { epoch, ok: false };
+                        }
+                    };
+
+                    const settled = await Promise.allSettled(candidates.map(fetchOne));
+                    const successes = settled
+                        .filter(r => r.status === 'fulfilled' && r.value.ok && r.value.data?.tlaDeposits)
+                        .map(r => r.value)
+                        .sort((a, b) => b.epoch - a.epoch);
+
+                    if (successes.length === 0) {
+                        console.warn(`DEBUG: adao snapshot — no usable snapshot found across epochs ${candidates.join(', ')}`);
                         return null;
                     }
-                    
-                    const snapshotData = await response.json();
-                    console.log("DEBUG: TLA snapshot loaded, keys:", Object.keys(snapshotData));
-                    
-                    // Check if TLA data exists in the snapshot
-                    if (snapshotData.tlaDeposits) {
-                        console.log("DEBUG: TLA data found in snapshot:", snapshotData.tlaDeposits);
-                        return {
-                            data: snapshotData.tlaDeposits,
-                            epoch: newestCompletedEpoch,
-                            timestamp: snapshotData.timestamp
-                        };
-                    } else {
-                        console.log("DEBUG: No tlaDeposits key found in snapshot");
-                    }
-                    
-                    return null;
+
+                    const winner = successes[0];
+                    const epochsBehind = (currentEpoch - 1) - winner.epoch;
+                    const isStale = epochsBehind > 0;
+                    console.log(`DEBUG: adao snapshot — loaded epoch ${winner.epoch} (${isStale ? 'STALE - ' + epochsBehind + ' epochs behind' : 'fresh'})`);
+
+                    const result = {
+                        data: winner.data.tlaDeposits,
+                        epoch: winner.epoch,
+                        currentEpoch,
+                        epochsBehind,
+                        isStale,
+                        timestamp: winner.data.timestamp
+                    };
+                    _adaoSnapshotCache = { epochKey: currentEpoch, result };
+                    return result;
+
                 } catch (error) {
                     console.error("DEBUG: Failed to fetch TLA from GitHub:", error);
                     return null;
@@ -3602,10 +3649,18 @@ est. APR 58.53 %"></textarea>
                     }
                     
                     console.log(`DEBUG: Updated TLA data from epoch ${tlaResult.epoch}`);
-                    return true;
+                    // Rev 3.29 — return staleness metadata so the caller can render the right
+                    // dot color and show the stale banner.
+                    return {
+                        success: true,
+                        isStale: tlaResult.isStale,
+                        epoch: tlaResult.epoch,
+                        currentEpoch: tlaResult.currentEpoch,
+                        epochsBehind: tlaResult.epochsBehind
+                    };
                 }
                 
-                return false;
+                return { success: false, isStale: false, epoch: null, currentEpoch: null, epochsBehind: 0 };
             }
             
             // --- Parsed TLA data holder ---
@@ -5996,6 +6051,12 @@ est. APR 58.53 %"></textarea>
                 // --- Variables to store calculated results ---
                 let snapshotResult = { timestamp: new Date().toISOString(), status: "partial" }; // Default status
 
+                // Rev 3.27 — null-safe formatters available in both try and catch blocks.
+                // Returns '—' for null/undefined/NaN so a single missing upstream value
+                // (e.g. an LCD 500) cannot cascade into a TypeError that halts UI updates.
+                const safeLocale = (v, opts) => (v == null || (typeof v === 'number' && Number.isNaN(v))) ? '—' : v.toLocaleString('en-US', opts);
+                const safeFix = (v, d = 2) => (v == null || (typeof v === 'number' && Number.isNaN(v))) ? '—' : v.toFixed(d);
+
                 try {
                     console.log("DEBUG: Starting primary API fetches..."); 
                     
@@ -6166,11 +6227,13 @@ est. APR 58.53 %"></textarea>
                     const circulatingSupply = mintedCount != null ? Math.max(0, mintedCount - 1000) : null; // Assuming 1000 DAO broken
                     const rewardsAttribute = contractJson?.data?.info?.extension?.attributes?.find(attr => attr.trait_type === 'rewards');
                     const rewardsValue = rewardsAttribute?.value;
-                    const liveAmpLunaBacking = rewardsValue ? Number(rewardsValue) / 1000000 : 0; 
-                    const backingInLunaLive = liveAmpLunaBacking * ampLunaToLunaRate;
-                    const backingInUSD = backingInLunaLive * lunaPriceUSD;
-                    const unmintedBackingLuna = unmintedCount * backingInLunaLive;
-                    const unmintedBackingUSD = unmintedCount * backingInUSD;
+                    // Rev 3.27: preserve null when upstream data is missing instead of silently
+                    // producing 0/NaN, which would display as "0 LUNA" and mislead users.
+                    const liveAmpLunaBacking = rewardsValue ? Number(rewardsValue) / 1000000 : null;
+                    const backingInLunaLive = (liveAmpLunaBacking != null && ampLunaToLunaRate != null) ? liveAmpLunaBacking * ampLunaToLunaRate : null;
+                    const backingInUSD = (backingInLunaLive != null && lunaPriceUSD != null) ? backingInLunaLive * lunaPriceUSD : null;
+                    const unmintedBackingLuna = (unmintedCount != null && backingInLunaLive != null) ? unmintedCount * backingInLunaLive : null;
+                    const unmintedBackingUSD = (unmintedCount != null && backingInUSD != null) ? unmintedCount * backingInUSD : null;
 
                     // Calculate Treasury Total USD (simplified from buildTreasuryTable)
                      let totalTreasuryUSD = 0;
@@ -6322,20 +6385,45 @@ est. APR 58.53 %"></textarea>
                      const brokenPercentEl = document.getElementById('broken-percent');
                      const brokenSliderEl = document.getElementById('broken-slider');
                      const totalNftsForBrokenCalc = 10000;
-                     if (unbrokenCountEl) unbrokenCountEl.textContent = (totalNftsForBrokenCalc - brokenCount).toLocaleString();
-                     if (brokenCountEl) brokenCountEl.textContent = brokenCount.toLocaleString();
-                     if (brokenPercentEl) brokenPercentEl.textContent = `${(brokenCount / totalNftsForBrokenCalc * 100).toFixed(2)}% Broken`;
-                     if (brokenSliderEl) {
+                     // Rev 3.27 — null-safe (brokenCount is normally a number from nfts.filter,
+                     // but if nfts is empty/missing we should show '—', not "10,000" / "0").
+                     if (unbrokenCountEl) unbrokenCountEl.textContent = (brokenCount == null) ? '—' : safeLocale(totalNftsForBrokenCalc - brokenCount);
+                     if (brokenCountEl) brokenCountEl.textContent = safeLocale(brokenCount);
+                     if (brokenPercentEl) brokenPercentEl.textContent = (brokenCount == null) ? '—' : `${safeFix(brokenCount / totalNftsForBrokenCalc * 100, 2)}% Broken`;
+                     if (brokenSliderEl && brokenCount != null) {
                          const percentBrokenNum = brokenCount / totalNftsForBrokenCalc * 100;
                          brokenSliderEl.innerHTML = `<div class="slider-fill-blue" style="width: ${100 - percentBrokenNum}%;"></div><div class="slider-fill-gray" style="width: ${percentBrokenNum}%;"></div>`;
                      }
 
-                    updateTile('backing-per-nft-ampluna', liveAmpLunaBacking.toFixed(4), true, { titleId: 'backing-ampluna-title', subtextId: 'backing-per-nft-change', subtext: `Ratio: ${ampLunaToLunaRate.toFixed(4)}` }); 
-                    updateTile('backing-per-nft-luna-live', backingInLunaLive.toFixed(4), true, { titleId: 'backing-luna-live-title', subtextId: 'live-luna-price', subtext: `@ $${lunaPriceUSD.toFixed(4)} / LUNA` }); 
-                    updateTile('backing-per-nft-usd', `$${backingInUSD.toFixed(2)}`, true, { titleId: 'backing-usd-title' });
-                    updateTile('unminted-nft-backing-luna', `${unmintedBackingLuna.toLocaleString('en-US', {maximumFractionDigits: 0})} LUNA`, true, { titleId: 'unminted-nft-backing-title' });
+                     // Rev 3.28 — Mint Status slider (parallel to broken-slider above).
+                     // Was previously only touched by updateUI() at startup, which read
+                     // dashboardData.statusSliders.mint.percentMinted — a hardcoded null
+                     // that nothing ever writes, so the spinners spun forever. Now driven
+                     // by the same live mintedCount/unmintedCount that everything else uses.
+                     const unmintedCountEl_top = document.getElementById('unminted-count');
+                     const mintedCountEl_top = document.getElementById('minted-count');
+                     const mintedPercentEl_top = document.getElementById('minted-percent');
+                     const mintSliderEl_live = document.getElementById('mint-slider');
+                     const totalSupplyForMintCalc = 10000;
+                     if (unmintedCountEl_top) unmintedCountEl_top.innerHTML = safeLocale(unmintedCount);
+                     if (mintedCountEl_top) mintedCountEl_top.innerHTML = safeLocale(mintedCount);
+                     if (mintedPercentEl_top) mintedPercentEl_top.innerHTML = (mintedCount == null) ? '—' : `${safeFix(mintedCount / totalSupplyForMintCalc * 100, 2)}% Minted`;
+                     if (mintSliderEl_live && mintedCount != null) {
+                         const percentMintedNum = mintedCount / totalSupplyForMintCalc * 100;
+                         // Same color convention as broken-slider: cyan-blue fill = "good" (minted),
+                         // gray fill = "remaining" (unminted).
+                         mintSliderEl_live.innerHTML = `<div class="slider-fill-blue" style="width: ${percentMintedNum}%;"></div><div class="slider-fill-gray" style="width: ${100 - percentMintedNum}%;"></div>`;
+                     }
+
+                    // Rev 3.27 — all toFixed/toLocaleString calls below switched to safe variants.
+                    // Previously a single null upstream value (e.g. an LCD 500) would throw
+                    // TypeError here and halt every UI update beyond this point.
+                    updateTile('backing-per-nft-ampluna', safeFix(liveAmpLunaBacking, 4), true, { titleId: 'backing-ampluna-title', subtextId: 'backing-per-nft-change', subtext: `Ratio: ${safeFix(ampLunaToLunaRate, 4)}` });
+                    updateTile('backing-per-nft-luna-live', safeFix(backingInLunaLive, 4), true, { titleId: 'backing-luna-live-title', subtextId: 'live-luna-price', subtext: (lunaPriceUSD != null) ? `@ $${safeFix(lunaPriceUSD, 4)} / LUNA` : 'Price unavailable' });
+                    updateTile('backing-per-nft-usd', (backingInUSD != null) ? `$${safeFix(backingInUSD, 2)}` : '—', true, { titleId: 'backing-usd-title' });
+                    updateTile('unminted-nft-backing-luna', (unmintedBackingLuna != null) ? `${safeLocale(unmintedBackingLuna, {maximumFractionDigits: 0})} LUNA` : '—', true, { titleId: 'unminted-nft-backing-title' });
                      const unmintedNftBackingUsdEl = document.getElementById('unminted-nft-backing-usd');
-                     if (unmintedNftBackingUsdEl) unmintedNftBackingUsdEl.textContent = `$${unmintedBackingUSD.toLocaleString('en-US', {maximumFractionDigits: 0})} USD`;
+                     if (unmintedNftBackingUsdEl) unmintedNftBackingUsdEl.textContent = (unmintedBackingUSD != null) ? `$${safeLocale(unmintedBackingUSD, {maximumFractionDigits: 0})} USD` : '—';
                     
                      const unmintedModalCount1 = document.getElementById('unminted-modal-count');
                      const unmintedModalCount2 = document.getElementById('unminted-modal-count-2');
@@ -6345,10 +6433,11 @@ est. APR 58.53 %"></textarea>
                      const unmintedModalTotalUsd = document.getElementById('unminted-modal-total-usd');
                      if(unmintedModalCount1) unmintedModalCount1.textContent = fmt(unmintedCount);
                      if(unmintedModalCount2) unmintedModalCount2.textContent = fmt(unmintedCount);
-                     if(unmintedModalBackingLuna) unmintedModalBackingLuna.textContent = backingInLunaLive.toFixed(4);
-                     if(unmintedModalBackingUsd) unmintedModalBackingUsd.textContent = backingInUSD.toFixed(4);
-                     if(unmintedModalTotalLuna) unmintedModalTotalLuna.textContent = `${unmintedBackingLuna.toLocaleString('en-US', {maximumFractionDigits: 0})} LUNA`;
-                     if(unmintedModalTotalUsd) unmintedModalTotalUsd.textContent = `$${unmintedBackingUSD.toLocaleString('en-US', {maximumFractionDigits: 0})} USD`;
+                     // Rev 3.27 — null-safe versions of the modal text values.
+                     if(unmintedModalBackingLuna) unmintedModalBackingLuna.textContent = safeFix(backingInLunaLive, 4);
+                     if(unmintedModalBackingUsd) unmintedModalBackingUsd.textContent = safeFix(backingInUSD, 4);
+                     if(unmintedModalTotalLuna) unmintedModalTotalLuna.textContent = (unmintedBackingLuna != null) ? `${safeLocale(unmintedBackingLuna, {maximumFractionDigits: 0})} LUNA` : '—';
+                     if(unmintedModalTotalUsd) unmintedModalTotalUsd.textContent = (unmintedBackingUSD != null) ? `$${safeLocale(unmintedBackingUSD, {maximumFractionDigits: 0})} USD` : '—';
 
                     console.log("DEBUG: UI updates triggered."); 
 
@@ -6362,19 +6451,28 @@ est. APR 58.53 %"></textarea>
                      snapshotResult = { timestamp: new Date().toISOString(), status: "error", error: error.message };
                      currentSnapshotData = snapshotResult; 
 
-                    // ... (rest of the error handling for UI remains the same) ...
+                    // Rev 3.27 — catch block hardened. Previously these lines also called
+                    // .toLocaleString() / .toFixed() on values that are hardcoded null in
+                    // dashboardData (line ~3370), so the catch itself crashed and never
+                    // applied its 'Error' fallbacks — leaving downstream tiles permanently
+                    // stuck on the initial spinner. All formatters are now null-safe.
                      const { keyMetrics } = dashboardData;
                      buildTreasuryTable(null, []); buildTlaVp(null, null); buildTlaDeposits(null); 
-                     updateTile('daodao-staked', keyMetrics.daodaoStaked.toLocaleString(), false);
-                     updateTile('dao-members', keyMetrics.daoMembers.toLocaleString(), false);
-                     updateTile('enterprise-staked-holder', keyMetrics.enterpriseStakedHolder.toLocaleString(), false, { titleId: 'enterprise-staked-title'});
+                     updateTile('daodao-staked', safeLocale(keyMetrics.daodaoStaked), false);
+                     updateTile('dao-members', safeLocale(keyMetrics.daoMembers), false);
+                     updateTile('enterprise-staked-holder', safeLocale(keyMetrics.enterpriseStakedHolder), false, { titleId: 'enterprise-staked-title'});
                      updateTile('backing-per-nft-ampluna', 'Error', false, { titleId: 'backing-ampluna-title', subtextId: 'backing-per-nft-change', subtext: 'Ratio: Error' });
-                     updateTile('backing-per-nft-luna-live', keyMetrics.backingInLuna.toFixed(2), false, { titleId: 'backing-luna-live-title', subtextId: 'live-luna-price', subtext: 'Price Error' });
+                     updateTile('backing-per-nft-luna-live', safeFix(keyMetrics.backingInLuna, 2), false, { titleId: 'backing-luna-live-title', subtextId: 'live-luna-price', subtext: 'Price Error' });
                      updateTile('backing-per-nft-usd', 'Error', false, { titleId: 'backing-usd-title' });
                      updateTile('unminted-nft-backing-luna', 'Error', false, { titleId: 'unminted-nft-backing-title' });
                       const unmintedNftBackingUsdEl = document.getElementById('unminted-nft-backing-usd'); if (unmintedNftBackingUsdEl) unmintedNftBackingUsdEl.textContent = 'Error';
                       const unmintedModalBackingLuna = document.getElementById('unminted-modal-backing-luna'); const unmintedModalBackingUsd = document.getElementById('unminted-modal-backing-usd'); const unmintedModalTotalLuna = document.getElementById('unminted-modal-total-luna'); const unmintedModalTotalUsd = document.getElementById('unminted-modal-total-usd');
                       if(unmintedModalBackingLuna) unmintedModalBackingLuna.textContent = 'Error'; if(unmintedModalBackingUsd) unmintedModalBackingUsd.textContent = 'Error'; if(unmintedModalTotalLuna) unmintedModalTotalLuna.textContent = 'Error'; if(unmintedModalTotalUsd) unmintedModalTotalUsd.textContent = 'Error';
+                      // Rev 3.27 — also reset the broken-count slider so it doesn't stay
+                      // on its initial spinner indefinitely.
+                      const unbrokenCountEl_e = document.getElementById('unbroken-count'); if (unbrokenCountEl_e) unbrokenCountEl_e.textContent = '—';
+                      const brokenCountEl_e = document.getElementById('broken-count'); if (brokenCountEl_e) brokenCountEl_e.textContent = '—';
+                      const brokenPercentEl_e = document.getElementById('broken-percent'); if (brokenPercentEl_e) brokenPercentEl_e.textContent = '—';
 
                 } finally {
                      isFetching = false; // Allow fetching again
@@ -6387,18 +6485,44 @@ est. APR 58.53 %"></textarea>
                        fetchAvgDailyGainFromGitHub();
                        
                        // Fetch TLA data from GitHub snapshots and update tile
-                       updateTlaFromGitHub().then(success => {
-                           if (success) {
+                       updateTlaFromGitHub().then(meta => {
+                           if (meta.success) {
                                // Re-run buildTlaDeposits with the updated data and cached price data
                                buildTlaDeposits(cachedPriceData);
-                               // Remove any pulse-dot — snapshot data isn't live, but no red dot replacement
-                               // (the spinner in the tile is the indicator)
-                               const tlaTitleEl = document.getElementById('dao-tla-title');
-                               if (tlaTitleEl) {
-                                   const existingDot = tlaTitleEl.querySelector('.pulse-dot, .static-dot-red');
+
+                               // Rev 3.29 — dot color reflects staleness:
+                               //   fresh data → green pulse-dot
+                               //   stale data → red static-dot-red + show banner
+                               //   total failure → no dot (spinner stays, signaling unresolved)
+                               ['dao-tla-title', 'dao-tla-vp-title'].forEach(id => {
+                                   const titleEl = document.getElementById(id);
+                                   if (!titleEl) return;
+                                   const existingDot = titleEl.querySelector('.pulse-dot, .static-dot-red');
                                    if (existingDot) existingDot.remove();
+                                   const dot = document.createElement('span');
+                                   dot.className = (meta.isStale ? 'static-dot-red' : 'pulse-dot') + ' ml-1';
+                                   dot.title = meta.isStale
+                                       ? `Stale — showing epoch ${meta.epoch} data (current is ${meta.currentEpoch}, missed ${meta.epochsBehind} snapshot${meta.epochsBehind === 1 ? '' : 's'})`
+                                       : `Live — epoch ${meta.epoch} data`;
+                                   titleEl.appendChild(dot);
+                               });
+
+                               // Show stale banner if applicable. Reuses the banner already
+                               // wired into the unclaimed-rewards-card area on the dashboard.
+                               if (meta.isStale) {
+                                   const banner = document.getElementById('unclaimed-stale-banner');
+                                   const warning = document.getElementById('unclaimed-stale-warning');
+                                   const staleEpochEl = document.getElementById('stale-epoch-num');
+                                   const currentEpochEl = document.getElementById('current-epoch-num');
+                                   if (banner) banner.classList.remove('hidden');
+                                   if (warning) warning.classList.remove('hidden');
+                                   if (staleEpochEl) staleEpochEl.textContent = meta.epoch;
+                                   if (currentEpochEl) currentEpochEl.textContent = meta.currentEpoch;
                                }
-                               console.log("DEBUG: TLA tile updated from GitHub snapshot");
+
+                               console.log(`DEBUG: TLA tiles updated (epoch ${meta.epoch}, ${meta.isStale ? 'stale' : 'fresh'})`);
+                           } else {
+                               console.warn("DEBUG: TLA tiles unresolved — no snapshot found, leaving spinners");
                            }
                        });
                        
