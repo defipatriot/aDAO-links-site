@@ -2976,7 +2976,7 @@ est. APR 58.53 %"></textarea>
             </div>
             <div class="mt-4 text-xs text-gray-500">
                 <button id="changelog-trigger" class="hover:text-cyan-400 transition-colors cursor-pointer">
-                    <span class="font-mono">Rev 3.32</span>
+                    <span class="font-mono">Rev 3.33</span>
                     <span class="opacity-60 mx-1">·</span>
                     <span>Changelog</span>
                 </button>
@@ -7898,13 +7898,22 @@ est. APR 58.53 %"></textarea>
                     content.classList.add('scale-95', 'opacity-0');
                 }
                 modal.classList.remove('opacity-100');
+                modal.classList.add('opacity-0');
                 setTimeout(() => modal.classList.add('hidden'), 200);
                 sessionStorage.setItem('aDAO_stale_modal_dismissed', 'true');
             }
 
-            // Wire up the stale-modal acknowledge button + standard close patterns.
-            // Uses DOMContentLoaded so the elements definitely exist.
-            document.addEventListener('DOMContentLoaded', () => {
+            // Rev 3.33 — Wire close handlers immediately, NOT via DOMContentLoaded.
+            // The <script> containing this code runs after the modal HTML at line 3353
+            // is parsed, but well before DOMContentLoaded fires (which waits for the
+            // entire body). If we wrap in addEventListener('DOMContentLoaded', ...),
+            // and DOMContentLoaded *has already fired* by some race condition (or by
+            // the time async work resolves and tries to use these handlers), the
+            // wrapped function never executes.
+            //
+            // The reliable pattern: attach immediately. getElementById('staleDataModal')
+            // succeeds because the modal HTML is parsed before this script tag executes.
+            (function wireStaleModalCloseHandlers() {
                 const ack = document.getElementById('stale-modal-ack');
                 if (ack) ack.addEventListener('click', hideStaleDataModal);
                 const modal = document.getElementById('staleDataModal');
@@ -7914,9 +7923,11 @@ est. APR 58.53 %"></textarea>
                     if (closeBtn) closeBtn.addEventListener('click', hideStaleDataModal);
                 }
                 document.addEventListener('keydown', (e) => {
-                    if (e.key === 'Escape' && modal && !modal.classList.contains('hidden')) hideStaleDataModal();
+                    const m = document.getElementById('staleDataModal');
+                    if (e.key === 'Escape' && m && !m.classList.contains('hidden')) hideStaleDataModal();
                 });
-            });
+            })();
+
 
             // Calculate current epoch from reference data or formula
             async function getCurrentEpoch() {
