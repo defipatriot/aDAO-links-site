@@ -2976,7 +2976,7 @@ est. APR 58.53 %"></textarea>
             </div>
             <div class="mt-4 text-xs text-gray-500">
                 <button id="changelog-trigger" class="hover:text-cyan-400 transition-colors cursor-pointer">
-                    <span class="font-mono">Rev 3.29</span>
+                    <span class="font-mono">Rev 3.30</span>
                     <span class="opacity-60 mx-1">·</span>
                     <span>Changelog</span>
                 </button>
@@ -3342,6 +3342,28 @@ est. APR 58.53 %"></textarea>
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+
+
+    <!-- Rev 3.30 — Stale data modal. Fires once per session when snapshot data
+         is from an older epoch than expected (i.e. a Sunday-night snapshot was
+         missed). User acknowledges by clicking the button; sessionStorage flag
+         prevents re-show within the same tab session. -->
+    <div id="staleDataModal" class="modal fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50 hidden opacity-0">
+        <div class="modal-content bg-[#1a1a1a] border border-yellow-600/40 rounded-xl shadow-xl w-full max-w-md relative text-white opacity-0 scale-95 p-6 sm:p-8">
+            <div class="flex items-start gap-3 mb-4">
+                <div class="flex-shrink-0 w-10 h-10 rounded-full bg-yellow-600/20 flex items-center justify-center">
+                    <i class="fas fa-exclamation-triangle text-yellow-400 text-lg"></i>
+                </div>
+                <div class="flex-1">
+                    <h3 class="text-xl font-bold text-yellow-400">Snapshot data is stale</h3>
+                    <p class="text-xs text-gray-500 mt-0.5">A weekly snapshot was missed</p>
+                </div>
+            </div>
+            <p class="text-sm text-gray-300 mb-2">You're viewing data from epoch <span id="stale-modal-loaded-epoch" class="font-bold text-white">—</span>. The current epoch is <span id="stale-modal-current-epoch" class="font-bold text-white">—</span>.</p>
+            <p class="text-sm text-gray-400 mb-5">The dashboard is <span id="stale-modal-epochs-behind" class="font-bold text-yellow-400">—</span> epoch behind. Some values (TLA deposits, VP, unclaimed rewards) may not reflect recent claims or changes. The next snapshot will be captured at epoch end.</p>
+            <button id="stale-modal-ack" class="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-semibold py-2.5 rounded-lg transition-colors">Got it — show me the dashboard</button>
         </div>
     </div>
 
@@ -6011,6 +6033,12 @@ est. APR 58.53 %"></textarea>
                  // The fetchLiveOnChainData's 'finally' block now handles this.
                  // --- END FIX ---
 
+                // Rev 3.30 — kick off the TLA snapshot fetch in parallel with the slow
+                // on-chain calls, so the stale-data popup can appear within ~500ms of
+                // page load instead of waiting 15s for fetchLiveOnChainData to finish.
+                // fetchTlaData is internally cached, so subsequent callers reuse the result.
+                fetchTlaData().then(() => applyTlaStaleness()).catch(() => {/* silent — UI handles missing data */});
+
                 fetchLiveOnChainData();
             }
 
@@ -6489,41 +6517,13 @@ est. APR 58.53 %"></textarea>
                            if (meta.success) {
                                // Re-run buildTlaDeposits with the updated data and cached price data
                                buildTlaDeposits(cachedPriceData);
-
-                               // Rev 3.29 — dot color reflects staleness:
-                               //   fresh data → green pulse-dot
-                               //   stale data → red static-dot-red + show banner
-                               //   total failure → no dot (spinner stays, signaling unresolved)
-                               ['dao-tla-title', 'dao-tla-vp-title'].forEach(id => {
-                                   const titleEl = document.getElementById(id);
-                                   if (!titleEl) return;
-                                   const existingDot = titleEl.querySelector('.pulse-dot, .static-dot-red');
-                                   if (existingDot) existingDot.remove();
-                                   const dot = document.createElement('span');
-                                   dot.className = (meta.isStale ? 'static-dot-red' : 'pulse-dot') + ' ml-1';
-                                   dot.title = meta.isStale
-                                       ? `Stale — showing epoch ${meta.epoch} data (current is ${meta.currentEpoch}, missed ${meta.epochsBehind} snapshot${meta.epochsBehind === 1 ? '' : 's'})`
-                                       : `Live — epoch ${meta.epoch} data`;
-                                   titleEl.appendChild(dot);
-                               });
-
-                               // Show stale banner if applicable. Reuses the banner already
-                               // wired into the unclaimed-rewards-card area on the dashboard.
-                               if (meta.isStale) {
-                                   const banner = document.getElementById('unclaimed-stale-banner');
-                                   const warning = document.getElementById('unclaimed-stale-warning');
-                                   const staleEpochEl = document.getElementById('stale-epoch-num');
-                                   const currentEpochEl = document.getElementById('current-epoch-num');
-                                   if (banner) banner.classList.remove('hidden');
-                                   if (warning) warning.classList.remove('hidden');
-                                   if (staleEpochEl) staleEpochEl.textContent = meta.epoch;
-                                   if (currentEpochEl) currentEpochEl.textContent = meta.currentEpoch;
-                               }
-
                                console.log(`DEBUG: TLA tiles updated (epoch ${meta.epoch}, ${meta.isStale ? 'stale' : 'fresh'})`);
                            } else {
-                               console.warn("DEBUG: TLA tiles unresolved — no snapshot found, leaving spinners");
+                               console.log("DEBUG: updateTlaFromGitHub returned no fresh adao snapshot — buildTlaDeposits will fall back to fetchTlaData");
                            }
+                           // Rev 3.30 — applyTlaStaleness handles dot, pill, banner-hide, and modal.
+                           // Called unconditionally so the UI reflects whatever fetchTlaData loaded.
+                           if (typeof applyTlaStaleness === 'function') applyTlaStaleness();
                        });
                        
                        // No fallback values for DAO broken/held — leave spinner if no live data
@@ -7566,8 +7566,12 @@ est. APR 58.53 %"></textarea>
                  var tlaMeta = (typeof getTlaDataMeta === 'function') ? getTlaDataMeta() : { isStale: true };
                  var dataIsStale = tlaMeta.isStale === true;
                  
-                 if (!hasValidTlaData || dataIsStale) {
-                     // No valid/fresh TLA data — show consistent spinner state (not — / "stale" text)
+                 // Rev 3.30 — RENDER stale data with a red dot indicator (handled by
+                 // applyTlaStaleness) instead of showing a perpetual spinner. Only spin
+                 // if data is genuinely missing — staleness alone is no longer a reason
+                 // to hide the numbers.
+                 if (!hasValidTlaData) {
+                     // No valid TLA data at all — show consistent spinner state
                      var spinner3xl = '<i class="fas fa-spinner fa-spin text-cyan-400 text-2xl"></i>';
                      var spinnerBase = '<i class="fas fa-spinner fa-spin text-gray-300"></i>';
                      if (totalValueTileEl) totalValueTileEl.innerHTML = spinner3xl;
@@ -7579,6 +7583,7 @@ est. APR 58.53 %"></textarea>
                      updateTile('dao-tla-total', null, false, { titleId: 'dao-tla-title' }); 
                      return;
                  }
+                 // Stale data falls through and renders normally; applyTlaStaleness adds the red dot.
                  
                  // Update tile values (always update, don't check for spinner)
                  if (totalValueTileEl) { 
@@ -7744,7 +7749,101 @@ est. APR 58.53 %"></textarea>
             // --- TLA Data Fetch (used by multiple functions) ---
             let cachedTlaData = null;
             let tlaDataMeta = { loadedEpoch: null, currentEpoch: null, isStale: false, epochsOld: 0 };
-            
+
+            // Rev 3.30 — Single source of truth for TLA staleness UI. Handles dot color,
+            // small "Stale Data" pill, and the on-load modal. Removes the big red banner
+            // that previously also fired (replaced by the modal — once acknowledged the
+            // user doesn't need to keep seeing it).
+            //
+            // Idempotent: safe to call multiple times. Modal only shows once per session.
+            function applyTlaStaleness() {
+                const meta = tlaDataMeta;
+                // Nothing to render until fetchTlaData has resolved at least once
+                if (meta.loadedEpoch == null) return;
+
+                // Dot indicator on TLA tile titles. Green pulse = fresh, red static = stale.
+                ['dao-tla-title', 'dao-tla-vp-title'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (!el) return;
+                    const existing = el.querySelector('.pulse-dot, .static-dot-red');
+                    if (existing) existing.remove();
+                    const dot = document.createElement('span');
+                    dot.className = (meta.isStale ? 'static-dot-red' : 'pulse-dot') + ' ml-1';
+                    dot.title = meta.isStale
+                        ? `Stale — showing epoch ${meta.loadedEpoch} data (current is ${meta.currentEpoch}, ${meta.epochsOld} epoch${meta.epochsOld === 1 ? '' : 's'} behind)`
+                        : `Live — epoch ${meta.loadedEpoch} data`;
+                    el.appendChild(dot);
+                });
+
+                // Small "Stale Data" pill in the unclaimed-rewards-card header (kept).
+                const pill = document.getElementById('unclaimed-stale-warning');
+                if (pill) pill.classList.toggle('hidden', !meta.isStale);
+
+                // Hide the legacy big red banner — replaced by modal on launch.
+                const banner = document.getElementById('unclaimed-stale-banner');
+                if (banner) banner.classList.add('hidden');
+
+                // The "Epoch X data" subtle text in the rewards header.
+                const dataStatus = document.getElementById('unclaimed-data-status');
+                if (dataStatus) {
+                    dataStatus.textContent = meta.isStale ? `Epoch ${meta.loadedEpoch} data` : '';
+                }
+
+                // Modal: show once per session if stale and not yet acknowledged.
+                if (meta.isStale && !sessionStorage.getItem('aDAO_stale_modal_dismissed')) {
+                    showStaleDataModal(meta);
+                }
+            }
+
+            function showStaleDataModal(meta) {
+                const modal = document.getElementById('staleDataModal');
+                if (!modal) return;
+                const loadedEl = document.getElementById('stale-modal-loaded-epoch');
+                const currentEl = document.getElementById('stale-modal-current-epoch');
+                const behindEl = document.getElementById('stale-modal-epochs-behind');
+                if (loadedEl) loadedEl.textContent = meta.loadedEpoch;
+                if (currentEl) currentEl.textContent = meta.currentEpoch;
+                if (behindEl) behindEl.textContent = meta.epochsOld;
+                modal.classList.remove('hidden');
+                requestAnimationFrame(() => {
+                    modal.classList.add('opacity-100');
+                    const content = modal.querySelector('.modal-content');
+                    if (content) {
+                        content.classList.remove('scale-95', 'opacity-0');
+                        content.classList.add('scale-100', 'opacity-100');
+                    }
+                });
+            }
+
+            function hideStaleDataModal() {
+                const modal = document.getElementById('staleDataModal');
+                if (!modal) return;
+                const content = modal.querySelector('.modal-content');
+                if (content) {
+                    content.classList.remove('scale-100', 'opacity-100');
+                    content.classList.add('scale-95', 'opacity-0');
+                }
+                modal.classList.remove('opacity-100');
+                setTimeout(() => modal.classList.add('hidden'), 200);
+                sessionStorage.setItem('aDAO_stale_modal_dismissed', 'true');
+            }
+
+            // Wire up the stale-modal acknowledge button + standard close patterns.
+            // Uses DOMContentLoaded so the elements definitely exist.
+            document.addEventListener('DOMContentLoaded', () => {
+                const ack = document.getElementById('stale-modal-ack');
+                if (ack) ack.addEventListener('click', hideStaleDataModal);
+                const modal = document.getElementById('staleDataModal');
+                if (modal) {
+                    modal.addEventListener('click', (e) => { if (e.target === modal) hideStaleDataModal(); });
+                    const closeBtn = modal.querySelector('.modal-close');
+                    if (closeBtn) closeBtn.addEventListener('click', hideStaleDataModal);
+                }
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Escape' && modal && !modal.classList.contains('hidden')) hideStaleDataModal();
+                });
+            });
+
             // Calculate current epoch from reference data or formula
             async function getCurrentEpoch() {
                 try {
@@ -8011,8 +8110,13 @@ est. APR 58.53 %"></textarea>
                     // Use the system's own epoch-based staleness check (more accurate than date check —
                     // file's `generated_at` can be recent even when data inside is from old epochs).
                     var meta = (typeof getTlaDataMeta === 'function') ? getTlaDataMeta() : { isStale: true };
-                    if (!tlaData || meta.isStale) {
-                        // No fresh data — show consistent spinner (not "stale" text)
+                    // Rev 3.30 — RENDER stale data with a red dot indicator instead of
+                    // showing a perpetual spinner. The popup modal + dot make staleness
+                    // visible without hiding the actual numbers (which the user wants
+                    // to see even when an epoch was missed). Only spin if data is
+                    // genuinely missing (no fallback succeeded).
+                    if (!tlaData) {
+                        // No data at all — keep spinner
                         mainTileValueEl.innerHTML = '<i class="fas fa-spinner fa-spin text-cyan-400 text-xl"></i>';
                         mainTileUsdEl.innerHTML = '<i class="fas fa-spinner fa-spin text-gray-300"></i>';
                         if (container) container.innerHTML = '<p class="text-center text-gray-500 p-4"><i class="fas fa-spinner fa-spin mr-2"></i>Loading TLA VP data...</p>';
@@ -8020,6 +8124,7 @@ est. APR 58.53 %"></textarea>
                         if (modalUsdEl) modalUsdEl.innerHTML = '<i class="fas fa-spinner fa-spin text-white"></i>';
                         return;
                     }
+                    // Stale data: continue rendering below (apply dot + modal via applyTlaStaleness at the end).
                     
                     const lunaPriceUSD = priceData?.['terra-luna-2']?.usd;
                     const ampLunaPriceUSD = priceData?.['eris-amplified-luna']?.usd;
@@ -8424,21 +8529,15 @@ est. APR 58.53 %"></textarea>
                 
                 // Check for stale data and update UI
                 const meta = getTlaDataMeta();
-                const staleBanner = document.getElementById('unclaimed-stale-banner');
                 const staleWarning = document.getElementById('unclaimed-stale-warning');
                 const dataStatus = document.getElementById('unclaimed-data-status');
                 
                 if (meta.isStale) {
-                    // Show stale warning
-                    if (staleBanner) staleBanner.classList.remove('hidden');
+                    // Rev 3.30 — banner replaced by modal (handled by applyTlaStaleness).
+                    // Keep the small "Stale Data" pill + status text + yellow tint as
+                    // passive indicators inside the rewards card.
                     if (staleWarning) staleWarning.classList.remove('hidden');
                     if (dataStatus) dataStatus.textContent = `Epoch ${meta.loadedEpoch} data`;
-                    
-                    // Update banner message
-                    const staleEpochEl = document.getElementById('stale-epoch-num');
-                    const currentEpochEl = document.getElementById('current-epoch-num');
-                    if (staleEpochEl) staleEpochEl.textContent = meta.loadedEpoch;
-                    if (currentEpochEl) currentEpochEl.textContent = meta.currentEpoch;
                     
                     // Add yellow tint to the card sections to indicate stale
                     document.querySelectorAll('#unclaimed-rewards-card .bg-gray-800\\/50').forEach(el => {
@@ -8446,7 +8545,6 @@ est. APR 58.53 %"></textarea>
                     });
                 } else {
                     // Data is current - hide warnings
-                    if (staleBanner) staleBanner.classList.add('hidden');
                     if (staleWarning) staleWarning.classList.add('hidden');
                     if (dataStatus) dataStatus.textContent = `Epoch ${meta.loadedEpoch} data`;
                     
