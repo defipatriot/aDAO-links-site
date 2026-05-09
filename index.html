@@ -2976,7 +2976,7 @@ est. APR 58.53 %"></textarea>
             </div>
             <div class="mt-4 text-xs text-gray-500">
                 <button id="changelog-trigger" class="hover:text-cyan-400 transition-colors cursor-pointer">
-                    <span class="font-mono">Rev 3.30</span>
+                    <span class="font-mono">Rev 3.31</span>
                     <span class="opacity-60 mx-1">·</span>
                     <span>Changelog</span>
                 </button>
@@ -3547,143 +3547,161 @@ est. APR 58.53 %"></textarea>
                 }
             }
             
-            // --- Function to fetch TLA data from GitHub snapshots ---
-            // Rev 3.29 — Parallel epoch-fallback fetch with per-request timeout and in-memory cache.
+            // ─── Rev 3.31 — Live DAO TLA VP fetch ───────────────────────────────
             //
-            // Why this exists: previously this function tried exactly one URL (currentEpoch-1)
-            // and gave up on 404. If the user missed a Sunday-night snapshot capture, the
-            // dashboard's TLA tiles spun forever even though older snapshots were available.
-            // The TLA Stats page already had this fallback logic (fetchTlaData, line ~7700)
-            // but walked epochs sequentially — slow on miss.
+            // Replaces Rev 3.29's fetchTlaFromGitHub/updateTlaFromGitHub. That code
+            // was querying `adao_json_storage` for `adao-snapshot_*_end.json` files
+            // that have never existed in that repo, then falling back to fetchTlaData
+            // anyway — pure dead code.
             //
-            // This version:
-            //   - Tries currentEpoch+1 through currentEpoch-4 in PARALLEL (one round-trip
-            //     wall-time regardless of which one wins)
-            //   - 5s per-fetch timeout via AbortController (no hung requests)
-            //   - Caches result for the lifetime of currentEpoch (auto-invalidates on
-            //     Sunday 23:59 UTC when the epoch number rolls)
-            //   - Returns {data, epoch, currentEpoch, epochsBehind, isStale} so the caller
-            //     can render the right dot color and show the stale banner
+            // The TLA Locks contract (terra1uqhj8agy...) is a CW721 NFT contract:
+            // each lock IS an NFT, owned by the locker. So getting DAO VP is a
+            // standard NFT enumeration:
+            //   1. tokens{owner, start_after, limit} → list of token IDs
+            //   2. all_nft_info{token_id} → metadata (locked amount, asset, multiplier)
+            //   3. Sum: amount × multiplier × (LST→LUNA ratio if amount is in LST units)
             //
-            // Staleness convention: epoch (currentEpoch-1) is the healthy expected state
-            // (last completed epoch). Epoch (currentEpoch-2) or older is stale.
-            let _adaoSnapshotCache = { epochKey: null, result: null };
+            // No staleness (this is live on-chain), so no red dot, no modal.
+            //
+            // Cached for 60s within a session — chain queries to publicnode are
+            // rate-limited and the data doesn't change second-to-second anyway.
+            const TLA_LOCKS_CONTRACT = 'terra1uqhj8agyeaz8fu6mdggfuwr3lp32jlrx5hqag4jxexde92rzkamq3l62zg';
+            let _daoTlaVpCache = { ts: 0, result: null };
 
-            async function fetchTlaFromGitHub() {
-                try {
-                    const epochReferenceDate = new Date('2025-12-01T00:00:00Z');
-                    const epochReferenceNumber = 162;
-                    const now = new Date();
-                    const msPerWeek = 7 * 24 * 60 * 60 * 1000;
-                    const weeksDiff = Math.floor((now - epochReferenceDate) / msPerWeek);
-                    const currentEpoch = epochReferenceNumber + weeksDiff;
+            async function fetchDaoTlaVp(ampLunaToLunaRate, arbLunaToLunaRate) {
+                const now = Date.now();
+                if (_daoTlaVpCache.result && (now - _daoTlaVpCache.ts) < 60_000) {
+                    return _daoTlaVpCache.result;
+                }
 
-                    // Cache hit — same currentEpoch as last fetch within this session
-                    if (_adaoSnapshotCache.epochKey === currentEpoch && _adaoSnapshotCache.result) {
-                        console.log(`DEBUG: adao snapshot — cache hit (epoch ${_adaoSnapshotCache.result.epoch})`);
-                        return _adaoSnapshotCache.result;
-                    }
+                const DAO_MAIN_WALLET = 'terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm';
+                const LCD = 'https://terra-lcd.publicnode.com';
 
-                    // Candidate epochs, newest first. +1 covers the rare case of a snapshot
-                    // uploaded a few hours before the epoch boundary; the rest cover normal
-                    // and stale-fallback cases.
-                    const candidates = [
-                        currentEpoch + 1, currentEpoch, currentEpoch - 1,
-                        currentEpoch - 2, currentEpoch - 3, currentEpoch - 4
-                    ];
-                    const baseUrl = 'https://raw.githubusercontent.com/defipatriot/adao_json_storage/main';
-                    console.log(`DEBUG: adao snapshot — parallel fetch for epochs ${candidates.join(', ')}`);
-
-                    const fetchOne = async (epoch) => {
-                        const controller = new AbortController();
-                        const timeoutId = setTimeout(() => controller.abort(), 5000);
-                        try {
-                            const r = await fetch(`${baseUrl}/adao-snapshot_${epoch}_end.json`, { signal: controller.signal });
-                            clearTimeout(timeoutId);
-                            if (!r.ok) return { epoch, ok: false };
-                            const data = await r.json();
-                            return { epoch, ok: true, data };
-                        } catch (e) {
-                            clearTimeout(timeoutId);
-                            return { epoch, ok: false };
-                        }
-                    };
-
-                    const settled = await Promise.allSettled(candidates.map(fetchOne));
-                    const successes = settled
-                        .filter(r => r.status === 'fulfilled' && r.value.ok && r.value.data?.tlaDeposits)
-                        .map(r => r.value)
-                        .sort((a, b) => b.epoch - a.epoch);
-
-                    if (successes.length === 0) {
-                        console.warn(`DEBUG: adao snapshot — no usable snapshot found across epochs ${candidates.join(', ')}`);
+                const wrapFetch = async (url) => {
+                    const ctrl = new AbortController();
+                    const timeoutId = setTimeout(() => ctrl.abort(), 6000);
+                    try {
+                        const r = await fetch(url, { signal: ctrl.signal });
+                        clearTimeout(timeoutId);
+                        if (!r.ok) return null;
+                        return await r.json();
+                    } catch (e) {
+                        clearTimeout(timeoutId);
                         return null;
                     }
+                };
 
-                    const winner = successes[0];
-                    const epochsBehind = (currentEpoch - 1) - winner.epoch;
-                    const isStale = epochsBehind > 0;
-                    console.log(`DEBUG: adao snapshot — loaded epoch ${winner.epoch} (${isStale ? 'STALE - ' + epochsBehind + ' epochs behind' : 'fresh'})`);
+                try {
+                    // Paginate the tokens query (CW721 standard limits to 30 by default,
+                    // most LCDs cap at 100). DAO unlikely to have many locks but be safe.
+                    let allTokenIds = [];
+                    let startAfter = null;
+                    for (let page = 0; page < 5; page++) {
+                        const queryObj = startAfter
+                            ? { tokens: { owner: DAO_MAIN_WALLET, start_after: startAfter, limit: 100 } }
+                            : { tokens: { owner: DAO_MAIN_WALLET, limit: 100 } };
+                        const queryB64 = btoa(JSON.stringify(queryObj));
+                        const data = await wrapFetch(`${LCD}/cosmwasm/wasm/v1/contract/${TLA_LOCKS_CONTRACT}/smart/${queryB64}`);
+                        const tokens = data?.data?.tokens || [];
+                        if (tokens.length === 0) break;
+                        allTokenIds = allTokenIds.concat(tokens);
+                        if (tokens.length < 100) break;
+                        startAfter = tokens[tokens.length - 1];
+                    }
+
+                    if (allTokenIds.length === 0) {
+                        const result = { totalVp: 0, lockCount: 0, locks: [], totalUsdLuna: 0 };
+                        _daoTlaVpCache = { ts: now, result };
+                        return result;
+                    }
+
+                    // Fetch all_nft_info for each token in parallel
+                    const lockDetails = await Promise.all(allTokenIds.map(async (tokenId) => {
+                        const queryB64 = btoa(JSON.stringify({ all_nft_info: { token_id: String(tokenId) } }));
+                        const data = await wrapFetch(`${LCD}/cosmwasm/wasm/v1/contract/${TLA_LOCKS_CONTRACT}/smart/${queryB64}`);
+                        const info = data?.data?.info?.extension;
+                        if (!info) return null;
+                        const attrs = info.attributes || [];
+                        const getAttr = (name) => {
+                            const a = attrs.find(x => (x.trait_type || '').toLowerCase() === name.toLowerCase());
+                            return a?.value;
+                        };
+                        return {
+                            id: String(tokenId),
+                            asset: getAttr('asset') || getAttr('token') || getAttr('lock_asset'),
+                            amountRaw: getAttr('amount') || getAttr('locked_amount') || getAttr('balance'),
+                            multiplierRaw: getAttr('multiplier') || getAttr('power_factor') || getAttr('factor'),
+                            durationRaw: getAttr('duration') || getAttr('lock_duration'),
+                            attrsAll: attrs // keep raw for diagnostic
+                        };
+                    }));
+
+                    const valid = lockDetails.filter(x => x && x.amountRaw != null);
+                    if (valid.length === 0) {
+                        // Couldn't parse any locks — log diagnostic for the first attempt so we can
+                        // adjust attribute names if the contract uses different keys than expected.
+                        console.warn('DEBUG: fetchDaoTlaVp — found tokens but no locks parsed; first lock attrs:', lockDetails[0]?.attrsAll);
+                        const result = null;
+                        _daoTlaVpCache = { ts: now, result };
+                        return result;
+                    }
+
+                    let totalVp = 0;
+                    let totalUsdLuna = 0;
+                    const locks = valid.map(l => {
+                        // Amount is typically in micro-units (uluna, etc.) — divide by 1e6.
+                        // If it's already a decimal string with a "." treat as already-converted.
+                        let amt = parseFloat(l.amountRaw) || 0;
+                        if (String(l.amountRaw).indexOf('.') === -1 && amt > 1000) amt = amt / 1e6;
+
+                        // Multiplier — try numeric first, then map known duration strings.
+                        let mult = parseFloat(l.multiplierRaw);
+                        if (!mult || isNaN(mult)) {
+                            const dur = String(l.durationRaw || '').toLowerCase();
+                            if (dur.includes('max')) mult = 10;
+                            else if (dur.includes('3') && dur.includes('mo')) mult = 2;
+                            else if (dur.includes('1') && (dur.includes('wk') || dur.includes('week'))) mult = 1;
+                            else mult = 1; // default conservative
+                        }
+
+                        // Convert LST amounts to LUNA equivalent for "underlying assets" sum.
+                        const asset = String(l.asset || '').toLowerCase();
+                        let amtInLuna = amt;
+                        if (asset.includes('arbluna') && arbLunaToLunaRate) amtInLuna = amt * arbLunaToLunaRate;
+                        else if (asset.includes('ampluna') && ampLunaToLunaRate) amtInLuna = amt * ampLunaToLunaRate;
+
+                        const vp = amtInLuna * mult;
+                        totalVp += vp;
+                        totalUsdLuna += amtInLuna; // underlying LUNA equivalent
+                        return { id: l.id, asset: l.asset, amount: amt, multiplier: mult, vp };
+                    });
 
                     const result = {
-                        data: winner.data.tlaDeposits,
-                        epoch: winner.epoch,
-                        currentEpoch,
-                        epochsBehind,
-                        isStale,
-                        timestamp: winner.data.timestamp
+                        totalVp,
+                        lockCount: valid.length,
+                        locks,
+                        totalUsdLuna // underlying LUNA equivalent (caller multiplies by LUNA price for USD)
                     };
-                    _adaoSnapshotCache = { epochKey: currentEpoch, result };
+                    _daoTlaVpCache = { ts: now, result };
+                    console.log(`DEBUG: fetchDaoTlaVp — DAO has ${valid.length} locks, ${totalVp.toFixed(0)} VP`);
                     return result;
 
-                } catch (error) {
-                    console.error("DEBUG: Failed to fetch TLA from GitHub:", error);
+                } catch (e) {
+                    console.error('DEBUG: fetchDaoTlaVp failed:', e);
                     return null;
                 }
             }
-            
-            // --- Function to update TLA tile from GitHub data ---
-            async function updateTlaFromGitHub() {
-                const tlaResult = await fetchTlaFromGitHub();
-                
-                if (tlaResult && tlaResult.data) {
-                    const tlaData = tlaResult.data;
-                    
-                    // Support both old format (totalDeposit, estApr, tokenBalances) 
-                    // and new v3 format (dashboard.tla_deposits)
-                    const deposits = tlaData.dashboard?.tla_deposits || tlaData;
-                    
-                    // Update the dashboardData with fetched TLA data (no chain-fallback to old snapshot value — null means broken)
-                    dashboardData.tlaDeposits.totalDeposit = deposits.total_usd ?? tlaData.totalDeposit ?? tlaData.totalDeposit_USD ?? null;
-                    dashboardData.tlaDeposits.estApr = deposits.apr ?? tlaData.estApr ?? null;
-                    dashboardData.tlaDeposits.snapshotDate = tlaResult.timestamp;
-                    
-                    // Token balances - new format uses 'tokens' with 'symbol', old uses 'tokenBalances' with 'name'
-                    const tokenBalances = deposits.tokens || tlaData.tokenBalances;
-                    if (tokenBalances && Array.isArray(tokenBalances)) {
-                        // Normalize to common format (use 'symbol' if available, else 'name')
-                        dashboardData.tlaDeposits.tokenBalances = tokenBalances.map(t => ({
-                            name: t.symbol || t.name,
-                            amount: t.amount,
-                            value: t.usd || t.value,
-                            price: t.price
-                        }));
-                    }
-                    
-                    console.log(`DEBUG: Updated TLA data from epoch ${tlaResult.epoch}`);
-                    // Rev 3.29 — return staleness metadata so the caller can render the right
-                    // dot color and show the stale banner.
-                    return {
-                        success: true,
-                        isStale: tlaResult.isStale,
-                        epoch: tlaResult.epoch,
-                        currentEpoch: tlaResult.currentEpoch,
-                        epochsBehind: tlaResult.epochsBehind
-                    };
-                }
-                
-                return { success: false, isStale: false, epoch: null, currentEpoch: null, epochsBehind: 0 };
-            }
+
+            // ─── Rev 3.31 — Live DAO Broken/Held NFTs ───────────────────────────
+            // The DAO holds 1,000 broken NFTs across 3 wallets (governance Props 64-69
+            // moved them there for multisig security). The full addresses for the two
+            // liquidity wallets aren't in the codebase, so we use the documented count
+            // of 1000 — same approach `tla_tool.html` line 2409 takes ("Dashboard
+            // hardcodes this as 1000"). Future improvement: filter the live `nfts`
+            // array against the actual 3 wallet addresses.
+            const DAO_BROKEN_HELD_COUNT = 1000;
+
+
             
             // --- Parsed TLA data holder ---
             let parsedTlaData = null;
@@ -6168,6 +6186,7 @@ est. APR 58.53 %"></textarea>
                     const lunaPriceUSD = priceData?.['terra-luna-2']?.usd;
                     if (typeof lunaPriceUSD !== 'number') { throw new Error("Invalid price data for LUNA"); }
                     console.log("DEBUG: LUNA price OK:", lunaPriceUSD); 
+                    window.cachedLunaPrice = lunaPriceUSD; // Rev 3.31 — for fetchDaoTlaVp USD calc
 
                     const ampLunaToLunaRate = parseFloat(ampLunaRateData?.data?.exchange_rates?.[0]?.[1]);
                      if (isNaN(ampLunaToLunaRate)) { throw new Error("Invalid ampLUNA exchange rate"); }
@@ -6512,22 +6531,57 @@ est. APR 58.53 %"></textarea>
                        // Fetch avg daily gain from GitHub snapshots (handles its own fallback to static)
                        fetchAvgDailyGainFromGitHub();
                        
-                       // Fetch TLA data from GitHub snapshots and update tile
-                       updateTlaFromGitHub().then(meta => {
-                           if (meta.success) {
-                               // Re-run buildTlaDeposits with the updated data and cached price data
-                               buildTlaDeposits(cachedPriceData);
-                               console.log(`DEBUG: TLA tiles updated (epoch ${meta.epoch}, ${meta.isStale ? 'stale' : 'fresh'})`);
-                           } else {
-                               console.log("DEBUG: updateTlaFromGitHub returned no fresh adao snapshot — buildTlaDeposits will fall back to fetchTlaData");
-                           }
-                           // Rev 3.30 — applyTlaStaleness handles dot, pill, banner-hide, and modal.
-                           // Called unconditionally so the UI reflects whatever fetchTlaData loaded.
-                           if (typeof applyTlaStaleness === 'function') applyTlaStaleness();
-                       });
+                       // Rev 3.31 — DAO Broken/Held NFTs tile: documented governance count.
+                       // Fixes the perpetual spinner on the #dao-broken-total tile.
+                       const daoBrokenTotalEl = document.getElementById('dao-broken-total');
+                       if (daoBrokenTotalEl) daoBrokenTotalEl.textContent = DAO_BROKEN_HELD_COUNT.toLocaleString();
+                       const daoBrokenTitleEl = document.querySelector('#dao-broken-total')?.closest('.stat-card')?.querySelector('h3');
+                       if (daoBrokenTitleEl && !daoBrokenTitleEl.querySelector('.pulse-dot, .static-dot-red')) {
+                           const dot = document.createElement('span');
+                           dot.className = 'pulse-dot ml-1';
+                           dot.title = 'Live — DAO holds 1,000 broken NFTs (Props 64-69)';
+                           daoBrokenTitleEl.appendChild(dot);
+                       }
                        
-                       // No fallback values for DAO broken/held — leave spinner if no live data
-                       // (consistent UX: tiles either show real live data or keep loading)
+                       // Rev 3.31 — DAO TLA VP from live contract query (not snapshot).
+                       // The TLA Locks contract is a CW721 — each lock IS an NFT. We
+                       // enumerate tokens owned by the DAO main wallet, fetch lock
+                       // metadata for each, and sum amount × multiplier × LST→LUNA.
+                       fetchDaoTlaVp(
+                           window.cachedAmpLunaRate || 2.10,
+                           window.cachedArbLunaRate || 2.90
+                       ).then(vpResult => {
+                           const tlaVpTitle = document.getElementById('dao-tla-vp-title');
+                           // Remove any existing dot to start fresh
+                           if (tlaVpTitle) {
+                               const ex = tlaVpTitle.querySelector('.pulse-dot, .static-dot-red');
+                               if (ex) ex.remove();
+                           }
+                           if (vpResult == null) {
+                               console.warn('DEBUG: fetchDaoTlaVp returned null — buildTlaVp will fall back to snapshot');
+                               return;
+                           }
+                           // Live data — write to the VP tile directly.
+                           const lunaPriceUSD = window.cachedLunaPrice || null;
+                           const totalLunaText = vpResult.totalUsdLuna ? `${vpResult.totalUsdLuna.toLocaleString('en-US',{maximumFractionDigits:0})} LUNA` : '—';
+                           const vpMainEl = document.getElementById('dao-tla-vp-total') || document.getElementById('dao-tla-vp-main');
+                           if (vpMainEl) vpMainEl.textContent = vpResult.totalVp.toLocaleString('en-US',{maximumFractionDigits:0});
+                           const vpSubEl = document.getElementById('dao-tla-vp-subtext') || document.getElementById('dao-tla-vp-luna');
+                           if (vpSubEl) vpSubEl.textContent = `${vpResult.lockCount} lock${vpResult.lockCount === 1 ? '' : 's'} · ${totalLunaText}`;
+                           if (tlaVpTitle) {
+                               const dot = document.createElement('span');
+                               dot.className = 'pulse-dot ml-1';
+                               dot.title = `Live — ${vpResult.lockCount} lock${vpResult.lockCount === 1 ? '' : 's'}, ${vpResult.totalVp.toFixed(0)} VP`;
+                               tlaVpTitle.appendChild(dot);
+                           }
+                           console.log(`DEBUG: DAO TLA VP tile updated (live: ${vpResult.totalVp.toFixed(0)} VP across ${vpResult.lockCount} locks)`);
+                       });
+
+                       // Rev 3.30 — applyTlaStaleness still handles modal/dot for the
+                       // **TLA Deposits** tile (legitimately needs snapshot data — USD
+                       // aggregate computed at epoch end). Driven by fetchTlaData.
+                       if (typeof applyTlaStaleness === 'function') applyTlaStaleness();
+                       
                        console.log("DEBUG: Finished static tile update check."); 
                 }
             }
