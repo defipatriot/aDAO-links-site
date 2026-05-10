@@ -3020,7 +3020,7 @@ est. APR 58.53 %"></textarea>
             </div>
             <div class="mt-4 text-xs text-gray-500">
                 <button id="changelog-trigger" class="hover:text-cyan-400 transition-colors cursor-pointer">
-                    <span class="font-mono">Rev 3.34</span>
+                    <span class="font-mono">Rev 3.35</span>
                     <span class="opacity-60 mx-1">·</span>
                     <span>Changelog</span>
                 </button>
@@ -7872,17 +7872,24 @@ est. APR 58.53 %"></textarea>
             // user doesn't need to keep seeing it).
             //
             // Idempotent: safe to call multiple times. Modal only shows once per session.
-            // Rev 3.34 — DAO Total Value tile updater.
-            // Idempotent: safe to call from multiple places. Reads the four contributing
-            // USD values from globals/dashboardData. Renders the breakdown only when
-            // ALL FOUR are populated, per Design Principle #1 (no misleading partials).
-            // Individual breakdown values can render as they arrive; the GRAND total
-            // stays a spinner until everything is in.
+            // Rev 3.35 — DAO Total Value tile updater, DOM-read approach.
+            //
+            // Previous version (Rev 3.34) read from window globals that each tile sets
+            // when it renders. Problem: if a tile renders its value through a different
+            // code path (e.g. snapshot fallback, error recovery, cached re-render), the
+            // global never gets written even though the tile shows a real value. The
+            // total tile then sat with spinners next to numbers that were clearly visible
+            // in the contributing tiles.
+            //
+            // This version reads directly from each contributing tile's rendered DOM
+            // element. If you can SEE the value on the page, the total picks it up.
+            // No race conditions, no globals to keep in sync, no missed paths.
+            //
+            // Idempotent: safe to call from a polling loop. Returns true once all four
+            // contributors have parsed numbers, false otherwise (caller can stop polling).
             function updateDaoTotalValue() {
                 const fmt = (v) => '$' + Math.round(v).toLocaleString('en-US');
                 const fmtCompact = (v) => {
-                    // Mobile uses compact notation to save horizontal space:
-                    // 18,948 → "$18.9K", 1,051,763 → "$1.05M"
                     if (v >= 1_000_000) return '$' + (v / 1_000_000).toFixed(2) + 'M';
                     if (v >= 1_000) return '$' + (v / 1_000).toFixed(1) + 'K';
                     return '$' + Math.round(v);
@@ -7890,11 +7897,37 @@ est. APR 58.53 %"></textarea>
                 const isMobile = window.innerWidth < 640;
                 const fmtVal = isMobile ? fmtCompact : fmt;
 
-                // Pull the 4 contributors from the canonical sources.
-                const treasury = (typeof window.liveTreasuryUsd === 'number') ? window.liveTreasuryUsd : null;
-                const tlaDeposits = (typeof dashboardData?.tlaDeposits?.totalDeposit === 'number') ? dashboardData.tlaDeposits.totalDeposit : null;
-                const tlaVp = (typeof window.liveTlaVpUsd === 'number') ? window.liveTlaVpUsd : null;
-                const nftBacking = (typeof window.liveUnmintedNftBackingUsd === 'number') ? window.liveUnmintedNftBackingUsd : null;
+                // Parse a USD number out of a tile's rendered text. Handles "$18,928",
+                // "$6,260.87", "$74,089 USD", "1,051,763 LUNA $74,089 USD", and similar.
+                // Strategy: strip everything but digits, dots, commas; pick the LAST
+                // dollar-amount group when multiple appear (the USD line, not LUNA).
+                // Returns null if no number is found or if it's clearly a spinner.
+                const parseUsd = (selector) => {
+                    const el = document.querySelector(selector);
+                    if (!el) return null;
+                    if (el.querySelector('.fa-spinner')) return null;
+                    const text = el.textContent.trim();
+                    if (!text || text === '—' || text === 'Error') return null;
+                    // Find all dollar-prefixed numbers, take the last (handles "X LUNA $Y USD")
+                    const matches = text.match(/\$[\d,]+\.?\d*/g);
+                    if (matches && matches.length > 0) {
+                        const n = parseFloat(matches[matches.length - 1].replace(/[$,]/g, ''));
+                        return isFinite(n) ? n : null;
+                    }
+                    // No $ prefix? Try to parse a bare number — for tiles that just show "5,715"
+                    const bare = text.replace(/[^\d.]/g, '');
+                    if (bare) {
+                        const n = parseFloat(bare);
+                        return isFinite(n) ? n : null;
+                    }
+                    return null;
+                };
+
+                // Read each contributor from its DOM element:
+                const treasury = parseUsd('#dao-treasury-total');
+                const tlaDeposits = parseUsd('#dao-tla-total');
+                const tlaVp = parseUsd('#dao-tla-vp-usd');                 // shows "$5,715"
+                const nftBacking = parseUsd('#unminted-nft-backing-usd');  // shows "$74,089 USD"
 
                 const set = (id, val) => {
                     const el = document.getElementById(id);
@@ -7907,13 +7940,29 @@ est. APR 58.53 %"></textarea>
                 set('dao-total-tla-vp', tlaVp);
                 set('dao-total-nft-backing', nftBacking);
 
-                // Grand total only renders when all four are in.
                 const grandEl = document.getElementById('dao-total-grand');
                 if (grandEl && treasury != null && tlaDeposits != null && tlaVp != null && nftBacking != null) {
                     const total = treasury + tlaDeposits + tlaVp + nftBacking;
                     grandEl.textContent = fmtVal(total);
+                    return true; // Fully populated — caller can stop polling
                 }
+                return false;
             }
+
+            // Rev 3.35 — Polling loop, since DOM-read approach doesn't get triggered
+            // by the contributors writing values. Polls every 500ms for up to 30s,
+            // stops as soon as all four contributors are parsed. ~60 iterations max,
+            // negligible CPU. Started from DOMContentLoaded so it covers all load
+            // paths (initial fetch, cached fetch, cold start).
+            (function startDaoTotalValuePolling() {
+                let attempts = 0;
+                const maxAttempts = 60; // 30s @ 500ms
+                const interval = setInterval(() => {
+                    attempts++;
+                    const done = updateDaoTotalValue();
+                    if (done || attempts >= maxAttempts) clearInterval(interval);
+                }, 500);
+            })();
 
             // Recompute on resize (mobile/desktop format flip).
             window.addEventListener('resize', () => updateDaoTotalValue());
