@@ -287,6 +287,18 @@
             #unclaimed-stale-banner { padding: 0.5rem !important; }
             #unclaimed-stale-banner .text-sm { font-size: 0.75rem !important; }
             #unclaimed-stale-banner .text-xs { font-size: 0.65rem !important; line-height: 0.85rem !important; }
+
+            /* Rev 3.34 — Mobile-only: shrink Backing / Floor numbers so $12.72 / $137.84
+               fits the tile width without truncation. Targets the two specific value
+               elements; scoped tightly so the rest of the dashboard isn't affected. */
+            #backing-per-nft-usd, #unbroken-floor-usd { font-size: 1.25rem !important; }
+            
+            /* Rev 3.34 — DAO Total Value tile: keep breakdown formula readable on mobile.
+               Mobile uses already-shortened "Tok / LPs / Locks / NFT" labels via
+               sm:hidden spans inside the HTML; this just tightens spacing. */
+            #dao-total-value-card { padding: 0.5rem 0.5rem !important; }
+            #dao-total-breakdown { font-size: 0.7rem !important; gap: 0.25rem !important; row-gap: 0.1rem !important; }
+            #dao-total-grand { font-size: 0.95rem !important; }
             
             /* MARKETPLACE TABS — segmented control */
             #nft-marketplace-section > div:first-child > .flex.gap-2 {
@@ -1366,6 +1378,38 @@
                 </div>
                  <p class="subtext text-xs font-semibold mt-1 text-gray-500">Click to see details</p>
             </div>
+
+            <!-- Rev 3.34 — DAO Total Value tile. Spans full width (4 cols desktop / 2 cols
+                 mobile), slimmer padding than other tiles. Sums the four contributing
+                 USD values: Treasury + TLA Deposits + TLA Locks + Unminted NFT Backing.
+                 Shows the breakdown formula plus a prominent total. Stays in spinner
+                 state until ALL FOUR contributors have populated (Design Principle #1:
+                 no partial totals — they mislead). Updated by `updateDaoTotalValue()`. -->
+            <div id="dao-total-value-card" class="stat-card col-span-2 md:col-span-4 px-4 py-3 rounded-xl text-center">
+                <div class="flex items-center justify-center gap-1 mb-1">
+                    <i class="fas fa-coins text-amber-400 text-xs"></i>
+                    <h3 class="text-xs font-medium text-gray-400 uppercase tracking-wider">DAO Total Value</h3>
+                </div>
+                <!-- Breakdown row: hidden on small mobile, visible from sm: up. The
+                     parts are tiny labels with their values. On the smallest screens
+                     this row is replaced by a more compact version (see CSS below). -->
+                <div id="dao-total-breakdown" class="flex items-baseline justify-center flex-wrap gap-x-1.5 gap-y-0.5 text-sm">
+                    <span class="text-gray-500"><span class="hidden sm:inline">Tokens </span><span class="sm:hidden text-[10px] uppercase">Tok</span></span>
+                    <span id="dao-total-treasury" class="font-mono text-white"><i class="fas fa-spinner fa-spin text-cyan-400 text-[11px]"></i></span>
+                    <span class="text-gray-600">+</span>
+                    <span class="text-gray-500"><span class="hidden sm:inline">TLA LPs </span><span class="sm:hidden text-[10px] uppercase">LPs</span></span>
+                    <span id="dao-total-tla-deposits" class="font-mono text-white"><i class="fas fa-spinner fa-spin text-cyan-400 text-[11px]"></i></span>
+                    <span class="text-gray-600">+</span>
+                    <span class="text-gray-500"><span class="hidden sm:inline">TLA Locks </span><span class="sm:hidden text-[10px] uppercase">Locks</span></span>
+                    <span id="dao-total-tla-vp" class="font-mono text-white"><i class="fas fa-spinner fa-spin text-cyan-400 text-[11px]"></i></span>
+                    <span class="text-gray-600">+</span>
+                    <span class="text-gray-500"><span class="hidden sm:inline">NFT Backing </span><span class="sm:hidden text-[10px] uppercase">NFT</span></span>
+                    <span id="dao-total-nft-backing" class="font-mono text-white"><i class="fas fa-spinner fa-spin text-cyan-400 text-[11px]"></i></span>
+                    <span class="text-gray-600">=</span>
+                    <span id="dao-total-grand" class="font-mono font-bold text-amber-400 text-lg"><i class="fas fa-spinner fa-spin text-amber-400 text-sm"></i></span>
+                </div>
+            </div>
+
             <a href="dao_treasury.html" class="stat-card-link p-6 rounded-xl text-center group">
                 <div>
                     <h3 id="dao-treasury-title" class="text-md font-medium text-gray-400 flex justify-center items-center gap-2">
@@ -1395,7 +1439,7 @@
             </div>
             <div id="unminted-backing-card" class="stat-card p-6 rounded-xl text-center cursor-pointer group">
                  <div>
-                    <h3 id="unminted-nft-backing-title" class="text-md font-medium text-gray-400 group-hover:text-teal-400 flex justify-center items-center gap-2">Unminted NFT Backing</h3>
+                    <h3 id="unminted-nft-backing-title" class="text-md font-medium text-gray-400 group-hover:text-teal-400 flex justify-center items-center gap-2"><span class="hidden sm:inline">Unminted NFT Backing</span><span class="sm:hidden">NFT Backing</span></h3>
                     <p id="unminted-nft-backing-luna" class="text-xl font-bold text-white mt-2"><i class="fas fa-spinner fa-spin text-cyan-400 text-xl"></i></p>
                     <p id="unminted-nft-backing-usd" class="text-base font-semibold text-gray-300"><i class="fas fa-spinner fa-spin text-gray-300"></i></p>
                 </div>
@@ -1404,7 +1448,7 @@
 
             <div class="stat-card p-6 rounded-xl text-center">
                 <div>
-                    <h3 id="backing-ampluna-title" class="text-md font-medium text-gray-400 flex justify-center items-center gap-2">Backing in ampLUNA</h3>
+                    <h3 id="backing-ampluna-title" class="text-md font-medium text-gray-400 flex justify-center items-center gap-2"><span class="hidden sm:inline">Backing in ampLUNA</span><span class="sm:hidden">ampLUNA Backed</span></h3>
                     <div class="flex justify-center items-center gap-2 mt-2">
                         <p id="backing-per-nft-ampluna" class="text-3xl font-bold text-white"><i class="fas fa-spinner fa-spin text-cyan-400 text-2xl"></i></p>
                          <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/ampLuna.webp?raw=true" alt="ampLUNA" class="h-8 w-8" onerror="this.src='https://placehold.co/32x32/1f2937/EAEAEA?text=AL'; this.onerror=null;">
@@ -1414,7 +1458,7 @@
             </div>
             <div class="stat-card p-6 rounded-xl text-center">
                 <div>
-                    <h3 id="backing-luna-live-title" class="text-md font-medium text-gray-400 flex justify-center items-center gap-2">Backing in LUNA</h3>
+                    <h3 id="backing-luna-live-title" class="text-md font-medium text-gray-400 flex justify-center items-center gap-2"><span class="hidden sm:inline">Backing in LUNA</span><span class="sm:hidden">LUNA Backed</span></h3>
                     <div class="flex justify-center items-center gap-2 mt-2">
                         <p id="backing-per-nft-luna-live" class="text-3xl font-bold text-white"><i class="fas fa-spinner fa-spin text-cyan-400 text-2xl"></i></p>
                          <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Luna.webp?raw=true" alt="LUNA" class="h-8 w-8" onerror="this.src='https://placehold.co/32x32/1f2937/EAEAEA?text=L'; this.onerror=null;">
@@ -1423,7 +1467,7 @@
                 <p id="live-luna-price" class="subtext text-xs font-semibold mt-1 text-gray-500"><i class="fas fa-spinner fa-spin text-gray-500"></i></p> </div>
             <div class="stat-card p-6 rounded-xl text-center">
                 <div>
-                    <h3 id="backing-usd-title" class="text-md font-medium text-gray-400 flex justify-center items-center gap-2">Backing / Floor (USD)</h3>
+                    <h3 id="backing-usd-title" class="text-md font-medium text-gray-400 flex justify-center items-center gap-2"><span class="hidden sm:inline">Backing / Floor (USD)</span><span class="sm:hidden">Backing / Floor</span></h3>
                     <div class="flex justify-center items-baseline gap-3 mt-2">
                         <div>
                             <p id="backing-per-nft-usd" class="text-2xl font-bold text-white"><i class="fas fa-spinner fa-spin text-cyan-400 text-xl"></i></p>
@@ -1440,7 +1484,7 @@
             </div>
             <div class="stat-card p-6 rounded-xl text-center">
                  <div>
-                    <h3 id="avg-daily-gain-title" class="text-md font-medium text-gray-400 flex justify-center items-center gap-2">Avg Daily Gain Per NFT</h3>
+                    <h3 id="avg-daily-gain-title" class="text-md font-medium text-gray-400 flex justify-center items-center gap-2"><span class="hidden sm:inline">Avg Daily Gain Per NFT</span><span class="sm:hidden">Avg Daily Gain</span></h3>
                     <p id="avg-daily-gain" class="text-3xl font-bold text-white mt-2"><i class="fas fa-spinner fa-spin text-cyan-400 text-2xl"></i></p>
                 </div>
                 <p id="avg-daily-gain-subtext" class="subtext text-xs font-semibold mt-1 text-gray-500"><i class="fas fa-spinner fa-spin text-gray-500"></i></p>
@@ -2976,7 +3020,7 @@ est. APR 58.53 %"></textarea>
             </div>
             <div class="mt-4 text-xs text-gray-500">
                 <button id="changelog-trigger" class="hover:text-cyan-400 transition-colors cursor-pointer">
-                    <span class="font-mono">Rev 3.33</span>
+                    <span class="font-mono">Rev 3.34</span>
                     <span class="opacity-60 mx-1">·</span>
                     <span>Changelog</span>
                 </button>
@@ -6471,6 +6515,11 @@ est. APR 58.53 %"></textarea>
                     updateTile('unminted-nft-backing-luna', (unmintedBackingLuna != null) ? `${safeLocale(unmintedBackingLuna, {maximumFractionDigits: 0})} LUNA` : '—', true, { titleId: 'unminted-nft-backing-title' });
                      const unmintedNftBackingUsdEl = document.getElementById('unminted-nft-backing-usd');
                      if (unmintedNftBackingUsdEl) unmintedNftBackingUsdEl.textContent = (unmintedBackingUSD != null) ? `$${safeLocale(unmintedBackingUSD, {maximumFractionDigits: 0})} USD` : '—';
+                     // Rev 3.34 — expose for DAO Total Value tile
+                     if (unmintedBackingUSD != null) {
+                         window.liveUnmintedNftBackingUsd = unmintedBackingUSD;
+                         if (typeof updateDaoTotalValue === 'function') updateDaoTotalValue();
+                     }
                     
                      const unmintedModalCount1 = document.getElementById('unminted-modal-count');
                      const unmintedModalCount2 = document.getElementById('unminted-modal-count-2');
@@ -6575,6 +6624,12 @@ est. APR 58.53 %"></textarea>
                                tlaVpTitle.appendChild(dot);
                            }
                            console.log(`DEBUG: DAO TLA VP tile updated (live: ${vpResult.totalVp.toFixed(0)} VP across ${vpResult.lockCount} locks)`);
+                           // Rev 3.34 — expose VP USD for DAO Total Value tile.
+                           // VP USD = underlying LUNA × LUNA price (best available estimate).
+                           if (vpResult.totalUsdLuna != null && lunaPriceUSD != null) {
+                               window.liveTlaVpUsd = vpResult.totalUsdLuna * lunaPriceUSD;
+                               if (typeof updateDaoTotalValue === 'function') updateDaoTotalValue();
+                           }
                        });
 
                        // Rev 3.30 — applyTlaStaleness still handles modal/dot for the
@@ -6791,6 +6846,8 @@ est. APR 58.53 %"></textarea>
                  
                  // Store live treasury value globally for calculator
                  window.liveTreasuryUsd = totalLiveUsd;
+                 // Rev 3.34 — feed DAO Total Value tile
+                 if (typeof updateDaoTotalValue === 'function') updateDaoTotalValue();
                  
                  // Trigger loading of additional treasury sections
                  loadLionDaoAlliance();
@@ -7646,6 +7703,8 @@ est. APR 58.53 %"></textarea>
                  if (aprTileEl) { 
                      aprTileEl.textContent = `Est. APR ${tlaData.estApr.toFixed(2)}%`; 
                  }
+                 // Rev 3.34 — feed DAO Total Value tile
+                 if (typeof updateDaoTotalValue === 'function') updateDaoTotalValue();
                  // Rev 3.32 — DON'T call updateTile() here. updateTile with isLive=false
                  // restores a spinner (line 8529 logic), which wiped the dollar value we
                  // just wrote at line 7644. The dot is owned by applyTlaStaleness now anyway.
@@ -7813,6 +7872,52 @@ est. APR 58.53 %"></textarea>
             // user doesn't need to keep seeing it).
             //
             // Idempotent: safe to call multiple times. Modal only shows once per session.
+            // Rev 3.34 — DAO Total Value tile updater.
+            // Idempotent: safe to call from multiple places. Reads the four contributing
+            // USD values from globals/dashboardData. Renders the breakdown only when
+            // ALL FOUR are populated, per Design Principle #1 (no misleading partials).
+            // Individual breakdown values can render as they arrive; the GRAND total
+            // stays a spinner until everything is in.
+            function updateDaoTotalValue() {
+                const fmt = (v) => '$' + Math.round(v).toLocaleString('en-US');
+                const fmtCompact = (v) => {
+                    // Mobile uses compact notation to save horizontal space:
+                    // 18,948 → "$18.9K", 1,051,763 → "$1.05M"
+                    if (v >= 1_000_000) return '$' + (v / 1_000_000).toFixed(2) + 'M';
+                    if (v >= 1_000) return '$' + (v / 1_000).toFixed(1) + 'K';
+                    return '$' + Math.round(v);
+                };
+                const isMobile = window.innerWidth < 640;
+                const fmtVal = isMobile ? fmtCompact : fmt;
+
+                // Pull the 4 contributors from the canonical sources.
+                const treasury = (typeof window.liveTreasuryUsd === 'number') ? window.liveTreasuryUsd : null;
+                const tlaDeposits = (typeof dashboardData?.tlaDeposits?.totalDeposit === 'number') ? dashboardData.tlaDeposits.totalDeposit : null;
+                const tlaVp = (typeof window.liveTlaVpUsd === 'number') ? window.liveTlaVpUsd : null;
+                const nftBacking = (typeof window.liveUnmintedNftBackingUsd === 'number') ? window.liveUnmintedNftBackingUsd : null;
+
+                const set = (id, val) => {
+                    const el = document.getElementById(id);
+                    if (!el) return;
+                    if (val == null) return; // Leave spinner; don't blank
+                    el.textContent = fmtVal(val);
+                };
+                set('dao-total-treasury', treasury);
+                set('dao-total-tla-deposits', tlaDeposits);
+                set('dao-total-tla-vp', tlaVp);
+                set('dao-total-nft-backing', nftBacking);
+
+                // Grand total only renders when all four are in.
+                const grandEl = document.getElementById('dao-total-grand');
+                if (grandEl && treasury != null && tlaDeposits != null && tlaVp != null && nftBacking != null) {
+                    const total = treasury + tlaDeposits + tlaVp + nftBacking;
+                    grandEl.textContent = fmtVal(total);
+                }
+            }
+
+            // Recompute on resize (mobile/desktop format flip).
+            window.addEventListener('resize', () => updateDaoTotalValue());
+
             function applyTlaStaleness() {
                 const meta = tlaDataMeta;
                 // Nothing to render until fetchTlaData has resolved at least once
