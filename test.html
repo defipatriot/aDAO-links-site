@@ -2674,10 +2674,11 @@ async function fetchTerraNetworkStats() {
         } catch (directErr) {
             tries.push(`direct ✗ (${directErr.message})`);
             try {
-                // Vercel's WAF rejects ?url=<plaintext URL> as SSRF and returns
-                // 405. Base64-encode and pass as ?u= instead — same data, but the
-                // encoded blob doesn't trip the URL-in-URL filter.
-                const proxyUrl = `/api/proxy?u=${btoa(SS_NETWORK_STATS_URL)}&t=${Date.now()}`;
+                // Dedicated server-side endpoint — no URL query param, so Vercel's
+                // WAF can't reject it as SSRF. The destination URL is hardcoded
+                // inside /api/smartstake.js. Cache-bust `t` is just a timestamp
+                // number, doesn't trigger any URL-pattern filtering.
+                const proxyUrl = `/api/smartstake?t=${Date.now()}`;
                 const resp = await fetch(proxyUrl, { cache: 'no-store' });
                 if (!resp.ok) {
                     const errText = await resp.text().catch(() => '');
