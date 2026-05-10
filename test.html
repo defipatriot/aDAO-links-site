@@ -2659,17 +2659,38 @@ async function fetchTerraNetworkStats() {
     if (btn) { btn.disabled = true; btn.dataset._origHtml = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
 
     try {
-        // Try direct fetch first; if blocked by CORS, fall through to the proxy chain.
+        // Try direct fetch first (works if SmartStake ever adds CORS headers).
+        // If blocked, fall through to our same-origin Vercel proxy at /api/proxy
+        // which fetches server-side. The third-party CORS proxies are kept as a
+        // last-ditch fallback in case /api/proxy is missing (e.g. running locally
+        // off file:// or against a deploy that hasn't picked up the function yet).
         let json = null;
+        const tries = [];
         try {
             const resp = await fetch(`${SS_NETWORK_STATS_URL}?t=${Date.now()}`, { cache: 'no-store' });
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             json = await resp.json();
+            tries.push('direct ✓');
         } catch (directErr) {
-            console.warn('[network-stats] direct fetch failed, trying CORS proxy:', directErr.message);
-            const text = await fetchWithCorsRetry(SS_NETWORK_STATS_URL);
-            json = JSON.parse(text);
+            tries.push(`direct ✗ (${directErr.message})`);
+            try {
+                const proxyUrl = `/api/proxy?url=${encodeURIComponent(SS_NETWORK_STATS_URL)}&t=${Date.now()}`;
+                const resp = await fetch(proxyUrl, { cache: 'no-store' });
+                if (!resp.ok) {
+                    const errText = await resp.text().catch(() => '');
+                    throw new Error(`HTTP ${resp.status} ${errText.slice(0, 80)}`);
+                }
+                json = await resp.json();
+                tries.push('vercel-proxy ✓');
+            } catch (proxyErr) {
+                tries.push(`vercel-proxy ✗ (${proxyErr.message})`);
+                console.warn('[network-stats] /api/proxy failed, falling back to public CORS proxies:', proxyErr.message);
+                const text = await fetchWithCorsRetry(SS_NETWORK_STATS_URL);
+                json = JSON.parse(text);
+                tries.push('cors-retry ✓');
+            }
         }
+        console.log('[network-stats] fetch path:', tries.join(' → '));
 
         if (!json || typeof json !== 'object' || !json.coinStat) {
             throw new Error('Unexpected response shape (no coinStat)');
