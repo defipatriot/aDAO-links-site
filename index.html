@@ -293,12 +293,25 @@
                elements; scoped tightly so the rest of the dashboard isn't affected. */
             #backing-per-nft-usd, #unbroken-floor-usd { font-size: 1.25rem !important; }
             
-            /* Rev 3.34 — DAO Total Value tile: keep breakdown formula readable on mobile.
-               Mobile uses already-shortened "Tok / LPs / Locks / NFT" labels via
-               sm:hidden spans inside the HTML; this just tightens spacing. */
+            /* Rev 3.36 — Allow specific tile titles to wrap on mobile instead of ellipsis-truncating.
+               The general rule at line 216-224 sets `white-space: nowrap; overflow: hidden;
+               text-overflow: ellipsis` for all stat-card h3s. For these five titles the labels
+               are short enough that wrapping is fine, and the centered `flex` layout was
+               clipping the leading character (e.g. "ampLUNA Backed" became "mpLUNA Backed").
+               Using clip instead of ellipsis + allowing wrap eliminates the visual cut-off. */
+            #backing-ampluna-title, #backing-luna-live-title, #backing-usd-title, #avg-daily-gain-title, #unminted-nft-backing-title {
+                white-space: normal !important;
+                overflow: visible !important;
+                text-overflow: clip !important;
+            }
+            /* Backing/Floor inner row: tighten the gap so two numbers fit cleanly */
+            #backing-usd-title + .flex { gap: 0.5rem !important; }
+            
+            /* Rev 3.34/3.36 — DAO Total Value tile mobile sizing.
+               Desktop formula is hidden on mobile via sm:hidden; mobile uses the stacked
+               layout (big total + name-only summary). */
             #dao-total-value-card { padding: 0.5rem 0.5rem !important; }
-            #dao-total-breakdown { font-size: 0.7rem !important; gap: 0.25rem !important; row-gap: 0.1rem !important; }
-            #dao-total-grand { font-size: 0.95rem !important; }
+            #dao-total-grand-mobile { font-size: 1.5rem !important; }
             
             /* MARKETPLACE TABS — segmented control */
             #nft-marketplace-section > div:first-child > .flex.gap-2 {
@@ -1379,34 +1392,51 @@
                  <p class="subtext text-xs font-semibold mt-1 text-gray-500">Click to see details</p>
             </div>
 
-            <!-- Rev 3.34 — DAO Total Value tile. Spans full width (4 cols desktop / 2 cols
+            <!-- Rev 3.34/3.36 — DAO Total Value tile. Spans full width (4 cols desktop / 2 cols
                  mobile), slimmer padding than other tiles. Sums the four contributing
                  USD values: Treasury + TLA Deposits + TLA Locks + Unminted NFT Backing.
-                 Shows the breakdown formula plus a prominent total. Stays in spinner
-                 state until ALL FOUR contributors have populated (Design Principle #1:
-                 no partial totals — they mislead). Updated by `updateDaoTotalValue()`. -->
+                 Stays in spinner state until ALL FOUR contributors have populated (Design
+                 Principle #1: no partial totals — they mislead). Updated by `updateDaoTotalValue()`.
+                 
+                 Rev 3.36: split into two views to fix mobile clipping. Desktop keeps the
+                 full inline formula. Mobile gets a stacked layout: big total on top,
+                 name-only breakdown line below ("Tokens + LPs + Locks + Backing"). No
+                 numbers in the mobile breakdown — it just communicates WHAT is summed,
+                 since the actual values are visible in the contributing tiles right below. -->
             <div id="dao-total-value-card" class="stat-card col-span-2 md:col-span-4 px-4 py-3 rounded-xl text-center">
                 <div class="flex items-center justify-center gap-1 mb-1">
                     <i class="fas fa-coins text-amber-400 text-xs"></i>
                     <h3 class="text-xs font-medium text-gray-400 uppercase tracking-wider">DAO Total Value</h3>
                 </div>
-                <!-- Breakdown row: hidden on small mobile, visible from sm: up. The
-                     parts are tiny labels with their values. On the smallest screens
-                     this row is replaced by a more compact version (see CSS below). -->
-                <div id="dao-total-breakdown" class="flex items-baseline justify-center flex-wrap gap-x-1.5 gap-y-0.5 text-sm">
-                    <span class="text-gray-500"><span class="hidden sm:inline">Tokens </span><span class="sm:hidden text-[10px] uppercase">Tok</span></span>
+                
+                <!-- Desktop view (sm: and up): full inline formula with values -->
+                <div id="dao-total-breakdown" class="hidden sm:flex items-baseline justify-center flex-wrap gap-x-1.5 gap-y-0.5 text-sm">
+                    <span class="text-gray-500">Tokens</span>
                     <span id="dao-total-treasury" class="font-mono text-white"><i class="fas fa-spinner fa-spin text-cyan-400 text-[11px]"></i></span>
                     <span class="text-gray-600">+</span>
-                    <span class="text-gray-500"><span class="hidden sm:inline">TLA LPs </span><span class="sm:hidden text-[10px] uppercase">LPs</span></span>
+                    <span class="text-gray-500">TLA LPs</span>
                     <span id="dao-total-tla-deposits" class="font-mono text-white"><i class="fas fa-spinner fa-spin text-cyan-400 text-[11px]"></i></span>
                     <span class="text-gray-600">+</span>
-                    <span class="text-gray-500"><span class="hidden sm:inline">TLA Locks </span><span class="sm:hidden text-[10px] uppercase">Locks</span></span>
+                    <span class="text-gray-500">TLA Locks</span>
                     <span id="dao-total-tla-vp" class="font-mono text-white"><i class="fas fa-spinner fa-spin text-cyan-400 text-[11px]"></i></span>
                     <span class="text-gray-600">+</span>
-                    <span class="text-gray-500"><span class="hidden sm:inline">NFT Backing </span><span class="sm:hidden text-[10px] uppercase">NFT</span></span>
+                    <span class="text-gray-500">NFT Backing</span>
                     <span id="dao-total-nft-backing" class="font-mono text-white"><i class="fas fa-spinner fa-spin text-cyan-400 text-[11px]"></i></span>
                     <span class="text-gray-600">=</span>
                     <span id="dao-total-grand" class="font-mono font-bold text-amber-400 text-lg"><i class="fas fa-spinner fa-spin text-amber-400 text-sm"></i></span>
+                </div>
+                
+                <!-- Mobile view (below sm:): big total on top, name-only summary below.
+                     #dao-total-grand-mobile mirrors #dao-total-grand — both get written
+                     by updateDaoTotalValue(). No numeric breakdown to clip; just shows
+                     WHAT is being summed. -->
+                <div class="sm:hidden">
+                    <div id="dao-total-grand-mobile" class="font-mono font-bold text-amber-400 text-2xl leading-tight">
+                        <i class="fas fa-spinner fa-spin text-amber-400 text-lg"></i>
+                    </div>
+                    <div class="text-[10px] text-gray-500 uppercase tracking-wide mt-0.5">
+                        Tokens + LPs + Locks + Backing
+                    </div>
                 </div>
             </div>
 
@@ -3020,7 +3050,7 @@ est. APR 58.53 %"></textarea>
             </div>
             <div class="mt-4 text-xs text-gray-500">
                 <button id="changelog-trigger" class="hover:text-cyan-400 transition-colors cursor-pointer">
-                    <span class="font-mono">Rev 3.35</span>
+                    <span class="font-mono">Rev 3.36</span>
                     <span class="opacity-60 mx-1">·</span>
                     <span>Changelog</span>
                 </button>
@@ -7941,9 +7971,15 @@ est. APR 58.53 %"></textarea>
                 set('dao-total-nft-backing', nftBacking);
 
                 const grandEl = document.getElementById('dao-total-grand');
-                if (grandEl && treasury != null && tlaDeposits != null && tlaVp != null && nftBacking != null) {
+                const grandMobileEl = document.getElementById('dao-total-grand-mobile');
+                if (treasury != null && tlaDeposits != null && tlaVp != null && nftBacking != null) {
                     const total = treasury + tlaDeposits + tlaVp + nftBacking;
-                    grandEl.textContent = fmtVal(total);
+                    const formattedDesktop = fmt(total);
+                    const formattedMobile = fmtCompact(total);
+                    if (grandEl) grandEl.textContent = formattedDesktop;
+                    // Rev 3.36 — mobile shows compact form (e.g. "$104.4K") since the
+                    // tile width on mobile can't comfortably fit the full "$104,846".
+                    if (grandMobileEl) grandMobileEl.textContent = formattedMobile;
                     return true; // Fully populated — caller can stop polling
                 }
                 return false;
