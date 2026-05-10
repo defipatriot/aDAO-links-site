@@ -674,6 +674,61 @@
     </div>
 </div>
 
+<!-- Bribe Edit Modal — opened by pencil/+ icons in renderCurrentEpochBribes -->
+<div id="bribe-edit-modal" class="fixed inset-0 bg-black/80 z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-[#1a1a1a] rounded-lg border border-gray-700 w-full max-w-md flex flex-col">
+        <div class="flex justify-between items-center p-3 border-b border-gray-700">
+            <div class="flex items-center gap-2">
+                <i class="fas fa-pencil-alt text-cyan-400"></i>
+                <span id="bribe-edit-title" class="text-white font-bold text-sm">Edit Bribe</span>
+            </div>
+            <button onclick="closeBribeEditModal()" class="text-gray-400 hover:text-white text-xl px-2">×</button>
+        </div>
+        <div class="p-4 space-y-3">
+            <div>
+                <label class="text-[10px] text-gray-400 uppercase font-bold block mb-1">Pool</label>
+                <input id="bribe-edit-pool" type="text" class="input-dark w-full text-sm font-mono" placeholder="e.g. PAXG-WBTC or wBTC.creda.a">
+            </div>
+            <div>
+                <label class="text-[10px] text-gray-400 uppercase font-bold block mb-1">Gauge</label>
+                <select id="bribe-edit-gauge" class="input-dark w-full text-sm">
+                    <option value="stable">stable</option>
+                    <option value="project">project</option>
+                    <option value="bluechip">bluechip</option>
+                    <option value="single">single</option>
+                </select>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="text-[10px] text-gray-400 uppercase font-bold block mb-1">USD per epoch</label>
+                    <input id="bribe-edit-usd" type="number" step="0.01" class="input-dark w-full text-sm font-mono" placeholder="100">
+                </div>
+                <div>
+                    <label class="text-[10px] text-gray-400 uppercase font-bold block mb-1">LUNA per epoch</label>
+                    <input id="bribe-edit-luna" type="number" step="0.01" class="input-dark w-full text-sm font-mono" placeholder="1741.89">
+                </div>
+            </div>
+            <div>
+                <label class="text-[10px] text-gray-400 uppercase font-bold block mb-1">Vote % (optional)</label>
+                <input id="bribe-edit-percent" type="number" step="0.01" class="input-dark w-full text-sm font-mono" placeholder="0">
+                <p class="text-[9px] text-gray-600 mt-1">Leave at 0 for launch incentives or top-up bribes that aren't from a routine vote split.</p>
+            </div>
+            <div id="bribe-edit-luna-hint" class="text-[9px] text-gray-500 hidden">
+                <i class="fas fa-info-circle mr-1"></i> Tip: at current LUNA price, $<span id="bribe-edit-luna-hint-usd">100</span> ≈ <span id="bribe-edit-luna-hint-luna">--</span> LUNA
+            </div>
+        </div>
+        <div class="flex items-center justify-between p-3 border-t border-gray-700">
+            <button id="bribe-edit-delete-btn" onclick="deleteBribeFromModal()" class="text-[10px] text-red-400 hover:text-red-300 px-2 py-1 hidden">
+                <i class="fas fa-trash mr-1"></i> Delete
+            </button>
+            <div class="flex gap-2 ml-auto">
+                <button onclick="closeBribeEditModal()" class="btn-action bg-gray-800 text-gray-300 border border-gray-700 text-xs px-3 py-1">Cancel</button>
+                <button onclick="saveBribeFromModal()" class="btn-action bg-cyan-900/50 text-cyan-200 border border-cyan-700 text-xs px-3 py-1">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- WS: VOTION -->
 <div id="ws-votion" class="workspace">
     <!-- Ratios Status + Votion Summary -->
@@ -1948,6 +2003,31 @@ async function fetchAllTokenPrices() {
     });
     setTxt('price-calc-count', calcCount);
     
+    // FUEL price is derived from chain — not on CoinGecko, but the LUNA-FUEL pool
+    // contract on Terra LCD gives us reserves we can divide for an exact ratio.
+    // Same pattern as fuel-tool.html. Runs after CoinGecko + calculated LSTs so
+    // the LUNA price is already populated for the USD conversion.
+    if (uniqueTokens.has('FUEL') && store.tokenPrices.LUNA?.price > 0) {
+        try {
+            const fuelPriceUsd = await fetchFuelPriceFromChain(store.tokenPrices.LUNA.price);
+            if (fuelPriceUsd != null) {
+                store.tokenPrices.FUEL = {
+                    price: fuelPriceUsd,
+                    source: 'lcd-pool-derived',
+                    formula: 'LUNA-FUEL pool ratio × LUNA price'
+                };
+                if (!tokenList.includes('FUEL')) tokenList.push('FUEL');
+                calcCount++;
+                setTxt('price-calc-count', calcCount);
+                console.log(`✓ FUEL: $${fuelPriceUsd.toFixed(8)} (chain-derived)`);
+            } else {
+                console.warn('FUEL chain price returned null — falling back to manual entry');
+            }
+        } catch (e) {
+            console.warn(`FUEL chain price fetch failed: ${e.message} — falling back to manual entry`);
+        }
+    }
+    
     // Update LUNA display
     if (store.tokenPrices.LUNA) {
         setTxt('price-luna', '$' + store.tokenPrices.LUNA.price.toFixed(4));
@@ -2478,7 +2558,11 @@ function updateLstOverallStatus() {
 
 async function fetchChainStakingApr() {
     try {
-        const resp = await fetch(STAKING_APR_CSV_URL);
+        // GitHub's raw CDN + the browser's HTTP cache will happily return
+        // a stale CSV here — the user reported repeatedly clicking Fetch APR
+        // and seeing the same 6-day-old number. Cache-busting query param
+        // plus explicit no-store header forces a fresh fetch every click.
+        const resp = await fetch(`${STAKING_APR_CSV_URL}?t=${Date.now()}`, { cache: 'no-store' });
         if (!resp.ok) throw new Error('Failed to fetch');
         
         const text = await resp.text();
@@ -3399,7 +3483,11 @@ function downloadExtJson() {
     // Update workflow status
     const statusText = store.testMode ? '✓ saved (TEST)' : '✓ saved';
     setTxt('step-export-val', statusText);
-    $('step-export').classList.add('status-done');
+    // step-export element doesn't always exist (some tool layouts skip it).
+    // Guard against null so the download flow doesn't throw after the file
+    // has already been saved successfully.
+    const stepExportEl = $('step-export');
+    if (stepExportEl) stepExportEl.classList.add('status-done');
     
     // Show alert with filename
     if (store.testMode) {
@@ -3445,7 +3533,8 @@ async function fetchStagingData() {
     for (let day of ['day1', 'day2', 'day3', 'day4']) {
         try {
             console.log(`Fetching staging ${day}: ${STAGING_URLS[day]}`);
-            let resp = await fetch(STAGING_URLS[day]);
+            // Cache-bust: GitHub raw + browser HTTP cache can serve stale data
+            let resp = await fetch(STAGING_URLS[day] + '?t=' + Date.now(), { cache: 'no-store' });
             console.log(`Staging ${day} response: ${resp.status}`);
             if (resp.ok) {
                 let data = await resp.json();
@@ -3463,7 +3552,8 @@ async function fetchStagingData() {
 
 async function fetchHistoricalData() {
     try {
-        let resp = await fetch(HISTORICAL_URL);
+        // Cache-bust to avoid stale GitHub raw / browser cache
+        let resp = await fetch(HISTORICAL_URL + '?t=' + Date.now(), { cache: 'no-store' });
         if (resp.ok) {
             store.historical = await resp.json();
             setTxt('fetch-historical', '✓');
@@ -3477,7 +3567,7 @@ async function fetchHistoricalData() {
 
 async function fetchCurrentData() {
     try {
-        let resp = await fetch(CURRENT_URL);
+        let resp = await fetch(CURRENT_URL + '?t=' + Date.now(), { cache: 'no-store' });
         if (resp.ok) {
             store.current = await resp.json();
             setTxt('fetch-current', '✓');
@@ -3531,172 +3621,212 @@ function updateStagingStatus() {
 // ============ LP REGISTRY FUNCTIONS ============
 
 function parseVoteTab() {
+    // Adaptive parser — replaces the previous version that hardcoded DEX names
+    // (Astroport / Skeleton Swap / WhiteWhale) and single-sided tokens
+    // (ampCAPA / xASTRO). When Creda joined as a new DEX (May 2026, hosting
+    // wBTC.creda.a), the old parser silently dropped every Creda-DEX entry.
+    //
+    // New approach: detect pool entries by SHAPE rather than by name lookup.
+    // A pool entry is any line that's followed within ~6 lines by a "VP X.YZ %"
+    // line. Whatever comes between is the DEX name (1 line) and optionally a
+    // "Single" marker. This adapts to new DEXes/tokens without code changes.
     let txt = $('voteTabPaste').value;
     let lines = txt.split('\n').map(l => l.trim()).filter(l => l);
     
     store.lpRegistry = {};
     
     const BUCKETS = ['stable', 'project', 'bluechip', 'single'];
-    // Known single-sided pool tokens (no LP pair)
-    const SINGLE_TOKENS = ['ampCAPA', 'xASTRO', 'AMPCAPA', 'XASTRO'];
+    
+    // Lines that should never be treated as pool names or DEX names. These are
+    // UI furniture (column headers, button labels, sprite placeholders).
+    const RESERVED = new Set([
+        'icon', 'iconicon', 'Icon',
+        'Pool', 'Incentives', 'vAPR', 'Your Vote',
+        'Add incentives', 'Extend locks', 'Create locks',
+        'Vote', 'Voted',
+        'Get Voting Power',
+        'no assets', '1 asset',
+        '-'
+    ]);
+    
+    // Line is reserved or otherwise not a real entry
+    function isReserved(s) {
+        if (!s) return true;
+        if (RESERVED.has(s)) return true;
+        // Long human-readable instructional sentences
+        if (s.startsWith('You have not voted')) return true;
+        if (s.startsWith('By participating in voting')) return true;
+        if (s.startsWith('Decide how much')) return true;
+        if (s.startsWith('Decide how much of your VP')) return true;
+        return false;
+    }
+    
+    // Heuristic: candidate looks like a DEX name (single-word capitalized,
+    // optionally with one space). Excludes anything with digits, $, %, or
+    // VP-prefix — those are amount lines, not DEX lines.
+    function looksLikeDexName(s) {
+        if (!s || s.length > 30) return false;
+        if (isReserved(s)) return false;
+        if (!/[A-Z]/.test(s)) return false;       // must contain uppercase
+        if (/[0-9$%]/.test(s)) return false;       // no numbers / $ / %
+        if (s.startsWith('VP ') || s.endsWith(' VP')) return false;
+        if (s.startsWith('Depth')) return false;
+        return true;
+    }
+    
+    // A pool-name candidate must be a NAME, not a value/label. Without this
+    // filter, leftover "Your Vote" amounts like `14 761.90 VP` and Depth
+    // lines like `Depth $ 3 330.44` get mistaken for pool names because
+    // they happen to be followed by another VP line within 6 lines (the
+    // next pool entry).
+    function looksLikePoolName(s) {
+        if (!s || isReserved(s)) return false;
+        if (s.startsWith('$') || s.startsWith('VP ') || s.startsWith('Depth')) return false;
+        if (s.endsWith(' VP') || s.endsWith('%')) return false;
+        if (/^[\d\s\.,<>]+$/.test(s)) return false;        // purely numerical
+        if (/^[\d\s\.,]+\s*[KMB]?\s*VP\s*$/.test(s)) return false;  // "12.34K VP"
+        if (!/[A-Za-z]/.test(s)) return false;             // must have letters
+        return true;
+    }
     
     let currentBucket = null;
     let i = 0;
+    let captured = 0;
     
     while (i < lines.length) {
         let line = lines[i];
         let lineLower = line.toLowerCase();
         
-        // Check for bucket header
+        // Bucket header
         if (BUCKETS.includes(lineLower)) {
             currentBucket = lineLower;
             i++;
             continue;
         }
         
-        // Look for LP pattern: "LUNA-USDC LP" or similar
-        // Or single-sided: check if next line is "Single" or if it's a known single token
-        let isSingle = false;
-        let lpName = null;
-        
-        // Skip common non-LP lines
-        if (line === 'icon' || line === 'Icon' || line === 'iconicon' || line === '') {
+        // Skip everything that isn't a plausible pool/token name. This is
+        // both for UI furniture (column headers, button labels) and for
+        // value lines that happen to land between entries (VP amounts,
+        // Depth values, percentages).
+        if (!looksLikePoolName(line)) {
             i++;
             continue;
         }
         
-        if (line.includes(' LP')) {
-            lpName = line.replace(' LP', '').trim();
-        } else if (line.endsWith('Single')) {
-            // Line itself ends with Single (e.g., "ampCAPA Single")
-            lpName = line.replace('Single', '').trim();
-            isSingle = true;
-        } else if (SINGLE_TOKENS.map(s => s.toUpperCase()).includes(line.toUpperCase())) {
-            // Known single token (case insensitive)
-            lpName = getCanonicalName(line);
-            isSingle = true;
-        } else if (i + 1 < lines.length && lines[i + 1].toLowerCase() === 'single') {
-            // Next line is "Single" - this line is the token name (e.g., "ampCAPA" followed by "Single")
-            lpName = getCanonicalName(line);
-            isSingle = true;
-            console.log('Detected single pool pattern:', line, '-> Single');
-        }
-        
-        // Debug: log what we found
-        if (lpName && isSingle) {
-            console.log('Found single-sided pool:', lpName, 'from line:', line);
-        }
-        
-        if (lpName) {
-            // Look ahead for dex and vote %
-            let dex = null;
-            let votePct = 0;
-            
-            // For single-sided pools, default to Astroport if no DEX found
-            let defaultDex = isSingle ? 'Astroport' : null;
-            
-            for (let k = 1; k <= 8 && i + k < lines.length; k++) {
-                let next = lines[i + k];
-                let nextLower = next.toLowerCase();
-                
-                // Skip "Single" marker line
-                if (nextLower === 'single') continue;
-                
-                // Detect DEX - both names used, handle SkeletonSwap (no space) variant
-                if (next === 'Astroport') {
-                    dex = 'Astroport';
-                } else if (next === 'WhiteWhale' || next === 'Skeleton Swap' || next === 'SkeletonSwap') {
-                    dex = 'Skeleton Swap'; // Normalize to Skeleton Swap
-                }
-                
-                // VP line: "VP 15.85M  76.9 %" or "VP 1.29M  5.8 %" or "VP < 0.01  0.0 %"
-                if (next.startsWith('VP ') && next.includes('%')) {
-                    let pctMatch = next.match(/([\d\.]+)\s*%/);
-                    if (pctMatch) {
-                        votePct = parseFloat(pctMatch[1]);
-                    }
-                    
-                    // Also capture VP amount (e.g., "15.85M" -> 15850000)
-                    let vpAmountMatch = next.match(/VP\s+([\d\.]+)([KMB]?)/i);
-                    let vpAmount = 0;
-                    if (vpAmountMatch) {
-                        vpAmount = parseFloat(vpAmountMatch[1]);
-                        let suffix = (vpAmountMatch[2] || '').toUpperCase();
-                        if (suffix === 'K') vpAmount *= 1000;
-                        else if (suffix === 'M') vpAmount *= 1000000;
-                        else if (suffix === 'B') vpAmount *= 1000000000;
-                    }
-                    
-                    // Look for Depth line in next few lines: "Depth $ 684.65K" or "Depth $ 45.23K"
-                    let depth = 0;
-                    for (let d = 1; d <= 3 && i + k + d < lines.length; d++) {
-                        let depthLine = lines[i + k + d];
-                        if (depthLine.startsWith('Depth $') || depthLine.startsWith('Depth $')) {
-                            // Parse: "Depth $ 684.65K" or "Depth $ 1.29M" or "Depth $ 7 071.40" or "Depth $ < 0.01"
-                            let depthMatch = depthLine.match(/Depth\s*\$\s*([\d\s,\.]+)([KMB]?)/i);
-                            if (depthMatch) {
-                                // Remove spaces and commas from number
-                                let depthNum = depthMatch[1].replace(/[\s,]/g, '');
-                                depth = parseFloat(depthNum) || 0;
-                                let depthSuffix = (depthMatch[2] || '').toUpperCase();
-                                if (depthSuffix === 'K') depth *= 1000;
-                                else if (depthSuffix === 'M') depth *= 1000000;
-                                else if (depthSuffix === 'B') depth *= 1000000000;
-                            }
-                            break;
-                        }
-                    }
-                    
-                    // Use detected dex or default (for singles)
-                    let finalDex = dex || defaultDex;
-                    
-                    // We found the VP for this dex, create the entry
-                    if (finalDex && lpName) {
-                        // Use composite key: "LUNA-USDC|Astroport" or "ampCAPA|Astroport"
-                        let key = `${lpName}|${finalDex}`;
-                        
-                        store.lpRegistry[key] = {
-                            lp: lpName,
-                            dex: finalDex,
-                            bucket: currentBucket || 'unknown',
-                            vote_pct: votePct,
-                            vp_amount: vpAmount,
-                            depth: depth,  // NEW: Pool depth for validation
-                            active: votePct >= 1,
-                            single: isSingle  // Mark as single-sided pool
-                        };
-                        
-                        if (depth > 0) {
-                            console.log(`LP Registry: ${key} depth=$${depth.toLocaleString()}`);
-                        }
-                        
-                        if (isSingle) {
-                            console.log('Created single pool entry:', key, votePct + '%');
-                        }
-                    }
-                    
-                    // For singles without explicit DEX, we're done after first VP
-                    if (isSingle && !dex) {
-                        break;
-                    }
-                    
-                    // Reset for next potential dex entry for same LP
-                    dex = null;
-                    votePct = 0;
-                }
-                
-                // Stop at next LP or bucket or single token
-                let isNextLp = next.includes(' LP');
-                let isNextSingle = SINGLE_TOKENS.includes(next) || (i + k + 1 < lines.length && lines[i + k + 1].toLowerCase() === 'single');
-                let isNextBucket = BUCKETS.includes(nextLower);
-                
-                if (k > 2 && (isNextLp || isNextSingle || isNextBucket)) {
-                    break;
-                }
+        // Look ahead up to 6 lines for a "VP X.Y[KMB]  Z.Z %" line — that
+        // confirms `line` is a pool/token name.
+        let vpLineIdx = -1;
+        for (let k = 1; k <= 6 && i + k < lines.length; k++) {
+            const candidate = lines[i + k];
+            if (candidate.startsWith('VP ') && candidate.includes('%')) {
+                vpLineIdx = i + k;
+                break;
             }
         }
-        i++;
+        
+        if (vpLineIdx === -1) {
+            // No VP shape nearby — current line isn't a pool entry
+            i++;
+            continue;
+        }
+        
+        // Determine pool name + single-sided status
+        const isLpPair = line.includes(' LP');
+        let lpName = isLpPair ? line.replace(' LP', '').trim() : line.trim();
+        let isSingle = !isLpPair;
+        let dex = null;
+        
+        // Walk the lines BETWEEN current line and the VP line. The DEX should
+        // be one of them. "Single" is a marker, not a DEX.
+        for (let k = 1; k < vpLineIdx - i; k++) {
+            const candidate = lines[i + k];
+            if (!candidate) continue;
+            if (candidate === 'icon' || candidate === 'iconicon') continue;
+            if (candidate === 'Single') {
+                isSingle = true;
+                continue;   // marker, keep looking for a real DEX (rare; Creda case showed real DEX after marker is possible)
+            }
+            // Normalize Skeleton Swap variants to canonical "Skeleton Swap"
+            if (candidate === 'SkeletonSwap' || candidate === 'Skeleton') {
+                dex = 'Skeleton Swap';
+                break;
+            }
+            if (looksLikeDexName(candidate)) {
+                dex = candidate.trim();
+                break;
+            }
+        }
+        
+        // Default for single-sided pools where only "Single" marker appeared
+        // (matches historical behavior — ampCAPA / xASTRO have always been
+        // stored under the Astroport DEX label even though shown as "Single")
+        if (!dex && isSingle) dex = 'Astroport';
+        
+        if (!dex) {
+            console.log(`Skipping ${lpName}: no DEX found in lookahead`);
+            i = vpLineIdx + 1;
+            continue;
+        }
+        
+        // Parse VP line: percentage + amount
+        const vpLine = lines[vpLineIdx];
+        let votePct = 0;
+        const pctMatch = vpLine.match(/([\d\.]+)\s*%/);
+        if (pctMatch) votePct = parseFloat(pctMatch[1]);
+        
+        let vpAmount = 0;
+        const vpAmountMatch = vpLine.match(/VP\s+([\d\.]+)([KMB]?)/i);
+        if (vpAmountMatch) {
+            vpAmount = parseFloat(vpAmountMatch[1]);
+            const suffix = (vpAmountMatch[2] || '').toUpperCase();
+            if (suffix === 'K') vpAmount *= 1000;
+            else if (suffix === 'M') vpAmount *= 1000000;
+            else if (suffix === 'B') vpAmount *= 1000000000;
+        }
+        
+        // Look for Depth line within the next 3 lines after VP
+        let depth = 0;
+        for (let d = 1; d <= 3 && vpLineIdx + d < lines.length; d++) {
+            const depthLine = lines[vpLineIdx + d];
+            if (depthLine.startsWith('Depth $') || depthLine.startsWith('Depth $ ')) {
+                const depthMatch = depthLine.match(/Depth\s*\$\s*([\d\s,\.]+)([KMB]?)/i);
+                if (depthMatch) {
+                    const depthNum = depthMatch[1].replace(/[\s,]/g, '');
+                    depth = parseFloat(depthNum) || 0;
+                    const ds = (depthMatch[2] || '').toUpperCase();
+                    if (ds === 'K') depth *= 1000;
+                    else if (ds === 'M') depth *= 1000000;
+                    else if (ds === 'B') depth *= 1000000000;
+                }
+                break;
+            }
+        }
+        
+        const key = `${lpName}|${dex}`;
+        store.lpRegistry[key] = {
+            lp: lpName,
+            dex,
+            bucket: currentBucket || 'unknown',
+            vote_pct: votePct,
+            vp_amount: vpAmount,
+            depth,
+            active: votePct >= 1,
+            single: isSingle
+        };
+        captured++;
+        
+        if (depth > 0) {
+            console.log(`LP Registry: ${key} depth=$${depth.toLocaleString()} (bucket=${currentBucket || '?'}, ${votePct}%${isSingle ? ', single' : ''})`);
+        }
+        if (isSingle) {
+            console.log(`Single-sided pool entry: ${key} (${votePct}%)`);
+        }
+        
+        // Advance past the entry (past Depth line if found)
+        i = vpLineIdx + 1;
     }
+    
+    console.log(`✓ Parsed ${captured} LP registry entries from Vote tab paste`);
     
     $('voteTabPaste').value = '';
     renderLpRegistry();
@@ -4004,47 +4134,134 @@ const VOTION_LOCKUPS = [
     { id: 'ampluna-1', type: 'ampLUNA', duration: '1wk', multiplier: 1 },
 ];
 
-// Track which proxy works
+// Track which proxy works (sticky cache across calls)
 let workingProxy = null;
 
+// Track which proxies have failed in the current run, so subsequent calls
+// in a multi-lockup fetch don't re-test a proxy we just saw fail. Reset
+// at the start of each fetchAllVotion run.
+let _runFailedProxies = new Set();
+
+function _resetVotionRunState() {
+    // Called by fetchAllVotion at the start of each run to clear per-run state.
+    // Doesn't clear workingProxy — that's the cross-run optimization.
+    _runFailedProxies = new Set();
+}
+
 async function fetchWithCorsRetry(url) {
-    // If we already found a working proxy, use it
-    if (workingProxy !== null) {
-        const proxyUrl = workingProxy + (workingProxy ? encodeURIComponent(url) : url);
-        const response = await fetch(proxyUrl, {
-            method: 'GET',
-            headers: { 'Accept': 'application/json' }
-        });
-        if (response.ok) return response;
-        // If it fails, reset and try all proxies again
-        workingProxy = null;
-    }
+    // Strategy:
+    // 1. Per-attempt timeout so a hung proxy doesn't stall the run
+    // 2. Retry on transient failures (HTTP 5xx) with exponential backoff —
+    //    Eris's backend.erisprotocol.com is intermittent rather than down,
+    //    confirmed via HAR capture where a "broken" /optimization endpoint
+    //    returned 200 a few minutes later
+    // 3. Smarter proxy ordering: prefer the cached working proxy, then skip
+    //    proxies we already saw fail this run
+    const PER_ATTEMPT_TIMEOUT_MS = 8000;
+    const MAX_RETRIES = 3;
+    const BACKOFF_MS = [0, 2000, 4000]; // wait before attempts 1, 2, 3
     
-    // Try each proxy
-    for (const proxy of CORS_PROXIES) {
+    async function attempt(proxyUrl) {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), PER_ATTEMPT_TIMEOUT_MS);
         try {
-            const proxyUrl = proxy + (proxy ? encodeURIComponent(url) : url);
-            console.log(`  Trying: ${proxy || 'direct'}...`);
             const response = await fetch(proxyUrl, {
                 method: 'GET',
-                headers: { 'Accept': 'application/json' }
+                headers: { 'Accept': 'application/json' },
+                signal: ctrl.signal
             });
-            if (response.ok) {
-                workingProxy = proxy;
-                console.log(`  ✓ Success via ${proxy || 'direct'}`);
-                return response;
-            }
-        } catch (e) {
-            console.log(`  ✗ ${proxy || 'direct'} failed: ${e.message}`);
+            clearTimeout(t);
+            return response;
+        } finally {
+            clearTimeout(t);
         }
     }
-    throw new Error('All fetch methods failed');
+    
+    // Build the proxy try-order: working proxy first (if any and not failed
+    // this run), then everything else not failed this run, then fallback to
+    // any failed-this-run proxy as last resort.
+    function buildProxyOrder() {
+        const fresh = [];
+        const stale = [];
+        // Cached working proxy first if still good
+        if (workingProxy !== null && !_runFailedProxies.has(workingProxy)) {
+            fresh.push(workingProxy);
+        }
+        for (const p of CORS_PROXIES) {
+            if (p === workingProxy) continue;  // already added
+            if (_runFailedProxies.has(p)) stale.push(p);
+            else fresh.push(p);
+        }
+        return [...fresh, ...stale];
+    }
+    
+    let lastErrorReason = 'no attempts made';
+    
+    for (let retry = 0; retry < MAX_RETRIES; retry++) {
+        // Backoff between retries (no wait on first attempt)
+        if (BACKOFF_MS[retry] > 0) {
+            console.log(`  ⏳ Retry ${retry + 1}/${MAX_RETRIES} after ${BACKOFF_MS[retry]}ms (last: ${lastErrorReason})`);
+            await new Promise(r => setTimeout(r, BACKOFF_MS[retry]));
+        }
+        
+        const proxyOrder = buildProxyOrder();
+        let sawTransient5xx = false;  // if all proxies returned 5xx, retry; if all 4xx, give up
+        
+        for (const proxy of proxyOrder) {
+            try {
+                const proxyUrl = proxy + (proxy ? encodeURIComponent(url) : url);
+                console.log(`  Trying: ${proxy || 'direct'}...`);
+                const response = await attempt(proxyUrl);
+                if (response.ok) {
+                    workingProxy = proxy;
+                    _runFailedProxies.delete(proxy);  // forgive prior failures on success
+                    console.log(`  ✓ Success via ${proxy || 'direct'}`);
+                    return response;
+                } else {
+                    lastErrorReason = `${proxy || 'direct'}: HTTP ${response.status}`;
+                    console.log(`  ✗ ${lastErrorReason}`);
+                    if (response.status >= 500 && response.status < 600) {
+                        sawTransient5xx = true;
+                        // Don't blacklist this proxy permanently — origin 5xx
+                        // doesn't tell us anything about the proxy itself
+                    } else {
+                        // 4xx including 403/404 — proxy itself is the problem,
+                        // mark it failed for this run
+                        _runFailedProxies.add(proxy);
+                    }
+                    // If we found a previously-cached working proxy fail, clear cache
+                    if (workingProxy === proxy) workingProxy = null;
+                }
+            } catch (e) {
+                const why = e.name === 'AbortError' ? `timeout (${PER_ATTEMPT_TIMEOUT_MS}ms)` : (e.message || 'failed');
+                lastErrorReason = `${proxy || 'direct'} failed: ${why}`;
+                console.log(`  ✗ ${lastErrorReason}`);
+                _runFailedProxies.add(proxy);
+                if (workingProxy === proxy) workingProxy = null;
+            }
+        }
+        
+        // If no transient 5xx anywhere, more retries won't help
+        if (!sawTransient5xx) {
+            console.log(`  ⚠ All paths returned terminal errors — not retrying`);
+            break;
+        }
+    }
+    
+    throw new Error(`All fetch methods failed (${lastErrorReason})`);
 }
+
+// Tracks the most recent failure reason per lockup id, so fetchAllVotion
+// can show users WHICH lockups failed and WHY (e.g. "ampluna-max: HTTP 502")
+// without changing fetchVotionFromApi's return contract (still null-on-fail
+// to keep fetchSingleVotion working unchanged).
+const _votionLastError = {};
 
 async function fetchVotionFromApi(lockupId) {
     const lockupConfig = VOTION_LOCKUPS.find(l => l.id === lockupId);
     if (!lockupConfig) {
         console.error('Unknown lockup:', lockupId);
+        _votionLastError[lockupId] = 'unknown lockup id';
         return null;
     }
 
@@ -4145,10 +4362,14 @@ async function fetchVotionFromApi(lockupId) {
             });
         }
         
+        // Clear any prior error reason on success
+        delete _votionLastError[lockupId];
         return lockup;
         
     } catch (err) {
-        console.error(`Failed to fetch Votion ${lockupId}:`, err);
+        const reason = err?.message || err?.toString().substring(0, 100) || 'unknown error';
+        _votionLastError[lockupId] = reason;
+        console.error(`Failed to fetch Votion ${lockupId}: ${reason}`);
         return null;
     }
 }
@@ -4157,11 +4378,35 @@ async function fetchAllVotion() {
     const statusEl = $('votion-fetch-status');
     if (statusEl) statusEl.innerHTML = '<span class="text-yellow-400"><i class="fas fa-spinner fa-spin mr-1"></i>Fetching all lockups...</span>';
     
+    // Reset per-run state (failed-proxy memory). Doesn't clear workingProxy
+    // — that's the cross-run optimization for the cached fast path.
+    _resetVotionRunState();
+    
     let successCount = 0;
     let skipCount = 0;
     let failCount = 0;
+    // Per-lockup failure detail. Was just a count before — user could see
+    // "(1 failed)" but not which lockup or why. They'd then fall back to
+    // copy-paste, which they reported doing for epoch 182.
+    const failures = [];     // [{label, reason}]
+    const skipped = [];      // [{label}]
     
-    for (const lockupConfig of VOTION_LOCKUPS) {
+    // Stagger settings. Eris's backend returns intermittent 5xx; firing all
+    // 6 lockups in rapid succession seems to make this worse (rate limit?
+    // cold cache? Either way, a small wait between calls measurably helps).
+    const STAGGER_MS = 500;
+    const totalLockups = VOTION_LOCKUPS.length;
+    
+    for (let idx = 0; idx < totalLockups; idx++) {
+        const lockupConfig = VOTION_LOCKUPS[idx];
+        const label = `${lockupConfig.type} ${lockupConfig.duration}`;
+        
+        // Update progress so the user sees movement during stagger waits +
+        // the multi-second backoffs inside fetchWithCorsRetry
+        if (statusEl) {
+            statusEl.innerHTML = `<span class="text-yellow-400"><i class="fas fa-spinner fa-spin mr-1"></i>Fetching ${label} (${idx + 1}/${totalLockups})...</span>`;
+        }
+        
         try {
             const lockup = await fetchVotionFromApi(lockupConfig.id);
             
@@ -4177,39 +4422,88 @@ async function fetchAllVotion() {
                     store.votion.lockups.push(lockup);
                 }
                 successCount++;
-                console.log(`✓ Fetched ${lockupConfig.type} ${lockupConfig.duration}: VP=${lockup.vp.toLocaleString()}`);
+                console.log(`✓ Fetched ${label}: VP=${lockup.vp.toLocaleString()}`);
             } else if (lockup === null) {
-                // API error (not empty position)
+                // API error — fetchVotionFromApi has stashed the reason
                 failCount++;
-                console.log(`✗ ${lockupConfig.type} ${lockupConfig.duration}: API error`);
+                const reason = _votionLastError[lockupConfig.id] || 'unknown error';
+                failures.push({ label, reason });
+                console.log(`✗ ${label}: ${reason}`);
             } else {
+                // Returned a lockup object but vp is 0/missing — genuine empty position
                 skipCount++;
-                console.log(`⊘ ${lockupConfig.type} ${lockupConfig.duration}: No position`);
+                skipped.push({ label });
+                console.log(`⊘ ${label}: No position`);
             }
         } catch (err) {
             failCount++;
-            console.error(`✗ ${lockupConfig.type} ${lockupConfig.duration}:`, err.message);
+            const reason = err?.message || 'loop error';
+            failures.push({ label, reason });
+            console.error(`✗ ${label}:`, reason);
+        }
+        
+        // Stagger between lockups (skip after the last one)
+        if (idx < totalLockups - 1) {
+            await new Promise(r => setTimeout(r, STAGGER_MS));
         }
     }
     
     renderVotion();
     updateWorkflowStatus();
     
+    // Stash for the details dialog
+    store.votion._lastFetch = { successCount, skipCount, failCount, failures, skipped, at: new Date().toISOString() };
+    
     if (statusEl) {
+        const showLink = (failCount > 0)
+            ? ` <span class="underline cursor-pointer text-red-300" onclick="showVotionFetchDetails()">show ${failCount} failure${failCount === 1 ? '' : 's'}</span>`
+            : '';
         if (successCount > 0) {
-            statusEl.innerHTML = `<span class="text-green-400">✓ Loaded ${successCount} lockups</span>` +
+            statusEl.innerHTML = `<span class="text-green-400">✓ Loaded ${successCount} lockup${successCount === 1 ? '' : 's'}</span>` +
                 (skipCount > 0 ? `<span class="text-gray-500 ml-2">(${skipCount} empty)</span>` : '') +
-                (failCount > 0 ? `<span class="text-red-400 ml-2">(${failCount} failed)</span>` : '');
+                (failCount > 0 ? `<span class="text-red-400 ml-2">(${failCount} failed)</span>${showLink}` : '');
             pasteStatus.votion = true;
             updatePasteStatus('ps-votion', true);
-        } else if (skipCount > 0) {
+        } else if (skipCount > 0 && failCount === 0) {
             statusEl.innerHTML = `<span class="text-gray-400">No positions found in ${skipCount} lockups</span>`;
         } else {
-            statusEl.innerHTML = `<span class="text-red-400">Failed to fetch (${failCount} errors)</span>`;
+            // All-fail or mostly-fail case. This is what hit the user in epoch 182.
+            statusEl.innerHTML = `<span class="text-red-400 font-bold">✗ Votion fetch failed: ${failCount} error${failCount === 1 ? '' : 's'}.</span>` +
+                showLink +
+                ` <span class="text-yellow-400">Use page-paste fallback below.</span>`;
         }
     }
     
-    return { success: successCount, skipped: skipCount, failed: failCount };
+    return { success: successCount, skipped: skipCount, failed: failCount, failures };
+}
+
+// Diagnostic dialog for the Votion fetch — see Astroport equivalent above.
+function showVotionFetchDetails() {
+    const last = store.votion?._lastFetch;
+    if (!last) {
+        alert('No Votion fetch summary available — run "Fetch All from API" first.');
+        return;
+    }
+    const lines = [
+        `Votion fetch summary (last run: ${last.at}):`,
+        ``,
+        `  Loaded:  ${last.successCount}`,
+        `  Empty:   ${last.skipCount}`,
+        `  Failed:  ${last.failCount}`,
+        ``,
+    ];
+    if (last.failures.length > 0) {
+        lines.push('Failures:');
+        for (const f of last.failures) lines.push(`  • ${f.label}: ${f.reason}`);
+        lines.push('');
+    }
+    if (last.skipped.length > 0) {
+        lines.push('Empty (legitimately had no position):');
+        for (const s of last.skipped) lines.push(`  • ${s.label}`);
+        lines.push('');
+    }
+    lines.push('If failures persist, paste each affected lockup manually using the page-paste fallback.');
+    alert(lines.join('\n'));
 }
 
 // Fetch single lockup by ID (for selective refresh)
@@ -4408,7 +4702,8 @@ function renderVotion() {
 async function fetchPdBribesFromGithub() {
     setTxt('pd-fetch-status', '⏳');
     try {
-        let resp = await fetch(PD_BRIBES_GITHUB_URL);
+        // Cache-bust: PD bribes JSON can be updated mid-week and we need fresh
+        let resp = await fetch(PD_BRIBES_GITHUB_URL + '?t=' + Date.now(), { cache: 'no-store' });
         if (!resp.ok) throw new Error('Failed to fetch');
         let data = await resp.json();
         store.pdBribesHistory = data;
@@ -4503,14 +4798,54 @@ function parsePdBribes() {
         store.pdNewProp = newProp;
         updateNewPropPreview();
         
-        // Check if this prop already exists
+        // Check if this prop already exists for the same epoch range
         let existingIdx = store.pdBribesHistory.findIndex(p => 
             p.start_epoch === newProp.start_epoch && p.end_epoch === newProp.end_epoch
         );
         
         if (existingIdx >= 0) {
-            if (confirm(`Prop ${newProp.epoch_range} already exists. Replace it?`)) {
+            // 3-way choice. Replace = wipe-and-write (old behavior); Merge =
+            // keep existing rows but ADD new bribes layered on top (handles
+            // launch incentives where PD posts a separate bribe entry for the
+            // same epoch range covering different pools); Cancel = bail.
+            const existing = store.pdBribesHistory[existingIdx];
+            const choice = prompt(
+                `A bribe entry for ${newProp.epoch_range} already exists with ${existing.bribes.length} bribe(s).\n\n` +
+                `Type one:\n` +
+                `  R = Replace (wipe existing, use new paste only)\n` +
+                `  M = Merge (add new bribes; for any pool that exists in both, sum the USD/LUNA — handles launch incentives)\n` +
+                `  C = Cancel`,
+                'M'
+            );
+            const action = (choice || '').trim().toUpperCase().charAt(0);
+            
+            if (action === 'R') {
                 store.pdBribesHistory[existingIdx] = newProp;
+            } else if (action === 'M') {
+                // Merge: for each new bribe, find a matching (gauge, pool) in
+                // existing — if found, sum the USD and LUNA amounts; if not,
+                // append as a new row. The pool name match is case-insensitive
+                // and uses the pool string directly, no normalization, so it
+                // matches what parsePdBribes wrote to .pool (always uppercase).
+                for (const newBribe of newProp.bribes) {
+                    const matchIdx = existing.bribes.findIndex(b =>
+                        (b.gauge || '').toLowerCase() === (newBribe.gauge || '').toLowerCase() &&
+                        (b.pool || '').toUpperCase() === (newBribe.pool || '').toUpperCase()
+                    );
+                    if (matchIdx >= 0) {
+                        existing.bribes[matchIdx].usd_per_epoch = (existing.bribes[matchIdx].usd_per_epoch || 0) + (newBribe.usd_per_epoch || 0);
+                        existing.bribes[matchIdx].luna_per_epoch = (existing.bribes[matchIdx].luna_per_epoch || 0) + (newBribe.luna_per_epoch || 0);
+                        // Mark as merged so the UI can flag it visually if needed
+                        existing.bribes[matchIdx].merged = true;
+                    } else {
+                        existing.bribes.push({ ...newBribe, addedManually: true });
+                    }
+                }
+                // existing remains in place at existingIdx — already mutated above
+            } else {
+                // Cancel — bail out, leave history alone, but clear paste field
+                $('pdPaste').value = '';
+                return;
             }
         } else {
             store.pdBribesHistory.push(newProp);
@@ -4651,12 +4986,19 @@ function renderCurrentEpochBribes(range, epoch) {
     setTxt('pd-preview-epoch', `Epoch ${epoch}`);
     setTxt('pd-preview-luna-price', lunaPrice > 0 ? '$' + lunaPrice.toFixed(4) : '$-- (fetch prices first)');
     
-    // Group bribes by gauge
+    // Locate the prop's index in pdBribesHistory so the pencil/× buttons can
+    // address each bribe by stable [propIdx, bribeIdx] coordinates. Don't pass
+    // bribe object refs — those don't survive the innerHTML render cycle.
+    const propIdx = store.pdBribesHistory.findIndex(p =>
+        p.start_epoch === range.start_epoch && p.end_epoch === range.end_epoch
+    );
+    
+    // Group bribes by gauge — keep original indexes so edits map correctly
     const gauges = {};
-    range.bribes.forEach(bribe => {
+    range.bribes.forEach((bribe, bribeIdx) => {
         const gauge = bribe.gauge || 'unknown';
         if (!gauges[gauge]) gauges[gauge] = [];
-        gauges[gauge].push(bribe);
+        gauges[gauge].push({ bribe, bribeIdx });
     });
     
     let html = '';
@@ -4667,12 +5009,20 @@ function renderCurrentEpochBribes(range, epoch) {
         'stable': 'text-yellow-400 border-yellow-900/50 bg-yellow-900/10'
     };
     
-    Object.entries(gauges).forEach(([gauge, bribes]) => {
+    // Show all 4 gauges even if one has zero bribes — so the "+ Add bribe"
+    // button is reachable for every gauge (e.g. you got launch-incentive
+    // single-gauge bribes that don't exist in the routine prop yet).
+    const ALL_GAUGES = ['stable', 'project', 'bluechip', 'single'];
+    for (const gauge of ALL_GAUGES) {
+        if (!gauges[gauge]) gauges[gauge] = [];
+    }
+    
+    Object.entries(gauges).forEach(([gauge, entries]) => {
         const colorClass = gaugeColors[gauge] || 'text-gray-400 border-gray-800 bg-gray-900/10';
         
         // Calculate gauge total
-        const gaugeTotal = bribes.reduce((s, b) => s + (b.usd_per_epoch || 0), 0);
-        const gaugeLuna = bribes.reduce((s, b) => s + (b.luna_per_epoch || 0), 0);
+        const gaugeTotal = entries.reduce((s, { bribe }) => s + (bribe.usd_per_epoch || 0), 0);
+        const gaugeLuna = entries.reduce((s, { bribe }) => s + (bribe.luna_per_epoch || 0), 0);
         
         html += `
             <div class="rounded border ${colorClass} p-3">
@@ -4683,12 +5033,13 @@ function renderCurrentEpochBribes(range, epoch) {
                 <div class="space-y-1">
         `;
         
-        bribes.forEach(bribe => {
+        if (entries.length === 0) {
+            html += `<div class="text-[9px] text-gray-600 italic py-1">No bribes in this gauge</div>`;
+        }
+        
+        entries.forEach(({ bribe, bribeIdx }) => {
             const originalUsd = bribe.usd_per_epoch || 0;
             const lunaAmount = bribe.luna_per_epoch || 0;
-            
-            // Calculate original LUNA price when bribe was posted
-            const originalLunaPrice = lunaAmount > 0 ? originalUsd / lunaAmount : 0;
             
             // Calculate current value
             const currentValue = lunaPrice > 0 && lunaAmount > 0 ? lunaAmount * lunaPrice : 0;
@@ -4702,11 +5053,21 @@ function renderCurrentEpochBribes(range, epoch) {
                 changeHtml = `<span class="${changeColor} text-[9px]">${arrow} ${Math.abs(pctChange).toFixed(1)}%</span>`;
             }
             
+            // Visual badge if this row was merged (summed) or manually added.
+            // Helps the user audit which numbers are auto vs hand-mixed.
+            let originBadge = '';
+            if (bribe.merged) {
+                originBadge = `<span class="text-[8px] bg-orange-900/50 text-orange-300 px-1 rounded ml-1" title="Merged from a launch-incentive paste">+merged</span>`;
+            } else if (bribe.addedManually) {
+                originBadge = `<span class="text-[8px] bg-cyan-900/50 text-cyan-300 px-1 rounded ml-1" title="Added manually">+added</span>`;
+            }
+            
             html += `
                 <div class="flex items-center justify-between text-[10px] py-1 border-b border-gray-800/50 last:border-0">
                     <div class="flex items-center gap-2">
                         <span class="text-white font-mono">${bribe.pool}</span>
                         <span class="text-gray-500">(${bribe.percent}%)</span>
+                        ${originBadge}
                     </div>
                     <div class="flex items-center gap-3 text-right">
                         <div class="text-gray-400">
@@ -4721,10 +5082,29 @@ function renderCurrentEpochBribes(range, epoch) {
                                 ${changeHtml}
                             </div>
                         ` : ''}
+                        ${propIdx >= 0 ? `
+                            <button onclick="openBribeEditModal(${propIdx}, ${bribeIdx})" class="text-gray-500 hover:text-cyan-400 px-1" title="Edit this bribe">
+                                <i class="fas fa-pencil-alt text-[9px]"></i>
+                            </button>
+                            <button onclick="deleteBribe(${propIdx}, ${bribeIdx})" class="text-gray-500 hover:text-red-400 px-1" title="Delete this bribe">
+                                <i class="fas fa-times text-[10px]"></i>
+                            </button>
+                        ` : ''}
                     </div>
                 </div>
             `;
         });
+        
+        // Add bribe button at bottom of gauge group
+        if (propIdx >= 0) {
+            html += `
+                <div class="pt-1 mt-1 border-t border-gray-800">
+                    <button onclick="openBribeEditModal(${propIdx}, -1, '${gauge}')" class="text-[9px] text-cyan-400 hover:text-cyan-300 w-full text-left px-1 py-0.5">
+                        <i class="fas fa-plus mr-1"></i> Add bribe to ${gauge}
+                    </button>
+                </div>
+            `;
+        }
         
         html += `
                 </div>
@@ -4738,6 +5118,146 @@ function renderCurrentEpochBribes(range, epoch) {
 function confirmPdBribesComplete() {
     store.pdBribesVerified = true;
     updateWorkflowStatus();
+}
+
+// =============================================================================
+// PD bribe inline-edit modal — pencil icons + "+ Add bribe" buttons in
+// renderCurrentEpochBribes call into these. The modal works in two modes:
+// EDIT (bribeIdx >= 0): pre-fills with the existing bribe's values, has a
+// Delete button. ADD (bribeIdx === -1): blank form pre-set to the gauge the
+// user clicked. Save() writes back to store.pdBribesHistory[propIdx].bribes
+// and re-renders the table + history. No schema change.
+// =============================================================================
+
+let _bribeEditCtx = null;  // { propIdx, bribeIdx, isAdd }
+let _bribeEditModalWired = false;
+
+function openBribeEditModal(propIdx, bribeIdx, defaultGauge) {
+    const prop = store.pdBribesHistory[propIdx];
+    if (!prop) return;
+    
+    const isAdd = bribeIdx === -1;
+    const bribe = isAdd ? null : prop.bribes[bribeIdx];
+    if (!isAdd && !bribe) return;
+    
+    _bribeEditCtx = { propIdx, bribeIdx, isAdd };
+    
+    // Wire ESC + backdrop click on first open (project convention: modals
+    // close via X button, Escape, and click outside). Module-level flag —
+    // _bribeEditCtx gets reassigned each open so we can't use it for this.
+    if (!_bribeEditModalWired) {
+        const modal = $('bribe-edit-modal');
+        if (modal) {
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) closeBribeEditModal();   // backdrop only
+            });
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
+                    closeBribeEditModal();
+                }
+            });
+            _bribeEditModalWired = true;
+        }
+    }
+    
+    // Title + Delete button visibility
+    setTxt('bribe-edit-title', isAdd ? `Add bribe to ${prop.epoch_range}` : `Edit bribe — ${prop.epoch_range}`);
+    const delBtn = $('bribe-edit-delete-btn');
+    if (delBtn) delBtn.classList.toggle('hidden', isAdd);
+    
+    // Pre-fill fields
+    $('bribe-edit-pool').value = isAdd ? '' : (bribe.pool || '');
+    $('bribe-edit-gauge').value = isAdd ? (defaultGauge || 'project') : (bribe.gauge || 'project');
+    $('bribe-edit-usd').value = isAdd ? '' : (bribe.usd_per_epoch || 0);
+    $('bribe-edit-luna').value = isAdd ? '' : (bribe.luna_per_epoch || 0);
+    $('bribe-edit-percent').value = isAdd ? 0 : (bribe.percent || 0);
+    
+    // Show conversion hint based on current LUNA price (helps when entering
+    // launch incentives that quote a USD amount; quick mental check)
+    const lunaPrice = store.tokenPrices.LUNA?.price || 0;
+    const hintEl = $('bribe-edit-luna-hint');
+    if (lunaPrice > 0 && hintEl) {
+        const usdHint = parseFloat($('bribe-edit-usd').value) || 100;
+        setTxt('bribe-edit-luna-hint-usd', usdHint);
+        setTxt('bribe-edit-luna-hint-luna', (usdHint / lunaPrice).toFixed(2));
+        hintEl.classList.remove('hidden');
+    }
+    
+    $('bribe-edit-modal').classList.remove('hidden');
+    setTimeout(() => { try { $('bribe-edit-pool').focus(); } catch (e) {} }, 50);
+}
+
+function closeBribeEditModal() {
+    $('bribe-edit-modal').classList.add('hidden');
+    _bribeEditCtx = null;
+}
+
+function saveBribeFromModal() {
+    if (!_bribeEditCtx) return;
+    const { propIdx, bribeIdx, isAdd } = _bribeEditCtx;
+    const prop = store.pdBribesHistory[propIdx];
+    if (!prop) { closeBribeEditModal(); return; }
+    
+    const pool = $('bribe-edit-pool').value.trim();
+    if (!pool) { alert('Pool name is required.'); return; }
+    
+    const usd = parseFloat($('bribe-edit-usd').value) || 0;
+    const luna = parseFloat($('bribe-edit-luna').value) || 0;
+    const percent = parseFloat($('bribe-edit-percent').value) || 0;
+    const gauge = $('bribe-edit-gauge').value;
+    
+    if (usd === 0 && luna === 0) {
+        if (!confirm('Both USD and LUNA are zero. Save anyway?')) return;
+    }
+    
+    if (isAdd) {
+        // Match parsePdBribes naming convention (uppercase pool name).
+        // Tag with addedManually so the table shows the +added badge.
+        prop.bribes.push({
+            gauge,
+            pool: pool.toUpperCase(),
+            percent,
+            usd_per_epoch: usd,
+            luna_per_epoch: luna,
+            addedManually: true
+        });
+    } else {
+        const b = prop.bribes[bribeIdx];
+        b.gauge = gauge;
+        b.pool = pool.toUpperCase();
+        b.percent = percent;
+        b.usd_per_epoch = usd;
+        b.luna_per_epoch = luna;
+        // Mark as touched so the user can see this was edited (not just from a paste)
+        b.editedManually = true;
+    }
+    
+    closeBribeEditModal();
+    
+    // Re-render: history list + current-epoch grid + coverage status
+    renderPdBribesHistory();
+    updatePdCoverage();
+}
+
+function deleteBribeFromModal() {
+    if (!_bribeEditCtx) return;
+    const { propIdx, bribeIdx, isAdd } = _bribeEditCtx;
+    if (isAdd) { closeBribeEditModal(); return; }
+    deleteBribe(propIdx, bribeIdx, true);  // skipReprompt — modal already implies intent
+    closeBribeEditModal();
+}
+
+// Standalone delete (called by × button next to each row).
+function deleteBribe(propIdx, bribeIdx, skipReprompt) {
+    const prop = store.pdBribesHistory[propIdx];
+    if (!prop?.bribes?.[bribeIdx]) return;
+    const b = prop.bribes[bribeIdx];
+    if (!skipReprompt) {
+        if (!confirm(`Remove ${b.pool} ($${b.usd_per_epoch}, ${b.luna_per_epoch} LUNA) from ${prop.epoch_range}?`)) return;
+    }
+    prop.bribes.splice(bribeIdx, 1);
+    renderPdBribesHistory();
+    updatePdCoverage();
 }
 
 function renderPdBribesHistory() {
@@ -5901,7 +6421,7 @@ function updateHistoricalStatus() {
 
 async function fetchHistoricalFromGithub() {
     try {
-        let resp = await fetch(HISTORICAL_URL);
+        let resp = await fetch(HISTORICAL_URL + '?t=' + Date.now(), { cache: 'no-store' });
         if (resp.ok) {
             store.historical = await resp.json();
             setTxt('fetch-historical', '✓');
@@ -7050,16 +7570,28 @@ async function fetchWithCorsProxy(url) {
         'https://corsproxy.io/?'
     ];
     
+    // Per-proxy timeout. A hung proxy used to stall the whole capture
+    // for minutes, bypassing the new error reporting.
+    const PER_ATTEMPT_TIMEOUT_MS = 8000;
+    
     for (const proxy of proxies) {
         try {
             const fetchUrl = proxy ? proxy + encodeURIComponent(url) : url;
-            const resp = await fetch(fetchUrl);
-            if (resp.ok) {
-                console.log(`✓ Fetched via ${proxy || 'direct'}: ${url.substring(0, 60)}...`);
-                return resp;
+            const ctrl = new AbortController();
+            const t = setTimeout(() => ctrl.abort(), PER_ATTEMPT_TIMEOUT_MS);
+            try {
+                const resp = await fetch(fetchUrl, { signal: ctrl.signal });
+                clearTimeout(t);
+                if (resp.ok) {
+                    console.log(`✓ Fetched via ${proxy || 'direct'}: ${url.substring(0, 60)}...`);
+                    return resp;
+                }
+            } finally {
+                clearTimeout(t);
             }
         } catch (e) {
-            console.log(`✗ Failed ${proxy || 'direct'}: ${e.message}`);
+            const why = e.name === 'AbortError' ? `timeout (${PER_ATTEMPT_TIMEOUT_MS}ms)` : (e.message || 'failed');
+            console.log(`✗ ${proxy || 'direct'}: ${why}`);
         }
     }
     throw new Error(`All fetch methods failed for ${url}`);
@@ -7112,6 +7644,38 @@ async function queryTerraContract(contractAddr, queryMsg) {
         console.error(`Query failed for ${contractAddr}:`, e);
         return null;
     }
+}
+
+// FUEL price derived from the LUNA-FUEL Astroport xyk pool's on-chain reserves.
+// Same approach as fuel-tool.html (line 673 fetchPoolRatio). FUEL isn't on
+// CoinGecko, so this is the cleanest auto-fetch path — Terra LCD allows CORS
+// directly so no proxy needed. Throws on failure; caller falls back to manual.
+async function fetchFuelPriceFromChain(lunaPriceUsd) {
+    const FUEL_POOL = 'terra10yfnsqn20rzlnlzkeva5255q27zp6ws9te9uuql9e0lacfcze7zsffjct5';
+    const FUEL_IBC_HASH = '4B44'; // Suffix-match on the FUEL IBC denom hash (matches fuel-tool.html)
+    
+    const result = await queryTerraContract(FUEL_POOL, { pool: {} });
+    if (!result || !Array.isArray(result.assets)) {
+        throw new Error('pool query returned no assets');
+    }
+    
+    let lunaReserve = null, fuelReserve = null;
+    for (const a of result.assets) {
+        const denom = a.info?.native_token?.denom || '';
+        const amt = parseFloat(a.amount);
+        if (!isFinite(amt)) continue;
+        if (denom === 'uluna') lunaReserve = amt;
+        else if (denom.includes(FUEL_IBC_HASH) || denom.toLowerCase().includes('fuel')) fuelReserve = amt;
+    }
+    if (!lunaReserve || !fuelReserve) {
+        throw new Error(`reserves not found (LUNA=${lunaReserve}, FUEL=${fuelReserve})`);
+    }
+    
+    // xyk pool: FUEL price in LUNA = luna_reserve / fuel_reserve.
+    // Both amounts come back in micro-units (uluna / 6-decimal FUEL), so the
+    // ratio is unitless and converts directly to LUNA-per-FUEL.
+    const fuelInLuna = lunaReserve / fuelReserve;
+    return fuelInLuna * lunaPriceUsd;
 }
 
 // Resolve denom to symbol
@@ -7269,6 +7833,32 @@ let astroMultiRangeData = {
     D90: null
 };
 
+// Pick whichever multi-range capture actually has data. Background:
+// Astroport's TRPC API silently dropped "D90" as a valid `dateRange` enum
+// (now returns Zod invalid_enum_value). When D90 is the only consulted source
+// and every D90 fetch errored, the export gets all zeros even though D7+D30
+// captured real data fine. Selection prefers more data over less; ranges
+// preserved in their original priority (longer window first when both have
+// real data, since longer windows are more analytically useful).
+function selectBestAstroRange(multiRange, fallback) {
+    const hasUseful = (rangeData) => {
+        if (!rangeData) return false;
+        for (const v of Object.values(rangeData)) {
+            if ((v?.latestLiquidity || 0) > 0) return true;
+            if (v?.epochs && Object.keys(v.epochs).length > 0) return true;
+        }
+        return false;
+    };
+    // Try D90 first (most data), then D30, then D7. Whichever has any non-zero
+    // entries wins. This makes the export resilient to a single range failing.
+    if (multiRange?.D90 && hasUseful(multiRange.D90)) return multiRange.D90;
+    if (multiRange?.D30 && hasUseful(multiRange.D30)) return multiRange.D30;
+    if (multiRange?.D7  && hasUseful(multiRange.D7))  return multiRange.D7;
+    // None of the ranges have useful data — fall back to whatever's in the
+    // single-shot epochData (might also be empty; that's then a real problem).
+    return fallback || {};
+}
+
 // Run the complete Astroport data collection workflow
 async function runFullAstroWorkflow() {
     const btn = $('btn-full-workflow');
@@ -7403,7 +7993,7 @@ function updateAstroTabStatus() {
     const astroRegistryCount = Object.values(store.lpRegistry).filter(lp => lp.dex === 'Astroport').length;
     const validationResults = astroValidationState?.results || [];
     const missingCount = validationResults.filter(r => r.status === 'missing').length;
-    const dataLoaded = Object.keys(astroMultiRangeData?.D90 || astroAutoData?.epochData || {}).length > 0;
+    const dataLoaded = Object.keys(selectBestAstroRange(astroMultiRangeData, astroAutoData?.epochData)).length > 0;
     
     if (astroRegistryCount > 0 && missingCount === 0 && dataLoaded) {
         // All LPs matched - green
@@ -7444,7 +8034,7 @@ async function exportComprehensiveAstroJSON() {
     
     // Build unified pool data
     const pools = {};
-    const d90Data = astroMultiRangeData.D90 || astroAutoData.epochData || {};
+    const d90Data = selectBestAstroRange(astroMultiRangeData, astroAutoData.epochData);
     
     for (const [contract, poolData] of Object.entries(d90Data)) {
         if (poolData.deprecated) continue; // Skip deprecated pools
@@ -7863,6 +8453,18 @@ async function fetchAstroData() {
     
     astroAutoData.epochData = {};
     
+    // Track per-pool fetch outcomes so we can report honestly at the end.
+    // Old version unconditionally said "✓ Fetched data for N pools" even when
+    // every series came back empty (which is exactly what shipped in epoch 182).
+    const fetchSummary = {
+        total: pools.length,
+        succeeded: 0,           // pool got non-empty series for at least one of liq/vol
+        emptyData: 0,           // both fetches returned 200 OK but with empty series
+        failed: 0,              // both fetches errored
+        partial: 0,             // one of the two fetches errored
+        failures: []            // [{poolName, liqError, volError}]
+    };
+    
     for (let i = 0; i < pools.length; i++) {
         const pool = pools[i];
         const progress = ((i + 1) / pools.length * 100).toFixed(0);
@@ -7873,13 +8475,40 @@ async function fetchAstroData() {
         statusEl.textContent = `Fetching ${poolName} (${i + 1}/${pools.length})...`;
         
         try {
-            const [liqData, volData] = await Promise.all([
+            const [liqRes, volRes] = await Promise.all([
                 fetchAstroChartData('liquidity', pool.poolContract, dateRange),
                 fetchAstroChartData('volume', pool.poolContract, dateRange)
             ]);
             
-            // Log data received
-            console.log(`${poolName}: ${liqData.length} liq points, ${volData.length} vol points`);
+            const liqData = liqRes.series;
+            const volData = volRes.series;
+            
+            // Categorize this pool's outcome
+            const bothFailed = !liqRes.ok && !volRes.ok;
+            const oneFailed = (!liqRes.ok || !volRes.ok) && !bothFailed;
+            const bothEmpty = liqRes.ok && volRes.ok && liqData.length === 0 && volData.length === 0;
+            
+            if (bothFailed) {
+                fetchSummary.failed++;
+                fetchSummary.failures.push({
+                    poolName,
+                    liqError: liqRes.errorReason,
+                    volError: volRes.errorReason
+                });
+            } else if (oneFailed) {
+                fetchSummary.partial++;
+                fetchSummary.failures.push({
+                    poolName,
+                    liqError: liqRes.ok ? null : liqRes.errorReason,
+                    volError: volRes.ok ? null : volRes.errorReason
+                });
+            } else if (bothEmpty) {
+                fetchSummary.emptyData++;
+            } else {
+                fetchSummary.succeeded++;
+            }
+            
+            console.log(`${poolName}: ${liqData.length} liq points, ${volData.length} vol points (liq=${liqRes.ok ? 'ok' : liqRes.errorReason}, vol=${volRes.ok ? 'ok' : volRes.errorReason})`);
             
             // Process into epoch averages
             const epochAverages = processEpochAverages(liqData, volData);
@@ -7900,13 +8529,23 @@ async function fetchAstroData() {
                 epochs: epochAverages,
                 dateRange,
                 latestLiquidity: latestLiq,
-                latestEpoch
+                latestEpoch,
+                fetchOk: !bothFailed,                                  // explicit flag for downstream
+                fetchErrors: bothFailed || oneFailed
+                    ? { liq: liqRes.errorReason, vol: volRes.errorReason }
+                    : null
             };
             
             console.log(`✓ ${poolName} @ ${pool.poolContract.substring(0,12)}...: $${latestLiq.toLocaleString()}`);
             
         } catch (e) {
             console.error(`Failed to fetch ${poolName}:`, e);
+            fetchSummary.failed++;
+            fetchSummary.failures.push({
+                poolName,
+                liqError: `loop error: ${e.message}`,
+                volError: `loop error: ${e.message}`
+            });
             astroAutoData.epochData[pool.poolContract] = {
                 name: poolName,
                 bucket: pool.bucket,
@@ -7916,7 +8555,9 @@ async function fetchAstroData() {
                 dateRange,
                 error: e.message,
                 latestLiquidity: 0,
-                latestEpoch: null
+                latestEpoch: null,
+                fetchOk: false,
+                fetchErrors: { liq: e.message, vol: e.message }
             };
         }
         
@@ -7925,6 +8566,9 @@ async function fetchAstroData() {
     }
     
     progressContainer.classList.add('hidden');
+    
+    // Stash for export-time validation + UI
+    astroAutoData.fetchSummary = fetchSummary;
     
     // Detect and handle duplicate pools (same name, different contracts)
     detectDuplicatePools();
@@ -7935,17 +8579,90 @@ async function fetchAstroData() {
     const activeCount = Object.values(astroAutoData.epochData).filter(p => !p.deprecated).length;
     const deprecatedCount = poolCount - activeCount;
     
-    if (deprecatedCount > 0) {
-        statusEl.textContent = `✓ Fetched ${poolCount} pools (${activeCount} active, ${deprecatedCount} deprecated)`;
-        statusEl.className = 'text-[9px] text-yellow-400';
-    } else {
-        statusEl.textContent = `✓ Fetched data for ${poolCount} pools`;
-        statusEl.className = 'text-[9px] text-green-400';
-    }
+    // Honest status reporting. Prior version unconditionally showed green
+    // checkmark even when 100% of pools came back with empty series.
+    const noUsefulData = fetchSummary.succeeded === 0 && fetchSummary.total > 0;
+    const mostlyFailed = (fetchSummary.failed + fetchSummary.partial) > fetchSummary.succeeded;
     
-    // Enable export (header button)
-    const exportBtn = $('btn-astro-export');
-    if (exportBtn) exportBtn.disabled = false;
+    if (noUsefulData) {
+        // Worst case — every pool returned empty or errored. This was the
+        // silent failure mode in epoch 182. Surface it loudly.
+        statusEl.innerHTML = `<span class="text-red-400 font-bold">✗ NO HISTORICAL DATA RETRIEVED.</span> ` +
+            `${fetchSummary.failed} fetch errors, ${fetchSummary.emptyData} empty responses. ` +
+            `<span class="underline cursor-pointer" onclick="showAstroFetchDetails()">Show details</span>. ` +
+            `<span class="text-yellow-400">Check Astroport TRPC endpoint + CORS proxies.</span>`;
+        statusEl.className = 'text-[9px] mb-3';
+        // Disable export — exporting all-zeros silently is what got us here
+        const btn = $('btn-astro-export');
+        if (btn) btn.disabled = true;
+    } else if (mostlyFailed) {
+        statusEl.innerHTML = `<span class="text-red-400 font-bold">⚠ Mostly failed:</span> ` +
+            `${fetchSummary.succeeded}/${fetchSummary.total} pools have data ` +
+            `(${fetchSummary.failed} failed, ${fetchSummary.partial} partial, ${fetchSummary.emptyData} empty). ` +
+            `<span class="underline cursor-pointer" onclick="showAstroFetchDetails()">Show failures</span>`;
+        statusEl.className = 'text-[9px] mb-3';
+        const btn = $('btn-astro-export');
+        if (btn) btn.disabled = false;
+    } else if (fetchSummary.failed > 0 || fetchSummary.partial > 0) {
+        statusEl.innerHTML = `<span class="text-yellow-400">⚠ Partial:</span> ` +
+            `${fetchSummary.succeeded}/${fetchSummary.total} pools OK ` +
+            `(${fetchSummary.failed + fetchSummary.partial} with errors, ${fetchSummary.emptyData} empty). ` +
+            `<span class="underline cursor-pointer" onclick="showAstroFetchDetails()">Show failures</span>`;
+        statusEl.className = 'text-[9px] mb-3';
+        const btn = $('btn-astro-export');
+        if (btn) btn.disabled = false;
+    } else if (deprecatedCount > 0) {
+        statusEl.innerHTML = `<span class="text-green-400">✓ Fetched ${fetchSummary.succeeded}/${fetchSummary.total} pools</span> ` +
+            `<span class="text-gray-500">(${activeCount} active, ${deprecatedCount} deprecated, ${fetchSummary.emptyData} empty)</span>`;
+        statusEl.className = 'text-[9px] mb-3';
+        const btn = $('btn-astro-export');
+        if (btn) btn.disabled = false;
+    } else {
+        statusEl.innerHTML = `<span class="text-green-400">✓ Fetched data for ${fetchSummary.succeeded}/${fetchSummary.total} pools</span>` +
+            (fetchSummary.emptyData > 0 ? ` <span class="text-gray-500">(${fetchSummary.emptyData} pools had no activity)</span>` : '');
+        statusEl.className = 'text-[9px] mb-3';
+        const btn = $('btn-astro-export');
+        if (btn) btn.disabled = false;
+    }
+}
+
+// Diagnostic dialog: lists which pools failed and why. Called from the
+// status message links rendered above. Uses an alert() rather than a
+// styled modal because (a) this runs on a debugging path the user only
+// hits when something is wrong, and (b) the surrounding code already
+// uses confirm()/alert() in similar contexts — minimal ceremony.
+function showAstroFetchDetails() {
+    const s = astroAutoData?.fetchSummary;
+    if (!s) {
+        alert('No fetch summary available — run the Astroport fetch first.');
+        return;
+    }
+    const lines = [
+        `Astroport fetch summary:`,
+        ``,
+        `  Total pools attempted:  ${s.total}`,
+        `  Got useful data:        ${s.succeeded}`,
+        `  Returned empty series:  ${s.emptyData}`,
+        `  Partial fail (1 of 2):  ${s.partial}`,
+        `  Both fetches failed:    ${s.failed}`,
+        ``,
+    ];
+    if (s.failures.length === 0) {
+        lines.push('No fetch errors recorded.');
+    } else {
+        lines.push('Per-pool errors:');
+        lines.push('');
+        for (const f of s.failures) {
+            const parts = [];
+            if (f.liqError) parts.push(`liq: ${f.liqError}`);
+            if (f.volError) parts.push(`vol: ${f.volError}`);
+            lines.push(`  ${f.poolName}`);
+            for (const p of parts) lines.push(`    ${p}`);
+        }
+    }
+    lines.push('');
+    lines.push('See browser console for the same info with timing details.');
+    alert(lines.join('\n'));
 }
 
 // Detect duplicate pools (same name OR reversed order, different contracts on same DEX)
@@ -8041,6 +8758,11 @@ function detectDuplicatePools() {
 }
 
 async function fetchAstroChartData(type, poolAddr, dateRange) {
+    // Returns { series: [...], ok: bool, errorReason: string|null }
+    // Callers MUST check .ok before treating empty .series as "no activity"
+    // (vs "fetch failed"). The pre-fix version silently returned [] on
+    // any failure which is why the cron-replacement repo and 5/9/26 epoch
+    // 182 capture both shipped with all-zero Astroport historical data.
     const input = {
         json: {
             pools: [poolAddr],
@@ -8053,19 +8775,41 @@ async function fetchAstroChartData(type, poolAddr, dateRange) {
     
     try {
         const resp = await fetchWithCorsProxy(url);
+        if (!resp.ok) {
+            const reason = `HTTP ${resp.status}`;
+            console.warn(`Astroport ${type} ${poolAddr.substring(0,12)}: ${reason}`);
+            return { series: [], ok: false, errorReason: reason };
+        }
         const data = await resp.json();
         
-        // Check for error response from Astroport
+        // Check for error response from Astroport (TRPC error envelope)
         if (data?.error) {
-            console.warn(`Astroport API error for ${type} ${poolAddr.substring(0,12)}:`, data.error);
-            return [];
+            // Extract a useful message. The TRPC envelope can be a string,
+            // an object with .message, or wrap a Zod validator error in
+            // a JSON-encoded array. Show enough text that we can read the
+            // schema constraint (the May 2026 D90-deprecated breakage was
+            // hidden behind a 80-char truncation; bumped to 200).
+            let msgText;
+            if (typeof data.error === 'string') {
+                msgText = data.error;
+            } else if (data.error?.message) {
+                msgText = data.error.message;
+            } else {
+                msgText = JSON.stringify(data.error);
+            }
+            const reason = `API error: ${msgText.substring(0, 200)}`;
+            console.warn(`Astroport ${type} ${poolAddr.substring(0,12)}: ${reason}`);
+            return { series: [], ok: false, errorReason: reason };
         }
         
         const series = data?.result?.data?.json?.[0]?.series || [];
-        return series;
+        // Empty series IS valid (pool may genuinely have no activity in the window),
+        // but we flag it so the caller can warn if EVERY pool comes back empty.
+        return { series, ok: true, errorReason: series.length === 0 ? 'empty-series' : null };
     } catch (e) {
-        console.error(`Failed to fetch ${type} for ${poolAddr}:`, e);
-        return [];
+        const reason = `fetch failed: ${e.message || e.toString().substring(0, 80)}`;
+        console.error(`Astroport ${type} ${poolAddr.substring(0,12)}: ${reason}`);
+        return { series: [], ok: false, errorReason: reason };
     }
 }
 
@@ -9180,8 +9924,9 @@ function buildDexPerformanceData(targetEpoch) {
                 };
             }
         } else if (dex === 'Astroport') {
-            // Get Astroport data from astroMultiRangeData
-            const d90Data = astroMultiRangeData.D90 || astroAutoData.epochData || {};
+            // Get Astroport data from astroMultiRangeData (helper picks the
+            // best range that has actual data, since D90 can fail entirely)
+            const d90Data = selectBestAstroRange(astroMultiRangeData, astroAutoData.epochData);
             
             // Find pool by name (may need contract lookup)
             for (const [contract, poolData] of Object.entries(d90Data)) {
@@ -9545,7 +10290,7 @@ function getExportData() {
         // DEX Performance - current epoch + last 4 epoch avg for all LPs
         dex_performance: dexPerformance,
         // Raw DEX data for detailed analysis
-        astroport_data: astroMultiRangeData?.D90 || astroAutoData?.epochData || {},
+        astroport_data: selectBestAstroRange(astroMultiRangeData, astroAutoData?.epochData),
         skeleton_swap_data: store.ww
     };
 }
@@ -9644,8 +10389,8 @@ function buildDexPerformanceForExport(targetEpoch) {
             }
             
         } else if (dex === 'Astroport') {
-            // Get Astroport data from astroMultiRangeData
-            const d90Data = astroMultiRangeData?.D90 || astroAutoData?.epochData || {};
+            // Get Astroport data from astroMultiRangeData (helper picks best range)
+            const d90Data = selectBestAstroRange(astroMultiRangeData, astroAutoData?.epochData);
             
             for (const [contract, poolData] of Object.entries(d90Data)) {
                 if (poolData.name === lpName && !poolData.deprecated) {
