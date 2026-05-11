@@ -391,7 +391,7 @@
                     <p><span class="text-green-400">✓ Auto-Fetch:</span> ampLUNA, arbLUNA, bLUNA, ampROAR, ampCAPA (from chain contracts)</p>
                     <p><span class="text-blue-400">Manual:</span> xASTRO ratio + all APYs (paste from Eris/Astroport)</p>
                     <p><span class="text-yellow-400">Staking APR:</span> Download CSV from Smart Stake → Upload to GitHub</p>
-                    <p><span class="text-yellow-400">Staking Ratio:</span> Auto-fetch from SmartStake API; full network-stats blob captured to epoch file</p>
+                    <p><span class="text-yellow-400">Staking Ratio:</span> Auto-fetch from Terra LCD + CoinGecko; full network-stats blob captured to epoch file</p>
                 </div>
             </div>
         </div>
@@ -1699,7 +1699,7 @@ let store = {
         xASTRO: { ratio: null, base: 'ASTRO', apy: null, updated: null },
         chainStakingApr: null,
         chainStakingAprDate: null,
-        stakingRatio: null,           // % of supply staked (from smartstake networkStats.coinStat.percentStaked)
+        stakingRatio: null,           // % of supply staked (derived: bonded_tokens ÷ total_supply via Terra LCD)
         stakingRatioDate: null,
         allUpdated: false
     },
@@ -2637,85 +2637,254 @@ async function fetchChainStakingApr() {
     }
 }
 
-// SmartStake networkStats endpoint. Returns the full Terra network stats blob:
-//   coinStat   — totalStake, percentStaked, currentRewardRate, supply, mcap, gini, etc. (~115 fields)
-//   params     — chain consensus params (signed_blocks_window, slashing fractions, unbonding time, etc.)
-//   notification — usually null
+// Data sources for the "Fetch Terra Stats" button:
+//   1. Terra LCD       — supply, bonded stake, validators, inflation
+//                        → derives: percent_staked, gini, nakamoto, top_5_vp, apr
+//   2. CoinGecko       — price, circulating supply, market cap, FDV
 //
-// We capture the WHOLE blob to the epoch file (terra_network_stats section) so future
-// analysts have everything available, and pull just `coinStat.percentStaked` into the UI's
-// staking-ratio field. We deliberately DO NOT overwrite store.lstRatios.chainStakingApr from
-// coinStat.currentRewardRate — the GitHub CSV is the curated source, divergent values would
-// silently corrupt historical parity.
-const SS_NETWORK_STATS_URL = 'https://ssdata.smartstakeapi.com/common/networkStats';
+// SmartStake was the original source for all of these in one shot, but their
+// API endpoint (https://ssdata.smartstakeapi.com/common/networkStats) started
+// returning 405 in May 2026. Pivoting to chain-of-truth data eliminates the
+// third-party dependency entirely: LCD is the chain itself, CoinGecko has
+// permissive CORS. The /api/network-stats Vercel proxy stays deployed but is
+// not called from this flow — kept in place in case SmartStake ever revives.
+//
+// 24h/7d/30d transaction counts are deliberately omitted: LCD can't compute
+// them without scanning every block in the window. If that becomes important
+// later, add a Mintscan or Numia indexer call here.
+const TERRA_LCD_URL    = 'https://terra-lcd.publicnode.com';
+const COINGECKO_LUNA   = 'https://api.coingecko.com/api/v3/coins/terra-luna-2?localization=false&tickers=false&community_data=false&developer_data=false&sparkline=false';
 
 async function fetchTerraNetworkStats() {
     const statusEl = $('staking-ratio-status');
-    const inputEl = $('staking-ratio-input');
-    const btn = $('btn-fetch-network-stats');
+    const inputEl  = $('staking-ratio-input');
+    const btn      = $('btn-fetch-network-stats');
 
-    if (statusEl) statusEl.textContent = '⏳ fetching SmartStake…';
-    if (statusEl) statusEl.className = 'text-[9px] text-yellow-400 mt-1';
-    if (btn) { btn.disabled = true; btn.dataset._origHtml = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; }
+    if (statusEl) {
+        statusEl.textContent = '⏳ querying LCD + CoinGecko…';
+        statusEl.className = 'text-[9px] text-yellow-400 mt-1';
+    }
+    if (btn) {
+        btn.disabled = true;
+        btn.dataset._origHtml = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Fetching...';
+    }
 
-    try {
-        // Try direct fetch first; if blocked by CORS, fall through to the proxy chain.
-        let json = null;
-        try {
-            const resp = await fetch(`${SS_NETWORK_STATS_URL}?t=${Date.now()}`, { cache: 'no-store' });
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            json = await resp.json();
-        } catch (directErr) {
-            console.warn('[network-stats] direct fetch failed, trying CORS proxy:', directErr.message);
-            const text = await fetchWithCorsRetry(SS_NETWORK_STATS_URL);
-            json = JSON.parse(text);
-        }
+    // Fire both sources in parallel — they're independent. If CoinGecko is
+    // rate-limiting (it does ~10-30 req/min for free), we still get all the
+    // staking metrics from LCD and just lose price/mcap.
+    const [lcdResult, geckoResult] = await Promise.allSettled([
+        _fetchTerraStatsFromLcd(),
+        _fetchLunaMarketFromCoinGecko(),
+    ]);
 
-        if (!json || typeof json !== 'object' || !json.coinStat) {
-            throw new Error('Unexpected response shape (no coinStat)');
-        }
-
-        // Capture the full blob — preserve as-is, no destructure.
-        store.terraNetworkStats = json;
-        store.terraNetworkStatsFetchedAt = new Date().toISOString();
-
-        // Pull staking ratio into the dedicated field + UI input.
-        const pctStaked = Number(json.coinStat.percentStaked);
-        if (Number.isFinite(pctStaked) && pctStaked > 0) {
-            store.lstRatios.stakingRatio = pctStaked;
-            store.lstRatios.stakingRatioDate = json.coinStat.recentBlockTime || store.terraNetworkStatsFetchedAt;
-            if (inputEl) inputEl.value = pctStaked.toFixed(2);
-        }
-
-        // Status: success. Note coinStat.lastUpdated can be months stale (verified
-        // 2026-05-10: lastUpdated was Feb 2026 while data was current). Use
-        // recentBlockTime when present — that's the actual chain timestamp.
-        const ts = json.coinStat.recentBlockTime || json.coinStat.lastUpdated || 'unknown';
+    const lcd   = lcdResult.status   === 'fulfilled' ? lcdResult.value   : null;
+    const gecko = geckoResult.status === 'fulfilled' ? geckoResult.value : null;
+    if (!lcd && !gecko) {
+        const errs = [
+            lcdResult.status   === 'rejected' ? `LCD: ${lcdResult.reason?.message}` : null,
+            geckoResult.status === 'rejected' ? `CG:  ${geckoResult.reason?.message}` : null,
+        ].filter(Boolean).join(' · ');
         if (statusEl) {
-            statusEl.textContent = `✓ SmartStake · ${ts.slice(0, 16).replace('T', ' ')} UTC`;
-            statusEl.className = 'text-[9px] text-green-400 mt-1';
-        }
-
-        console.log(`✓ Terra network stats fetched: percentStaked=${pctStaked}%, currentRewardRate=${json.coinStat.currentRewardRate}%, blockTime=${ts}`);
-        updateLstCardStatus('stakingRatio');
-        updateLstOverallStatus();
-        updateWorkflowStatus();
-        return json;
-    } catch (e) {
-        console.error('[network-stats] fetch failed:', e);
-        if (statusEl) {
-            statusEl.textContent = `❌ ${e.message} — enter manually`;
+            statusEl.textContent = `❌ ${errs} — enter manually`;
             statusEl.className = 'text-[9px] text-red-400 mt-1';
         }
-        // Leave inputEl editable so user can manually enter the staking ratio.
-        return null;
-    } finally {
         if (btn && btn.dataset._origHtml) {
             btn.innerHTML = btn.dataset._origHtml;
             delete btn.dataset._origHtml;
             btn.disabled = false;
         }
+        return null;
     }
+
+    // Assemble the unified blob. Shape is documented at the field level so the
+    // cron consumer (Phase 5) can ingest without re-discovering provenance.
+    const fetchedAt = new Date().toISOString();
+    const blob = {
+        fetched_at:     fetchedAt,
+        sources: {
+            lcd:       lcd       ? { ok: true, url: TERRA_LCD_URL, fetched_at: fetchedAt } : { ok: false, error: lcdResult.reason?.message || 'unknown' },
+            coingecko: gecko     ? { ok: true, url: COINGECKO_LUNA, fetched_at: fetchedAt } : { ok: false, error: geckoResult.reason?.message || 'unknown' },
+        },
+        // === FROM LCD (derived from chain state) ===
+        total_supply_uluna:     lcd?.total_supply_uluna ?? null,
+        total_supply_luna:      lcd?.total_supply_luna ?? null,
+        bonded_tokens_uluna:    lcd?.bonded_tokens_uluna ?? null,
+        bonded_tokens_luna:     lcd?.bonded_tokens_luna ?? null,
+        not_bonded_tokens_luna: lcd?.not_bonded_tokens_luna ?? null,
+        percent_staked:         lcd?.percent_staked ?? null,
+        inflation:              lcd?.inflation ?? null,
+        community_tax:          lcd?.community_tax ?? null,
+        staking_apr:            lcd?.staking_apr ?? null,
+        gini:                   lcd?.gini ?? null,
+        nakamoto_index:         lcd?.nakamoto_index ?? null,
+        active_validators:      lcd?.active_validators ?? null,
+        top_5_voting_power_pct: lcd?.top_5_voting_power_pct ?? null,
+        validators:             lcd?.validators ?? null,
+        latest_block_height:    lcd?.latest_block_height ?? null,
+        latest_block_time:      lcd?.latest_block_time ?? null,
+        // === FROM COINGECKO (market data) ===
+        usd_price:              gecko?.usd_price ?? null,
+        usd_market_cap:         gecko?.usd_market_cap ?? null,
+        usd_fdv:                gecko?.usd_fdv ?? null,
+        circulating_supply:     gecko?.circulating_supply ?? null,
+        price_change_pct_24h:   gecko?.price_change_pct_24h ?? null,
+        price_change_pct_7d:    gecko?.price_change_pct_7d ?? null,
+        price_change_pct_30d:   gecko?.price_change_pct_30d ?? null,
+    };
+
+    // Store + write to UI fields.
+    store.terraNetworkStats = blob;
+    store.terraNetworkStatsFetchedAt = fetchedAt;
+
+    if (blob.percent_staked != null) {
+        store.lstRatios.stakingRatio = blob.percent_staked;
+        store.lstRatios.stakingRatioDate = fetchedAt;
+        if (inputEl) inputEl.value = blob.percent_staked.toFixed(2);
+    }
+
+    // Status: list which sources came back. Each source individually optional.
+    const sourceLabels = [];
+    if (blob.sources.lcd.ok)       sourceLabels.push('LCD');
+    if (blob.sources.coingecko.ok) sourceLabels.push('CoinGecko');
+    const failedLabels = [];
+    if (!blob.sources.lcd.ok)       failedLabels.push('LCD');
+    if (!blob.sources.coingecko.ok) failedLabels.push('CG');
+
+    if (statusEl) {
+        const okPart   = sourceLabels.length ? `✓ ${sourceLabels.join(' + ')}` : '';
+        const failPart = failedLabels.length ? `  (${failedLabels.join(',')} failed)` : '';
+        statusEl.textContent = `${okPart}${failPart} · ${fetchedAt.slice(0, 16).replace('T', ' ')} UTC`;
+        statusEl.className = failedLabels.length
+            ? 'text-[9px] text-yellow-400 mt-1'
+            : 'text-[9px] text-green-400 mt-1';
+    }
+
+    console.log('═══ Terra Network Stats ═══');
+    console.log('  Sources:        ', sourceLabels.join(', ') || '(none)');
+    if (failedLabels.length) console.log('  Failed:         ', failedLabels.join(', '));
+    if (blob.percent_staked != null) console.log(`  Percent Staked: ${blob.percent_staked.toFixed(2)}%`);
+    if (blob.staking_apr != null)    console.log(`  Staking APR:    ${blob.staking_apr.toFixed(4)}%`);
+    if (blob.gini != null)           console.log(`  Gini:           ${blob.gini.toFixed(6)}`);
+    if (blob.nakamoto_index != null) console.log(`  Nakamoto:       ${blob.nakamoto_index}`);
+    if (blob.usd_price != null)      console.log(`  USD Price:      $${blob.usd_price}`);
+    if (blob.usd_market_cap != null) console.log(`  USD Mcap:       $${blob.usd_market_cap.toLocaleString()}`);
+
+    updateLstCardStatus('stakingRatio');
+    updateLstOverallStatus();
+    updateWorkflowStatus();
+
+    if (btn && btn.dataset._origHtml) {
+        btn.innerHTML = btn.dataset._origHtml;
+        delete btn.dataset._origHtml;
+        btn.disabled = false;
+    }
+    return blob;
+}
+
+// --- Source 1: Terra LCD ----------------------------------------------------
+// Five parallel calls. Bonded validator list (call 3) drives gini + nakamoto.
+async function _fetchTerraStatsFromLcd() {
+    const _q = async (path) => {
+        const r = await fetch(`${TERRA_LCD_URL}${path}`, { cache: 'no-store' });
+        if (!r.ok) throw new Error(`LCD ${path} → HTTP ${r.status}`);
+        return r.json();
+    };
+
+    const [supply, pool, validators, mintParams, distParams, block] = await Promise.all([
+        _q('/cosmos/bank/v1beta1/supply/by_denom?denom=uluna'),
+        _q('/cosmos/staking/v1beta1/pool'),
+        _q('/cosmos/staking/v1beta1/validators?status=BOND_STATUS_BONDED&pagination.limit=500'),
+        _q('/cosmos/mint/v1beta1/inflation'),
+        _q('/cosmos/distribution/v1beta1/params'),
+        _q('/cosmos/base/tendermint/v1beta1/blocks/latest'),
+    ]);
+
+    // Supply & stake (u-LUNA in chain, ÷1e6 for display LUNA).
+    const totalSupplyU  = Number(supply.amount.amount);
+    const bondedU       = Number(pool.pool.bonded_tokens);
+    const notBondedU    = Number(pool.pool.not_bonded_tokens);
+    const percentStaked = totalSupplyU > 0 ? (bondedU / totalSupplyU) * 100 : 0;
+
+    // Decentralization metrics from full bonded set.
+    const tokens = validators.validators
+        .map(v => Number(v.tokens))
+        .filter(t => t > 0)
+        .sort((a, b) => b - a);   // descending
+    const totalBonded = tokens.reduce((s, t) => s + t, 0);
+
+    // Top-5 voting power %.
+    const top5 = tokens.slice(0, 5).map(t => totalBonded > 0 ? (t / totalBonded) * 100 : 0);
+
+    // Nakamoto: min N validators whose cumulative stake > 33.4%.
+    let cumul = 0;
+    let nakamoto = 0;
+    for (const t of tokens) {
+        cumul += t;
+        nakamoto++;
+        if (totalBonded > 0 && cumul / totalBonded > 1 / 3) break;
+    }
+
+    // Gini coefficient over the bonded set (ascending Lorenz formula).
+    const n = tokens.length;
+    const asc = [...tokens].reverse();   // ascending
+    let sumCum = 0;
+    let runningTotal = 0;
+    for (const t of asc) { runningTotal += t; sumCum += runningTotal; }
+    const gini = (totalBonded > 0 && n > 0) ? (n + 1 - 2 * sumCum / totalBonded) / n : 0;
+
+    // APR: inflation / percent_staked * (1 - community_tax). Most networks
+    // have community_tax = 0, but we account for it just in case.
+    const inflation = Number(mintParams.inflation);
+    const commTax   = Number(distParams.params.community_tax);
+    const stakingApr = percentStaked > 0
+        ? (inflation / (percentStaked / 100)) * (1 - commTax) * 100
+        : 0;
+
+    return {
+        total_supply_uluna:     totalSupplyU,
+        total_supply_luna:      totalSupplyU / 1e6,
+        bonded_tokens_uluna:    bondedU,
+        bonded_tokens_luna:     bondedU / 1e6,
+        not_bonded_tokens_luna: notBondedU / 1e6,
+        percent_staked:         percentStaked,
+        inflation:              inflation,
+        community_tax:          commTax,
+        staking_apr:            stakingApr,
+        gini:                   gini,
+        nakamoto_index:         nakamoto,
+        active_validators:      n,
+        top_5_voting_power_pct: top5,
+        // Full validator list — captured for future re-analysis (top-N drift,
+        // commission changes, etc.). Trimmed to essentials to keep size down.
+        validators: validators.validators.map(v => ({
+            operator_address: v.operator_address,
+            moniker:          v.description?.moniker || '',
+            tokens:           Number(v.tokens),
+            commission_rate:  Number(v.commission?.commission_rates?.rate || 0),
+            jailed:           v.jailed,
+            status:           v.status,
+        })),
+        latest_block_height:    Number(block.block.header.height),
+        latest_block_time:      block.block.header.time,
+    };
+}
+
+// --- Source 2: CoinGecko ----------------------------------------------------
+async function _fetchLunaMarketFromCoinGecko() {
+    const r = await fetch(COINGECKO_LUNA, { cache: 'no-store' });
+    if (!r.ok) throw new Error(`CoinGecko → HTTP ${r.status}`);
+    const data = await r.json();
+    const md = data.market_data || {};
+    return {
+        usd_price:            md.current_price?.usd ?? null,
+        usd_market_cap:       md.market_cap?.usd ?? null,
+        usd_fdv:              md.fully_diluted_valuation?.usd ?? null,
+        circulating_supply:   md.circulating_supply ?? null,
+        price_change_pct_24h: md.price_change_percentage_24h ?? null,
+        price_change_pct_7d:  md.price_change_percentage_7d ?? null,
+        price_change_pct_30d: md.price_change_percentage_30d ?? null,
+    };
 }
 
 function checkStaleAprData(dateStr) {
@@ -2916,10 +3085,24 @@ function initLstRatiosTab() {
         if (sri) sri.value = Number(store.lstRatios.stakingRatio).toFixed(2);
         const srs = $('staking-ratio-status');
         if (srs && store.terraNetworkStats) {
-            const ts = store.terraNetworkStats?.coinStat?.recentBlockTime
+            // New blob shape: top-level fetched_at + sources object.
+            // Old SmartStake shape (coinStat.recentBlockTime) handled as fallback
+            // for stores saved before the LCD+CoinGecko pivot.
+            const ts = store.terraNetworkStats?.fetched_at
+                    || store.terraNetworkStats?.coinStat?.recentBlockTime
                     || store.terraNetworkStatsFetchedAt
                     || '';
-            srs.textContent = `✓ SmartStake · ${ts.slice(0, 16).replace('T', ' ')} UTC`;
+            const srcs = store.terraNetworkStats?.sources;
+            let label = '✓ saved';
+            if (srcs) {
+                const ok = [];
+                if (srcs.lcd?.ok)       ok.push('LCD');
+                if (srcs.coingecko?.ok) ok.push('CoinGecko');
+                if (ok.length) label = `✓ ${ok.join(' + ')}`;
+            } else if (store.terraNetworkStats?.coinStat) {
+                label = '✓ SmartStake (legacy)';
+            }
+            srs.textContent = `${label} · ${ts.slice(0, 16).replace('T', ' ')} UTC`;
             srs.className = 'text-[9px] text-green-400 mt-1';
         } else if (srs) {
             srs.textContent = 'Source: manual';
