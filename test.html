@@ -1708,14 +1708,25 @@ let store = {
     mode: 'staging', // 'staging' or 'normal'
     lpRegistry: {},  // keyed "{lp}|{dex}" → { lp, dex, bucket, vote_pct, vp_amount, depth, active, single }
     votion: { lockups: [], ratioArb: null, ratioAmp: null },
-    // Comprehensive LST ratios and APYs - all start empty
+    // Comprehensive LST ratios and APYs. Each entry tracks:
+    //   ratio          — current exchange rate (LST → base asset)
+    //   base           — base asset symbol
+    //   apy            — compound APY %, auto-computed from exchange_rates history (Eris vaults)
+    //   apr            — linear APR % from same history; null for non-Eris LSTs
+    //   apyWindowDays  — span of the snapshot window used for the computation
+    //   apyStale       — true if newest snapshot is >30 days old (vault likely paused)
+    //   apySource      — 'eris_exchange_rates' for auto-fetched, null for manual entry
+    //   updated        — ISO timestamp of last ratio fetch
+    //
+    // Auto-APY coverage: ampLUNA, ampROAR, ampCAPA (all Eris-managed vaults).
+    // Manual-only: arbLUNA (pending HAR), bLUNA (skipped), xASTRO (skipped — emissions-based).
     lstRatios: {
-        ampLUNA: { ratio: null, base: 'LUNA', apy: null, updated: null },
-        arbLUNA: { ratio: null, base: 'LUNA', apy: null, updated: null },
-        bLUNA: { ratio: null, base: 'LUNA', apy: null, updated: null }, // bLUNA doesn't show APY on BBL
-        ampCAPA: { ratio: null, base: 'CAPA', apy: null, updated: null },
-        ampROAR: { ratio: null, base: 'ROAR', apy: null, updated: null },
-        xASTRO: { ratio: null, base: 'ASTRO', apy: null, updated: null },
+        ampLUNA: { ratio: null, base: 'LUNA', apy: null, apr: null, apyWindowDays: null, apyStale: false, apySource: null, updated: null },
+        arbLUNA: { ratio: null, base: 'LUNA', apy: null, apr: null, apyWindowDays: null, apyStale: false, apySource: null, updated: null },
+        bLUNA:   { ratio: null, base: 'LUNA', apy: null, apr: null, apyWindowDays: null, apyStale: false, apySource: null, updated: null }, // bLUNA doesn't show APY on BBL
+        ampCAPA: { ratio: null, base: 'CAPA', apy: null, apr: null, apyWindowDays: null, apyStale: false, apySource: null, updated: null },
+        ampROAR: { ratio: null, base: 'ROAR', apy: null, apr: null, apyWindowDays: null, apyStale: false, apySource: null, updated: null },
+        xASTRO:  { ratio: null, base: 'ASTRO', apy: null, apr: null, apyWindowDays: null, apyStale: false, apySource: null, updated: null },
         chainStakingApr: null,
         chainStakingAprDate: null,
         stakingRatio: null,           // % of supply staked (derived: bonded_tokens ÷ total_supply via Terra LCD)
@@ -1774,31 +1785,54 @@ const PD_BRIBES_GITHUB_URL = GITHUB_BASE + 'tla_pd_bribes.json';
 const STAKING_APR_CSV_URL = 'https://raw.githubusercontent.com/defipatriot/tla-ext_json_storage/main/Staking%20APR.csv';
 
 // LST Hub Contracts for auto-fetching ratios - WORKING CONFIG
+// `apySource` indicates which contracts expose an `exchange_rates` history that
+// lets us compute APR/APY client-side (rate-of-change over snapshot window).
+//
+// Coverage status:
+//   ✅ ampLUNA — exchange_rates from Eris hub (also used for ratio)
+//                Response shape: [[ts_int, "rate"], ...]
+//   ✅ ampROAR — exchange_rates from Eris hub (separate call from ratio)
+//                Response shape: [[ts_int, "rate"], ...]
+//   ✅ ampCAPA — exchange_rates from Eris hub. Data may go stale if vault paused
+//                — stale flag is captured in store/export, not treated as error.
+//                Response shape: [[ts_int, "rate"], ...]
+//   ✅ arbLUNA — exchange_rates from Eris arb-vault hub. Different response
+//                shape: [[block_height, {exchange_rate, time_s}], ...].
+//                Handler in _computeLstApyFromRates normalizes both shapes.
+//   ⏭️ bLUNA  — SKIPPED. Backbone Labs contract; historical APR not exposed via
+//                simple query. Their UI computes from offline indexer. Manual only.
+//   ⏭️ xASTRO — SKIPPED. Astroport governance; APY is emissions-based, not vault
+//                rate. Different math entirely. Manual only.
 const lstContracts = {
     ampLUNA: {
         hub: 'terra10788fkzah89xrdm27zkj5yvhj9x3494lxawzm5qq3vvxcqz2yzaqyd3enk',
         query: 'exchange_rates',
-        parse: (data) => parseFloat(data?.data?.exchange_rates?.[0]?.[1] || 0)
+        parse: (data) => parseFloat(data?.data?.exchange_rates?.[0]?.[1] || 0),
+        apySource: 'eris_exchange_rates',
     },
     arbLUNA: {
         hub: 'terra1r9gls56glvuc4jedsvc3uwh6vj95mqm9efc7hnweqxa2nlme5cyqxygy5m',
         query: 'state',
-        parse: (data) => parseFloat(data?.data?.exchange_rate || 0)
+        parse: (data) => parseFloat(data?.data?.exchange_rate || 0),
+        apySource: 'eris_exchange_rates',   // HAR-verified — uses nested shape (handler normalizes)
     },
     ampROAR: {
         hub: 'terra1vklefn7n6cchn0u962w3gaszr4vf52wjvd4y95t2sydwpmpdtszsqvk9wy',
         query: 'state',
-        parse: (data) => parseFloat(data?.data?.exchange_rate || 0)
+        parse: (data) => parseFloat(data?.data?.exchange_rate || 0),
+        apySource: 'eris_exchange_rates',
     },
     ampCAPA: {
         hub: 'terra186rpfczl7l2kugdsqqedegl4es4hp624phfc7ddy8my02a4e8lgq5rlx7y',
         query: 'state',
-        parse: (data) => parseFloat(data?.data?.exchange_rate || 0)
+        parse: (data) => parseFloat(data?.data?.exchange_rate || 0),
+        apySource: 'eris_exchange_rates',
     },
     bLUNA: {
         hub: 'terra1l2nd99yze5fszmhl5svyh5fky9wm4nz4etlgnztfu4e8809gd52q04n3ea',
         query: 'state',
-        parse: (data) => parseFloat(data?.data?.exchange_rate || 0)
+        parse: (data) => parseFloat(data?.data?.exchange_rate || 0),
+        apySource: null,   // skipped per request — manual only
     }
 };
 
@@ -3108,6 +3142,62 @@ function checkStaleAprData(dateStr) {
 }
 
 // Fetch all LST ratios from chain - WORKING VERSION
+// Compute LST APR/APY from an exchange_rates history.
+// Input: array of snapshots, newest first. Two shapes supported (both from Eris):
+//   Shape A (amp* vaults):   [[unix_timestamp, "rate_string"], ...]
+//   Shape B (arb vault):     [[block_height,   { exchange_rate: "...", time_s: <ts> }], ...]
+// Output: { apr, apy, windowDays, stale } or null if insufficient data.
+//
+// Math:
+//   - APR (linear):   (r_new/r_old - 1) × (year_sec / span_sec) × 100
+//   - APY (compound): ((r_new/r_old) ^ (year_sec/span_sec) - 1) × 100
+//
+// We use the full span (oldest → newest of the returned window) instead of just
+// adjacent points, because exchange rates are pushed irregularly (whenever the
+// protocol calls `harvest`), so adjacent snapshots can be minutes apart and
+// produce wildly noisy short-window rates.
+//
+// Stale detection: if the newest snapshot is older than 30 days, the vault is
+// likely paused/inactive — flag but still return the computed historical APY.
+function _computeLstApyFromRates(rates) {
+    if (!Array.isArray(rates) || rates.length < 2) return null;
+
+    // Normalize both shapes into { ts, rate } pairs.
+    const _extract = (entry) => {
+        if (!Array.isArray(entry) || entry.length < 2) return null;
+        const [first, second] = entry;
+        if (typeof second === 'string' || typeof second === 'number') {
+            // Shape A: [timestamp, rate_string]
+            return { ts: Number(first), rate: parseFloat(second) };
+        }
+        if (second && typeof second === 'object') {
+            // Shape B: [block_height, { exchange_rate, time_s }]
+            return { ts: Number(second.time_s), rate: parseFloat(second.exchange_rate) };
+        }
+        return null;
+    };
+
+    const newest = _extract(rates[0]);
+    const oldest = _extract(rates[rates.length - 1]);
+    if (!newest || !oldest) return null;
+
+    const spanSec = newest.ts - oldest.ts;
+    if (!Number.isFinite(spanSec) || spanSec <= 0) return null;
+    if (!Number.isFinite(newest.rate) || !Number.isFinite(oldest.rate)) return null;
+    if (newest.rate <= 0 || oldest.rate <= 0) return null;
+
+    const yearSec = 365.25 * 86400;
+    const apr = (newest.rate / oldest.rate - 1) * (yearSec / spanSec) * 100;
+    const apy = (Math.pow(newest.rate / oldest.rate, yearSec / spanSec) - 1) * 100;
+    const windowDays = spanSec / 86400;
+
+    // Stale if newest snapshot > 30 days old
+    const nowSec = Math.floor(Date.now() / 1000);
+    const stale = (nowSec - newest.ts) > 30 * 86400;
+
+    return { apr, apy, windowDays, stale };
+}
+
 async function fetchAllLstRatiosFromChain() {
     const tokens = ['ampLUNA', 'arbLUNA', 'bLUNA', 'ampROAR', 'ampCAPA'];
     
@@ -3138,7 +3228,44 @@ async function fetchAllLstRatiosFromChain() {
                 // Update store
                 store.lstRatios[token].ratio = rate;
                 store.lstRatios[token].updated = new Date().toISOString();
-                
+
+                // Compute APY for Eris-managed vaults (config.apySource === 'eris_exchange_rates').
+                // The exchange_rates query was either already used to fetch the ratio (ampLUNA)
+                // or needs a separate call (ampROAR/ampCAPA). Failure here is non-fatal —
+                // ratio still succeeds, APY just stays manual.
+                if (config.apySource === 'eris_exchange_rates') {
+                    try {
+                        let rates;
+                        if (config.query === 'exchange_rates') {
+                            // Already have the history from the ratio query.
+                            rates = data?.data?.exchange_rates;
+                        } else {
+                            // Need a second call.
+                            const histQuery = btoa(JSON.stringify({ exchange_rates: { limit: 14 } }));
+                            const histUrl = `https://terra.publicnode.com/cosmwasm/wasm/v1/contract/${config.hub}/smart/${histQuery}`;
+                            const histRes = await fetch(histUrl);
+                            if (!histRes.ok) throw new Error(`exchange_rates query HTTP ${histRes.status}`);
+                            const histData = await histRes.json();
+                            rates = histData?.data?.exchange_rates;
+                        }
+
+                        const apyResult = _computeLstApyFromRates(rates);
+                        if (apyResult) {
+                            store.lstRatios[token].apy            = apyResult.apy;     // compound APY — the "real" number
+                            store.lstRatios[token].apr            = apyResult.apr;     // linear APR — comparable across protocols
+                            store.lstRatios[token].apyWindowDays  = apyResult.windowDays;
+                            store.lstRatios[token].apyStale       = apyResult.stale;
+                            store.lstRatios[token].apySource      = 'eris_exchange_rates';
+
+                            const apyEl = $(`lst-apy-${token}`);
+                            if (apyEl) apyEl.value = apyResult.apy.toFixed(2);
+                            console.log(`  ↳ ${token} APY: ${apyResult.apy.toFixed(2)}% (APR ${apyResult.apr.toFixed(2)}%, ${apyResult.windowDays.toFixed(1)}d window${apyResult.stale ? ', STALE' : ''})`);
+                        }
+                    } catch (apyErr) {
+                        console.warn(`  ↳ ${token} APY compute failed:`, apyErr.message);
+                    }
+                }
+
                 // Update UI
                 const inputEl = $(`lst-ratio-${token}`);
                 const statusEl = $(`lst-status-${token}`);
