@@ -2734,7 +2734,10 @@ async function fetchTerraNetworkStats() {
         percent_staked:         lcd?.percent_staked ?? null,
         inflation:              lcd?.inflation ?? null,
         community_tax:          lcd?.community_tax ?? null,
+        annual_provisions_uluna: lcd?.annual_provisions_uluna ?? null,
         staking_apr:            lcd?.staking_apr ?? null,
+        staking_apy_weekly:     lcd?.staking_apy_weekly ?? null,
+        staking_apy_daily:      lcd?.staking_apy_daily ?? null,
         gini:                   lcd?.gini ?? null,
         nakamoto_index:         lcd?.nakamoto_index ?? null,
         active_validators:      lcd?.active_validators ?? null,
@@ -2784,6 +2787,7 @@ async function fetchTerraNetworkStats() {
     if (failedLabels.length) console.log('  Failed:         ', failedLabels.join(', '));
     if (blob.percent_staked != null) console.log(`  Percent Staked: ${blob.percent_staked.toFixed(2)}%`);
     if (blob.staking_apr != null)    console.log(`  Staking APR:    ${blob.staking_apr.toFixed(4)}%`);
+    if (blob.staking_apy_weekly != null) console.log(`  Staking APY:    ${blob.staking_apy_weekly.toFixed(4)}% (weekly compound)`);
     if (blob.gini != null)           console.log(`  Gini:           ${blob.gini.toFixed(6)}`);
     if (blob.nakamoto_index != null) console.log(`  Nakamoto:       ${blob.nakamoto_index}`);
     if (blob.usd_price != null)      console.log(`  USD Price:      $${blob.usd_price}`);
@@ -2813,13 +2817,14 @@ async function _fetchTerraStatsFromLcd() {
         return r.json();
     };
 
-    const [supply, pool, validators, mintParams, distParams, block] = await Promise.all([
+    const [supply, pool, validators, mintParams, distParams, block, annualProv] = await Promise.all([
         _q('/cosmos/bank/v1beta1/supply/by_denom?denom=uluna'),
         _q('/cosmos/staking/v1beta1/pool'),
         _q('/cosmos/staking/v1beta1/validators?status=BOND_STATUS_BONDED&pagination.limit=500'),
         _q('/cosmos/mint/v1beta1/inflation'),
         _q('/cosmos/distribution/v1beta1/params'),
         _q('/cosmos/base/tendermint/v1beta1/blocks/latest'),
+        _q('/cosmos/mint/v1beta1/annual_provisions'),
     ]);
 
     // Supply & stake (u-LUNA in chain, ÷1e6 for display LUNA).
@@ -2855,12 +2860,28 @@ async function _fetchTerraStatsFromLcd() {
     for (const t of asc) { runningTotal += t; sumCum += runningTotal; }
     const gini = (totalBonded > 0 && n > 0) ? (n + 1 - 2 * sumCum / totalBonded) / n : 0;
 
-    // APR: inflation / percent_staked * (1 - community_tax). Most networks
-    // have community_tax = 0, but we account for it just in case.
-    const inflation = Number(mintParams.inflation);
-    const commTax   = Number(distParams.params.community_tax);
-    const stakingApr = percentStaked > 0
-        ? (inflation / (percentStaked / 100)) * (1 - commTax) * 100
+    // APR — Method 2: annual_provisions ÷ bonded × (1 − community_tax).
+    // More accurate than the older "inflation ÷ percent_staked" formula because
+    // it uses the chain's actual annual mint rate (which already accounts for
+    // any inflation drift since the last bonded snapshot), instead of deriving
+    // it from two independently-fetched values. The difference is usually small
+    // (≤0.1%) but matters for end-of-epoch precision.
+    //
+    // APY (weekly compound) reflects what a delegator actually earns when they
+    // re-delegate rewards weekly, which is what most Cosmos delegators do.
+    // APY (daily compound) is included for parity with restaking services.
+    const inflation       = Number(mintParams.inflation);
+    const commTax         = Number(distParams.params.community_tax);
+    const annualProvU     = Number(annualProv.annual_provisions);   // u-LUNA minted per year
+    const stakingApr      = bondedU > 0
+        ? (annualProvU / bondedU) * (1 - commTax) * 100
+        : 0;
+    const aprDecimal      = stakingApr / 100;
+    const stakingApyWeekly = stakingApr > 0
+        ? (Math.pow(1 + aprDecimal / 52, 52) - 1) * 100
+        : 0;
+    const stakingApyDaily  = stakingApr > 0
+        ? (Math.pow(1 + aprDecimal / 365, 365) - 1) * 100
         : 0;
 
     return {
@@ -2872,7 +2893,10 @@ async function _fetchTerraStatsFromLcd() {
         percent_staked:         percentStaked,
         inflation:              inflation,
         community_tax:          commTax,
+        annual_provisions_uluna: annualProvU,
         staking_apr:            stakingApr,
+        staking_apy_weekly:     stakingApyWeekly,
+        staking_apy_daily:      stakingApyDaily,
         gini:                   gini,
         nakamoto_index:         nakamoto,
         active_validators:      n,
@@ -2950,6 +2974,8 @@ function _renderTerraStatsPanel(blob) {
         ['Not Bonded',            fmtNum(blob.not_bonded_tokens_luna) + ' LUNA', 'LCD'],
         ['Percent Staked',        fmtPct(blob.percent_staked),        'LCD'],
         ['Staking APR',           fmtPct(blob.staking_apr, 4),        'LCD'],
+        ['Staking APY (weekly)',  fmtPct(blob.staking_apy_weekly, 4), 'LCD'],
+        ['Staking APY (daily)',   fmtPct(blob.staking_apy_daily, 4),  'LCD'],
         ['Inflation',             fmtPct(blob.inflation == null ? null : blob.inflation * 100), 'LCD'],
         ['Community Tax',         fmtPct(blob.community_tax == null ? null : blob.community_tax * 100, 4), 'LCD'],
         ['Gini Coefficient',      blob.gini == null ? '—' : blob.gini.toFixed(6), 'LCD'],
