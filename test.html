@@ -388,8 +388,8 @@
             <div class="col-span-2 bg-[#0D0D0D] rounded-lg p-3 border border-gray-800">
                 <div class="text-[9px] text-gray-500 uppercase font-bold mb-2">Auto-Fetch Info</div>
                 <div class="text-[10px] text-gray-400 space-y-1">
-                    <p><span class="text-green-400">✓ Auto-Fetch:</span> ampLUNA, arbLUNA, bLUNA, ampROAR, ampCAPA (from chain contracts)</p>
-                    <p><span class="text-blue-400">Manual:</span> xASTRO ratio + all APYs (paste from Eris/Astroport)</p>
+                    <p><span class="text-green-400">✓ Auto-Fetch:</span> ampLUNA, arbLUNA, bLUNA, ampROAR, ampCAPA, xASTRO (chain + Astroport TRPC)</p>
+                    <p><span class="text-blue-400">Manual:</span> APYs where not auto-detected (bLUNA only currently)</p>
                     <p><span class="text-yellow-400">Staking APR:</span> Download CSV from Smart Stake → Upload to GitHub</p>
                     <p><span class="text-yellow-400">Staking Ratio:</span> Auto-fetch from Terra LCD + CoinGecko; full network-stats blob captured to epoch file</p>
                 </div>
@@ -1709,24 +1709,26 @@ let store = {
     lpRegistry: {},  // keyed "{lp}|{dex}" → { lp, dex, bucket, vote_pct, vp_amount, depth, active, single }
     votion: { lockups: [], ratioArb: null, ratioAmp: null },
     // Comprehensive LST ratios and APYs. Each entry tracks:
-    //   ratio          — current exchange rate (LST → base asset)
+    //   ratio          — current exchange rate (LST → base asset); manual for xASTRO
     //   base           — base asset symbol
-    //   apy            — compound APY %, auto-computed from exchange_rates history (Eris vaults)
-    //   apr            — linear APR % from same history; null for non-Eris LSTs
-    //   apyWindowDays  — span of the snapshot window used for the computation
-    //   apyStale       — true if newest snapshot is >30 days old (vault likely paused)
-    //   apySource      — 'eris_exchange_rates' for auto-fetched, null for manual entry
-    //   updated        — ISO timestamp of last ratio fetch
+    //   apy            — primary APY %. Eris vaults: compound APY from exchange_rates history.
+    //                    xASTRO: week APY from Astroport TRPC endpoint.
+    //   apr            — primary APR %. Eris: linear from history. xASTRO: week APR.
+    //   apyDay/aprDay  — additional day-window numbers for xASTRO (Astroport supplies both)
+    //   apyWindowDays  — span of the snapshot window (Eris) or 7 (xASTRO week metric)
+    //   apyStale       — true if newest snapshot is >30 days old (Eris vaults that paused)
+    //   apySource      — 'eris_exchange_rates' | 'astroport_trpc_staking_apy' | null (manual)
+    //   updated        — ISO timestamp of last fetch
     //
-    // Auto-APY coverage: ampLUNA, ampROAR, ampCAPA (all Eris-managed vaults).
-    // Manual-only: arbLUNA (pending HAR), bLUNA (skipped), xASTRO (skipped — emissions-based).
+    // Auto-APY coverage: ampLUNA, ampROAR, ampCAPA, arbLUNA, xASTRO.
+    // Manual-only: bLUNA (Backbone Labs — no on-chain history query).
     lstRatios: {
-        ampLUNA: { ratio: null, base: 'LUNA', apy: null, apr: null, apyWindowDays: null, apyStale: false, apySource: null, updated: null },
-        arbLUNA: { ratio: null, base: 'LUNA', apy: null, apr: null, apyWindowDays: null, apyStale: false, apySource: null, updated: null },
-        bLUNA:   { ratio: null, base: 'LUNA', apy: null, apr: null, apyWindowDays: null, apyStale: false, apySource: null, updated: null }, // bLUNA doesn't show APY on BBL
-        ampCAPA: { ratio: null, base: 'CAPA', apy: null, apr: null, apyWindowDays: null, apyStale: false, apySource: null, updated: null },
-        ampROAR: { ratio: null, base: 'ROAR', apy: null, apr: null, apyWindowDays: null, apyStale: false, apySource: null, updated: null },
-        xASTRO:  { ratio: null, base: 'ASTRO', apy: null, apr: null, apyWindowDays: null, apyStale: false, apySource: null, updated: null },
+        ampLUNA: { ratio: null, base: 'LUNA', apy: null, apr: null, apyDay: null, aprDay: null, apyWindowDays: null, apyStale: false, apySource: null, updated: null },
+        arbLUNA: { ratio: null, base: 'LUNA', apy: null, apr: null, apyDay: null, aprDay: null, apyWindowDays: null, apyStale: false, apySource: null, updated: null },
+        bLUNA:   { ratio: null, base: 'LUNA', apy: null, apr: null, apyDay: null, aprDay: null, apyWindowDays: null, apyStale: false, apySource: null, updated: null }, // bLUNA doesn't show APY on BBL
+        ampCAPA: { ratio: null, base: 'CAPA', apy: null, apr: null, apyDay: null, aprDay: null, apyWindowDays: null, apyStale: false, apySource: null, updated: null },
+        ampROAR: { ratio: null, base: 'ROAR', apy: null, apr: null, apyDay: null, aprDay: null, apyWindowDays: null, apyStale: false, apySource: null, updated: null },
+        xASTRO:  { ratio: null, base: 'ASTRO', apy: null, apr: null, apyDay: null, aprDay: null, apyWindowDays: null, apyStale: false, apySource: null, updated: null },
         chainStakingApr: null,
         chainStakingAprDate: null,
         stakingRatio: null,           // % of supply staked (derived: bonded_tokens ÷ total_supply via Terra LCD)
@@ -1785,24 +1787,26 @@ const PD_BRIBES_GITHUB_URL = GITHUB_BASE + 'tla_pd_bribes.json';
 const STAKING_APR_CSV_URL = 'https://raw.githubusercontent.com/defipatriot/tla-ext_json_storage/main/Staking%20APR.csv';
 
 // LST Hub Contracts for auto-fetching ratios - WORKING CONFIG
-// `apySource` indicates which contracts expose an `exchange_rates` history that
-// lets us compute APR/APY client-side (rate-of-change over snapshot window).
+// `apySource` indicates how APY/APR is auto-computed (if at all):
+//   'eris_exchange_rates'         — read history from Eris hub, derive rate-of-change
+//   'astroport_trpc_staking_apy'  — Astroport's pre-computed TRPC endpoint
+//   null                          — manual entry only
 //
 // Coverage status:
-//   ✅ ampLUNA — exchange_rates from Eris hub (also used for ratio)
-//                Response shape: [[ts_int, "rate"], ...]
-//   ✅ ampROAR — exchange_rates from Eris hub (separate call from ratio)
-//                Response shape: [[ts_int, "rate"], ...]
-//   ✅ ampCAPA — exchange_rates from Eris hub. Data may go stale if vault paused
-//                — stale flag is captured in store/export, not treated as error.
-//                Response shape: [[ts_int, "rate"], ...]
-//   ✅ arbLUNA — exchange_rates from Eris arb-vault hub. Different response
-//                shape: [[block_height, {exchange_rate, time_s}], ...].
-//                Handler in _computeLstApyFromRates normalizes both shapes.
+//   ✅ ampLUNA — Eris hub. Response shape: [[ts_int, "rate"], ...]
+//   ✅ ampROAR — Eris hub. Response shape: [[ts_int, "rate"], ...]
+//   ✅ ampCAPA — Eris hub. Same shape; data may go stale if vault paused
+//                (stale flag is captured in store/export, not treated as error).
+//   ✅ arbLUNA — Eris arb-vault hub. Nested response shape:
+//                [[block_height, {exchange_rate, time_s}], ...].
+//                _computeLstApyFromRates normalizes both Eris shapes.
+//   ✅ xASTRO  — Astroport TRPC `protocol.stakingApy` for APR/APY (pre-computed
+//                day + week), plus `tokens.getPrice` for both ASTRO and xASTRO
+//                USD prices; ratio is derived as `xASTRO_price / ASTRO_price`.
+//                All three TRPC calls run in parallel. Ratio plugs into the
+//                existing CALCULATED_TOKENS price-derivation logic.
 //   ⏭️ bLUNA  — SKIPPED. Backbone Labs contract; historical APR not exposed via
 //                simple query. Their UI computes from offline indexer. Manual only.
-//   ⏭️ xASTRO — SKIPPED. Astroport governance; APY is emissions-based, not vault
-//                rate. Different math entirely. Manual only.
 const lstContracts = {
     ampLUNA: {
         hub: 'terra10788fkzah89xrdm27zkj5yvhj9x3494lxawzm5qq3vvxcqz2yzaqyd3enk',
@@ -1832,8 +1836,17 @@ const lstContracts = {
         hub: 'terra1l2nd99yze5fszmhl5svyh5fky9wm4nz4etlgnztfu4e8809gd52q04n3ea',
         query: 'state',
         parse: (data) => parseFloat(data?.data?.exchange_rate || 0),
-        apySource: null,   // skipped per request — manual only
-    }
+        apySource: null,   // skipped — manual only
+    },
+    // xASTRO uses Astroport's TRPC endpoints (no Eris-style hub query). APY/APR
+    // come pre-computed; ratio is derived from two parallel `tokens.getPrice` calls
+    // (xASTRO_USD ÷ ASTRO_USD). _fetchXastroApyFromAstroport handles all three calls.
+    xASTRO: {
+        hub: null,
+        query: null,
+        parse: null,
+        apySource: 'astroport_trpc_staking_apy',
+    },
 };
 
 // Epoch calculation constants
@@ -3198,8 +3211,87 @@ function _computeLstApyFromRates(rates) {
     return { apr, apy, windowDays, stale };
 }
 
+// Astroport TRPC endpoints serve pre-computed xASTRO data:
+//
+//   1. protocol.stakingApy  → day/week APR & APY (fee-based yield, % units)
+//   2. tokens.getPrice      → USD price of any token by denom
+//                              We call this for both ASTRO and xASTRO; the ratio is
+//                              `xASTRO_price / ASTRO_price`, which is the same number
+//                              the in-app "1 xASTRO = X ASTRO" widget shows.
+//                              Cleaner than going through the Neutron staking contract
+//                              (which has no public address in the Astroport docs and
+//                              would require its own LCD allowlist + query schema).
+//
+// xASTRO migrated to Neutron tokenfactory denoms in 2024; both endpoints use
+// chainId='neutron-1'. The HAR confirms CORS works direct from the browser.
+//
+// IMPORTANT: stakingApy values are in PERCENT units (e.g. 0.147 = 0.147%, not 14.7%).
+// xASTRO yields are intentionally low — they come from protocol fees, not emissions.
+const ASTRO_DENOM_NEUTRON  = 'factory/neutron1ffus553eet978k024lmssw0czsxwr97mggyv85lpcsdkft8v9ufsz3sa07/astro';
+const XASTRO_DENOM_NEUTRON = 'factory/neutron1zlf3hutsa4qnmue53lz2tfxrutp8y2e3rj4nkghg3rupgl4mqy8s5jgxsn/xASTRO';
+
+async function _fetchXastroApyFromAstroport() {
+    const apyInput   = encodeURIComponent(JSON.stringify({ json: { chainId: 'neutron-1' } }));
+    const astroInput = encodeURIComponent(JSON.stringify({ json: { chainId: 'neutron-1', tokenAddress: ASTRO_DENOM_NEUTRON } }));
+    const xastroInput= encodeURIComponent(JSON.stringify({ json: { chainId: 'neutron-1', tokenAddress: XASTRO_DENOM_NEUTRON } }));
+
+    const apyUrl    = `https://app.astroport.fi/api/trpc/protocol.stakingApy?input=${apyInput}`;
+    const astroUrl  = `https://app.astroport.fi/api/trpc/tokens.getPrice?input=${astroInput}`;
+    const xastroUrl = `https://app.astroport.fi/api/trpc/tokens.getPrice?input=${xastroInput}`;
+
+    // Fire all three in parallel. Each failure handled independently — APY-only
+    // success is still useful (price-only success is too, but less aligned with
+    // the function's primary contract). Caller's status indicator surfaces gaps.
+    const [apyR, astroR, xastroR] = await Promise.allSettled([
+        fetch(apyUrl,    { cache: 'no-store', headers: { accept: '*/*' } }),
+        fetch(astroUrl,  { cache: 'no-store', headers: { accept: '*/*' } }),
+        fetch(xastroUrl, { cache: 'no-store', headers: { accept: '*/*' } }),
+    ]);
+
+    // Parse the APY response (primary; throw if missing — that's the headline).
+    if (apyR.status !== 'fulfilled' || !apyR.value.ok) {
+        throw new Error(`Astroport stakingApy ${apyR.status === 'fulfilled' ? 'HTTP ' + apyR.value.status : apyR.reason?.message || 'fetch failed'}`);
+    }
+    const apyBody = await apyR.value.json();
+    const apyData = apyBody?.result?.data?.json;
+    if (!apyData) throw new Error('Astroport stakingApy: empty payload');
+    const weekApy = Number(apyData.weekApy);
+    const weekApr = Number(apyData.weekApr);
+    const dayApy  = Number(apyData.dayApy);
+    const dayApr  = Number(apyData.dayApr);
+    if (![weekApy, weekApr, dayApy, dayApr].every(Number.isFinite)) {
+        throw new Error('Astroport stakingApy: malformed numbers');
+    }
+
+    // Parse the price responses (best-effort — don't throw on individual failure,
+    // ratio is omitted from the result if either side is missing).
+    const _parsePrice = async (settledResult) => {
+        if (settledResult.status !== 'fulfilled' || !settledResult.value.ok) return null;
+        try {
+            const body = await settledResult.value.json();
+            const p = Number(body?.result?.data?.json);
+            return Number.isFinite(p) && p > 0 ? p : null;
+        } catch { return null; }
+    };
+    const astroUsd  = await _parsePrice(astroR);
+    const xastroUsd = await _parsePrice(xastroR);
+    const ratio = (astroUsd && xastroUsd) ? (xastroUsd / astroUsd) : null;
+
+    return {
+        apr: weekApr,           // headline = week (smoother than day)
+        apy: weekApy,
+        dayApr,
+        dayApy,
+        // Optional price-derived ratio + the underlying USD prices for transparency.
+        ratio,
+        astroUsd,
+        xastroUsd,
+        updatedAt: apyData.updatedAt || apyData.blockTimestamp || null,
+    };
+}
+
 async function fetchAllLstRatiosFromChain() {
-    const tokens = ['ampLUNA', 'arbLUNA', 'bLUNA', 'ampROAR', 'ampCAPA'];
+    const tokens = ['ampLUNA', 'arbLUNA', 'bLUNA', 'ampROAR', 'ampCAPA', 'xASTRO'];
     
     // Set all to fetching
     tokens.forEach(token => {
@@ -3213,6 +3305,68 @@ async function fetchAllLstRatiosFromChain() {
     let successCount = 0;
     
     for (const [token, config] of Object.entries(lstContracts)) {
+        // xASTRO: no chain ratio fetch — APY comes from Astroport's TRPC endpoint.
+        // Ratio remains manual (xASTRO is a 1:1 fee-accruing receipt, not a rate-changing vault).
+        // Handle the entire fetch in a self-contained branch so the chain-query path
+        // below stays unchanged.
+        if (config.apySource === 'astroport_trpc_staking_apy') {
+            try {
+                const apyResult = await _fetchXastroApyFromAstroport();
+                if (apyResult) {
+                    store.lstRatios.xASTRO.apy           = apyResult.apy;           // week APY (the headline number)
+                    store.lstRatios.xASTRO.apr           = apyResult.apr;           // week APR
+                    store.lstRatios.xASTRO.apyDay        = apyResult.dayApy;        // also keep day numbers for completeness
+                    store.lstRatios.xASTRO.aprDay        = apyResult.dayApr;
+                    store.lstRatios.xASTRO.apyWindowDays = 7;                       // by definition (Astroport's week metric)
+                    store.lstRatios.xASTRO.apyStale      = false;
+                    store.lstRatios.xASTRO.apySource     = 'astroport_trpc_staking_apy';
+                    store.lstRatios.xASTRO.updated       = apyResult.updatedAt || new Date().toISOString();
+
+                    // Ratio (xASTRO → ASTRO) derived from the two parallel USD-price calls.
+                    // Same number Astroport's stake page shows. Plugs into the existing
+                    // CALCULATED_TOKENS price-derivation logic (price = basePrice × ratio).
+                    let ratioStatus = '';
+                    if (apyResult.ratio != null) {
+                        store.lstRatios.xASTRO.ratio = apyResult.ratio;
+                        const ratioInputEl = $(`lst-ratio-xASTRO`);
+                        if (ratioInputEl) ratioInputEl.value = apyResult.ratio.toFixed(4);
+                        ratioStatus = ` · ratio ${apyResult.ratio.toFixed(4)}`;
+                    } else {
+                        ratioStatus = ' · ratio: price fetch failed (enter manually)';
+                    }
+
+                    const apyEl = $(`lst-apy-xASTRO`);
+                    if (apyEl) apyEl.value = apyResult.apy.toFixed(4);
+
+                    const statusEl = $(`lst-status-xASTRO`);
+                    const cardEl   = $(`lst-card-xASTRO`);
+                    if (statusEl) {
+                        statusEl.textContent = `✓ APY ${apyResult.apy.toFixed(2)}%`;
+                        statusEl.className = 'text-[9px] px-2 py-0.5 rounded bg-green-900/50 text-green-400 flex-1 text-center';
+                    }
+                    if (cardEl) cardEl.className = 'bg-[#161616] rounded-lg p-3 border-2 border-green-700';
+
+                    console.log(`✅ xASTRO APY: ${apyResult.apy.toFixed(4)}% (week, APR ${apyResult.apr.toFixed(4)}%) · day: ${apyResult.dayApy.toFixed(4)}%${ratioStatus}`);
+                    successCount++;
+                } else {
+                    console.warn('❌ xASTRO APY: empty response from Astroport TRPC');
+                    const statusEl = $(`lst-status-xASTRO`);
+                    if (statusEl) {
+                        statusEl.textContent = '❌ failed';
+                        statusEl.className = 'text-[9px] px-2 py-0.5 rounded bg-red-900/50 text-red-400 flex-1 text-center';
+                    }
+                }
+            } catch (e) {
+                console.warn(`❌ xASTRO APY fetch failed:`, e.message);
+                const statusEl = $(`lst-status-xASTRO`);
+                if (statusEl) {
+                    statusEl.textContent = '❌ failed';
+                    statusEl.className = 'text-[9px] px-2 py-0.5 rounded bg-red-900/50 text-red-400 flex-1 text-center';
+                }
+            }
+            continue;   // skip the chain-query block below
+        }
+
         try {
             const queryObj = config.query === 'exchange_rates' ? { exchange_rates: {} } : { state: {} };
             const query = btoa(JSON.stringify(queryObj));
