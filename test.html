@@ -9487,15 +9487,27 @@ async function resolvePoolNames() {
         statusEl.textContent = `Resolving ${i + 1}/${pools.length}: ${pool.name}...`;
         
         try {
-            // Query Astroport pools.byAddress API
-            const url = `https://app.astroport.fi/api/trpc/pools.byAddress?input=${encodeURIComponent(JSON.stringify({
-                json: {
-                    chainId: ["phoenix-1"],
-                    address: pool.poolContract
-                }
+            // Query Astroport pools.byAddress API — via /api/astroport proxy to
+            // avoid intermittent CORS issues on this endpoint. Direct call is
+            // kept as fallback for environments without the proxy.
+            const trpcPath = `/api/trpc/pools.byAddress?input=${encodeURIComponent(JSON.stringify({
+                json: { chainId: ["phoenix-1"], address: pool.poolContract }
             }))}`;
+            const proxyUrl  = `/api/astroport?path=${encodeURIComponent(trpcPath)}`;
+            const directUrl = `https://app.astroport.fi${trpcPath}`;
             
-            const response = await fetch(url);
+            let response;
+            try {
+                response = await fetch(proxyUrl);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            } catch (proxyErr) {
+                // Astroport's `pools.byAddress` returns HTTP 500 ("Pool not found")
+                // for deprecated/dead pool addresses. Those genuinely fail through
+                // both paths — the resulting null poolInfo gets handled below
+                // and the pool ends up tagged as deprecated downstream.
+                console.warn(`[pools.byAddress] proxy failed for ${pool.name} (${proxyErr.message}), trying direct`);
+                response = await fetch(directUrl);
+            }
             if (!response.ok) {
                 console.warn(`Failed to resolve ${pool.name}: HTTP ${response.status}`);
                 failed++;
@@ -9928,10 +9940,29 @@ async function fetchAstroChartData(type, poolAddr, dateRange) {
         }
     };
     
-    const url = `https://app.astroport.fi/api/trpc/charts.${type}?input=${encodeURIComponent(JSON.stringify(input))}`;
+    const directUrl = `https://app.astroport.fi/api/trpc/charts.${type}?input=${encodeURIComponent(JSON.stringify(input))}`;
+    // Same-origin proxy path. The path query MUST keep its inner ? — the proxy
+    // forwards the whole "/api/trpc/...?input=..." string to upstream verbatim,
+    // and the existing chain of CORS proxies stays as a fallback if /api/astroport
+    // is unavailable (e.g. local file:// dev, or pre-deploy testing).
+    const proxyPath  = `/api/trpc/charts.${type}?input=${encodeURIComponent(JSON.stringify(input))}`;
+    const proxyUrl   = `/api/astroport?path=${encodeURIComponent(proxyPath)}`;
     
     try {
-        const resp = await fetchWithCorsProxy(url);
+        // Prefer the Vercel proxy — eliminates the intermittent CORS issues
+        // and HTTP-500-with-no-CORS-header behavior we've seen on this endpoint.
+        let resp;
+        try {
+            resp = await fetch(proxyUrl, { cache: 'no-store' });
+            if (!resp.ok) {
+                // Don't read body here — control flow falls through to fallback,
+                // which will eventually surface an error if both paths fail.
+                throw new Error(`HTTP ${resp.status}`);
+            }
+        } catch (proxyErr) {
+            console.warn(`[astroport ${type}] /api/astroport failed (${proxyErr.message}), falling back to public CORS chain`);
+            resp = await fetchWithCorsProxy(directUrl);
+        }
         if (!resp.ok) {
             const reason = `HTTP ${resp.status}`;
             console.warn(`Astroport ${type} ${poolAddr.substring(0,12)}: ${reason}`);
@@ -11022,7 +11053,11 @@ function buildDexPerformanceData(targetEpoch) {
         const dex = lpData.dex;
         const bucket = lpData.bucket;
         
-        // Initialize performance entry
+        // Initialize performance entry. `currentEpoch` is in-progress data (may
+        // have 0 volume early in an epoch — that's normal); `lastCompleteEpoch`
+        // is the most recent epoch with enough samples to be reliable. Analysts
+        // pick whichever they need. `deprecated` flag carries through when
+        // Astroport says "Pool not found" for a duplicate/dead pool address.
         const perfEntry = {
             lp: lpName,
             dex: dex,
@@ -11034,8 +11069,17 @@ function buildDexPerformanceData(targetEpoch) {
                 avgLiquidity: 0,
                 totalVolume: 0
             },
+            lastCompleteEpoch: {
+                epoch: null,
+                avgLiquidity: 0,
+                totalVolume: 0,
+                liqPointCount: 0,
+                volPointCount: 0
+            },
             avg4Epoch: null,
-            historical: {}
+            historical: {},
+            deprecated: false,
+            deprecatedReason: null
         };
         
         if (dex === 'Skeleton Swap') {
@@ -11085,27 +11129,59 @@ function buildDexPerformanceData(targetEpoch) {
             // best range that has actual data, since D90 can fail entirely)
             const d90Data = selectBestAstroRange(astroMultiRangeData, astroAutoData.epochData);
             
-            // Find pool by name (may need contract lookup)
+            // First pass: prefer non-deprecated, fall back to deprecated so we
+            // still surface the flag for dashboards/QA.
+            let matched = null;
+            let matchedContract = null;
             for (const [contract, poolData] of Object.entries(d90Data)) {
-                if (poolData.name === lpName && !poolData.deprecated) {
+                if (poolData.name === lpName) {
+                    matched = poolData;
+                    matchedContract = contract;
+                    if (!poolData.deprecated) break;
+                }
+            }
+            if (matched) {
+                if (matched.deprecated) {
+                    perfEntry.deprecated = true;
+                    perfEntry.deprecatedReason = matched.deprecatedReason || 'Pool marked deprecated by Astroport';
+                }
+                if (!matched.deprecated) {
                     // Collect historical epochs
-                    const allEpochs = poolData.epochs || {};
+                    const allEpochs = matched.epochs || {};
                     for (const [epStr, epData] of Object.entries(allEpochs)) {
                         const ep = parseInt(epStr);
                         const avgVol = epData.avgVolume || 0;
                         perfEntry.historical[ep] = {
                             avgLiquidity: epData.avgLiquidity || 0,
-                            totalVolume: avgVol * 7 // Convert avg to total
+                            totalVolume: avgVol * 7,           // Convert avg to total
+                            liqPointCount: epData.liqPointCount || 0,
+                            volPointCount: epData.volPointCount || 0
                         };
                     }
                     
-                    // Find latest epoch
+                    // Find latest epoch — populates currentEpoch (in-progress, possibly 0 volume)
                     const sortedEpochs = Object.keys(allEpochs).map(Number).sort((a, b) => b - a);
                     const latestEp = sortedEpochs[0];
                     if (latestEp && perfEntry.historical[latestEp]) {
                         perfEntry.currentEpoch.epoch = latestEp;
                         perfEntry.currentEpoch.avgLiquidity = perfEntry.historical[latestEp].avgLiquidity;
                         perfEntry.currentEpoch.totalVolume = perfEntry.historical[latestEp].totalVolume;
+                    }
+                    
+                    // lastCompleteEpoch — first epoch (newest → oldest) with volPointCount >= 5.
+                    // See export builder for rationale. Tab uses this for "headline" numbers.
+                    for (const ep of sortedEpochs) {
+                        const h = perfEntry.historical[ep];
+                        if (h && (h.volPointCount || 0) >= 5) {
+                            perfEntry.lastCompleteEpoch = {
+                                epoch: ep,
+                                avgLiquidity: h.avgLiquidity,
+                                totalVolume: h.totalVolume,
+                                liqPointCount: h.liqPointCount,
+                                volPointCount: h.volPointCount
+                            };
+                            break;
+                        }
                     }
                     
                     // Calculate 4-epoch average
@@ -11125,8 +11201,7 @@ function buildDexPerformanceData(targetEpoch) {
                         };
                     }
                     
-                    perfEntry.poolContract = contract;
-                    break;
+                    perfEntry.poolContract = matchedContract;
                 }
             }
         }
@@ -11473,10 +11548,26 @@ function buildDexPerformanceForExport(targetEpoch) {
             active: lpData.active !== false,
             registryDepth: lpData.depth || 0,
             
-            // Current epoch metrics
+            // In-progress current epoch metrics. Volume here can be 0/low if the
+            // epoch just started (Astroport's indexer aggregates volume hourly),
+            // which is normal — not a bug. Analysts who need a stable headline
+            // number should use `lastCompleteEpoch` instead.
             epochAvg: {
                 avgLiquidity: 0,
                 totalVolume: 0
+            },
+            
+            // Last fully-aggregated epoch — the most recent epoch with enough
+            // sample points to be considered stable (>=5 volume points). This is
+            // the field to use when you want a reliable headline number for an
+            // LP, e.g. when ranking pools by recent activity. epochAvg + this
+            // give analysts both "what's happening now" and "last reliable snapshot".
+            lastCompleteEpoch: {
+                epoch: null,
+                avgLiquidity: 0,
+                totalVolume: 0,
+                liqPointCount: 0,
+                volPointCount: 0
             },
             
             // Last 4 epochs average (uses 2, 3, or 4 epochs as available)
@@ -11485,7 +11576,15 @@ function buildDexPerformanceForExport(targetEpoch) {
                 totalVolume: 0,
                 epochsUsed: 0,
                 epochs: []
-            }
+            },
+            
+            // Marked true when Astroport returned "Pool not found" (i.e. an
+            // older duplicate of an active pool) or when the pool simply has
+            // no historical data we could fetch. The vote tab still references
+            // these because the gauge controller doesn't garbage-collect them,
+            // but they aren't meaningful for performance analysis.
+            deprecated: false,
+            deprecatedReason: null
         };
         
         if (dex === 'Skeleton Swap') {
@@ -11534,6 +11633,22 @@ function buildDexPerformanceForExport(targetEpoch) {
                 entry.epochAvg.totalVolume = currentData.totalVolume;
             }
             
+            // lastCompleteEpoch for SS: most recent epoch that isn't the
+            // in-progress targetEpoch. Skeleton Swap data points don't carry
+            // a sample-count (they're already pre-aggregated per epoch by SS's
+            // backend), so "epoch != current" is the best heuristic we have for
+            // "definitely complete".
+            const completePoint = historicalPoints.find(p => p.epoch !== targetEpoch);
+            if (completePoint) {
+                entry.lastCompleteEpoch = {
+                    epoch: completePoint.epoch,
+                    avgLiquidity: completePoint.avgLiquidity,
+                    totalVolume: completePoint.totalVolume,
+                    liqPointCount: null,   // SS source doesn't expose this
+                    volPointCount: null
+                };
+            }
+            
             // Calculate last 4 average (using whatever epochs are available)
             if (last4.length > 0) {
                 let totalLiq = 0, totalVol = 0;
@@ -11553,16 +11668,49 @@ function buildDexPerformanceForExport(targetEpoch) {
             // Get Astroport data from astroMultiRangeData (helper picks best range)
             const d90Data = selectBestAstroRange(astroMultiRangeData, astroAutoData?.epochData);
             
+            // First pass: find ANY pool entry by name (including deprecated ones)
+            // so we can carry the deprecated flag through to dex_performance.
+            let matched = null;
+            let matchedContract = null;
             for (const [contract, poolData] of Object.entries(d90Data)) {
-                if (poolData.name === lpName && !poolData.deprecated) {
-                    const allEpochs = poolData.epochs || {};
+                if (poolData.name === lpName) {
+                    matched = poolData;
+                    matchedContract = contract;
+                    if (!poolData.deprecated) break;   // prefer non-deprecated; keep searching if first hit is deprecated
+                }
+            }
+            if (matched) {
+                if (matched.deprecated) {
+                    entry.deprecated = true;
+                    entry.deprecatedReason = matched.deprecatedReason || 'Pool marked deprecated by Astroport';
+                }
+                if (!matched.deprecated) {
+                    const allEpochs = matched.epochs || {};
                     const sortedEpochs = Object.keys(allEpochs).map(Number).sort((a, b) => b - a);
                     
-                    // Current epoch data
+                    // epochAvg: in-progress current epoch (volume may be 0 if epoch just started — that's expected)
                     const latestEp = sortedEpochs[0];
                     if (latestEp && allEpochs[latestEp]) {
                         entry.epochAvg.avgLiquidity = allEpochs[latestEp].avgLiquidity || 0;
                         entry.epochAvg.totalVolume = (allEpochs[latestEp].avgVolume || 0) * 7;
+                    }
+                    
+                    // lastCompleteEpoch: first epoch (newest → oldest) with volPointCount >= 5.
+                    // 5 is the cutoff because Astroport's volume indexer aggregates roughly hourly;
+                    // ≥5 points means the epoch has been running long enough for volume to stabilize.
+                    // Falls back to the latest epoch if NONE meet the threshold (rare edge case).
+                    for (const ep of sortedEpochs) {
+                        const epData = allEpochs[ep];
+                        if (epData && (epData.volPointCount || 0) >= 5) {
+                            entry.lastCompleteEpoch = {
+                                epoch: ep,
+                                avgLiquidity: epData.avgLiquidity || 0,
+                                totalVolume: (epData.avgVolume || 0) * 7,
+                                liqPointCount: epData.liqPointCount || 0,
+                                volPointCount: epData.volPointCount || 0
+                            };
+                            break;
+                        }
                     }
                     
                     // Last 4 epochs average
@@ -11580,8 +11728,6 @@ function buildDexPerformanceForExport(targetEpoch) {
                             epochs: last4Epochs
                         };
                     }
-                    
-                    break;
                 }
             }
         }
