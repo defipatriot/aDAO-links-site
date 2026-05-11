@@ -396,8 +396,27 @@
             </div>
         </div>
     </div>
-    
-    <!-- LST Ratio Cards -->
+
+    <!-- Terra Stats Results Panel — collapsible, shown after a successful Fetch Terra Stats -->
+    <div id="terra-stats-panel" class="hidden bg-[#0D0D0D] rounded-lg p-4 mb-4 border border-yellow-900/50">
+        <div class="flex justify-between items-center mb-3">
+            <div class="flex items-center gap-2">
+                <i class="fas fa-check-circle text-green-400"></i>
+                <span class="text-yellow-400 text-[11px] font-bold uppercase">Terra Stats — Fetch Result</span>
+                <span id="terra-stats-panel-timestamp" class="text-[9px] text-gray-500"></span>
+            </div>
+            <button onclick="$('terra-stats-panel').classList.add('hidden')" class="text-[10px] text-gray-500 hover:text-gray-300 px-2 py-0.5 rounded cursor-pointer">
+                <i class="fas fa-times"></i> Close
+            </button>
+        </div>
+        <!-- Source status row -->
+        <div id="terra-stats-panel-sources" class="flex gap-2 mb-3 text-[10px]"></div>
+        <!-- Field grid: 3 columns of label/value rows -->
+        <div id="terra-stats-panel-grid" class="grid grid-cols-3 gap-x-4 gap-y-1 text-[10px]"></div>
+        <div class="text-[9px] text-gray-500 mt-3 pt-2 border-t border-gray-800">
+            Full blob (incl. 100-validator list) saved to <code class="text-yellow-400">store.terraNetworkStats</code> and exported in <code class="text-yellow-400">terra_network_stats</code> field of epoch JSON.
+        </div>
+    </div>
     <div class="grid grid-cols-3 gap-4 mb-4">
         <!-- ampLUNA - AUTO-FETCH -->
         <div id="lst-card-ampLUNA" class="bg-[#161616] rounded-lg p-3 border-2 border-gray-700">
@@ -2770,6 +2789,9 @@ async function fetchTerraNetworkStats() {
     if (blob.usd_price != null)      console.log(`  USD Price:      $${blob.usd_price}`);
     if (blob.usd_market_cap != null) console.log(`  USD Mcap:       $${blob.usd_market_cap.toLocaleString()}`);
 
+    // Render the results panel for at-a-glance verification.
+    _renderTerraStatsPanel(blob);
+
     updateLstCardStatus('stakingRatio');
     updateLstOverallStatus();
     updateWorkflowStatus();
@@ -2885,6 +2907,88 @@ async function _fetchLunaMarketFromCoinGecko() {
         price_change_pct_7d:  md.price_change_percentage_7d ?? null,
         price_change_pct_30d: md.price_change_percentage_30d ?? null,
     };
+}
+
+// --- Results panel renderer -------------------------------------------------
+// Pops open the verification panel after a successful fetch. Shows every field
+// with its computed value + which source produced it. User can close manually.
+function _renderTerraStatsPanel(blob) {
+    const panel  = $('terra-stats-panel');
+    const grid   = $('terra-stats-panel-grid');
+    const srcRow = $('terra-stats-panel-sources');
+    const tsEl   = $('terra-stats-panel-timestamp');
+    if (!panel || !grid || !srcRow) return;
+
+    // Helpers: format numbers consistently. Display "—" for nulls.
+    const fmtNum = (n, decimals = 0) =>
+        (n == null || !Number.isFinite(n)) ? '—'
+        : Number(n).toLocaleString(undefined, { maximumFractionDigits: decimals, minimumFractionDigits: decimals });
+    const fmtPct = (n, decimals = 2) =>
+        (n == null || !Number.isFinite(n)) ? '—' : `${Number(n).toFixed(decimals)}%`;
+    const fmtUsd = (n) =>
+        (n == null || !Number.isFinite(n)) ? '—' : `$${Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+    const fmtUsdK = (n) =>   // for large USD values (mcap, fdv) — no decimals
+        (n == null || !Number.isFinite(n)) ? '—' : `$${Math.round(Number(n)).toLocaleString()}`;
+
+    // Source-status pills.
+    const srcs = blob.sources || {};
+    const pill = (label, ok, err) => `
+        <span class="px-2 py-1 rounded ${ok ? 'bg-green-900/30 text-green-400 border border-green-900/50' : 'bg-red-900/30 text-red-400 border border-red-900/50'}">
+            ${ok ? '✓' : '✗'} ${label}${ok ? '' : (err ? ': ' + err.slice(0, 40) : '')}
+        </span>`;
+    srcRow.innerHTML =
+        pill('Terra LCD',  srcs.lcd?.ok,       srcs.lcd?.error) +
+        pill('CoinGecko',  srcs.coingecko?.ok, srcs.coingecko?.error);
+
+    tsEl.textContent = '· ' + (blob.fetched_at || '').slice(0, 19).replace('T', ' ') + ' UTC';
+
+    // Field rows. Each row: label, value, source-badge. Grouped by source for clarity.
+    const rows = [
+        // From Terra LCD
+        ['Total Supply',          fmtNum(blob.total_supply_luna)      + ' LUNA', 'LCD'],
+        ['Bonded (Staked)',       fmtNum(blob.bonded_tokens_luna)     + ' LUNA', 'LCD'],
+        ['Not Bonded',            fmtNum(blob.not_bonded_tokens_luna) + ' LUNA', 'LCD'],
+        ['Percent Staked',        fmtPct(blob.percent_staked),        'LCD'],
+        ['Staking APR',           fmtPct(blob.staking_apr, 4),        'LCD'],
+        ['Inflation',             fmtPct(blob.inflation == null ? null : blob.inflation * 100), 'LCD'],
+        ['Community Tax',         fmtPct(blob.community_tax == null ? null : blob.community_tax * 100, 4), 'LCD'],
+        ['Gini Coefficient',      blob.gini == null ? '—' : blob.gini.toFixed(6), 'LCD'],
+        ['Nakamoto Index',        blob.nakamoto_index == null ? '—' : String(blob.nakamoto_index), 'LCD'],
+        ['Active Validators',     blob.active_validators == null ? '—' : String(blob.active_validators), 'LCD'],
+        ['Top-5 VP Share',        Array.isArray(blob.top_5_voting_power_pct)
+                                      ? blob.top_5_voting_power_pct.map(p => p.toFixed(2) + '%').join(', ')
+                                      : '—', 'LCD'],
+        ['Validators Captured',   blob.validators ? `${blob.validators.length} (with monikers)` : '—', 'LCD'],
+        ['Latest Block',          blob.latest_block_height == null ? '—' : '#' + Number(blob.latest_block_height).toLocaleString(), 'LCD'],
+        // From CoinGecko
+        ['USD Price',             fmtUsd(blob.usd_price),             'CG'],
+        ['Market Cap',            fmtUsdK(blob.usd_market_cap),       'CG'],
+        ['FDV',                   fmtUsdK(blob.usd_fdv),              'CG'],
+        ['Circulating Supply',    fmtNum(blob.circulating_supply)     + ' LUNA', 'CG'],
+        ['Price Δ 24h',           fmtPct(blob.price_change_pct_24h),  'CG'],
+        ['Price Δ 7d',            fmtPct(blob.price_change_pct_7d),   'CG'],
+        ['Price Δ 30d',           fmtPct(blob.price_change_pct_30d),  'CG'],
+    ];
+
+    const srcBadge = (src) => {
+        const cls = src === 'LCD'
+            ? 'bg-blue-900/30 text-blue-300 border border-blue-900/50'
+            : 'bg-purple-900/30 text-purple-300 border border-purple-900/50';
+        return `<span class="text-[8px] px-1 py-0.5 rounded ${cls} ml-1">${src}</span>`;
+    };
+    // Each entry renders as a label-on-top, value-below pair. Missing values
+    // (when a source failed) get muted styling to make the gap obvious.
+    grid.innerHTML = rows.map(([label, val, src]) => {
+        const muted = (val === '—') ? 'text-gray-600' : 'text-gray-200';
+        return `<div class="border-l-2 ${val === '—' ? 'border-gray-800' : (src === 'LCD' ? 'border-blue-900/50' : 'border-purple-900/50')} pl-2 py-0.5">
+            <div class="text-[9px] text-gray-500 uppercase tracking-wider">${label}${srcBadge(src)}</div>
+            <div class="${muted} font-mono">${val}</div>
+        </div>`;
+    }).join('');
+
+    panel.classList.remove('hidden');
+    // Smooth scroll into view so user sees results without hunting for them.
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 function checkStaleAprData(dateStr) {
@@ -3107,6 +3211,11 @@ function initLstRatiosTab() {
         } else if (srs) {
             srs.textContent = 'Source: manual';
             srs.className = 'text-[9px] text-gray-500 mt-1';
+        }
+        // If we have a new-shape blob in store, re-render the results panel so
+        // the user sees prior fetch results without needing to re-click.
+        if (store.terraNetworkStats?.sources) {
+            try { _renderTerraStatsPanel(store.terraNetworkStats); } catch (e) { /* non-fatal */ }
         }
     }
 
