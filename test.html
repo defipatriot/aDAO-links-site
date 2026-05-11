@@ -1757,8 +1757,22 @@ let store = {
     liveEpoch: null, // { epoch, end_time, phase, daysRemaining }
     prevExt: null,    // Loaded previous ext file for reference
     testMode: false,  // If true, export saves with _test suffix
-    // Token prices from CoinGecko and calculated
-    tokenPrices: {},  // { LUNA: { price, source: 'coingecko'|'calculated'|'manual' }, ... }
+    // Token prices, keyed by canonical symbol (e.g. "LUNA", "ampLUNA", "USDC").
+    // Each entry: { price, source, fetchedAt, ...source-specific fields }
+    //
+    // source values:
+    //   'coingecko'             — fetched from CoinGecko `simple/price`. Includes sourceUrl + sourceId.
+    //   'bridged'               — wrapped/IBC variant priced at its base's CoinGecko price.
+    //                              Includes sourceBase (e.g. wBTC.axl uses WBTC's price).
+    //   'calculated-eris'       — LST priced as basePrice × ratio, where ratio comes from
+    //                              an Eris hub `exchange_rates` query. Includes formula + sourceRatio.
+    //   'calculated-astroport'  — xASTRO priced as basePrice × ratio, where ratio comes from
+    //                              Astroport's tokens.getPrice TRPC (xASTRO_USD ÷ ASTRO_USD).
+    //   'lcd-pool-derived'      — On-chain pool reserves divided to get a spot ratio
+    //                              (FUEL currently — LUNA-FUEL pool ratio × LUNA price).
+    //   'manual'                — User typed into the prices tab "Manual" column.
+    //   'custom'                — User added an entirely new token row.
+    tokenPrices: {},
     skippedTokens: {}, // { TOKEN: true } for tokens user wants to skip
     // Verification flags for workflow steps
     lpRegistryVerified: false,
@@ -2031,7 +2045,10 @@ async function fetchAllTokenPrices() {
                     if (uniqueTokens.has(token)) {
                         store.tokenPrices[token] = {
                             price: priceData.usd,
-                            source: 'coingecko'
+                            source: 'coingecko',
+                            sourceUrl: 'https://api.coingecko.com/api/v3/simple/price',
+                            sourceId: geckoId,
+                            fetchedAt: new Date().toISOString(),
                         };
                         cgCount++;
                     }
@@ -2045,12 +2062,15 @@ async function fetchAllTokenPrices() {
     
     // Apply prices to bridged tokens (wBTC.axl gets WBTC price, etc.)
     let bridgedCount = 0;
+    const _bridgedFetchedAt = new Date().toISOString();
     Object.entries(bridgedToBase).forEach(([bridgedToken, base]) => {
         if (basePrices[base] && !store.tokenPrices[bridgedToken]) {
             store.tokenPrices[bridgedToken] = {
                 price: basePrices[base],
-                source: 'bridged',
-                baseToken: CANONICAL_NAMES[base] || base
+                source: 'bridged',                       // bridged: base token's CoinGecko price applied to wrapped variant
+                sourceBase: CANONICAL_NAMES[base] || base,
+                baseToken:  CANONICAL_NAMES[base] || base, // kept for back-compat with existing readers
+                fetchedAt: _bridgedFetchedAt,
             };
             bridgedCount++;
         }
@@ -2073,13 +2093,27 @@ async function fetchAllTokenPrices() {
         // Skip if we don't have base price or ratio
         if (!basePrice || !ratio) return;
         
+        // Annotate the source: 'calculated-eris' for the Eris-managed LSTs
+        // (ampLUNA, arbLUNA, ampROAR, ampCAPA, bLUNA), 'calculated-astroport'
+        // for xASTRO (ratio came from Astroport's tokens.getPrice TRPC).
+        // Captured so analysts can later distinguish "chain-derived ratio" from
+        // "third-party-API ratio" without re-running history.
+        const ratioSrc = store.lstRatios[config.ratioKey]?.apySource;
+        const calcSubtype = ratioSrc === 'astroport_trpc_staking_apy'
+            ? 'calculated-astroport'
+            : 'calculated-eris';
+        const fetchedAt = new Date().toISOString();
+        
         // Special case: bLUNA/boneLUNA - add both if either exists in LP registry
         if (displayName === 'bLUNA' || displayName === 'boneLUNA') {
             if (hasBLuna || hasBoneLuna) {
                 store.tokenPrices[displayName] = {
                     price: basePrice * ratio,
-                    source: 'calculated',
-                    formula: `${config.base} × ${ratio.toFixed(4)}`
+                    source: calcSubtype,
+                    formula: `${config.base} × ${ratio.toFixed(4)}`,
+                    sourceBase: config.base,
+                    sourceRatio: ratio,
+                    fetchedAt,
                 };
                 if (!tokenList.includes(displayName)) tokenList.push(displayName);
                 calcCount++;
@@ -2090,8 +2124,11 @@ async function fetchAllTokenPrices() {
         else {
             store.tokenPrices[displayName] = {
                 price: basePrice * ratio,
-                source: 'calculated',
-                formula: `${config.base} × ${ratio.toFixed(4)}`
+                source: calcSubtype,
+                formula: `${config.base} × ${ratio.toFixed(4)}`,
+                sourceBase: config.base,
+                sourceRatio: ratio,
+                fetchedAt,
             };
             if (!tokenList.includes(displayName)) tokenList.push(displayName);
             calcCount++;
@@ -2110,7 +2147,10 @@ async function fetchAllTokenPrices() {
                 store.tokenPrices.FUEL = {
                     price: fuelPriceUsd,
                     source: 'lcd-pool-derived',
-                    formula: 'LUNA-FUEL pool ratio × LUNA price'
+                    formula: 'LUNA-FUEL pool ratio × LUNA price',
+                    sourceBase: 'LUNA',
+                    sourceUrl: 'terra-rest.publicnode.com/cosmwasm/wasm/v1/contract/{LUNA-FUEL pool}',
+                    fetchedAt: new Date().toISOString(),
                 };
                 if (!tokenList.includes('FUEL')) tokenList.push('FUEL');
                 calcCount++;
@@ -2253,7 +2293,8 @@ function setManualPrice(token, value) {
     if (price > 0) {
         store.tokenPrices[token] = {
             price: price,
-            source: 'manual'
+            source: 'manual',
+            fetchedAt: new Date().toISOString(),
         };
         
         // Move from manual to auto list by re-rendering
@@ -2286,7 +2327,8 @@ function addCustomToken() {
     // Add to store
     store.tokenPrices[name] = {
         price: price,
-        source: 'custom'
+        source: 'custom',
+        fetchedAt: new Date().toISOString(),
     };
     
     // Clear inputs
@@ -4996,10 +5038,29 @@ async function fetchVotionFromApi(lockupId) {
         return null;
     }
 
-    const url = `${VOTION_API_BASE}/${lockupId}/optimization`;
-    
+    // Eris's CORS blocks www.thealliancedao.com (HTTP 500: "not allowed origin"),
+    // so route via our same-origin /api/eris proxy which fetches server-side.
+    // Direct path is kept as a fallback only for environments where /api/eris
+    // isn't reachable (e.g. local file://). On the deployed site, the proxy path
+    // is always the first attempt.
+    const directUrl = `${VOTION_API_BASE}/${lockupId}/optimization`;
+    const proxyPath = `/votion/liquidity-alliance/${lockupId}/optimization`;
+    const proxyUrl  = `/api/eris?path=${encodeURIComponent(proxyPath)}`;
+
     try {
-        const response = await fetchWithCorsRetry(url);
+        // Try the proxy first (same-origin, no CORS).
+        let response;
+        try {
+            response = await fetch(proxyUrl, { cache: 'no-store' });
+            if (!response.ok) {
+                const errText = await response.text().catch(() => '');
+                throw new Error(`HTTP ${response.status} ${errText.slice(0, 80)}`);
+            }
+        } catch (proxyErr) {
+            // Fallback: third-party CORS proxies (the existing chain).
+            console.warn(`[votion] /api/eris failed (${proxyErr.message}), falling back to public CORS proxies`);
+            response = await fetchWithCorsRetry(directUrl);
+        }
         const data = await response.json();
         
         // Get ratios from store
@@ -8746,10 +8807,13 @@ async function _resolvePoolId(poolId, queryContract) {
             }
 
             // Sub-case C: bare native denom (ibc/<HASH>, uluna, etc.) — single-sided gauge.
-            // Resolve the symbol via the bundled denom map / cw20 token_info fallback.
-            const symbol = await _resolveSymbol(denom, queryContract);
-            if (!symbol) {
-                console.log(`[chain-fetch] resolve ${poolId}: could not resolve symbol from denom`);
+            // Use the production resolveDenom (queries chainsco IBC indexer + falls back to
+            // cw20 token_info) so we get canonical symbols instead of fake "IBC/xxxxxx" placeholders.
+            let symbol;
+            try { symbol = await resolveDenom(denom); } catch { symbol = null; }
+            // Skip unresolved IBC tokens rather than letting fake hash-symbols leak into the LP registry.
+            if (!symbol || /^IBC\/[A-Fa-f0-9]{4,}$/.test(symbol)) {
+                console.log(`[chain-fetch] resolve ${poolId}: could not resolve symbol from denom (${denom.slice(0, 40)}...)`);
                 return null;
             }
             return { lp: symbol, dex: 'Astroport', single: true, poolAddr: null };
@@ -8764,8 +8828,13 @@ async function _resolvePoolId(poolId, queryContract) {
 }
 
 /**
- * Build "TOKENA-TOKENB" from a pair's asset_infos. Standalone (not the in-tool
- * buildPoolName) so the fetcher remains pure / liftable to Node.
+ * Build "TOKENA-TOKENB" from a pair's asset_infos. Delegates token-symbol
+ * resolution to the production `resolveDenom` (which queries the IBC denoms
+ * indexer + falls back to cw20 token_info), so we get the same canonical
+ * symbols the manual-paste path produces. This is the fix for the
+ * "random IBC tokens in the Prices tab" issue: previously this function
+ * used a tiny hardcoded IBC map that returned fake `IBC/<6-hex>` symbols
+ * for anything unknown, which then leaked into pool names and the Prices tab.
  */
 async function _buildPoolNameFromAssetInfos(assetInfos, queryContract) {
     if (!Array.isArray(assetInfos) || assetInfos.length !== 2) return null;
@@ -8773,8 +8842,14 @@ async function _buildPoolNameFromAssetInfos(assetInfos, queryContract) {
     for (const a of assetInfos) {
         const denom = a?.native_token?.denom || a?.token?.contract_addr || null;
         if (!denom) return null;
-        const sym = await _resolveSymbol(denom, queryContract);
-        if (!sym) return null;
+        // Use the production resolver — same one that powers the manual-paste path.
+        // It handles ibc/ via the chainsco indexer, factory/ via the suffix pattern map,
+        // terra1 cw20s via token_info, and applies DENOM_PATTERNS for casing.
+        let sym;
+        try { sym = await resolveDenom(denom); } catch { sym = null; }
+        // Anything that comes back as a fake "IBC/xxxx" hash placeholder is treated
+        // as unresolved; that pool gets skipped rather than poisoning the token list.
+        if (!sym || /^IBC\/[A-Fa-f0-9]{4,}$/.test(sym)) return null;
         symbols.push(sym);
     }
     if (symbols[1] === 'LUNA' || (symbols[0] !== 'LUNA' && symbols[1] < symbols[0])) {
@@ -8783,6 +8858,9 @@ async function _buildPoolNameFromAssetInfos(assetInfos, queryContract) {
     return symbols.join('-');
 }
 
+// Legacy maps from the Phase 1 prototype — kept only as documentation of what
+// the inline resolver USED to support. The active implementation now delegates
+// to the production `resolveDenom` (which uses chainsco's IBC indexer).
 const _NATIVE_DENOMS = { uluna: 'LUNA' };
 const _IBC_KNOWN = {
     '2C962DAB9F57FE0921435426AE75196009FAA1981BF86991203C8411F8980FDB': 'USDC',
@@ -8790,7 +8868,12 @@ const _IBC_KNOWN = {
     'B3504E092456BA618CC28AC671A71FB08C6CA0FD0BE7C8A5B5A3E2DD933CC9E4': 'USDC.axl',
     // Extend as new IBC tokens enter the gauges. Source: in-tool KNOWN_TOKEN_MAP.
 };
-async function _resolveSymbol(denom, queryContract) {
+// DEPRECATED: superseded by the production `resolveDenom` (line ~8413) which uses
+// the chainsco.pe IBC indexer for full ibc/<hash> coverage. The old version below
+// used only a hardcoded 3-entry table and produced "IBC/<6-hex>" placeholders for
+// anything unknown, which then polluted the Prices tab with unresolved IBC tokens.
+// Kept here as a comment for archaeological clarity — do not call.
+async function _resolveSymbol_DEPRECATED_DO_NOT_USE(denom, queryContract) {
     if (_NATIVE_DENOMS[denom]) return _NATIVE_DENOMS[denom];
     if (denom.startsWith('ibc/')) {
         const hash = denom.slice(4);
