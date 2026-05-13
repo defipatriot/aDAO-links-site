@@ -2914,24 +2914,61 @@
             };
         });
 
-        // ===== Compute the summary block from the vote pools =====
-        // For the VP breakdown chart, we need all three numbers at the SAME scale.
-        // Each user's VP is allocated across ~4 buckets, so:
-        //   - sum of per-pool VPs = users × buckets_voted_avg (~94M)
-        //   - max bucket VP = unique-user VP (~24M, Eris convention)
-        // The chart breakdown (Votion / aDAO / Other) is naturally a sum-across-pools
-        // calculation (each pool contributes its own bribes/votion/aDAO), so we
-        // use sum-across-pools for total_vp to keep ratios honest.
-        // The max-bucket VP is preserved separately for any context that wants
-        // the Eris-style headline number.
+        // ===== Compute UNIQUE VP totals (not pool-summed which inflates 4×) =====
+        //
+        // Each user's VP is allocated across 4 buckets (one allocation per bucket).
+        // Summing per-pool stats counts each user 4 times. The truthful "unique user"
+        // metric uses per-bucket aggregates and takes the max bucket value (since each
+        // bucket has roughly the full active TLA VP):
+        //
+        //   Total TLA VP  = max bucket_vp_human                            ≈ 24.1M
+        //   Votion VP     = max bucket sum-of-pool-votion_current_vp        ≈ 6.9M
+        //   aDAO VP       = sum of unique member VPs + treasury display VP  ≈ 2.55M
+        //   Other VP      = remainder
+        //
+        // This matches Eris's "Total Voting Power" convention and the user's mental
+        // model of "how many unique users back each voting category".
+
+        // Total VP — max bucket VP (canonical TLA metric)
         const bucketVps = Object.values(tlaSnapshot.buckets || {}).map(b => b.bucket_vp_human || 0);
         const maxBucketVp = bucketVps.length ? Math.max(...bucketVps) : 0;
-        const sumPoolVp = votePools.reduce((s, p) => s + (p.vp || 0), 0);
-        const totalVp = sumPoolVp;  // chart uses sum-across-pools
+        const totalVp = maxBucketVp;
 
-        const totalAdaoVp = votePools.reduce((s, p) => s + (p.adao_vp || 0), 0);
-        const totalVotionCurrentVp = votePools.reduce((s, p) => s + (p.votion?.current_vp || 0), 0);
-        const totalVotionOptimizedVp = votePools.reduce((s, p) => s + (p.votion?.next_vp || 0), 0);
+        // Votion VP — per bucket sum of pool-level votion_current_vp, take max
+        const votionByBucket = {};
+        for (const p of (tlaSnapshot.pools || [])) {
+            if (p.status === 'inactive') continue;
+            const b = p.bucket;
+            if (!votionByBucket[b]) votionByBucket[b] = 0;
+            votionByBucket[b] += p.voting_power?.votion_current_vp || 0;
+        }
+        const totalVotionCurrentVp = Object.values(votionByBucket).length
+            ? Math.max(...Object.values(votionByBucket)) : 0;
+
+        // Optimized version — same approach
+        const votionOptByBucket = {};
+        for (const p of (tlaSnapshot.pools || [])) {
+            if (p.status === 'inactive') continue;
+            const b = p.bucket;
+            if (!votionOptByBucket[b]) votionOptByBucket[b] = 0;
+            votionOptByBucket[b] += p.voting_power?.votion_optimized_vp || 0;
+        }
+        const totalVotionOptimizedVp = Object.values(votionOptByBucket).length
+            ? Math.max(...Object.values(votionOptByBucket)) : 0;
+
+        // aDAO VP — sum of unique member VPs + treasury display VP
+        // (NOT sum-across-pools which would 4× inflate since each member votes in 4 buckets)
+        let memberVpSum = 0;
+        for (const m of (adaoPositions?.members || [])) {
+            memberVpSum += m.summary?.voting_power_human || 0;
+        }
+        const treasuryDisplayVp = adaoPositions?.treasury?.summary?.display_voting_power_human || 0;
+        const totalAdaoVp = memberVpSum + treasuryDisplayVp;
+
+        // Pool-summed aDAO VP — for any context that needs it (e.g. waterfall chart per-pool)
+        const totalAdaoVpPoolSum = votePools.reduce((s, p) => s + (p.adao_vp || 0), 0);
+
+        // Total bribes USD (sum across all pools — correct since each pool's bribes are unique)
         const totalBribesUsd = votePools.reduce((s, p) => s + (p.bribes?.total || 0), 0);
 
         // ===== Build liquidity.{active_pools, inactive_pools} arrays =====
@@ -3019,10 +3056,12 @@
             vote: {
                 pools: votePools,
                 summary: {
-                    total_vp: totalVp,                          // sum-across-pools (chart breakdown scale)
-                    total_vp_max_bucket: maxBucketVp,           // Eris-style canonical TLA VP
-                    total_adao_vp: totalAdaoVp,                 // sum-across-pools (chart scale)
-                    total_votion_current_vp: totalVotionCurrentVp,
+                    total_vp: totalVp,                          // max bucket VP — Eris convention (unique users)
+                    total_vp_max_bucket: maxBucketVp,           // explicit alias for clarity
+                    total_vp_pool_sum: votePools.reduce((s, p) => s + (p.vp || 0), 0),  // pool-summed (inflated) — for context only
+                    total_adao_vp: totalAdaoVp,                 // unique aDAO VP (members + treasury)
+                    total_adao_vp_pool_sum: totalAdaoVpPoolSum, // pool-summed aDAO VP for waterfall use
+                    total_votion_current_vp: totalVotionCurrentVp,    // unique LST-backed VP
                     total_votion_optimized_vp: totalVotionOptimizedVp,
                 },
             },
@@ -3137,12 +3176,28 @@
 
     function buildAdaoVotesIndex(adaoPositions) {
         const idx = {};
-        if (!adaoPositions?.members) return idx;
-        for (const m of adaoPositions.members) {
-            const votesPerBucket = m.voting?.votes_per_bucket || {};
-            const userVp = m.summary?.voting_power_human || 0;
-            for (const bucket of Object.keys(votesPerBucket)) {
-                const votes = votesPerBucket[bucket]?.votes || [];
+        if (!adaoPositions) return idx;
+
+        // Include both named members AND the treasury wallet — treasury IS the
+        // aDAO Core entity and its votes are part of "aDAO VP".
+        const voters = [];
+        for (const m of (adaoPositions.members || [])) {
+            voters.push({
+                vp: m.summary?.voting_power_human || 0,
+                votes_per_bucket: m.voting?.votes_per_bucket || {},
+            });
+        }
+        if (adaoPositions.treasury) {
+            voters.push({
+                vp: adaoPositions.treasury.summary?.display_voting_power_human || 0,
+                votes_per_bucket: adaoPositions.treasury.voting?.votes_per_bucket || {},
+            });
+        }
+
+        for (const voter of voters) {
+            const userVp = voter.vp;
+            for (const bucket of Object.keys(voter.votes_per_bucket)) {
+                const votes = voter.votes_per_bucket[bucket]?.votes || [];
                 for (const v of votes) {
                     const id = v.gauge_pool_id || v.pool_gauge_id;
                     if (!id) continue;
