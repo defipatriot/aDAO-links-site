@@ -2806,15 +2806,18 @@
     // ============================================================
     function buildLegacyDataShape({ tlaSnapshot, networkPrices, adaoPositions, bribesCurrent, pdBribes, historical, votion, currentEpoch }) {
         const tokenPrices = networkPrices?.token_prices || {};
+        const lunaPriceUsd = tokenPrices.LUNA?.final_price_usd || 0;
 
-        // Build bribes lookup: pool_gauge_id → { total_usd, pd_usd, other_usd }
-        const bribesByPool = buildBribesIndex(bribesCurrent, pdBribes, tokenPrices);
+        // Build per-pool bribes USD from tla-snapshot's own bribes.active_now (pricing inline)
+        // Note: pools already have bribes nested — no need for external bribes-data file
+        const bribesByPool = buildBribesIndex(tlaSnapshot, tokenPrices, pdBribes);
 
-        // Build votion lookup: pool_gauge_id → { current_vp, next_vp, change_vp, ... }
-        const votionByPool = buildVotionIndex(votion);
+        // Votion data is already embedded in pool.voting_power.votion_current_vp / votion_optimized_vp
+        // and pool.voting_power.lockup_contributions[] — use those, ignore external votion file
 
         // Build historical lookup: "PoolName|DEX" → { liq_4ep_avg, vol_4ep_avg, ... }
-        const historicalByPool = buildHistoricalIndex(historical, currentEpoch);
+        // Uses the LATEST available epochs in the historical file (since data ends at epoch 166)
+        const historicalByPool = buildHistoricalIndex(historical);
 
         // Build aDAO vote allocations lookup: pool_gauge_id → { adao_vp, adao_pct }
         const adaoVotesByPool = buildAdaoVotesIndex(adaoPositions);
@@ -2822,33 +2825,55 @@
         // ===== Build v3 "vote.pools" array =====
         const votePools = (tlaSnapshot.pools || []).map(p => {
             const bribes = bribesByPool[p.gauge_pool_id] || { total_usd: 0, pd_usd: 0, other_usd: 0 };
-            const votionEntry = votionByPool[p.gauge_pool_id] || {};
-            const historicalEntry = historicalByPool[`${p.name}|${p.dex_display || p.dex}`] || {};
             const adaoEntry = adaoVotesByPool[p.gauge_pool_id] || { adao_vp: 0, adao_pct: 0 };
 
-            // APR — base is from rewards.approx_apr_pct. Amplified = base × amp_factor
-            const aprNon = p.rewards?.approx_apr_pct || 0;
-            const ampFactor = computeAmpFactor(p.bucket);  // 1.10 stable, 1.05 others (matches TLA constants)
+            // VP — use vp_human from voting_power
+            const vp = p.voting_power?.vp_human || 0;
+            const votePct = p.voting_power?.pct_of_bucket || 0;
+
+            // Votion VP — already computed per-pool in tla-snapshot
+            const votionCurrentVp = p.voting_power?.votion_current_vp || 0;
+            const votionOptimizedVp = p.voting_power?.votion_optimized_vp || 0;
+
+            // Historical lookup — try both pool name keys (with/without DEX)
+            const histKey1 = `${p.name}|${p.dex}`;
+            const histKey2 = p.name;
+            const historicalEntry = historicalByPool[histKey1] || historicalByPool[histKey2] || {};
+
+            // APR — filtered for ranking credibility.
+            // Use `staked_in_tla_usd` as the filter (not `depth_usd`) because:
+            //   - depth_usd is the total DEX pool TVL (anyone's liquidity)
+            //   - staked_in_tla_usd is what's actually earning TLA rewards
+            // A pool with $48K depth but only $884 staked in TLA has unrealistic APR.
+            // Threshold $20K ensures meaningful TLA stake. Cap at 200% as final safety.
+            const tlaStakedUsd = p.staked_in_tla_usd || 0;
+            const aprNonRaw = p.rewards?.approx_apr_pct;
+            const aprNonValid = (typeof aprNonRaw === 'number' && isFinite(aprNonRaw)) ? aprNonRaw : 0;
+            const aprNon = tlaStakedUsd < 20000 ? 0 : Math.min(aprNonValid, 200);
+            const ampFactor = computeAmpFactor(p.bucket);
             const aprAmp = aprNon * ampFactor;
 
-            // Compute scores using siteConfig.scoring weights
-            const scores = computePoolScores(p, siteConfig?.scoring, p.dex_display || p.dex);
+            // adao_pct computed from VP if VP > 0
+            const adaoPct = vp > 0 ? (adaoEntry.adao_vp / vp) * 100 : 0;
+
+            // Scores
+            const scores = computePoolScores(p, siteConfig?.scoring);
 
             return {
                 name: p.name,
-                dex: p.dex_display || p.dex || p.dex_raw || 'Astroport',
+                dex: p.dex || 'Astroport',
                 dex_raw: p.dex_raw || p.dex,
                 bucket: p.bucket,
-                is_active: p.status === 'active' || p.status === 'at_risk',
+                is_active: p.status === 'active',  // strict — at_risk and inactive show as inactive
 
                 // Vote data
-                vp: p.voting_power?.next_vp_human || 0,
-                vote_pct: p.voting_power?.pct_of_bucket || 0,
+                vp: vp,
+                vote_pct: votePct,
                 depth: p.depth_usd || 0,
 
                 // aDAO aggregated vote
-                adao_vp: adaoEntry.adao_vp,
-                adao_pct: adaoEntry.adao_pct,
+                adao_vp: adaoEntry.adao_vp || 0,
+                adao_pct: adaoPct,
 
                 // APR
                 apr_non: aprNon,
@@ -2862,14 +2887,14 @@
                     other: bribes.other_usd,
                 },
 
-                // Votion (next-epoch projection)
+                // Votion (next-epoch projection) — already in tla-snapshot per pool
                 votion: {
-                    current_vp: votionEntry.current_vp || 0,
-                    current_pct: votionEntry.current_pct || 0,
-                    next_vp: votionEntry.next_vp || 0,
-                    next_pct: votionEntry.next_pct || 0,
-                    change_vp: votionEntry.change_vp || 0,
-                    change_pct: votionEntry.change_pct || 0,
+                    current_vp: votionCurrentVp,
+                    current_pct: vp > 0 ? (votionCurrentVp / vp) * 100 : 0,
+                    next_vp: votionOptimizedVp,
+                    next_pct: vp > 0 ? (votionOptimizedVp / vp) * 100 : 0,
+                    change_vp: votionOptimizedVp - votionCurrentVp,
+                    change_pct: 0,
                 },
 
                 // Historical
@@ -2879,61 +2904,87 @@
                     liq_4ep_count: historicalEntry.liq_4ep_count || 0,
                     vol_4ep_avg: historicalEntry.vol_4ep_avg || 0,
                     vol_4ep_count: historicalEntry.vol_4ep_count || 0,
+                    epochs_used: historicalEntry.epochs_used || [],
                 },
 
                 // Scores
                 scores: scores,
 
-                included_in_grade: !!historicalEntry.liq_4ep_avg && p.dex_display !== 'Skeleton Swap',
+                included_in_grade: !!historicalEntry.liq_4ep_avg && p.dex !== 'Skeleton Swap',
             };
         });
 
+        // ===== Compute the summary block from the vote pools =====
+        // total_vp represents the TLA-wide voting power. Since each user's VP
+        // is allocated to one pool per bucket (4 buckets), summing across all
+        // pools double-counts. The bucket-level VP (max bucket) is the canonical
+        // measure — matches Eris's "Total Voting Power" headline.
+        const bucketVps = Object.values(tlaSnapshot.buckets || {}).map(b => b.bucket_vp_human || 0);
+        const maxBucketVp = bucketVps.length ? Math.max(...bucketVps) : 0;
+        const totalVp = maxBucketVp;  // canonical TLA total VP
+
+        const totalAdaoVp = votePools.reduce((s, p) => s + (p.adao_vp || 0), 0);
+        const totalVotionCurrentVp = votePools.reduce((s, p) => s + (p.votion?.current_vp || 0), 0);
+        const totalVotionOptimizedVp = votePools.reduce((s, p) => s + (p.votion?.next_vp || 0), 0);
+        const totalBribesUsd = votePools.reduce((s, p) => s + (p.bribes?.total || 0), 0);
+
         // ===== Build liquidity.{active_pools, inactive_pools} arrays =====
         const allPools = tlaSnapshot.pools || [];
-        const activeP = allPools.filter(p => p.status === 'active' || p.status === 'at_risk');
-        const inactiveP = allPools.filter(p => p.status === 'inactive');
-        const buildTlaPool = (p) => ({
-            name: p.name,
-            normalized_name: p.name,
-            dex: p.dex_display || p.dex || 'Astroport',
-            type: p.dex_type || p.type || null,
-            bucket: p.bucket,
-            depth: p.depth_usd || 0,
-            tla_staked: p.staked_in_tla_usd || 0,
-            rewards_per_year: p.rewards?.usd_per_year || 0,
-            apr: {
-                non_amp: p.rewards?.approx_apr_pct || 0,
-                amplified: (p.rewards?.approx_apr_pct || 0) * computeAmpFactor(p.bucket),
-            },
-            adao_deposit: { non_amp: 0, amplified: 0 },  // per-pool aDAO deposit broken down — left at 0 for now
+        const activeP = allPools.filter(p => p.status === 'active');
+        const inactiveP = allPools.filter(p => p.status === 'inactive' || p.status === 'at_risk');
+        const buildTlaPool = (p) => {
+            const tlaStakedUsd = p.staked_in_tla_usd || 0;
+            const aprNonRaw = p.rewards?.approx_apr_pct;
+            const aprNonValid = (typeof aprNonRaw === 'number' && isFinite(aprNonRaw)) ? aprNonRaw : 0;
+            const aprNon = tlaStakedUsd < 20000 ? 0 : Math.min(aprNonValid, 200);
+            return {
+                name: p.name,
+                normalized_name: p.name,
+                dex: p.dex || 'Astroport',
+                type: p.dex_subtype || null,
+                bucket: p.bucket,
+                depth: depthUsd,
+                tla_staked: p.staked_in_tla_usd || 0,
+                rewards_per_year: p.rewards?.annual_emissions_usd || 0,
+                apr: {
+                    non_amp: aprNon,
+                    amplified: aprNon * computeAmpFactor(p.bucket),
+                },
+                adao_deposit: { non_amp: 0, amplified: 0 },
+            };
+        };
+
+        // ===== Bucket-level summary (for the DEX vs TLA Staked bar chart) =====
+        const buckets = tlaSnapshot.buckets || {};
+
+        // ===== Top stats =====
+        const annualLuna = tlaSnapshot.totals?.rewards?.annual_emissions_luna || 0;
+        const annualUsd = tlaSnapshot.totals?.rewards?.annual_emissions_usd || 0;
+        const epochRewardsLuna = annualLuna / 52;
+        const epochRewardsUsd = annualUsd / 52;
+
+        // Active counts by DEX
+        const activeAstroPools = activeP.filter(p => (p.dex || '').toLowerCase().includes('astro')).length;
+        const activeSkeletonPools = activeP.filter(p => (p.dex || '').toLowerCase().includes('skeleton')).length;
+
+        // Avg APR — same filter as per-pool: tla_staked ≥ $20K, sustainable APR ≤ 200%, not Skeleton
+        const aprQualified = activeP.filter(p => {
+            const tlaStaked = p.staked_in_tla_usd || 0;
+            const apr = p.rewards?.approx_apr_pct;
+            return tlaStaked >= 20000 &&
+                   typeof apr === 'number' && apr > 0 && apr < 200 &&
+                   p.dex !== 'Skeleton Swap';
         });
-
-        // ===== Build totals summary =====
-        const totalsBuckets = tlaSnapshot.buckets || {};
-        const tlaTvlUsd = tlaSnapshot.totals?.tla_tvl_usd || 0;
-        const tlaRewardsUsdYr = tlaSnapshot.totals?.rewards?.total_usd_per_year || 0;
-
-        // Compute epoch rewards (luna per epoch)
-        const epochRewardsLuna = (tlaSnapshot.totals?.rewards?.total_luna_per_year || 0) / 52;
-        const epochRewardsUsd = epochRewardsLuna * (networkPrices?.token_prices?.LUNA?.final_price_usd || 0);
-
-        // Average APR (non-amp / amp) — weighted across active pools, by depth
-        const activeForApr = activeP.filter(p => p.dex_display !== 'Skeleton Swap' && p.rewards?.approx_apr_pct > 0);
         let totalDepth = 0, totalAprDepth = 0;
-        for (const p of activeForApr) {
-            const w = p.depth_usd || 0;
+        for (const p of aprQualified) {
+            const w = p.staked_in_tla_usd || 0;
             totalDepth += w;
-            totalAprDepth += (p.rewards?.approx_apr_pct || 0) * w;
+            totalAprDepth += (p.rewards.approx_apr_pct || 0) * w;
         }
         const avgAprNon = totalDepth > 0 ? totalAprDepth / totalDepth : 0;
-        const avgAprAmp = avgAprNon * 1.06;  // rough composite amp factor
+        const avgAprAmp = avgAprNon * 1.06;
 
-        // Active pool counts by DEX
-        const activeAstroPools = activeP.filter(p => (p.dex_display || p.dex || '').toLowerCase().includes('astro')).length;
-        const activeSkeletonPools = activeP.filter(p => (p.dex_display || p.dex || '').toLowerCase().includes('skeleton')).length;
-
-        // Total bribes USD (current epoch)
-        const totalBribesUsd = Object.values(bribesByPool).reduce((s, b) => s + (b.total_usd || 0), 0);
+        const tlaTvlUsd = tlaSnapshot.totals?.tla_tvl_usd || 0;
 
         return {
             meta: {
@@ -2944,7 +2995,7 @@
             },
             totals: {
                 tla_tvl: tlaTvlUsd,
-                tla_rewards_per_year: tlaRewardsUsdYr,
+                tla_rewards_per_year: annualUsd,
                 active_astro_pools: activeAstroPools,
                 active_ww_pools: activeSkeletonPools,
                 epoch_rewards_luna: epochRewardsLuna,
@@ -2953,8 +3004,22 @@
                 avg_apr_non_amp: avgAprNon,
                 avg_apr_amplified: avgAprAmp,
             },
-            buckets: totalsBuckets,
-            vote: { pools: votePools },
+            buckets: buckets,
+            vote: {
+                pools: votePools,
+                summary: {
+                    total_vp: totalVp,
+                    total_adao_vp: totalAdaoVp,
+                    total_votion_current_vp: totalVotionCurrentVp,
+                    total_votion_optimized_vp: totalVotionOptimizedVp,
+                },
+            },
+            ext_data: {
+                votion: {
+                    total_vp: totalVotionCurrentVp,
+                    total_optimized_vp: totalVotionOptimizedVp,
+                },
+            },
             liquidity: {
                 active_pools: activeP.map(buildTlaPool),
                 inactive_pools: inactiveP.map(buildTlaPool),
@@ -2975,75 +3040,84 @@
         return bucket === 'stable' ? 1.10 : 1.05;
     }
 
-    function buildBribesIndex(bribesCurrent, pdBribes, tokenPrices) {
+    // Build USD-valued bribes index. Pools have bribes.active_now nested with
+    // raw token amounts. Multiply by token prices from network-and-prices.
+    function buildBribesIndex(tlaSnapshot, tokenPrices, pdBribes) {
         const idx = {};
-        if (!bribesCurrent) return idx;
+        const pdMultisig = 'terra1k8ug6dkzntczfzn76wsh24tdjmx944yj6mk063wum7n20cwd7lxq4lppjg';
 
-        // bribes-data current-state shape may vary; defensively walk it
-        const pools = bribesCurrent.pools || bribesCurrent.bribes || [];
-        for (const entry of pools) {
-            const gaugePoolId = entry.gauge_pool_id || entry.pool_id || null;
-            if (!gaugePoolId) continue;
+        for (const p of (tlaSnapshot.pools || [])) {
+            const activeNow = p.bribes?.active_now || [];
             let totalUsd = 0;
-            const tokens = entry.tokens || entry.bribes || [];
-            for (const t of tokens) {
-                if (typeof t.usd_value === 'number') totalUsd += t.usd_value;
-                else if (typeof t.usd === 'number') totalUsd += t.usd;
-            }
-            // PD share — match by recognizing the multisig wallet as briber if present
-            let pdUsd = 0;
-            for (const t of tokens) {
-                if ((t.briber || '').includes('terra1k8ug6dkzntczfzn76wsh24tdjmx944yj6mk063wum7n20cwd7lxq4lppjg')) {
-                    pdUsd += (t.usd_value || t.usd || 0);
+            for (const bucket of activeNow) {
+                for (const asset of (bucket.assets || [])) {
+                    const amount = parseFloat(asset.amount) || 0;
+                    if (amount === 0) continue;
+                    const amountHuman = amount / 1e6;
+                    // Look up price by symbol/denom
+                    const priceUsd = resolveTokenPriceFromInfo(asset.info, tokenPrices);
+                    if (priceUsd) totalUsd += amountHuman * priceUsd;
                 }
             }
-            idx[gaugePoolId] = {
+            // For now we don't distinguish PD vs other for active bribes (no briber address in this shape)
+            idx[p.gauge_pool_id] = {
                 total_usd: totalUsd,
-                pd_usd: pdUsd,
-                other_usd: Math.max(0, totalUsd - pdUsd),
+                pd_usd: 0,
+                other_usd: totalUsd,
             };
         }
         return idx;
     }
 
-    function buildVotionIndex(votion) {
-        const idx = {};
-        if (!votion) return idx;
-        const pools = votion.pools || [];
-        for (const p of pools) {
-            const id = p.gauge_pool_id || p.pool_id;
-            if (!id) continue;
-            idx[id] = {
-                current_vp: p.current_vp || 0,
-                current_pct: p.current_pct || 0,
-                next_vp: p.next_vp || 0,
-                next_pct: p.next_pct || 0,
-                change_vp: (p.next_vp || 0) - (p.current_vp || 0),
-                change_pct: (p.next_pct || 0) - (p.current_pct || 0),
-            };
+    // Best-effort token price resolution from an asset_info object
+    function resolveTokenPriceFromInfo(info, tokenPrices) {
+        if (!info || !tokenPrices) return null;
+        // cw20 — look up by address (some tokens may use address-key in token_prices)
+        if (info.cw20) {
+            for (const sym of Object.keys(tokenPrices)) {
+                const entry = tokenPrices[sym];
+                if (entry?.address === info.cw20 || entry?.cw20 === info.cw20) {
+                    return entry.final_price_usd || null;
+                }
+            }
         }
-        return idx;
+        // native — common case: LUNA, USDC, etc. The denom often encodes the symbol.
+        if (info.native) {
+            const denom = info.native;
+            // Try common patterns
+            if (denom === 'uluna') return tokenPrices.LUNA?.final_price_usd || null;
+            // IBC denoms — look for any token whose denom field matches
+            for (const sym of Object.keys(tokenPrices)) {
+                const entry = tokenPrices[sym];
+                if (entry?.denom === denom || entry?.native === denom) {
+                    return entry.final_price_usd || null;
+                }
+            }
+        }
+        return null;
     }
 
-    function buildHistoricalIndex(historical, currentEpoch) {
+    // Historical lookup — use latest available epochs in the file (data may stop at e.g. 166).
+    // For each LP, average the most recent 4 epoch values present in the file.
+    function buildHistoricalIndex(historical) {
         const idx = {};
         if (!historical?.lps) return idx;
         for (const [key, entry] of Object.entries(historical.lps)) {
             const liqEpochs = entry.liquidity?.epochs || {};
             const volEpochs = entry.volume?.epochs || {};
-            const lookback = 4;
-            const liq4 = [];
-            const vol4 = [];
-            for (let e = currentEpoch - 1; e > currentEpoch - 1 - lookback; e--) {
-                if (liqEpochs[e]?.avg) liq4.push(liqEpochs[e].avg);
-                if (volEpochs[e]?.avg) vol4.push(volEpochs[e].avg);
-            }
+            // Sort epochs numerically, take the latest 4 with valid avg
+            const liqSorted = Object.keys(liqEpochs).map(Number).filter(e => liqEpochs[e]?.avg).sort((a, b) => b - a);
+            const volSorted = Object.keys(volEpochs).map(Number).filter(e => volEpochs[e]?.avg).sort((a, b) => b - a);
+            const liqLatest = liqSorted.slice(0, 4).map(e => liqEpochs[e].avg);
+            const volLatest = volSorted.slice(0, 4).map(e => volEpochs[e].avg);
+            const epochsUsed = [...new Set([...liqSorted.slice(0, 4), ...volSorted.slice(0, 4)])].sort((a, b) => b - a);
             idx[key] = {
-                liq_4ep_avg: liq4.length ? liq4.reduce((s, x) => s + x, 0) / liq4.length : 0,
-                liq_4ep_count: liq4.length,
-                vol_4ep_avg: vol4.length ? vol4.reduce((s, x) => s + x, 0) / vol4.length : 0,
-                vol_4ep_count: vol4.length,
+                liq_4ep_avg: liqLatest.length ? liqLatest.reduce((s, x) => s + x, 0) / liqLatest.length : 0,
+                liq_4ep_count: liqLatest.length,
+                vol_4ep_avg: volLatest.length ? volLatest.reduce((s, x) => s + x, 0) / volLatest.length : 0,
+                vol_4ep_count: volLatest.length,
                 efficiency: 0,
+                epochs_used: epochsUsed,
             };
         }
         return idx;
@@ -3062,7 +3136,7 @@
                     if (!id) continue;
                     const weight = (v.weight_bps || 0) / 10000;
                     const allocVp = userVp * weight;
-                    if (!idx[id]) idx[id] = { adao_vp: 0, adao_pct: 0 };
+                    if (!idx[id]) idx[id] = { adao_vp: 0 };
                     idx[id].adao_vp += allocVp;
                 }
             }
@@ -3070,17 +3144,16 @@
         return idx;
     }
 
-    function computePoolScores(pool, scoringWeights, dexDisplay) {
-        // Compute access/performance/support scores
+    function computePoolScores(pool, scoringWeights) {
         // Skeleton Swap pools excluded from grading (no historical data)
-        if (dexDisplay === 'Skeleton Swap') {
+        if (pool.dex === 'Skeleton Swap') {
             return { access: 0, performance: 0, support: 0, adao_opportunity: 0 };
         }
-        // Simplified scoring stub — real formula would consider origin, asset class, etc.
-        // For now: derive based on pool stats. This preserves the structure expected by render code.
-        const access = pool.voting_power?.pct_of_bucket >= 1 ? 80 : 50;
+        // Simplified scoring — preserves structure expected by renderer.
+        // Real formula refinement is a follow-up task once data accumulates.
+        const access = (pool.voting_power?.pct_of_bucket || 0) >= 1 ? 80 : 50;
         const performance = Math.min(100, (pool.depth_usd || 0) / 1000);
-        const support = pool.adao_vp_pct >= 1 ? 75 : 40;
+        const support = 60;  // placeholder
         const weights = scoringWeights?.weights || { access: 0.15, performance: 0.55, support: 0.30 };
         const adao_opportunity = access * weights.access + performance * weights.performance + support * weights.support;
         return { access, performance, support, adao_opportunity };
