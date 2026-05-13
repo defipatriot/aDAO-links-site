@@ -2929,11 +2929,16 @@
         const totalBribesUsd = votePools.reduce((s, p) => s + (p.bribes?.total || 0), 0);
 
         // ===== Build liquidity.{active_pools, inactive_pools} arrays =====
+        // Actual statuses in tla-snapshot:
+        //   - "active"                      → earning rewards (≥ 1% of bucket VP)
+        //   - "voted_but_below_threshold"   → has votes but not earning (the "at-risk" / "inactive" view)
+        //   - "zero_vp"                     → no votes at all (rarely listed)
         const allPools = tlaSnapshot.pools || [];
         const activeP = allPools.filter(p => p.status === 'active');
-        const inactiveP = allPools.filter(p => p.status === 'inactive' || p.status === 'at_risk');
+        const inactiveP = allPools.filter(p => p.status === 'voted_but_below_threshold' || p.status === 'zero_vp');
         const buildTlaPool = (p) => {
             const tlaStakedUsd = p.staked_in_tla_usd || 0;
+            const depthUsd = p.depth_usd || 0;
             const aprNonRaw = p.rewards?.approx_apr_pct;
             const aprNonValid = (typeof aprNonRaw === 'number' && isFinite(aprNonRaw)) ? aprNonRaw : 0;
             const aprNon = tlaStakedUsd < 20000 ? 0 : Math.min(aprNonValid, 200);
@@ -2944,7 +2949,7 @@
                 type: p.dex_subtype || null,
                 bucket: p.bucket,
                 depth: depthUsd,
-                tla_staked: p.staked_in_tla_usd || 0,
+                tla_staked: tlaStakedUsd,
                 rewards_per_year: p.rewards?.annual_emissions_usd || 0,
                 apr: {
                     non_amp: aprNon,
