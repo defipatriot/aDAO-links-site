@@ -2863,8 +2863,8 @@
                 name: p.name,
                 dex: p.dex || 'Astroport',
                 dex_raw: p.dex_raw || p.dex,
-                bucket: p.bucket,
-                is_active: p.status === 'active',  // strict — at_risk and inactive show as inactive
+                bucket: (p.bucket || '').toUpperCase(),  // renderer expects UPPERCASE
+                is_active: p.status === 'active',
 
                 // Vote data
                 vp: vp,
@@ -2915,13 +2915,19 @@
         });
 
         // ===== Compute the summary block from the vote pools =====
-        // total_vp represents the TLA-wide voting power. Since each user's VP
-        // is allocated to one pool per bucket (4 buckets), summing across all
-        // pools double-counts. The bucket-level VP (max bucket) is the canonical
-        // measure — matches Eris's "Total Voting Power" headline.
+        // For the VP breakdown chart, we need all three numbers at the SAME scale.
+        // Each user's VP is allocated across ~4 buckets, so:
+        //   - sum of per-pool VPs = users × buckets_voted_avg (~94M)
+        //   - max bucket VP = unique-user VP (~24M, Eris convention)
+        // The chart breakdown (Votion / aDAO / Other) is naturally a sum-across-pools
+        // calculation (each pool contributes its own bribes/votion/aDAO), so we
+        // use sum-across-pools for total_vp to keep ratios honest.
+        // The max-bucket VP is preserved separately for any context that wants
+        // the Eris-style headline number.
         const bucketVps = Object.values(tlaSnapshot.buckets || {}).map(b => b.bucket_vp_human || 0);
         const maxBucketVp = bucketVps.length ? Math.max(...bucketVps) : 0;
-        const totalVp = maxBucketVp;  // canonical TLA total VP
+        const sumPoolVp = votePools.reduce((s, p) => s + (p.vp || 0), 0);
+        const totalVp = sumPoolVp;  // chart uses sum-across-pools
 
         const totalAdaoVp = votePools.reduce((s, p) => s + (p.adao_vp || 0), 0);
         const totalVotionCurrentVp = votePools.reduce((s, p) => s + (p.votion?.current_vp || 0), 0);
@@ -2947,7 +2953,7 @@
                 normalized_name: p.name,
                 dex: p.dex || 'Astroport',
                 type: p.dex_subtype || null,
-                bucket: p.bucket,
+                bucket: (p.bucket || '').toUpperCase(),  // renderer expects UPPERCASE
                 depth: depthUsd,
                 tla_staked: tlaStakedUsd,
                 rewards_per_year: p.rewards?.annual_emissions_usd || 0,
@@ -3013,8 +3019,9 @@
             vote: {
                 pools: votePools,
                 summary: {
-                    total_vp: totalVp,
-                    total_adao_vp: totalAdaoVp,
+                    total_vp: totalVp,                          // sum-across-pools (chart breakdown scale)
+                    total_vp_max_bucket: maxBucketVp,           // Eris-style canonical TLA VP
+                    total_adao_vp: totalAdaoVp,                 // sum-across-pools (chart scale)
                     total_votion_current_vp: totalVotionCurrentVp,
                     total_votion_optimized_vp: totalVotionOptimizedVp,
                 },
@@ -3632,9 +3639,12 @@
         const active = store.pools.filter(p => p.is_active !== false);
         
         // Calculate VP breakdown (v3 format)
+        // V2026: read aDAO VP from vote.summary (sum-across-pools scale) so it
+        // matches votion VP scale. locks.summary.total_vp is treasury-only (single
+        // user) and used by the aDAO tab — wrong scale for this breakdown chart.
         const totalVP = data?.vote?.summary?.total_vp || 0;
-        const votionVP = data?.ext_data?.votion?.total_vp || 0;
-        const adaoVP = data?.locks?.summary?.total_vp || 0;
+        const votionVP = data?.vote?.summary?.total_votion_current_vp || data?.ext_data?.votion?.total_vp || 0;
+        const adaoVP = data?.vote?.summary?.total_adao_vp || data?.locks?.summary?.total_vp || 0;
         const otherVP = Math.max(0, totalVP - votionVP - adaoVP);
         
         // Update chart header
