@@ -607,6 +607,89 @@
         #docs-basics, #docs-glossary, #docs-scores, #docs-access, #docs-ecosystem, #docs-faq {
             scroll-margin-top: 100px;
         }
+
+        /* ============================================================
+           CRON HEALTH — footer indicator + per-widget staleness
+           ============================================================ */
+        /* Footer indicator dot */
+        .cron-health-trigger {
+            display: inline-flex; align-items: center; gap: 6px;
+            font-size: 0.75rem; color: #9ca3af;
+            background: transparent; border: none; cursor: pointer;
+            padding: 2px 6px; border-radius: 4px;
+            transition: color 0.15s, background 0.15s;
+        }
+        .cron-health-trigger:hover { color: #fff; background: rgba(255,255,255,0.05); }
+        .cron-health-trigger .dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: #6b7280; transition: background 0.3s;
+        }
+        .cron-health-trigger[data-overall="fresh"]    .dot { background: #10b981; box-shadow: 0 0 6px rgba(16,185,129,0.7); }
+        .cron-health-trigger[data-overall="warning"]  .dot { background: #f59e0b; box-shadow: 0 0 6px rgba(245,158,11,0.7); }
+        .cron-health-trigger[data-overall="stale"]    .dot { background: #ef4444; box-shadow: 0 0 6px rgba(239,68,68,0.8); }
+        .cron-health-trigger[data-overall="unknown"]  .dot { background: #6b7280; }
+
+        /* Cron health modal table */
+        .cron-health-row {
+            display: grid;
+            grid-template-columns: auto 1fr auto auto;
+            gap: 12px; align-items: center;
+            padding: 10px 12px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            font-size: 0.875rem;
+        }
+        .cron-health-row:last-child { border-bottom: none; }
+        .cron-health-row .status-dot {
+            width: 10px; height: 10px; border-radius: 50%;
+        }
+        .cron-health-row[data-status="fresh"]    .status-dot { background: #10b981; }
+        .cron-health-row[data-status="warning"]  .status-dot { background: #f59e0b; }
+        .cron-health-row[data-status="stale"]    .status-dot { background: #ef4444; }
+        .cron-health-row[data-status="unknown"]  .status-dot { background: #6b7280; }
+        .cron-health-row .age-cell {
+            font-family: ui-monospace, monospace;
+            color: #d1d5db;
+        }
+        .cron-health-row[data-status="warning"] .age-cell { color: #fbbf24; }
+        .cron-health-row[data-status="stale"] .age-cell   { color: #f87171; font-weight: 600; }
+        .cron-health-row .cadence-cell {
+            font-size: 0.75rem; color: #9ca3af;
+        }
+
+        /* Per-widget stale signaling — applied via data-stale attribute */
+        [data-cron-source][data-stale="warning"] {
+            position: relative;
+            outline: 1px solid rgba(245,158,11,0.4);
+            outline-offset: -1px;
+        }
+        [data-cron-source][data-stale="stale"] {
+            position: relative;
+            outline: 1px solid rgba(239,68,68,0.5);
+            outline-offset: -1px;
+        }
+        [data-cron-source][data-stale]::before {
+            content: attr(data-stale-label);
+            position: absolute;
+            top: 4px; right: 4px;
+            z-index: 5;
+            padding: 2px 6px;
+            font-size: 9px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border-radius: 3px;
+            pointer-events: none;
+        }
+        [data-cron-source][data-stale="warning"]::before {
+            background: rgba(245,158,11,0.18);
+            color: #fbbf24;
+            border: 1px solid rgba(245,158,11,0.35);
+        }
+        [data-cron-source][data-stale="stale"]::before {
+            background: rgba(239,68,68,0.18);
+            color: #f87171;
+            border: 1px solid rgba(239,68,68,0.45);
+        }
     </style>
 
     <!-- ============================================================
@@ -856,7 +939,7 @@
     <main class="max-w-7xl mx-auto px-4 py-6">
         
         <!-- OVERVIEW TAB -->
-        <div id="tab-overview" class="tab-content active">
+        <div id="tab-overview" class="tab-content active" data-cron-source="tla-snapshot,network-and-prices,bribes-history">
             <!-- Skeleton Swap Data Notice -->
             <div id="skeleton-swap-notice" class="mb-4 p-4 rounded-lg bg-amber-500/10 border border-amber-500/20">
                 <div class="flex items-start gap-3">
@@ -1088,7 +1171,7 @@
         </div>
         
         <!-- POOLS TAB -->
-        <div id="tab-pools" class="tab-content">
+        <div id="tab-pools" class="tab-content" data-cron-source="tla-snapshot,network-and-prices">
             <div class="glass-card p-4 mb-4">
                 <div class="flex flex-wrap items-center gap-4">
                     <input type="text" id="pool-search" placeholder="Search pools..." 
@@ -1119,7 +1202,7 @@
         </div>
         
         <!-- TLA LIQUIDITY TAB -->
-        <div id="tab-tla" class="tab-content">
+        <div id="tab-tla" class="tab-content" data-cron-source="adao-positions,tla-snapshot">
             <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                 <div class="glass-card p-5 text-center">
                     <div id="tla-total-depth" class="text-3xl font-bold text-green-400 mono">-</div>
@@ -1183,7 +1266,7 @@
         </div>
         
         <!-- RANKINGS TAB -->
-        <div id="tab-rankings" class="tab-content">
+        <div id="tab-rankings" class="tab-content" data-cron-source="tla-snapshot">
             <!-- Mission Statement -->
             <div class="glass-card p-6 mb-6 border-l-4 border-cyan-500">
                 <div class="flex items-start gap-4">
@@ -1349,7 +1432,7 @@
         </div>
         
         <!-- DAO TAB -->
-        <div id="tab-dao" class="tab-content">
+        <div id="tab-dao" class="tab-content" data-cron-source="adao-positions">
             <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
                 <div class="glass-card p-5 text-center">
                     <div id="dao-locked-vp" class="text-3xl font-bold text-cyan-400 mono">-</div>
@@ -2109,6 +2192,11 @@
                     <span class="opacity-60 mx-1">·</span>
                     <span>Changelog</span>
                 </button>
+                <span class="opacity-40 mx-2">·</span>
+                <button id="cronHealthTrigger" class="cron-health-trigger" data-overall="unknown" title="Click for cron status details">
+                    <span class="dot"></span>
+                    <span class="label">Cron status</span>
+                </button>
             </div>
         </div>
     </footer>
@@ -2127,6 +2215,33 @@
                     <i class="fas fa-spinner fa-spin mr-2"></i>Loading changelog...
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Cron Health Modal -->
+    <div id="cronHealthModal" class="modal fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50 hidden opacity-0">
+        <div class="modal-content bg-[#0f1117] border border-cyan-700/40 rounded-xl shadow-xl w-full max-w-2xl relative text-white opacity-0 scale-95 p-6 max-h-[85vh] overflow-y-auto">
+            <button class="modal-close absolute top-4 right-4 text-gray-400 hover:text-white text-3xl leading-none" data-close="cronHealthModal">&times;</button>
+            <h3 class="text-2xl font-bold text-cyan-400 mb-1 flex items-center gap-3">
+                <i class="fas fa-heart-pulse"></i>
+                Cron Health
+            </h3>
+            <p class="text-gray-500 text-xs mb-4">
+                Data freshness for each scheduled job. Computed from each cron's <span class="font-mono">capturedAt</span> timestamp.
+            </p>
+            <div class="flex items-center gap-4 text-xs text-gray-400 mb-4 px-2">
+                <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-green-500"></span>Fresh</span>
+                <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>Approaching stale</span>
+                <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-red-500"></span>Stale</span>
+            </div>
+            <div id="cronHealthModalBody" class="border border-white/5 rounded-lg overflow-hidden bg-black/20">
+                <div class="text-gray-500 text-center py-8">
+                    <i class="fas fa-spinner fa-spin mr-2"></i>Loading…
+                </div>
+            </div>
+            <p class="text-[10px] text-gray-600 mt-4 text-center">
+                Re-checks every 30 seconds. Auto-refreshes when this modal is open.
+            </p>
         </div>
     </div>
 
@@ -2197,8 +2312,240 @@
         previousEpochData: null,
         previousAdaoSnap: null,
         previousEpochNumber: null, // Actual epoch number of loaded previous data (may not be epoch-1 if gaps exist)
-        historyData: [] // Array of {epoch, metrics} for trend display
+        historyData: [], // Array of {epoch, metrics} for trend display
+        cronHealth: {}, // { [cronKey]: { capturedAt: Date, status: 'fresh'|'warning'|'stale', error: null|string } }
     };
+
+    // ============================================================
+    // CRON HEALTH REGISTRY
+    // Each cron's expected cadence + the URL that exposes its capturedAt.
+    // ============================================================
+    const CRON_REGISTRY = {
+        'tla-snapshot': {
+            label: 'TLA Snapshot',
+            cadence: 'hourly',
+            cadenceMs: 60 * 60 * 1000,
+            warningMs: 75 * 60 * 1000,  // 1h 15m
+            staleMs: 2 * 60 * 60 * 1000, // 2h
+            sourceUrl: 'https://raw.githubusercontent.com/defipatriot/tla-snapshot-data_2026/main/data/tla-snapshot.json',
+            description: 'Unified aggregator — powers pools, pie, VP totals',
+        },
+        'network-and-prices': {
+            label: 'Network & Prices',
+            cadence: 'hourly',
+            cadenceMs: 60 * 60 * 1000,
+            warningMs: 75 * 60 * 1000,
+            staleMs: 2 * 60 * 60 * 1000,
+            sourceUrl: 'https://raw.githubusercontent.com/defipatriot/network-and-prices-data_2026/main/data/network-and-prices.json',
+            description: 'LUNA price, LST ratios, token prices',
+        },
+        'bribes-history': {
+            label: 'Bribes History',
+            cadence: 'daily',
+            cadenceMs: 24 * 60 * 60 * 1000,
+            warningMs: 26 * 60 * 60 * 1000,
+            staleMs: 36 * 60 * 60 * 1000,
+            sourceUrl: 'https://raw.githubusercontent.com/defipatriot/bribes-data_2026/main/data/current-state.json',
+            description: 'PD bribes + epoch archives',
+        },
+        'adao-positions': {
+            label: 'aDAO Positions',
+            cadence: 'weekly',
+            cadenceMs: 7 * 24 * 60 * 60 * 1000,
+            warningMs: 8 * 24 * 60 * 60 * 1000,
+            staleMs: 10 * 24 * 60 * 60 * 1000,
+            sourceUrl: 'https://raw.githubusercontent.com/defipatriot/adao-positions-data_2026/main/data/current.json',
+            description: 'Treasury + 46 member portfolios',
+        },
+        'astroport': {
+            label: 'Astroport Pools',
+            cadence: 'daily',
+            cadenceMs: 24 * 60 * 60 * 1000,
+            warningMs: 26 * 60 * 60 * 1000,
+            staleMs: 36 * 60 * 60 * 1000,
+            sourceUrl: 'https://raw.githubusercontent.com/defipatriot/astroport-pool-data_2026/main/astroport/astroport-snapshot.json',
+            description: 'Astroport pool TVL + volume (feeds TLA Snapshot)',
+        },
+        'skeletonswap': {
+            label: 'Skeleton Swap',
+            cadence: 'daily',
+            cadenceMs: 24 * 60 * 60 * 1000,
+            warningMs: 26 * 60 * 60 * 1000,
+            staleMs: 36 * 60 * 60 * 1000,
+            sourceUrl: 'https://raw.githubusercontent.com/defipatriot/ss-pool-data_2026/main/ss-pool-snapshot.json',
+            description: 'Skeleton Swap pool data (feeds TLA Snapshot)',
+        },
+        'votion': {
+            label: 'Votion',
+            cadence: 'weekly',
+            cadenceMs: 7 * 24 * 60 * 60 * 1000,
+            warningMs: 8 * 24 * 60 * 60 * 1000,
+            staleMs: 10 * 24 * 60 * 60 * 1000,
+            sourceUrl: null, // dynamic — set per epoch
+            description: 'Next-epoch vote optimization data',
+        },
+    };
+
+    // Per-source cadence label for the modal
+    function cronCadenceLabel(key) {
+        return CRON_REGISTRY[key]?.cadence || '?';
+    }
+
+    // Record a capture time for a cron. Pass null for capturedAt if fetch failed.
+    function recordCronCapture(key, capturedAt, errorMessage = null) {
+        if (!CRON_REGISTRY[key]) {
+            console.warn(`[cron-health] unknown cron key: ${key}`);
+            return;
+        }
+        const ts = capturedAt ? new Date(capturedAt) : null;
+        store.cronHealth[key] = {
+            capturedAt: ts,
+            checkedAt: new Date(),
+            error: errorMessage,
+        };
+    }
+
+    // Compute current status for one cron given its registry config + recorded capture.
+    function computeCronStatus(key) {
+        const cfg = CRON_REGISTRY[key];
+        const rec = store.cronHealth[key];
+        if (!cfg) return 'unknown';
+        if (!rec || rec.error) return 'stale';
+        if (!rec.capturedAt) return 'unknown';
+        const age = Date.now() - rec.capturedAt.getTime();
+        if (age >= cfg.staleMs) return 'stale';
+        if (age >= cfg.warningMs) return 'warning';
+        return 'fresh';
+    }
+
+    // Worst-of-all status across all known crons (for footer indicator)
+    function getOverallCronHealth() {
+        const keys = Object.keys(CRON_REGISTRY);
+        let worst = 'fresh';
+        const rank = { fresh: 0, warning: 1, stale: 2, unknown: 1 };
+        let anyKnown = false;
+        for (const k of keys) {
+            const s = computeCronStatus(k);
+            if (s !== 'unknown') anyKnown = true;
+            if (rank[s] > rank[worst]) worst = s;
+        }
+        if (!anyKnown) return 'unknown';
+        return worst;
+    }
+
+    // Format an age in ms as a relative time string ("3m ago", "16h ago", "2d ago")
+    function formatAge(ms) {
+        if (!isFinite(ms) || ms < 0) return '—';
+        const sec = Math.floor(ms / 1000);
+        if (sec < 60) return `${sec}s ago`;
+        const min = Math.floor(sec / 60);
+        if (min < 60) return `${min}m ago`;
+        const hr = Math.floor(min / 60);
+        if (hr < 24) return `${hr}h ago`;
+        const day = Math.floor(hr / 24);
+        return `${day}d ago`;
+    }
+
+    // Apply data-stale attributes to every [data-cron-source] element on the page.
+    // The cron-source attribute is a comma-separated list of cron keys.
+    function refreshWidgetStaleness() {
+        const els = document.querySelectorAll('[data-cron-source]');
+        els.forEach(el => {
+            const sources = (el.getAttribute('data-cron-source') || '')
+                .split(',').map(s => s.trim()).filter(Boolean);
+            let worst = 'fresh';
+            const rank = { fresh: 0, warning: 1, stale: 2, unknown: 1 };
+            for (const k of sources) {
+                const s = computeCronStatus(k);
+                if (rank[s] > rank[worst]) worst = s;
+            }
+            if (worst === 'fresh' || worst === 'unknown') {
+                el.removeAttribute('data-stale');
+                el.removeAttribute('data-stale-label');
+            } else {
+                el.setAttribute('data-stale', worst);
+                el.setAttribute('data-stale-label', worst === 'warning' ? 'stale-soon' : 'stale');
+            }
+        });
+    }
+
+    // Update the footer indicator dot color.
+    function refreshHealthIndicator() {
+        const btn = document.getElementById('cronHealthTrigger');
+        if (!btn) return;
+        const overall = getOverallCronHealth();
+        btn.setAttribute('data-overall', overall);
+        const label = btn.querySelector('.label');
+        if (label) {
+            label.textContent = ({
+                'fresh':   'Crons healthy',
+                'warning': 'Cron stale soon',
+                'stale':   'Cron stale',
+                'unknown': 'Cron status',
+            })[overall];
+        }
+    }
+
+    // Populate the cron-health modal table.
+    function renderCronHealthModal() {
+        const body = document.getElementById('cronHealthModalBody');
+        if (!body) return;
+        const rows = Object.keys(CRON_REGISTRY).map(key => {
+            const cfg = CRON_REGISTRY[key];
+            const rec = store.cronHealth[key];
+            const status = computeCronStatus(key);
+            const age = (rec?.capturedAt) ? (Date.now() - rec.capturedAt.getTime()) : NaN;
+            const ageStr = rec?.error
+                ? `<span class="text-red-400">error</span>`
+                : (rec?.capturedAt ? formatAge(age) : '—');
+            const capturedStr = rec?.capturedAt ? rec.capturedAt.toISOString().replace('T',' ').slice(0,19)+' UTC' : 'never';
+            const errBlock = rec?.error ? `<div class="text-[10px] text-red-400 mt-1">${rec.error}</div>` : '';
+            return `
+                <div class="cron-health-row" data-status="${status}">
+                    <span class="status-dot"></span>
+                    <div>
+                        <div class="text-white font-medium">${cfg.label}</div>
+                        <div class="text-[11px] text-gray-500">${cfg.description}</div>
+                        ${errBlock}
+                    </div>
+                    <span class="cadence-cell">${cfg.cadence}</span>
+                    <div class="text-right">
+                        <div class="age-cell">${ageStr}</div>
+                        <div class="text-[10px] text-gray-500">${capturedStr}</div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+        body.innerHTML = rows;
+    }
+
+    // Refresh all health UI — call after data load AND on a 30s interval.
+    function refreshCronHealthAll() {
+        refreshHealthIndicator();
+        refreshWidgetStaleness();
+        // Only re-render modal body if it's currently open
+        const modal = document.getElementById('cronHealthModal');
+        if (modal && !modal.classList.contains('hidden')) renderCronHealthModal();
+    }
+
+    // Lightweight fetch of just the capturedAt for crons the page doesn't otherwise read.
+    async function fetchCronCapturedAt(key) {
+        const cfg = CRON_REGISTRY[key];
+        if (!cfg?.sourceUrl) return;
+        try {
+            const r = await fetch(cfg.sourceUrl);
+            if (!r.ok) {
+                recordCronCapture(key, null, `HTTP ${r.status}`);
+                return;
+            }
+            const j = await r.json();
+            const ts = j.capturedAt || j.generatedAt || j.fetched_at || null;
+            if (ts) recordCronCapture(key, ts);
+            else recordCronCapture(key, null, 'no capturedAt field');
+        } catch (e) {
+            recordCronCapture(key, null, e.message || 'fetch failed');
+        }
+    }
     
     // ============================================================
     // HELPERS
@@ -2613,6 +2960,17 @@
             store.pdBribesData = pdBribesResp;
             store.historicalData = historicalResp;
             store.votionData = votionResp;
+
+            // === Record cron-health capturedAt for primary sources ===
+            recordCronCapture('tla-snapshot',       tlaSnapshotResp?.capturedAt   || null, tlaSnapshotResp   ? null : 'fetch failed');
+            recordCronCapture('network-and-prices', networkPricesResp?.capturedAt || null, networkPricesResp ? null : 'fetch failed');
+            recordCronCapture('adao-positions',     adaoPositionsResp?.capturedAt || null, adaoPositionsResp ? null : 'fetch failed');
+            recordCronCapture('bribes-history',     bribesCurrentResp?.capturedAt || null, bribesCurrentResp ? null : 'fetch failed');
+            recordCronCapture('votion',             votionResp?.fetched_at || votionResp?.capturedAt || null, votionResp ? null : 'fetch failed');
+            // Producer crons (page doesn't otherwise need them) — fetch timestamps in background, non-blocking
+            fetchCronCapturedAt('astroport').then(refreshCronHealthAll);
+            fetchCronCapturedAt('skeletonswap').then(refreshCronHealthAll);
+            refreshCronHealthAll();
 
             // === Build the LUNA price snap (replaces adaoSnap) ===
             const lunaPriceUsd = networkPricesResp?.token_prices?.LUNA?.final_price_usd
@@ -8080,9 +8438,50 @@
         
         setupEventListeners();
         initTabFromHash(); // Check URL hash and switch to that tab
+        setupCronHealthUI();
         
         // Load current live data (no more per-epoch file picking — data is continuous now)
         await loadEpochData();
+    }
+
+    // ============================================================
+    // CRON HEALTH UI wire-up
+    // ============================================================
+    function setupCronHealthUI() {
+        const trigger = document.getElementById('cronHealthTrigger');
+        const modal   = document.getElementById('cronHealthModal');
+        if (!trigger || !modal) return;
+
+        const openModal = () => {
+            renderCronHealthModal();
+            modal.classList.remove('hidden');
+            // Match the changelog-modal animation pattern
+            requestAnimationFrame(() => {
+                modal.classList.remove('opacity-0');
+                const content = modal.querySelector('.modal-content');
+                if (content) content.classList.remove('opacity-0','scale-95');
+            });
+        };
+        const closeModal = () => {
+            modal.classList.add('opacity-0');
+            const content = modal.querySelector('.modal-content');
+            if (content) content.classList.add('opacity-0','scale-95');
+            setTimeout(() => modal.classList.add('hidden'), 200);
+        };
+
+        trigger.addEventListener('click', openModal);
+        modal.querySelectorAll('.modal-close, [data-close="cronHealthModal"]').forEach(b =>
+            b.addEventListener('click', closeModal));
+        modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape' && !modal.classList.contains('hidden')) closeModal();
+        });
+
+        // Periodic refresh — recompute relative ages every 30s, no refetch
+        setInterval(refreshCronHealthAll, 30 * 1000);
+
+        // Initial paint (statuses will be 'unknown' until data loads)
+        refreshCronHealthAll();
     }
     
     // Legacy stub — no longer needed since data is live and continuous
