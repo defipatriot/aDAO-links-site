@@ -2956,16 +2956,20 @@
         const totalVotionOptimizedVp = Object.values(votionOptByBucket).length
             ? Math.max(...Object.values(votionOptByBucket)) : 0;
 
-        // aDAO VP — sum of unique member VPs + treasury display VP
-        // (NOT sum-across-pools which would 4× inflate since each member votes in 4 buckets)
+        // aDAO VP — TREASURY ONLY (the aDAO entity that votes with pooled funds).
+        // Member-level breakdowns belong in the separate Member Stats page; at the
+        // TLA-wide level, "aDAO" = the treasury wallet that votes with the DAO's
+        // collective stake. Each member's personal VP is conceptually "Other" here.
+        const treasuryDisplayVp = adaoPositions?.treasury?.summary?.display_voting_power_human || 0;
+        const totalAdaoVp = treasuryDisplayVp;
+
+        // For analytical context (not displayed here, but kept for Member Stats page)
         let memberVpSum = 0;
         for (const m of (adaoPositions?.members || [])) {
             memberVpSum += m.summary?.voting_power_human || 0;
         }
-        const treasuryDisplayVp = adaoPositions?.treasury?.summary?.display_voting_power_human || 0;
-        const totalAdaoVp = memberVpSum + treasuryDisplayVp;
 
-        // Pool-summed aDAO VP — for any context that needs it (e.g. waterfall chart per-pool)
+        // Pool-summed aDAO VP — TREASURY ONLY, used by waterfall chart per-pool
         const totalAdaoVpPoolSum = votePools.reduce((s, p) => s + (p.adao_vp || 0), 0);
 
         // Total bribes USD (sum across all pools — correct since each pool's bribes are unique)
@@ -3174,38 +3178,26 @@
         return idx;
     }
 
+    // Build per-pool aDAO VP allocations from the TREASURY wallet only.
+    // At the TLA-wide level (this page), "aDAO" = the DAO treasury entity.
+    // Individual member voting belongs in the separate Member Stats page.
     function buildAdaoVotesIndex(adaoPositions) {
         const idx = {};
-        if (!adaoPositions) return idx;
+        if (!adaoPositions?.treasury) return idx;
 
-        // Include both named members AND the treasury wallet — treasury IS the
-        // aDAO Core entity and its votes are part of "aDAO VP".
-        const voters = [];
-        for (const m of (adaoPositions.members || [])) {
-            voters.push({
-                vp: m.summary?.voting_power_human || 0,
-                votes_per_bucket: m.voting?.votes_per_bucket || {},
-            });
-        }
-        if (adaoPositions.treasury) {
-            voters.push({
-                vp: adaoPositions.treasury.summary?.display_voting_power_human || 0,
-                votes_per_bucket: adaoPositions.treasury.voting?.votes_per_bucket || {},
-            });
-        }
+        const treasury = adaoPositions.treasury;
+        const treasuryVp = treasury.summary?.display_voting_power_human || 0;
+        const votesPerBucket = treasury.voting?.votes_per_bucket || {};
 
-        for (const voter of voters) {
-            const userVp = voter.vp;
-            for (const bucket of Object.keys(voter.votes_per_bucket)) {
-                const votes = voter.votes_per_bucket[bucket]?.votes || [];
-                for (const v of votes) {
-                    const id = v.gauge_pool_id || v.pool_gauge_id;
-                    if (!id) continue;
-                    const weight = (v.weight_bps || 0) / 10000;
-                    const allocVp = userVp * weight;
-                    if (!idx[id]) idx[id] = { adao_vp: 0 };
-                    idx[id].adao_vp += allocVp;
-                }
+        for (const bucket of Object.keys(votesPerBucket)) {
+            const votes = votesPerBucket[bucket]?.votes || [];
+            for (const v of votes) {
+                const id = v.gauge_pool_id || v.pool_gauge_id;
+                if (!id) continue;
+                const weight = (v.weight_bps || 0) / 10000;
+                const allocVp = treasuryVp * weight;
+                if (!idx[id]) idx[id] = { adao_vp: 0 };
+                idx[id].adao_vp += allocVp;
             }
         }
         return idx;
