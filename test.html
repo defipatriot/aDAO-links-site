@@ -624,10 +624,11 @@
             width: 8px; height: 8px; border-radius: 50%;
             background: #6b7280; transition: background 0.3s;
         }
-        .cron-health-trigger[data-overall="fresh"]    .dot { background: #10b981; box-shadow: 0 0 6px rgba(16,185,129,0.7); }
-        .cron-health-trigger[data-overall="warning"]  .dot { background: #f59e0b; box-shadow: 0 0 6px rgba(245,158,11,0.7); }
-        .cron-health-trigger[data-overall="stale"]    .dot { background: #ef4444; box-shadow: 0 0 6px rgba(239,68,68,0.8); }
-        .cron-health-trigger[data-overall="unknown"]  .dot { background: #6b7280; }
+        .cron-health-trigger[data-overall="fresh"]     .dot { background: #10b981; box-shadow: 0 0 6px rgba(16,185,129,0.7); }
+        .cron-health-trigger[data-overall="no-signal"] .dot { background: #10b981; box-shadow: 0 0 6px rgba(16,185,129,0.7); }
+        .cron-health-trigger[data-overall="warning"]   .dot { background: #f59e0b; box-shadow: 0 0 6px rgba(245,158,11,0.7); }
+        .cron-health-trigger[data-overall="stale"]     .dot { background: #ef4444; box-shadow: 0 0 6px rgba(239,68,68,0.8); }
+        .cron-health-trigger[data-overall="unknown"]   .dot { background: #6b7280; }
 
         /* Cron health modal table */
         .cron-health-row {
@@ -646,6 +647,7 @@
         .cron-health-row[data-status="warning"]  .status-dot { background: #f59e0b; }
         .cron-health-row[data-status="stale"]    .status-dot { background: #ef4444; }
         .cron-health-row[data-status="unknown"]  .status-dot { background: #6b7280; }
+        .cron-health-row[data-status="no-signal"] .status-dot { background: #6b7280; outline: 1px dashed #9ca3af; outline-offset: 1px; }
         .cron-health-row .age-cell {
             font-family: ui-monospace, monospace;
             color: #d1d5db;
@@ -2229,10 +2231,11 @@
             <p class="text-gray-500 text-xs mb-4">
                 Data freshness for each scheduled job. Computed from each cron's <span class="font-mono">capturedAt</span> timestamp.
             </p>
-            <div class="flex items-center gap-4 text-xs text-gray-400 mb-4 px-2">
+            <div class="flex items-center gap-4 text-xs text-gray-400 mb-4 px-2 flex-wrap">
                 <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-green-500"></span>Fresh</span>
                 <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>Approaching stale</span>
                 <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-red-500"></span>Stale</span>
+                <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-gray-500" style="outline:1px dashed #9ca3af; outline-offset:1px"></span>No freshness signal</span>
             </div>
             <div id="cronHealthModalBody" class="border border-white/5 rounded-lg overflow-hidden bg-black/20">
                 <div class="text-gray-500 text-center py-8">
@@ -2363,7 +2366,9 @@
             cadenceMs: 24 * 60 * 60 * 1000,
             warningMs: 26 * 60 * 60 * 1000,
             staleMs: 36 * 60 * 60 * 1000,
-            sourceUrl: 'https://raw.githubusercontent.com/defipatriot/astroport-pool-data_2026/main/astroport/astroport-snapshot.json',
+            // Per-epoch JSON files; we try current epoch, fall back to previous
+            sourceUrlFn: (epoch) => `https://raw.githubusercontent.com/defipatriot/astroport-pool-data_2026/main/astroport/astroport-epoch-${epoch}.json`,
+            sourceUrlFallbackFn: (epoch) => `https://raw.githubusercontent.com/defipatriot/astroport-pool-data_2026/main/astroport/astroport-epoch-${epoch - 1}.json`,
             description: 'Astroport pool TVL + volume (feeds TLA Snapshot)',
         },
         'skeletonswap': {
@@ -2372,7 +2377,10 @@
             cadenceMs: 24 * 60 * 60 * 1000,
             warningMs: 26 * 60 * 60 * 1000,
             staleMs: 36 * 60 * 60 * 1000,
-            sourceUrl: 'https://raw.githubusercontent.com/defipatriot/ss-pool-data_2026/main/ss-pool-snapshot.json',
+            // SS writes CSV files (day-1..7, weekly-avg, etc.) — no embedded capturedAt field.
+            // No reliable freshness signal until cron writes a heartbeat JSON.
+            noHeartbeat: true,
+            noHeartbeatReason: 'CSV output has no timestamp field; needs cron-side heartbeat file',
             description: 'Skeleton Swap pool data (feeds TLA Snapshot)',
         },
         'votion': {
@@ -2381,7 +2389,9 @@
             cadenceMs: 7 * 24 * 60 * 60 * 1000,
             warningMs: 8 * 24 * 60 * 60 * 1000,
             staleMs: 10 * 24 * 60 * 60 * 1000,
-            sourceUrl: null, // dynamic — set per epoch
+            // Per-epoch JSON; latest is for the current canonical epoch
+            sourceUrlFn: (epoch) => `https://raw.githubusercontent.com/defipatriot/votion-data_2026/main/votion/votion-epoch-${epoch}.json`,
+            sourceUrlFallbackFn: (epoch) => `https://raw.githubusercontent.com/defipatriot/votion-data_2026/main/votion/votion-epoch-${epoch - 1}.json`,
             description: 'Next-epoch vote optimization data',
         },
     };
@@ -2410,6 +2420,8 @@
         const cfg = CRON_REGISTRY[key];
         const rec = store.cronHealth[key];
         if (!cfg) return 'unknown';
+        // Cron explicitly has no freshness signal — surface that distinctly, not as an error.
+        if (cfg.noHeartbeat) return 'no-signal';
         if (!rec || rec.error) return 'stale';
         if (!rec.capturedAt) return 'unknown';
         const age = Date.now() - rec.capturedAt.getTime();
@@ -2418,16 +2430,17 @@
         return 'fresh';
     }
 
-    // Worst-of-all status across all known crons (for footer indicator)
+    // Worst-of-all status across all known crons (for footer indicator).
+    // 'no-signal' does NOT escalate the overall — it's an informational state.
     function getOverallCronHealth() {
         const keys = Object.keys(CRON_REGISTRY);
         let worst = 'fresh';
-        const rank = { fresh: 0, warning: 1, stale: 2, unknown: 1 };
+        const rank = { fresh: 0, 'no-signal': 0, warning: 1, stale: 2, unknown: 1 };
         let anyKnown = false;
         for (const k of keys) {
             const s = computeCronStatus(k);
             if (s !== 'unknown') anyKnown = true;
-            if (rank[s] > rank[worst]) worst = s;
+            if ((rank[s] ?? 0) > (rank[worst] ?? 0)) worst = s;
         }
         if (!anyKnown) return 'unknown';
         return worst;
@@ -2448,18 +2461,19 @@
 
     // Apply data-stale attributes to every [data-cron-source] element on the page.
     // The cron-source attribute is a comma-separated list of cron keys.
+    // 'no-signal' is treated as benign — it doesn't flag widgets as stale.
     function refreshWidgetStaleness() {
         const els = document.querySelectorAll('[data-cron-source]');
         els.forEach(el => {
             const sources = (el.getAttribute('data-cron-source') || '')
                 .split(',').map(s => s.trim()).filter(Boolean);
             let worst = 'fresh';
-            const rank = { fresh: 0, warning: 1, stale: 2, unknown: 1 };
+            const rank = { fresh: 0, 'no-signal': 0, warning: 1, stale: 2, unknown: 1 };
             for (const k of sources) {
                 const s = computeCronStatus(k);
-                if (rank[s] > rank[worst]) worst = s;
+                if ((rank[s] ?? 0) > (rank[worst] ?? 0)) worst = s;
             }
-            if (worst === 'fresh' || worst === 'unknown') {
+            if (worst === 'fresh' || worst === 'unknown' || worst === 'no-signal') {
                 el.removeAttribute('data-stale');
                 el.removeAttribute('data-stale-label');
             } else {
@@ -2478,11 +2492,12 @@
         const label = btn.querySelector('.label');
         if (label) {
             label.textContent = ({
-                'fresh':   'Crons healthy',
-                'warning': 'Cron stale soon',
-                'stale':   'Cron stale',
-                'unknown': 'Cron status',
-            })[overall];
+                'fresh':     'Crons healthy',
+                'no-signal': 'Crons healthy',
+                'warning':   'Cron stale soon',
+                'stale':     'Cron stale',
+                'unknown':   'Cron status',
+            })[overall] || 'Cron status';
         }
     }
 
@@ -2494,12 +2509,25 @@
             const cfg = CRON_REGISTRY[key];
             const rec = store.cronHealth[key];
             const status = computeCronStatus(key);
-            const age = (rec?.capturedAt) ? (Date.now() - rec.capturedAt.getTime()) : NaN;
-            const ageStr = rec?.error
-                ? `<span class="text-red-400">error</span>`
-                : (rec?.capturedAt ? formatAge(age) : '—');
-            const capturedStr = rec?.capturedAt ? rec.capturedAt.toISOString().replace('T',' ').slice(0,19)+' UTC' : 'never';
-            const errBlock = rec?.error ? `<div class="text-[10px] text-red-400 mt-1">${rec.error}</div>` : '';
+
+            let ageStr, capturedStr, errBlock = '';
+
+            if (status === 'no-signal') {
+                ageStr = `<span class="text-gray-400">no signal</span>`;
+                capturedStr = `<span class="text-[10px] text-gray-600">${cfg.noHeartbeatReason || 'no heartbeat'}</span>`;
+            } else if (rec?.error) {
+                ageStr = `<span class="text-red-400">error</span>`;
+                capturedStr = 'never';
+                errBlock = `<div class="text-[10px] text-red-400 mt-1">${rec.error}</div>`;
+            } else if (rec?.capturedAt) {
+                const age = Date.now() - rec.capturedAt.getTime();
+                ageStr = formatAge(age);
+                capturedStr = rec.capturedAt.toISOString().replace('T',' ').slice(0,19) + ' UTC';
+            } else {
+                ageStr = '—';
+                capturedStr = 'never';
+            }
+
             return `
                 <div class="cron-health-row" data-status="${status}">
                     <span class="status-dot"></span>
@@ -2529,22 +2557,42 @@
     }
 
     // Lightweight fetch of just the capturedAt for crons the page doesn't otherwise read.
+    // Supports static sourceUrl, dynamic sourceUrlFn(epoch), and a fallback URL for crons
+    // whose latest file might be on the previous epoch.
     async function fetchCronCapturedAt(key) {
         const cfg = CRON_REGISTRY[key];
-        if (!cfg?.sourceUrl) return;
-        try {
-            const r = await fetch(cfg.sourceUrl);
-            if (!r.ok) {
-                recordCronCapture(key, null, `HTTP ${r.status}`);
-                return;
-            }
-            const j = await r.json();
-            const ts = j.capturedAt || j.generatedAt || j.fetched_at || null;
-            if (ts) recordCronCapture(key, ts);
-            else recordCronCapture(key, null, 'no capturedAt field');
-        } catch (e) {
-            recordCronCapture(key, null, e.message || 'fetch failed');
+        if (!cfg) return;
+        if (cfg.noHeartbeat) {
+            // Cron has no freshness signal — record a sentinel and move on
+            recordCronCapture(key, null, cfg.noHeartbeatReason || 'no heartbeat available');
+            return;
         }
+        const epoch = store.currentRealEpoch || 0;
+        // Build the list of URLs to try in order: primary, fallback
+        const urls = [];
+        if (typeof cfg.sourceUrlFn === 'function') urls.push(cfg.sourceUrlFn(epoch));
+        else if (cfg.sourceUrl) urls.push(cfg.sourceUrl);
+        if (typeof cfg.sourceUrlFallbackFn === 'function') urls.push(cfg.sourceUrlFallbackFn(epoch));
+
+        if (urls.length === 0) {
+            recordCronCapture(key, null, 'no sourceUrl configured');
+            return;
+        }
+
+        let lastErr = null;
+        for (const url of urls) {
+            try {
+                const r = await fetch(url);
+                if (!r.ok) { lastErr = `HTTP ${r.status}`; continue; }
+                const j = await r.json();
+                const ts = j.capturedAt || j.generatedAt || j.fetched_at || null;
+                if (ts) { recordCronCapture(key, ts); return; }
+                lastErr = 'no capturedAt field';
+            } catch (e) {
+                lastErr = e.message || 'fetch failed';
+            }
+        }
+        recordCronCapture(key, null, lastErr);
     }
     
     // ============================================================
