@@ -2366,8 +2366,9 @@
             cadenceMs: 24 * 60 * 60 * 1000,
             warningMs: 26 * 60 * 60 * 1000,
             staleMs: 36 * 60 * 60 * 1000,
-            // Per-epoch JSON files; we try current epoch, fall back to previous
-            sourceUrlFn: (epoch) => `https://raw.githubusercontent.com/defipatriot/astroport-pool-data_2026/main/astroport/astroport-epoch-${epoch}.json`,
+            // Heartbeat file written on every successful run; falls back to per-epoch JSON
+            // if heartbeat doesn't exist yet (e.g. before the cron has been redeployed)
+            sourceUrl: 'https://raw.githubusercontent.com/defipatriot/astroport-pool-data_2026/main/data/heartbeat.json',
             sourceUrlFallbackFn: (epoch) => `https://raw.githubusercontent.com/defipatriot/astroport-pool-data_2026/main/astroport/astroport-epoch-${epoch - 1}.json`,
             description: 'Astroport pool TVL + volume (feeds TLA Snapshot)',
         },
@@ -2377,10 +2378,9 @@
             cadenceMs: 24 * 60 * 60 * 1000,
             warningMs: 26 * 60 * 60 * 1000,
             staleMs: 36 * 60 * 60 * 1000,
-            // SS writes CSV files (day-1..7, weekly-avg, etc.) — no embedded capturedAt field.
-            // No reliable freshness signal until cron writes a heartbeat JSON.
-            noHeartbeat: true,
-            noHeartbeatReason: 'CSV output has no timestamp field; needs cron-side heartbeat file',
+            // Heartbeat file (added in cron after previous CSV-only outputs lacked a timestamp)
+            sourceUrl: 'https://raw.githubusercontent.com/defipatriot/ss-pool-data_2026/main/data/heartbeat.json',
+            // No fallback — if heartbeat isn't there yet, status will be 'stale' until cron redeploys
             description: 'Skeleton Swap pool data (feeds TLA Snapshot)',
         },
         'votion': {
