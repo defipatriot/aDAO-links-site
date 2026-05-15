@@ -836,6 +836,18 @@
                         </a>
                     </p>
                 </div>
+
+                <!-- Member Data Selector (Overview tab only).
+                     Default value "" = TLA-wide view (no member overlay).
+                     Selecting a member adds a slice to the VP pie, a layer to the waterfall,
+                     and filters the threshold watch to pools they voted for. -->
+                <div id="member-selector-wrap" class="flex items-center gap-2">
+                    <label for="member-selector" class="text-xs text-gray-500 hidden md:block">Member Data:</label>
+                    <select id="member-selector" class="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-purple-500/50 hover:bg-white/10 transition-colors min-w-[180px]" disabled>
+                        <option value="">All members (TLA-wide)</option>
+                    </select>
+                </div>
+
                 <div class="flex items-center gap-4 flex-wrap">
                     <div class="text-center">
                         <div class="text-xs text-gray-500">Live Epoch</div>
@@ -1071,10 +1083,16 @@
                         <span class="text-gray-400">aDAO:</span>
                         <span id="waterfall-adao" class="font-mono text-cyan-400">-</span>
                     </div>
-                    <div class="flex items-center gap-2">
+                    <!-- Selected-member legend chip — populated by JS when a member is selected -->
+                    <div id="waterfall-member-legend" class="flex items-center gap-2 hidden">
                         <span class="w-3 h-3 rounded bg-amber-500"></span>
+                        <span class="text-gray-400" id="waterfall-member-label">Member:</span>
+                        <span id="waterfall-member" class="font-mono text-amber-400">-</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="w-3 h-3 rounded bg-slate-500"></span>
                         <span class="text-gray-400">Other:</span>
-                        <span id="waterfall-other" class="font-mono text-amber-400">-</span>
+                        <span id="waterfall-other" class="font-mono text-slate-400">-</span>
                     </div>
                 </div>
                 
@@ -1133,8 +1151,9 @@
                         <h3 class="font-semibold text-lg flex items-center gap-2">
                             <i class="fas fa-exclamation-triangle text-amber-400"></i>
                             Threshold Watch
+                            <span id="threshold-member-badge" class="hidden text-[10px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 font-medium normal-case"></span>
                         </h3>
-                        <p class="text-xs text-gray-500 mt-1">Pools need &gt;1% of bucket votes to stay active. Showing pools at risk and recently inactive.</p>
+                        <p class="text-xs text-gray-500 mt-1" id="threshold-description">Pools need &gt;1% of bucket votes to stay active. Showing pools at risk and recently inactive.</p>
                     </div>
                 </div>
                 
@@ -2317,6 +2336,10 @@
         previousEpochNumber: null, // Actual epoch number of loaded previous data (may not be epoch-1 if gaps exist)
         historyData: [], // Array of {epoch, metrics} for trend display
         cronHealth: {}, // { [cronKey]: { capturedAt: Date, status: 'fresh'|'warning'|'stale', error: null|string } }
+        // Member overlay (Overview tab only). null = TLA-wide view.
+        // When set to a member wallet address, the pie + waterfall + threshold rerender
+        // with that member's slice/layer/filter applied. Pools/TLA Liquidity/etc are unaffected.
+        selectedMemberWallet: null,
     };
 
     // ============================================================
@@ -3027,6 +3050,10 @@
             store.historicalData = historicalResp;
             store.votionData = votionResp;
 
+            // Populate the member-data dropdown now that adaoPositions is loaded.
+            // Members are sorted alphabetically by display name for easy scanning.
+            populateMemberSelector();
+
             // === Record cron-health capturedAt for primary sources ===
             recordCronCapture('tla-snapshot',       tlaSnapshotResp?.capturedAt   || null, tlaSnapshotResp   ? null : 'fetch failed');
             recordCronCapture('network-and-prices', networkPricesResp?.capturedAt || null, networkPricesResp ? null : 'fetch failed');
@@ -3179,6 +3206,11 @@
                 dex_raw: p.dex_raw || p.dex,
                 bucket: (p.bucket || '').toUpperCase(),  // renderer expects UPPERCASE
                 is_active: p.status === 'active',
+                // Canonical unique identifier — preserved from tla-snapshot so member-vote
+                // lookups can match by gauge_pool_id (which is truly unique, unlike name+dex
+                // which can collide when two pools with the same pair exist on the same DEX,
+                // e.g. an active LUNA-WBTC and an older below-threshold one).
+                gauge_pool_id: p.gauge_pool_id || null,
 
                 // Vote data
                 vp: vp,
@@ -3987,6 +4019,101 @@
     }
     
     // ============================================================
+    // MEMBER OVERLAY (Overview tab only)
+    // Populates the header dropdown from adao-positions; when a member is selected,
+    // the pie chart, waterfall, and threshold watch re-render with that member's
+    // slice/layer/filter. Pools/TLA Liquidity/aDAO/etc are unaffected.
+    // ============================================================
+    function populateMemberSelector() {
+        const sel = document.getElementById('member-selector');
+        if (!sel) return;
+        const members = store.adaoPositions?.members || [];
+        if (members.length === 0) {
+            sel.disabled = true;
+            return;
+        }
+        // Sort alphabetically (case-insensitive) by display name
+        const sorted = [...members].sort((a, b) => {
+            const aName = (a.name || a.wallet || '').toLowerCase();
+            const bName = (b.name || b.wallet || '').toLowerCase();
+            return aName < bName ? -1 : aName > bName ? 1 : 0;
+        });
+        // Reset to the single "All members" option, then append member options
+        sel.innerHTML = '<option value="">All members (TLA-wide)</option>';
+        for (const m of sorted) {
+            if (!m.wallet) continue;
+            const opt = document.createElement('option');
+            opt.value = m.wallet;
+            const vpStr = m.summary?.display_voting_power_human
+                ? ` (${fmtNum(m.summary.display_voting_power_human)} VP)`
+                : '';
+            opt.textContent = `${m.name || m.wallet.slice(0, 12) + '…'}${vpStr}`;
+            sel.appendChild(opt);
+        }
+        sel.disabled = false;
+        // Restore prior selection if user picked one before data finished loading
+        if (store.selectedMemberWallet) sel.value = store.selectedMemberWallet;
+        // Wire up change handler — only attach once
+        if (!sel.dataset.wired) {
+            sel.addEventListener('change', onMemberSelectorChange);
+            sel.dataset.wired = '1';
+        }
+    }
+
+    function onMemberSelectorChange(e) {
+        const wallet = e.target.value || null;
+        store.selectedMemberWallet = wallet;
+        // Re-render only the three Overview-tab visuals affected by member selection.
+        // Other tabs untouched per design (member overlay is Overview-only).
+        try { renderBucketCharts(); } catch (err) { console.warn('renderBucketCharts after member change:', err); }
+        try {
+            // Re-render waterfall in its currently-active bucket
+            const activeBucketBtn = document.querySelector('.votion-bucket-btn.active');
+            const bucket = activeBucketBtn?.dataset?.bucket || 'STABLE';
+            renderWaterfallChart(bucket);
+        } catch (err) { console.warn('renderWaterfallChart after member change:', err); }
+        try { renderThresholdWatch(); } catch (err) { console.warn('renderThresholdWatch after member change:', err); }
+    }
+
+    // Returns the selected member object (from adaoPositions.members) or null.
+    function getSelectedMember() {
+        const wallet = store.selectedMemberWallet;
+        if (!wallet) return null;
+        const members = store.adaoPositions?.members || [];
+        return members.find(m => m.wallet === wallet) || null;
+    }
+
+    // Returns { totalVp, votesByPool } for the selected member, or null.
+    //   totalVp        — their display_voting_power_human
+    //   votesByPool    — Map<gaugePoolId, vpAllocated> — keyed on the truly unique
+    //                    gauge_pool_id (not name+dex which can collide when multiple
+    //                    pools share the same pair on the same DEX in the same bucket).
+    function getSelectedMemberAllocations() {
+        const m = getSelectedMember();
+        if (!m) return null;
+        const totalVp = m.summary?.display_voting_power_human || 0;
+        const byPool = new Map();
+        const votesPerBucket = m.voting?.votes_per_bucket || {};
+        for (const info of Object.values(votesPerBucket)) {
+            for (const v of (info.votes || [])) {
+                const key = v.pool_gauge_id;
+                if (!key) continue;   // skip malformed vote entries
+                const vp = ((v.weight_bps || 0) / 10000) * totalVp;
+                byPool.set(key, (byPool.get(key) || 0) + vp);
+            }
+        }
+        return { member: m, totalVp, votesByPool: byPool };
+    }
+
+    // Build the lookup key from a normalized pool object in store.pools.
+    // Must match the key shape produced by getSelectedMemberAllocations() above.
+    // Returns null if the pool has no gauge_pool_id (defensive — shouldn't happen
+    // for real pools coming from tla-snapshot).
+    function poolKeyForLookup(pool) {
+        return pool.gauge_pool_id || null;
+    }
+
+    // ============================================================
     // OVERVIEW TAB
     // ============================================================
     function renderOverviewTab() {
@@ -4017,10 +4144,28 @@
         const tlaTVL = store.tlaPools.reduce((sum, p) => sum + (p.tla_staked || 0), 0);
         document.getElementById('chart-tla-tvl').textContent = fmt$(tlaTVL);
         
-        // VP Breakdown Chart (Votion, aDAO, Other)
+        // VP Breakdown Chart (Votion, aDAO, Other [+ optional Selected Member])
+        // When a member is selected via the header dropdown, carve their VP out
+        // of the "Other" slice into its own slice. Total VP unchanged.
+        const memberAlloc = getSelectedMemberAllocations();
+        let memberSliceVp = 0;
+        let memberSliceLabel = null;
+        if (memberAlloc) {
+            // Cap the member slice at the size of "Other" so we never produce a negative
+            // residual if the member has more VP than the leftover bucket somehow.
+            memberSliceVp = Math.min(memberAlloc.totalVp, otherVP);
+            memberSliceLabel = memberAlloc.member.name || memberAlloc.member.wallet.slice(0, 12) + '…';
+        }
+        const adjustedOtherVP = Math.max(0, otherVP - memberSliceVp);
+
         const vpLabels = ['Votion VP', 'aDAO VP', 'Other'];
-        const vpData = [votionVP, adaoVP, otherVP];
+        const vpData = [votionVP, adaoVP, adjustedOtherVP];
         const vpColors = ['#a855f7', '#06b6d4', '#64748b'];
+        if (memberSliceVp > 0) {
+            vpLabels.push(memberSliceLabel);
+            vpData.push(memberSliceVp);
+            vpColors.push('#f59e0b');   // amber — distinct from existing 3 colors
+        }
         
         const ctx1 = document.getElementById('vpBreakdownChart').getContext('2d');
         if (store.charts.vpBreakdown) store.charts.vpBreakdown.destroy();
@@ -4375,8 +4520,38 @@
     function renderThresholdWatch() {
         const allPools = store.pools || [];
         const prevPools = store.previousEpochData?.pools || [];
+
+        // Member filter: when a member is selected, only show pools they voted for.
+        // Note: ideally we'd filter by "LPs they staked in," but per-member LP staking
+        // is not currently captured in adao-positions. Their VOTES are the closest proxy
+        // we have to "pools they care about." Future cron extension could add LP staking.
+        const memberAlloc = getSelectedMemberAllocations();
+        const memberPoolSet = memberAlloc
+            ? new Set([...memberAlloc.votesByPool.keys()])
+            : null;
+        const memberName = memberAlloc
+            ? (memberAlloc.member.name || memberAlloc.member.wallet.slice(0, 12) + '…')
+            : null;
+
+        // Update the section header badge + description
+        const badge = document.getElementById('threshold-member-badge');
+        const desc = document.getElementById('threshold-description');
+        if (badge) {
+            if (memberName) {
+                badge.textContent = `Filtered: ${memberName}`;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+        }
+        if (desc) {
+            desc.textContent = memberName
+                ? `Pools need >1% of bucket votes to stay active. Showing ${memberName}'s pools that are at risk or inactive.`
+                : 'Pools need >1% of bucket votes to stay active. Showing pools at risk and recently inactive.';
+        }
         
-        // Group by bucket and calculate bucket totals
+        // Group by bucket and calculate bucket totals (use ALL pools, not filtered —
+        // bucket percentages must reflect the true bucket-level VP totals)
         const bucketTotals = {};
         allPools.forEach(p => {
             if (!bucketTotals[p.bucket]) bucketTotals[p.bucket] = 0;
@@ -4390,12 +4565,18 @@
             prevBucketTotals[p.bucket] += (p.vp || 0);
         });
         
-        // Calculate percentage of bucket for each pool
-        const poolsWithPct = allPools.map(p => {
+        // Calculate percentage of bucket for each pool — then optionally filter to member's pools
+        let poolsWithPct = allPools.map(p => {
             const bucketTotal = bucketTotals[p.bucket] || 1;
             const pct = ((p.vp || 0) / bucketTotal) * 100;
             return { ...p, bucketPct: pct };
         });
+        if (memberPoolSet) {
+            poolsWithPct = poolsWithPct.filter(p => {
+                const key = poolKeyForLookup(p);
+                return key && memberPoolSet.has(key);
+            });
+        }
         
         // Previous epoch percentages
         const prevPoolsWithPct = prevPools.map(p => {
@@ -4465,11 +4646,14 @@
         const hasMoreAtRisk = atRisk.length > 5;
         
         if (atRisk.length === 0) {
+            const emptyMsg = memberName
+                ? `None of ${memberName}'s pools are currently at risk`
+                : 'No pools currently at risk - all active pools are above 2%';
             atRiskContainer.innerHTML = `
                 <div class="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
                     <div class="flex items-center gap-2 text-emerald-400">
                         <i class="fas fa-shield-alt"></i>
-                        <span class="text-sm">No pools currently at risk - all active pools are above 2%</span>
+                        <span class="text-sm">${emptyMsg}</span>
                     </div>
                 </div>
             `;
@@ -4545,11 +4729,14 @@
         const hasMoreDropped = !showAllDropped && justDropped.length > 5;
         
         if (justDropped.length === 0) {
+            const emptyMsg = memberName
+                ? `None of ${memberName}'s pools dropped this epoch`
+                : 'No pools dropped this epoch - all active pools maintained their status';
             recentlyDroppedContainer.innerHTML = `
                 <div class="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
                     <div class="flex items-center gap-2 text-emerald-400">
                         <i class="fas fa-check-circle"></i>
-                        <span class="text-sm">No pools dropped this epoch - all active pools maintained their status</span>
+                        <span class="text-sm">${emptyMsg}</span>
                     </div>
                 </div>
             `;
@@ -4713,16 +4900,31 @@
         
         // Select which Votion VP to use based on toggle
         const getVotionVP = (p) => useNextEpoch ? (p.votion_next_vp || 0) : (p.votion_now_vp || 0);
-        
+
+        // Selected member's per-pool VP map (for this bucket only). null when no member selected.
+        // We need a quick lookup by pool name. Members vote across all 4 buckets so we filter to
+        // just this bucket's pools when building the per-pool overlay below.
+        const memberAlloc = getSelectedMemberAllocations();
+        const memberByPool = memberAlloc ? memberAlloc.votesByPool : null;
+
         // Calculate bucket totals
         const bucketTotalVP = pools.reduce((sum, p) => sum + (p.vp || 0), 0);
         const bucketVotionVP = pools.reduce((sum, p) => sum + getVotionVP(p), 0);
         const bucketAdaoVP = pools.reduce((sum, p) => sum + (p.adao_vp || 0), 0);
-        const bucketOtherVP = Math.max(0, bucketTotalVP - bucketVotionVP - bucketAdaoVP);
+        // Member VP contribution within THIS bucket only (sum across pools shown here)
+        const bucketMemberVP = memberByPool
+            ? pools.reduce((sum, p) => {
+                const key = poolKeyForLookup(p);
+                return sum + (key ? (memberByPool.get(key) || 0) : 0);
+            }, 0)
+            : 0;
+        // "Other" now means everyone except Votion/aDAO/selectedMember
+        const bucketOtherVP = Math.max(0, bucketTotalVP - bucketVotionVP - bucketAdaoVP - bucketMemberVP);
         
         // Calculate percentages
         const votionPct = bucketTotalVP > 0 ? (bucketVotionVP / bucketTotalVP) * 100 : 0;
         const adaoPct = bucketTotalVP > 0 ? (bucketAdaoVP / bucketTotalVP) * 100 : 0;
+        const memberPct = bucketTotalVP > 0 ? (bucketMemberVP / bucketTotalVP) * 100 : 0;
         const otherPct = bucketTotalVP > 0 ? (bucketOtherVP / bucketTotalVP) * 100 : 0;
         
         // Round up to nice number for scale
@@ -4733,6 +4935,18 @@
         document.getElementById('waterfall-votion').textContent = `${fmtNum(bucketVotionVP)} / ${votionPct.toFixed(1)}%`;
         document.getElementById('waterfall-adao').textContent = `${fmtNum(bucketAdaoVP)} / ${adaoPct.toFixed(1)}%`;
         document.getElementById('waterfall-other').textContent = `${fmtNum(bucketOtherVP)} / ${otherPct.toFixed(1)}%`;
+        // Show/hide member legend chip
+        const memberLegend = document.getElementById('waterfall-member-legend');
+        if (memberLegend) {
+            if (memberAlloc) {
+                const memberName = memberAlloc.member.name || memberAlloc.member.wallet.slice(0, 12) + '…';
+                document.getElementById('waterfall-member-label').textContent = `${memberName}:`;
+                document.getElementById('waterfall-member').textContent = `${fmtNum(bucketMemberVP)} / ${memberPct.toFixed(1)}%`;
+                memberLegend.classList.remove('hidden');
+            } else {
+                memberLegend.classList.add('hidden');
+            }
+        }
         document.getElementById('scale-max').textContent = fmtNum(scaleMax);
         document.getElementById('scale-25').textContent = fmtNum(scaleMax * 0.25);
         document.getElementById('scale-50').textContent = fmtNum(scaleMax * 0.50);
@@ -4751,7 +4965,10 @@
             const poolVP = pool.vp || 0;
             const votionVP = getVotionVP(pool);
             const adaoVP = pool.adao_vp || 0;
-            const otherVP = Math.max(0, poolVP - votionVP - adaoVP);
+            // Selected member's VP in this specific pool (0 if not selected or no vote here)
+            const memberPoolKey = memberByPool ? poolKeyForLookup(pool) : null;
+            const memberVP = memberPoolKey ? (memberByPool.get(memberPoolKey) || 0) : 0;
+            const otherVP = Math.max(0, poolVP - votionVP - adaoVP - memberVP);
             
             // Calculate start position and width as percentage of scale
             const startPct = (cumulative / scaleMax) * 100;
@@ -4765,6 +4982,7 @@
             // Calculate sub-segment widths (as % of pool's width)
             const votionPct = poolVP > 0 ? (votionVP / poolVP) * 100 : 0;
             const adaoPct = poolVP > 0 ? (adaoVP / poolVP) * 100 : 0;
+            const memberSubPct = poolVP > 0 ? (memberVP / poolVP) * 100 : 0;
             const otherPct = poolVP > 0 ? (otherVP / poolVP) * 100 : 0;
             
             // Calculate change indicator for next epoch view
@@ -4789,7 +5007,8 @@
                          style="left: ${startPct}%; width: ${Math.max(poolWidthPct, 0.5)}%;">
                         ${votionVP > 0 ? `<div class="h-full" style="width: ${votionPct}%; background: rgba(168, 85, 247, 0.9);"></div>` : ''}
                         ${adaoVP > 0 ? `<div class="h-full" style="width: ${adaoPct}%; background: rgba(6, 182, 212, 0.9);"></div>` : ''}
-                        ${otherVP > 0 ? `<div class="h-full" style="width: ${otherPct}%; background: rgba(245, 158, 11, 0.7);"></div>` : ''}
+                        ${memberVP > 0 ? `<div class="h-full" style="width: ${memberSubPct}%; background: rgba(245, 158, 11, 0.95);" title="Selected member"></div>` : ''}
+                        ${otherVP > 0 ? `<div class="h-full" style="width: ${otherPct}%; background: rgba(100, 116, 139, 0.7);"></div>` : ''}
                     </div>
                     
                     <!-- Pool name inside bar if bar is wide enough -->
