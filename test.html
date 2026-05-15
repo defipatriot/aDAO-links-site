@@ -1187,8 +1187,13 @@
                         <div class="w-4 h-3 rounded" style="background: #06b6d4;"></div>
                         <span class="text-gray-400">aDAO</span>
                     </div>
-                    <div class="flex items-center gap-2">
+                    <!-- Member chip — revealed by JS when a member is selected, label populated dynamically -->
+                    <div id="waterfall-footer-member-legend" class="flex items-center gap-2 hidden">
                         <div class="w-4 h-3 rounded" style="background: #f59e0b;"></div>
+                        <span class="text-gray-400" id="waterfall-footer-member-label">Member</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <div class="w-4 h-3 rounded" style="background: #64748b;"></div>
                         <span class="text-gray-400">Other</span>
                     </div>
                 </div>
@@ -3533,24 +3538,58 @@
     // Best-effort token price resolution from an asset_info object
     function resolveTokenPriceFromInfo(info, tokenPrices) {
         if (!info || !tokenPrices) return null;
-        // cw20 — look up by address (some tokens may use address-key in token_prices)
+
+        // Walks all known shapes of an address field for one token entry. The network-and-prices
+        // cron stores per-source prices nested under `prices.{astroport,coingecko,calculated}.address`
+        // and `prices.{...}.all_chains.{chain}.address`, while older entries kept `entry.address` at
+        // the top level. We accept any of these so a single canonical entry can be matched no matter
+        // where the address lives in the shape. The matching token's final_price_usd is canonical.
+        function entryMatchesCw20(entry, cw20) {
+            if (!entry) return false;
+            if (entry.address === cw20 || entry.cw20 === cw20) return true;
+            const prices = entry.prices || {};
+            for (const src of Object.values(prices)) {
+                if (!src) continue;
+                if (src.address === cw20) return true;
+                const allChains = src.all_chains || {};
+                for (const chain of Object.values(allChains)) {
+                    if (chain?.address === cw20) return true;
+                }
+            }
+            return false;
+        }
+        function entryMatchesNative(entry, denom) {
+            if (!entry) return false;
+            if (entry.denom === denom || entry.native === denom) return true;
+            const prices = entry.prices || {};
+            for (const src of Object.values(prices)) {
+                if (!src) continue;
+                if (src.denom === denom || src.native === denom) return true;
+            }
+            return false;
+        }
+
+        // cw20 — token address-based lookup
         if (info.cw20) {
             for (const sym of Object.keys(tokenPrices)) {
                 const entry = tokenPrices[sym];
-                if (entry?.address === info.cw20 || entry?.cw20 === info.cw20) {
+                if (entryMatchesCw20(entry, info.cw20)) {
                     return entry.final_price_usd || null;
                 }
             }
         }
-        // native — common case: LUNA, USDC, etc. The denom often encodes the symbol.
+        // native — common case: LUNA, USDC, IBC denoms, factory tokens
         if (info.native) {
             const denom = info.native;
-            // Try common patterns
+            // Fast-path for LUNA
             if (denom === 'uluna') return tokenPrices.LUNA?.final_price_usd || null;
-            // IBC denoms — look for any token whose denom field matches
+            // Factory-style native tokens may include symbol at the tail (e.g. .../ampCAPA)
+            const tail = denom.split('/').pop();
+            if (tail && tokenPrices[tail]?.final_price_usd) return tokenPrices[tail].final_price_usd;
+            // Fall back to scanning denom/native fields
             for (const sym of Object.keys(tokenPrices)) {
                 const entry = tokenPrices[sym];
-                if (entry?.denom === denom || entry?.native === denom) {
+                if (entryMatchesNative(entry, denom)) {
                     return entry.final_price_usd || null;
                 }
             }
@@ -5115,17 +5154,24 @@
         document.getElementById('waterfall-votion').textContent = `${fmtNum(bucketVotionVP)} / ${votionPct.toFixed(1)}%`;
         document.getElementById('waterfall-adao').textContent = `${fmtNum(bucketAdaoVP)} / ${adaoPct.toFixed(1)}%`;
         document.getElementById('waterfall-other').textContent = `${fmtNum(bucketOtherVP)} / ${otherPct.toFixed(1)}%`;
-        // Show/hide member legend chip
+        // Show/hide member legend chip (top totals row + bottom footer legend)
         const memberLegend = document.getElementById('waterfall-member-legend');
-        if (memberLegend) {
-            if (memberAlloc) {
-                const memberName = memberAlloc.member.name || memberAlloc.member.wallet.slice(0, 12) + '…';
+        const footerMemberLegend = document.getElementById('waterfall-footer-member-legend');
+        const footerMemberLabel = document.getElementById('waterfall-footer-member-label');
+        if (memberAlloc) {
+            const memberName = memberAlloc.member.name || memberAlloc.member.wallet.slice(0, 12) + '…';
+            if (memberLegend) {
                 document.getElementById('waterfall-member-label').textContent = `${memberName}:`;
                 document.getElementById('waterfall-member').textContent = `${fmtNum(bucketMemberVP)} / ${memberPct.toFixed(1)}%`;
                 memberLegend.classList.remove('hidden');
-            } else {
-                memberLegend.classList.add('hidden');
             }
+            if (footerMemberLegend) {
+                if (footerMemberLabel) footerMemberLabel.textContent = memberName;
+                footerMemberLegend.classList.remove('hidden');
+            }
+        } else {
+            if (memberLegend) memberLegend.classList.add('hidden');
+            if (footerMemberLegend) footerMemberLegend.classList.add('hidden');
         }
         document.getElementById('scale-max').textContent = fmtNum(scaleMax);
         document.getElementById('scale-25').textContent = fmtNum(scaleMax * 0.25);
@@ -5211,7 +5257,8 @@
                         <div class="text-gray-300">Total VP: <span class="text-cyan-400 font-mono">${fmtNum(poolVP)}</span></div>
                         ${votionVP > 0 ? `<div class="text-purple-400">Votion${useNextEpoch ? ' (Planned)' : ''}: ${fmtNum(votionVP)} (${votionPct.toFixed(1)}%)${votionChange !== 0 ? ` <span class="${votionChange > 0 ? 'text-emerald-400' : 'text-red-400'}">(${votionChange > 0 ? '+' : ''}${fmtNum(votionChange)})</span>` : ''}</div>` : ''}
                         ${adaoVP > 0 ? `<div class="text-cyan-400">aDAO: ${fmtNum(adaoVP)} (${adaoPct.toFixed(1)}%)</div>` : ''}
-                        ${otherVP > 0 ? `<div class="text-amber-400">Other: ${fmtNum(otherVP)} (${otherPct.toFixed(1)}%)</div>` : ''}
+                        ${memberVP > 0 ? `<div class="text-amber-400">${memberAlloc ? (memberAlloc.member.name || memberAlloc.member.wallet.slice(0, 12) + '…') : 'Member'}: ${fmtNum(memberVP)} (${memberSubPct.toFixed(1)}%)</div>` : ''}
+                        ${otherVP > 0 ? `<div class="text-slate-400">Other: ${fmtNum(otherVP)} (${otherPct.toFixed(1)}%)</div>` : ''}
                     </div>
                 </div>
             `;
