@@ -5869,6 +5869,9 @@
                             <div class="text-sm text-gray-400">
                                 <i class="fas fa-chart-line mr-2"></i>Daily Liquidity & Volume
                                 <span class="text-[10px] text-gray-500 ml-2">Solid = Liq, Dashed = Vol • Past epoch then current</span>
+                                <span class="text-[10px] text-amber-400/80 ml-2" title="Skeleton Swap's upstream API has been serving stale data. SS chart lines are temporarily hidden while the cron is updated to use the new SS API endpoint. SS data remains in the table.">
+                                    <i class="fas fa-info-circle"></i> Astroport only
+                                </span>
                             </div>
                             <div class="flex items-center gap-2">
                                 <select class="scale-select epoch-select text-xs" data-bucket="${bucket}" onchange="updateBucketChartScale('${bucket}', this.value)">
@@ -5992,9 +5995,13 @@
         
         const data = store.dailyChartData;
         const bucketPools = store.pools.filter(p => p.bucket === bucket && p.is_active !== false);
-        // Include BOTH Astroport and Skeleton Swap pools (the new daily data covers both)
+        // TEMPORARY (May 17 2026): exclude Skeleton Swap pools from chart.
+        // The SS cron's upstream API has been serving frozen data since ~May 4
+        // (SS migrated their API to /api/pools and the old endpoint is stale).
+        // Re-enable once the cron is updated to call the new endpoint.
+        // See: ss-pool-data_2026 cron update in flight.
         const lpKeys = bucketPools
-            .filter(p => p.dex === 'Astroport' || p.dex === 'Skeleton Swap')
+            .filter(p => p.dex === 'Astroport')
             .map(p => `${p.name}|${p.dex}`)
             .filter(k => data.series[k]);  // only LPs with at least some series data
         
