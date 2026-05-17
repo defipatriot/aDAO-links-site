@@ -1814,7 +1814,7 @@
                             <div class="text-xl font-bold text-blue-400">25%</div>
                         </div>
                         <div class="text-sm text-gray-400">
-                            <span class="text-white">4-epoch average volume</span> — More trades = more activity on Terra
+                            <span class="text-white">Epoch average volume</span> — More trades = more activity on Terra
                         </div>
                     </div>
                     
@@ -1824,7 +1824,7 @@
                             <div class="text-xl font-bold text-cyan-400">20%</div>
                         </div>
                         <div class="text-sm text-gray-400">
-                            <span class="text-white">4-epoch average liquidity</span> — Deeper pools enable larger trades with less slippage
+                            <span class="text-white">Epoch average liquidity</span> — Deeper pools enable larger trades with less slippage
                         </div>
                     </div>
                     
@@ -2335,6 +2335,12 @@
         adaoMembersUrl:    'https://raw.githubusercontent.com/defipatriot/adao-positions-data_2026/main/data/members.json',
         bribesCurrentUrl:  'https://raw.githubusercontent.com/defipatriot/bribes-data_2026/main/data/current-state.json',
         votionBaseUrl:     'https://raw.githubusercontent.com/defipatriot/votion-data_2026/main/votion',  // append /votion-epoch-{N}.json
+
+        // Per-epoch pool data (new cron repos) — used to build last-completed-epoch
+        // averages for the Pools tab "Epoch Avg" columns. Astroport file is the LIVE
+        // file for the current epoch (it carries epochs[N-1] frozen inside).
+        astroportEpochBaseUrl: 'https://raw.githubusercontent.com/defipatriot/astroport-pool-data_2026/main/astroport',  // append /astroport-epoch-{N}.json
+        ssWeeklyAvgBaseUrl:    'https://raw.githubusercontent.com/defipatriot/ss-pool-data_2026/main/data/weekly-avg',   // append /2026-epoch-{N}.csv
 
         // Legacy data sources (still in use)
         epochDatesUrl:     'https://raw.githubusercontent.com/defipatriot/tla_json_storage/main/epoch_1-300_date.json',
@@ -3076,6 +3082,7 @@
             console.log(`Loading live data for current epoch ${currentEpoch}`);
 
             // === Fetch all primary sources in parallel ===
+            const lastCompleteEpoch = currentEpoch - 1;
             const [
                 tlaSnapshotResp,
                 networkPricesResp,
@@ -3084,6 +3091,8 @@
                 pdBribesResp,
                 historicalResp,
                 votionResp,
+                astroEpochResp,
+                ssWeeklyAvgText,
             ] = await Promise.all([
                 fetch(CONFIG.tlaSnapshotUrl).then(r => r.ok ? r.json() : null).catch(e => { console.warn('tla-snapshot fetch:', e.message); return null; }),
                 fetch(CONFIG.networkPricesUrl).then(r => r.ok ? r.json() : null).catch(e => { console.warn('network-prices fetch:', e.message); return null; }),
@@ -3092,6 +3101,20 @@
                 fetch(CONFIG.pdBribesUrl).then(r => r.ok ? r.json() : null).catch(() => null),
                 fetch(CONFIG.historicalUrls[2026]).then(r => r.ok ? r.json() : null).catch(() => null),
                 fetch(`${CONFIG.votionBaseUrl}/votion-epoch-${currentEpoch}.json`).then(r => r.ok ? r.json() : null).catch(() => null),
+                // Astroport: live file for current epoch — carries epochs[N-1] inside
+                fetch(`${CONFIG.astroportEpochBaseUrl}/astroport-epoch-${currentEpoch}.json`)
+                    .then(r => r.ok ? r.json() : null)
+                    .catch(e => { console.warn('astroport-epoch fetch:', e.message); return null; }),
+                // SS weekly-avg for the last completed epoch.
+                // Fallback to epoch-2 ago if it's not written yet (cron writes Mon 00:05 UTC).
+                fetch(`${CONFIG.ssWeeklyAvgBaseUrl}/2026-epoch-${lastCompleteEpoch}.csv`)
+                    .then(r => {
+                        if (r.ok) return r.text();
+                        // Fallback: try one epoch earlier
+                        return fetch(`${CONFIG.ssWeeklyAvgBaseUrl}/2026-epoch-${lastCompleteEpoch - 1}.csv`)
+                            .then(r2 => r2.ok ? r2.text() : null);
+                    })
+                    .catch(e => { console.warn('ss-weekly-avg fetch:', e.message); return null; }),
             ]);
 
             if (!tlaSnapshotResp) {
@@ -3152,6 +3175,8 @@
                 pdBribes: pdBribesResp,
                 historical: historicalResp,
                 votion: votionResp,
+                astroEpoch: astroEpochResp,
+                ssWeeklyAvgCsv: ssWeeklyAvgText,
                 currentEpoch,
             });
             store.data = transformedData;
@@ -3209,7 +3234,7 @@
     // ============================================================
     // TRANSFORM: new continuous data → legacy "data" shape
     // ============================================================
-    function buildLegacyDataShape({ tlaSnapshot, networkPrices, adaoPositions, bribesCurrent, pdBribes, historical, votion, currentEpoch }) {
+    function buildLegacyDataShape({ tlaSnapshot, networkPrices, adaoPositions, bribesCurrent, pdBribes, historical, votion, astroEpoch, ssWeeklyAvgCsv, currentEpoch }) {
         const tokenPrices = networkPrices?.token_prices || {};
         const lunaPriceUsd = tokenPrices.LUNA?.final_price_usd || 0;
 
@@ -3220,9 +3245,14 @@
         // Votion data is already embedded in pool.voting_power.votion_current_vp / votion_optimized_vp
         // and pool.voting_power.lockup_contributions[] — use those, ignore external votion file
 
-        // Build historical lookup: "PoolName|DEX" → { liq_4ep_avg, vol_4ep_avg, ... }
-        // Uses the LATEST available epochs in the historical file (since data ends at epoch 166)
-        const historicalByPool = buildHistoricalIndex(historical);
+        // Build per-pool epoch averages from the new cron repos.
+        // Returns { "PoolName|DEX": { liq_4ep_avg, vol_4ep_avg, ... } } — same shape
+        // as the old buildHistoricalIndex but the values are the LAST COMPLETE
+        // EPOCH's daily-averages (not a 4-epoch rolling average). Field names are
+        // preserved so downstream code is untouched; the column label is updated
+        // to "Epoch Avg" to reflect the new semantics.
+        const lastCompleteEpoch = currentEpoch - 1;
+        const historicalByPool = buildEpochAvgIndex(astroEpoch, ssWeeklyAvgCsv, lastCompleteEpoch);
 
         // Build aDAO vote allocations lookup: pool_gauge_id → { adao_vp, adao_pct }
         const adaoVotesByPool = buildAdaoVotesIndex(adaoPositions);
@@ -3622,6 +3652,91 @@
         }
         return idx;
     }
+
+    // Minimal CSV parser — splits on commas, trims, strips surrounding quotes.
+    // Sufficient for the SS weekly-avg files where no field contains a literal comma.
+    // Returns array of objects keyed by the header row.
+    function parseCsv(text) {
+        if (!text) return [];
+        const lines = text.split(/\r?\n/).filter(l => l.length > 0);
+        if (lines.length < 2) return [];
+        const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+        const rows = [];
+        for (let i = 1; i < lines.length; i++) {
+            const cells = lines[i].split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+            const obj = {};
+            for (let j = 0; j < headers.length; j++) obj[headers[j]] = cells[j] ?? '';
+            rows.push(obj);
+        }
+        return rows;
+    }
+
+    // Build last-completed-epoch averages from the new cron data repos.
+    // Returns the same SHAPE as buildHistoricalIndex so downstream consumers
+    // are unchanged. Field names `liq_4ep_avg` / `vol_4ep_avg` are preserved
+    // for now (semantically they now represent the SINGLE most-recently-
+    // completed epoch's daily-average, not a 4-epoch rolling average).
+    //
+    //   astroEpochJson: JSON from astroport-pool-data_2026/astroport/astroport-epoch-{currentEpoch}.json
+    //                   (live file — carries epochs[currentEpoch-1] frozen inside)
+    //   ssWeeklyAvgCsv: text from ss-pool-data_2026/data/weekly-avg/2026-epoch-{currentEpoch-1}.csv
+    //   lastCompleteEpoch: integer, the target epoch we want averages for
+    //
+    // Volume normalization: both DEXes contribute a DAILY-AVERAGE volume
+    // (Astroport's epochs[N].avgVolume is already daily; SS's total_volume_usd
+    // is the epoch sum, divided here by snapshot_count to get daily-avg).
+    function buildEpochAvgIndex(astroEpochJson, ssWeeklyAvgCsv, lastCompleteEpoch) {
+        const idx = {};
+        const targetKey = String(lastCompleteEpoch);
+
+        // === Astroport ===
+        if (astroEpochJson?.pools && Array.isArray(astroEpochJson.pools)) {
+            for (const p of astroEpochJson.pools) {
+                const name = p.name;
+                if (!name) continue;
+                const epData = p.epochs?.[targetKey] || {};
+                const avgLiq = Number(epData.avgLiquidity) || 0;
+                const avgVol = Number(epData.avgVolume) || 0;
+                const liqPts = Number(epData.liqPointCount) || 0;
+                const volPts = Number(epData.volPointCount) || 0;
+                // Weekly turnover ratio: (daily-avg volume * 7) / avg liquidity
+                const efficiency = avgLiq > 0 ? (avgVol * 7) / avgLiq : 0;
+                idx[`${name}|Astroport`] = {
+                    liq_4ep_avg: avgLiq,
+                    vol_4ep_avg: avgVol,
+                    liq_4ep_count: liqPts,
+                    vol_4ep_count: volPts,
+                    efficiency: efficiency,
+                    epochs_used: (avgLiq || avgVol) ? [lastCompleteEpoch] : [],
+                };
+            }
+        }
+
+        // === Skeleton Swap ===
+        if (ssWeeklyAvgCsv && typeof ssWeeklyAvgCsv === 'string') {
+            const rows = parseCsv(ssWeeklyAvgCsv);
+            for (const row of rows) {
+                const name = (row.pool_id || row.pool_name || '').trim();
+                if (!name) continue;
+                const avgLiq = Number(row.avg_tvl_usd) || 0;
+                const totalVol = Number(row.total_volume_usd) || 0;
+                const n = Number(row.snapshot_count) || 1;
+                const avgVol = n > 0 ? totalVol / n : 0;
+                const efficiency = avgLiq > 0 ? (avgVol * 7) / avgLiq : 0;
+                idx[`${name}|Skeleton Swap`] = {
+                    liq_4ep_avg: avgLiq,
+                    vol_4ep_avg: avgVol,
+                    liq_4ep_count: n,
+                    vol_4ep_count: n,
+                    efficiency: efficiency,
+                    epochs_used: (avgLiq || avgVol) ? [lastCompleteEpoch] : [],
+                };
+            }
+        }
+
+        return idx;
+    }
+
 
     // Build per-pool aDAO VP allocations from the TREASURY wallet only.
     // At the TLA-wide level (this page), "aDAO" = the DAO treasury entity.
@@ -5538,8 +5653,8 @@
                                     <tr>
                                         <th class="text-left" title="Pool name, DEX, and pool type (PCL, Stable, XYK)">Pool</th>
                                         <th class="text-center" title="Active = receiving TLA rewards, Inactive = no rewards">Status</th>
-                                        <th class="text-right" title="Average DEX liquidity over the last 4 epochs (~28 days)">4EP Avg Liq</th>
-                                        <th class="text-right" title="Average trading volume over the last 4 epochs (~28 days)">4EP Avg Vol</th>
+                                        <th class="text-right" title="Average DEX liquidity over the last completed epoch (~7 days)">Epoch Avg Liq</th>
+                                        <th class="text-right" title="Average daily trading volume over the last completed epoch">Epoch Avg Vol</th>
                                         <th class="text-right" title="Annual Percentage Rate. Top: Amplified (with boost), Bottom: Non-amplified (base)">APR</th>
                                         <th class="text-right" title="Current Votion protocol votes. Top: Vote power, Bottom: % of bucket total">Votion Now</th>
                                         <th class="text-right" title="Change in Votion votes from current to next epoch">Δ Vote</th>
@@ -6249,8 +6364,8 @@
                 `${effPct}% = For every $100 in this pool,&#10;` +
                 `$${effPct} of trading happens per week.&#10;&#10;` +
                 `This Pool:&#10;` +
-                `  Weekly Volume: ${fmt$(p.vol_4ep_avg || 0)}&#10;` +
-                `  Pool Liquidity: ${fmt$(p.liq_4ep_avg || 0)}&#10;&#10;` +
+                `  Epoch Daily-Avg Volume: ${fmt$(p.vol_4ep_avg || 0)}&#10;` +
+                `  Epoch Avg Liquidity:    ${fmt$(p.liq_4ep_avg || 0)}&#10;&#10;` +
                 `Rating: ${effLabel}&#10;` +
                 `Rank: #${rank} of ${efficiencies.length} pools (top ${percentile}%)`;
             
