@@ -519,6 +519,27 @@
         }
         .active-dot.on { background: #10b981; }
         .active-dot.off { background: #475569; }
+
+        /* Copy-address button next to "Unknown" pool labels */
+        .copy-addr-btn {
+            background: transparent;
+            border: none;
+            padding: 2px 4px;
+            cursor: pointer;
+            color: #fbbf24;
+            border-radius: 4px;
+            line-height: 1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .copy-addr-btn:hover { background: rgba(251, 191, 36, 0.15); }
+        .copy-addr-btn.copied {
+            color: #10b981 !important;
+            opacity: 1 !important;
+        }
+        /* Swap clipboard icon for check on successful copy */
+        .copy-addr-btn.copied .fa-copy::before { content: "\f00c"; }
         
         /* Desktop readability - larger text on big screens */
         @media (min-width: 1400px) {
@@ -2342,10 +2363,18 @@
         astroportEpochBaseUrl: 'https://raw.githubusercontent.com/defipatriot/astroport-pool-data_2026/main/astroport',  // append /astroport-epoch-{N}.json
         ssWeeklyAvgBaseUrl:    'https://raw.githubusercontent.com/defipatriot/ss-pool-data_2026/main/data/weekly-avg',   // append /2026-epoch-{N}.csv
 
+        // Daily pool snapshots — powers the Pools tab bucket charts (7 days of
+        // past epoch + N days of current epoch).
+        //   Astroport: data/daily/YYYY-MM-DD.csv (immutable)
+        //   SS:        data/{month}_backup/YYYY-MM-DD.csv  (e.g. may_backup, june_backup)
+        astroportDailyBaseUrl: 'https://raw.githubusercontent.com/defipatriot/astroport-pool-data_2026/main/data/daily',
+        ssDailyBaseUrl:        'https://raw.githubusercontent.com/defipatriot/ss-pool-data_2026/main/data',
+
         // Legacy data sources (still in use)
         epochDatesUrl:     'https://raw.githubusercontent.com/defipatriot/tla_json_storage/main/epoch_1-300_date.json',
         pdBribesUrl:       'https://raw.githubusercontent.com/defipatriot/tla-ext_json_storage/main/tla_pd_bribes.json',
         docsUrl:           'https://raw.githubusercontent.com/defipatriot/tla_json_storage/main/tla_docs.json',
+        knownTokensUrl:    'https://raw.githubusercontent.com/defipatriot/tla_json_storage/main/tla_known_tokens.json',
         historicalUrls: {
             2025: 'https://raw.githubusercontent.com/defipatriot/tla-ext_json_storage/main/tla_ext_historical_2025.json',
             2026: 'https://raw.githubusercontent.com/defipatriot/tla-ext_json_storage/main/tla_ext_historical_2026.json'
@@ -2731,6 +2760,56 @@
         if (Math.abs(n) >= 1e3) return (n / 1e3).toFixed(1) + 'K';
         return n.toFixed(2);
     }
+
+    // ============================================================
+    // POOL NAME DISPLAY
+    // ============================================================
+    // When the TLA snapshot can't resolve a gauge entry to a friendly symbol,
+    // it stores the raw address as the pool name (e.g. "cw20:terra1hqq…sf" or
+    // "native:factory/terra…"). These are 40-50 chars wide and would blow out
+    // the Pool column layout if rendered as-is.
+    //
+    // Workflow for handling these:
+    //   1) Unknowns render as "Unknown" + a short prefix:…tail subtitle +
+    //      a copy-to-clipboard button so you can grab the full address.
+    //   2) Once you've confirmed what a token is (chain query, project docs,
+    //      DEX listing, etc.), add it to tla_known_tokens.json in the
+    //      tla_json_storage repo. The page fetches that file on load and
+    //      populates KNOWN_TOKEN_NAMES from `data.tokens`. Then the pool
+    //      renders as a normal named pool with no extra styling.
+    //
+    // The map below is the *runtime* form — populated at startup from the
+    // external JSON file (see loadKnownTokens / CONFIG.knownTokensUrl). It
+    // starts empty so unknowns render correctly even if the fetch fails.
+    //
+    // Returns:
+    //   { label, subtitle, full, isUnknown, isMapped }
+    //     label     — primary visible text ("Unknown" or the friendly name)
+    //     subtitle  — secondary line (e.g. "cw20:…vd33sf"), empty for normal
+    //     full      — the full original name, for tooltip + copy
+    //     isUnknown — true if this is a raw unresolved address with no mapping
+    //     isMapped  — true if KNOWN_TOKEN_NAMES had an entry
+    let KNOWN_TOKEN_NAMES = {};
+
+    function formatPoolDisplayName(name) {
+        if (!name) return { label: '-', subtitle: '', full: '', isUnknown: false, isMapped: false };
+        if (KNOWN_TOKEN_NAMES[name]) {
+            return { label: KNOWN_TOKEN_NAMES[name], subtitle: '', full: name, isUnknown: false, isMapped: true };
+        }
+        const cw20Match = name.match(/^cw20:(\S+)$/);
+        if (cw20Match) {
+            const addr = cw20Match[1];
+            const tail = addr.length > 6 ? addr.slice(-6) : addr;
+            return { label: 'Unknown', subtitle: `cw20:…${tail}`, full: name, isUnknown: true, isMapped: false };
+        }
+        const nativeMatch = name.match(/^native:(\S+)$/);
+        if (nativeMatch) {
+            const addr = nativeMatch[1];
+            const tail = addr.length > 10 ? addr.slice(-10) : addr;
+            return { label: 'Unknown', subtitle: `native:…${tail}`, full: name, isUnknown: true, isMapped: false };
+        }
+        return { label: name, subtitle: '', full: name, isUnknown: false, isMapped: false };
+    }
     
     function getBucketColor(bucket) {
         const colors = {
@@ -3093,6 +3172,7 @@
                 votionResp,
                 astroEpochResp,
                 ssWeeklyAvgText,
+                knownTokensResp,
             ] = await Promise.all([
                 fetch(CONFIG.tlaSnapshotUrl).then(r => r.ok ? r.json() : null).catch(e => { console.warn('tla-snapshot fetch:', e.message); return null; }),
                 fetch(CONFIG.networkPricesUrl).then(r => r.ok ? r.json() : null).catch(e => { console.warn('network-prices fetch:', e.message); return null; }),
@@ -3115,7 +3195,34 @@
                             .then(r2 => r2.ok ? r2.text() : null);
                     })
                     .catch(e => { console.warn('ss-weekly-avg fetch:', e.message); return null; }),
+                // Known-token name overrides (manual mapping for raw cw20:/native: addresses)
+                fetch(CONFIG.knownTokensUrl).then(r => r.ok ? r.json() : null).catch(() => null),
             ]);
+
+            // Populate the runtime token-names map. Underscore-prefixed keys
+            // are placeholders in the JSON template — filter them out.
+            if (knownTokensResp?.tokens && typeof knownTokensResp.tokens === 'object') {
+                const cleaned = {};
+                for (const [k, v] of Object.entries(knownTokensResp.tokens)) {
+                    if (!k.startsWith('_') && typeof v === 'string' && v) cleaned[k] = v;
+                }
+                KNOWN_TOKEN_NAMES = cleaned;
+                console.log(`Loaded ${Object.keys(cleaned).length} known-token name overrides`);
+            }
+
+            // Fire off the daily-chart fetch in the background (28 small CSVs).
+            // Doesn't block the rest of loadEpochData — Pools tab charts render
+            // when this resolves, others render immediately.
+            loadDailyChartData(currentEpoch, store.epochDates).then(d => {
+                store.dailyChartData = d;
+                // If Pools tab is already rendered, re-render the charts now that data is in.
+                if (document.getElementById('tab-pools')?.classList.contains('active')) {
+                    try { renderPoolsByBucket(); } catch (e) { console.warn('chart re-render:', e); }
+                }
+            }).catch(e => {
+                console.warn('daily-chart load failed:', e);
+                store.dailyChartData = null;
+            });
 
             if (!tlaSnapshotResp) {
                 throw new Error('TLA snapshot unavailable — required for page render');
@@ -3735,6 +3842,139 @@
         }
 
         return idx;
+    }
+
+    // ============================================================
+    // DAILY CHART DATA LOADER
+    // ============================================================
+    // Powers the Pools tab bucket charts with daily-cadence values:
+    //   - 7 days of the last completed epoch (e.g. 184d1...184d7)
+    //   - 1..N days of the current epoch as it progresses (185d1...)
+    //
+    // Coverage caveats (May 2026):
+    //   - Astroport's data/daily/ only has recent days; older days return 404
+    //     and show as gaps in the chart lines.
+    //   - SS's data/{month}_backup/ has fuller history.
+    //
+    // Schema variations handled:
+    //   - Astroport CSV uses `pool` (May 12-13) OR `pool_name` (May 14+)
+    //   - SS CSV uses `pool_id` (older) OR `pool_name` (newer)
+    //
+    // Returns null if epoch info unavailable. Otherwise:
+    //   { labels:   ["184d1", "184d2", ..., "185dN"],  // X-axis labels
+    //     dates:    ["2026-05-04", ...],               // for tooltips
+    //     pastEpoch, currentEpoch,
+    //     coverage: { astroPoints, ssPoints },         // for diagnostics
+    //     series:   { "PoolName|DEX": { liq:[...], vol:[...] } } }
+    //
+    function daysBetweenUtc(startISO, endISO) {
+        const out = [];
+        const start = new Date(startISO);
+        const end = new Date(endISO);
+        for (const d = new Date(start); d < end; d.setUTCDate(d.getUTCDate() + 1)) {
+            out.push(d.toISOString().slice(0, 10));
+        }
+        return out;
+    }
+
+    function ssMonthBackupFolder(dateISO) {
+        const d = new Date(dateISO + 'T00:00:00Z');
+        const m = d.toLocaleString('en-US', { month: 'long', timeZone: 'UTC' }).toLowerCase();
+        return `${m}_backup`;
+    }
+
+    function extractDailyPoolName(row, dex) {
+        if (dex === 'Astroport') return (row.pool_name || row.pool || '').trim();
+        return (row.pool_id || row.pool_name || '').trim();   // SS
+    }
+    function extractDailyTvl(row, dex) {
+        const v = dex === 'Astroport'
+            ? (row.tvl_usd ?? row.astroport_tvl_usd)
+            : row.tvl_usd;
+        const n = parseFloat(v);
+        return (isNaN(n) || n <= 0) ? null : n;
+    }
+    function extractDailyVol(row, dex) {
+        const v = dex === 'Astroport'
+            ? (row.volume_24h_usd ?? row.astroport_day_volume_usd)
+            : row.volume_24h_usd;
+        const n = parseFloat(v);
+        return (isNaN(n) || n <= 0) ? null : n;
+    }
+
+    async function loadDailyChartData(currentEpoch, epochDates) {
+        if (!Array.isArray(epochDates) || !currentEpoch) return null;
+        const past = epochDates.find(e => e.epoch === currentEpoch - 1);
+        const curr = epochDates.find(e => e.epoch === currentEpoch);
+        if (!past || !curr) {
+            console.warn('[daily-chart] missing epoch_dates entry for epoch', currentEpoch - 1, 'or', currentEpoch);
+            return null;
+        }
+
+        // Build the date list. Past epoch contributes all 7 days; current epoch
+        // contributes only dates ≤ today (UTC) since future days don't exist yet.
+        const todayIso = new Date().toISOString().slice(0, 10);
+        const pastDates = daysBetweenUtc(past.start_time, past.end_time);
+        const currDates = daysBetweenUtc(curr.start_time, curr.end_time).filter(d => d <= todayIso);
+
+        const labels = [];
+        const dates  = [];
+        pastDates.forEach((d, i) => { labels.push(`${past.epoch}d${i+1}`); dates.push(d); });
+        currDates.forEach((d, i) => { labels.push(`${curr.epoch}d${i+1}`); dates.push(d); });
+
+        // Build the fetch plan: 2 DEXes per date.
+        const plan = [];
+        for (const date of dates) {
+            plan.push({ dex: 'Astroport',     date, url: `${CONFIG.astroportDailyBaseUrl}/${date}.csv` });
+            plan.push({ dex: 'Skeleton Swap', date, url: `${CONFIG.ssDailyBaseUrl}/${ssMonthBackupFolder(date)}/${date}.csv` });
+        }
+
+        const results = await Promise.all(plan.map(p =>
+            fetch(p.url)
+                .then(r => r.ok ? r.text() : null)
+                .catch(() => null)
+                .then(text => ({ ...p, text }))
+        ));
+
+        // Diagnostics — count what we actually got
+        let astroPoints = 0, ssPoints = 0;
+        for (const r of results) {
+            if (!r.text || r.text.length < 30) continue;
+            if (r.dex === 'Astroport') astroPoints++; else ssPoints++;
+        }
+
+        // Ingest rows into series keyed by "Name|DEX"
+        const series = {};
+        for (const r of results) {
+            if (!r.text || r.text.length < 30) continue;
+            const rows = parseCsv(r.text);
+            for (const row of rows) {
+                const name = extractDailyPoolName(row, r.dex);
+                if (!name) continue;
+                const key = `${name}|${r.dex}`;
+                if (!series[key]) {
+                    series[key] = {
+                        liq: new Array(dates.length).fill(null),
+                        vol: new Array(dates.length).fill(null),
+                    };
+                }
+                const idx = dates.indexOf(r.date);
+                if (idx === -1) continue;
+                const tvl = extractDailyTvl(row, r.dex);
+                const vol = extractDailyVol(row, r.dex);
+                if (tvl !== null) series[key].liq[idx] = tvl;
+                if (vol !== null) series[key].vol[idx] = vol;
+            }
+        }
+
+        console.log(`[daily-chart] loaded — ${Object.keys(series).length} series, ${labels.length} x-axis points (astro day-files: ${astroPoints}, ss day-files: ${ssPoints})`);
+        return {
+            labels, dates,
+            pastEpoch: past.epoch,
+            currentEpoch: curr.epoch,
+            coverage: { astroPoints, ssPoints, totalPossible: dates.length },
+            series,
+        };
     }
 
 
@@ -5623,12 +5863,12 @@
                         </div>
                     </div>
                     
-                    <!-- Historical Chart for this bucket -->
+                    <!-- Daily Chart for this bucket -->
                     <div class="glass-card p-4 mb-4">
                         <div class="flex items-center justify-between mb-3">
                             <div class="text-sm text-gray-400">
-                                <i class="fas fa-chart-line mr-2"></i>Historical Liquidity & Volume
-                                <span class="text-[10px] text-gray-500 ml-2">Solid = Liq, Dashed = Vol</span>
+                                <i class="fas fa-chart-line mr-2"></i>Daily Liquidity & Volume
+                                <span class="text-[10px] text-gray-500 ml-2">Solid = Liq, Dashed = Vol • Past epoch then current</span>
                             </div>
                             <div class="flex items-center gap-2">
                                 <select class="scale-select epoch-select text-xs" data-bucket="${bucket}" onchange="updateBucketChartScale('${bucket}', this.value)">
@@ -5733,16 +5973,16 @@
         const canvas = document.getElementById(`chart-${bucket}`);
         if (!canvas) return;
         
-        // Check if historical data loaded
-        if (!historicalState.data) {
+        // Check if daily-chart data has loaded yet (it's async after page render)
+        if (!store.dailyChartData) {
             const container = canvas.parentElement;
             if (container) {
                 container.innerHTML = `
                     <div class="flex items-center justify-center h-full text-gray-500">
                         <div class="text-center">
-                            <i class="fas fa-database text-3xl mb-2 opacity-50"></i>
-                            <div class="text-sm">Historical data not available</div>
-                            <div class="text-xs text-gray-600 mt-1">Yearly historical files not found on server</div>
+                            <i class="fas fa-circle-notch fa-spin text-2xl mb-2 opacity-60"></i>
+                            <div class="text-sm">Loading daily series…</div>
+                            <div class="text-xs text-gray-600 mt-1">Fetching per-day pool snapshots</div>
                         </div>
                     </div>
                 `;
@@ -5750,50 +5990,23 @@
             return;
         }
         
-        const data = historicalState.data;
+        const data = store.dailyChartData;
         const bucketPools = store.pools.filter(p => p.bucket === bucket && p.is_active !== false);
-        // Only look for Astroport pools in historical data (Skeleton Swap data not available)
+        // Include BOTH Astroport and Skeleton Swap pools (the new daily data covers both)
         const lpKeys = bucketPools
-            .filter(p => p.dex === 'Astroport')
-            .map(p => `${p.name}|${p.dex}`);
+            .filter(p => p.dex === 'Astroport' || p.dex === 'Skeleton Swap')
+            .map(p => `${p.name}|${p.dex}`)
+            .filter(k => data.series[k]);  // only LPs with at least some series data
         
-        // Get epochs from any available LP
-        let epochs = [];
-        for (const lpKey of lpKeys) {
-            if (data.lps[lpKey]?.liquidity?.epochs) {
-                epochs = Object.keys(data.lps[lpKey].liquidity.epochs).map(Number).sort((a, b) => a - b);
-                break;
-            }
-        }
-        
-        // Epochs are already trimmed in loadHistoricalData, but safety check
-        const maxEpochs = CONFIG.maxHistoricalEpochs || 26;
-        if (epochs.length > maxEpochs) {
-            epochs = epochs.slice(-maxEpochs);
-        }
-        
-        if (epochs.length === 0) {
-            // Show message if no data
+        if (lpKeys.length === 0) {
             const container = canvas.parentElement;
             if (container) {
-                const hasSkeletonPools = bucketPools.some(p => p.dex?.includes('Skeleton'));
-                const hasAstroPools = bucketPools.some(p => p.dex === 'Astroport');
-                
-                let message = 'No historical data for this bucket';
-                let submsg = '';
-                
-                if (hasSkeletonPools && !hasAstroPools) {
-                    submsg = 'Skeleton Swap pools don\'t have historical data yet';
-                } else if (!hasAstroPools) {
-                    submsg = 'No Astroport pools in this bucket';
-                }
-                
                 container.innerHTML = `
                     <div class="flex items-center justify-center h-full text-gray-500">
                         <div class="text-center">
                             <i class="fas fa-chart-line text-3xl mb-2 opacity-50"></i>
-                            <div class="text-sm">${message}</div>
-                            ${submsg ? `<div class="text-xs text-gray-600 mt-1">${submsg}</div>` : ''}
+                            <div class="text-sm">No daily data for this bucket yet</div>
+                            <div class="text-xs text-gray-600 mt-1">Charts populate as the daily cron writes files</div>
                         </div>
                     </div>
                 `;
@@ -5801,18 +6014,14 @@
             return;
         }
         
-        // Filter LPs by scale tier
+        // Filter LPs by scale tier — use the LATEST non-null liquidity value
+        // (not just last index, since some pools may have older trailing data)
         const filteredLpKeys = lpKeys.filter(lpKey => {
-            const lpData = data.lps[lpKey];
-            if (!lpData) return false;
-            
-            // Get latest liquidity value
-            const lastEpoch = epochs[epochs.length - 1];
-            const avgLiq = lpData.liquidity?.epochs?.[lastEpoch]?.avg || 0;
-            
-            if (scaleFilter === 'top') return avgLiq >= 100000;
-            if (scaleFilter === 'mid') return avgLiq >= 10000 && avgLiq < 100000;
-            if (scaleFilter === 'low') return avgLiq < 10000;
+            const liqArr = data.series[lpKey]?.liq || [];
+            const latestLiq = [...liqArr].reverse().find(v => v != null) || 0;
+            if (scaleFilter === 'top') return latestLiq >= 100000;
+            if (scaleFilter === 'mid') return latestLiq >= 10000 && latestLiq < 100000;
+            if (scaleFilter === 'low') return latestLiq < 10000;
             return true; // 'all'
         });
         
@@ -5821,13 +6030,12 @@
             '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1'
         ];
         
-        // Store state for this bucket
+        // Store state for this bucket (legacy `epochs` key removed — labels comes from store.dailyChartData)
         bucketChartState[bucket] = {
             lpKeys: filteredLpKeys,
             colors: colors,
             scaleFilter: scaleFilter,
             selectedLP: null,
-            epochs: epochs
         };
         
         rebuildBucketChart(bucket);
@@ -5840,64 +6048,63 @@
         const canvas = document.getElementById(`chart-${bucket}`);
         if (!canvas) return;
         
-        const data = historicalState.data;
-        const { lpKeys, colors, selectedLP, epochs } = state;
+        const data = store.dailyChartData;
+        if (!data) return;
+        const { lpKeys, colors, selectedLP } = state;
+        const labels = data.labels;
+        const pastEpoch = data.pastEpoch;
         
         const datasets = [];
-        let colorIdx = 0;
         let maxLiq = 0, maxVol = 0;
         
-        // Calculate max values only for visible LPs
+        // First pass — calculate max values across visible LPs
         lpKeys.forEach(lpKey => {
             if (selectedLP && selectedLP !== lpKey) return;
-            const lpData = data.lps[lpKey];
-            if (!lpData) return;
-            
-            epochs.forEach(ep => {
-                const liq = lpData.liquidity?.epochs?.[ep]?.avg || 0;
-                const vol = lpData.volume?.epochs?.[ep]?.avg || 0;
-                if (liq > maxLiq) maxLiq = liq;
-                if (vol > maxVol) maxVol = vol;
-            });
+            const s = data.series[lpKey];
+            if (!s) return;
+            s.liq.forEach(v => { if (v != null && v > maxLiq) maxLiq = v; });
+            s.vol.forEach(v => { if (v != null && v > maxVol) maxVol = v; });
         });
         
+        // Second pass — build datasets
         lpKeys.forEach((lpKey, idx) => {
-            const lpData = data.lps[lpKey];
-            if (!lpData) return;
+            const s = data.series[lpKey];
+            if (!s) return;
             
             const color = colors[idx % colors.length];
             const lpName = lpKey.split('|')[0];
+            const lpDex  = lpKey.split('|')[1];
+            const dexBadge = lpDex === 'Skeleton Swap' ? ' (SS)' : '';
             const isVisible = !selectedLP || selectedLP === lpKey;
-            const opacity = isVisible ? 1 : 0.1;
             
             // Liquidity (solid)
             datasets.push({
-                label: `${lpName} Liq`,
-                data: epochs.map(ep => lpData.liquidity?.epochs?.[ep]?.avg || null),
+                label: `${lpName}${dexBadge} Liq`,
+                data: s.liq,
                 borderColor: isVisible ? color : color + '20',
                 backgroundColor: 'transparent',
                 borderWidth: isVisible ? 2 : 1,
                 tension: 0.3,
                 pointRadius: isVisible ? 2 : 0,
+                spanGaps: false,
                 yAxisID: 'y',
                 hidden: !isVisible && selectedLP
             });
             
             // Volume (dashed)
             datasets.push({
-                label: `${lpName} Vol`,
-                data: epochs.map(ep => lpData.volume?.epochs?.[ep]?.avg || null),
+                label: `${lpName}${dexBadge} Vol`,
+                data: s.vol,
                 borderColor: isVisible ? color : color + '20',
                 backgroundColor: 'transparent',
                 borderWidth: isVisible ? 1.5 : 1,
                 borderDash: [4, 4],
                 tension: 0.3,
                 pointRadius: isVisible ? 2 : 0,
+                spanGaps: false,
                 yAxisID: 'y1',
                 hidden: !isVisible && selectedLP
             });
-            
-            colorIdx++;
         });
         
         // Destroy existing chart
@@ -5908,10 +6115,7 @@
         const ctx = canvas.getContext('2d');
         bucketCharts[bucket] = new Chart(ctx, {
             type: 'line',
-            data: {
-                labels: epochs.map(e => e.toString()),
-                datasets: datasets
-            },
+            data: { labels, datasets },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
@@ -5920,13 +6124,34 @@
                     legend: { display: false },
                     tooltip: {
                         callbacks: {
-                            label: ctx => `${ctx.dataset.label}: ${fmt$(ctx.parsed.y)}`
+                            // Append the date to the x-axis label (e.g. "184d3 — 2026-05-06")
+                            title: items => {
+                                if (!items.length) return '';
+                                const i = items[0].dataIndex;
+                                const date = data.dates[i] || '';
+                                return `${items[0].label} — ${date}`;
+                            },
+                            label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y == null ? 'n/a' : fmt$(ctx.parsed.y)}`,
                         }
-                    }
+                    },
+                    annotation: undefined, // placeholder for future epoch-divider line
                 },
                 scales: {
                     x: {
-                        grid: { color: 'rgba(255,255,255,0.03)' },
+                        grid: {
+                            color: ctx => {
+                                // Slightly stronger gridline at the past→current epoch boundary
+                                const lbl = ctx.tick?.label || '';
+                                if (typeof lbl === 'string' && lbl.startsWith(`${pastEpoch + 1}d1`)) {
+                                    return 'rgba(168, 85, 247, 0.35)';
+                                }
+                                return 'rgba(255,255,255,0.03)';
+                            },
+                            lineWidth: ctx => {
+                                const lbl = ctx.tick?.label || '';
+                                return (typeof lbl === 'string' && lbl.startsWith(`${pastEpoch + 1}d1`)) ? 2 : 1;
+                            }
+                        },
                         ticks: { color: '#6b7280', font: { size: 9 } }
                     },
                     y: {
@@ -6085,12 +6310,32 @@
         // Escape pool name for data attributes
         const safePoolName = p.name.replace(/'/g, "\\'");
         
+        // Format the visible name. Unresolved addresses render as "Unknown" with
+        // a copy-to-clipboard button and the prefix:…tail as a subtitle.
+        const displayName = formatPoolDisplayName(p.name);
+        let nameCellHtml;
+        if (displayName.isUnknown) {
+            const safeFull = displayName.full.replace(/"/g, '&quot;');
+            nameCellHtml = `
+                <div class="font-medium text-amber-300 flex items-center gap-1.5" title="${safeFull}">
+                    <i class="fas fa-question-circle text-[11px] text-amber-400/70"></i>
+                    Unknown
+                    <button type="button" class="copy-addr-btn opacity-50 hover:opacity-100 transition-opacity ml-0.5" data-copy="${safeFull}" title="Copy full address">
+                        <i class="fas fa-copy text-[10px]"></i>
+                    </button>
+                </div>
+                <div class="text-[10px] text-gray-500 mono">${displayName.subtitle} • ${p.dex}${poolType ? ' • ' + poolType : ''}</div>
+            `;
+        } else {
+            nameCellHtml = `
+                <div class="font-medium" title="${displayName.full}">${displayName.label}</div>
+                <div class="text-[10px] text-gray-500">${p.dex}${poolType ? ' • ' + poolType : ''}</div>
+            `;
+        }
+        
         return `
             <tr class="${!isActive ? 'opacity-60' : ''}">
-                <td>
-                    <div class="font-medium">${p.name}</div>
-                    <div class="text-[10px] text-gray-500">${p.dex}${poolType ? ' • ' + poolType : ''}</div>
-                </td>
+                <td>${nameCellHtml}</td>
                 <td class="text-center">
                     ${isActive 
                         ? '<span class="text-[10px] px-2 py-0.5 rounded bg-green-500/20 text-green-400">ACTIVE</span>' 
@@ -6383,15 +6628,35 @@
             // Helper for icon color
             const iconColor = (change) => change > 0 ? 'text-emerald-400' : change < 0 ? 'text-red-400' : 'text-gray-500 opacity-40';
             
+            // Format the visible name. Unresolved addresses render as "Unknown"
+            // with a copy-to-clipboard button.
+            const tlaDisplayName = formatPoolDisplayName(p.normalized_name || p.name);
+            let tlaNameInner;
+            if (tlaDisplayName.isUnknown) {
+                const safeFullTla = tlaDisplayName.full.replace(/"/g, '&quot;');
+                tlaNameInner = `
+                    <div class="font-medium text-amber-300 flex items-center gap-1.5" title="${safeFullTla}">
+                        <i class="fas fa-question-circle text-[11px] text-amber-400/70"></i>
+                        Unknown
+                        <button type="button" class="copy-addr-btn opacity-50 hover:opacity-100 transition-opacity ml-0.5" data-copy="${safeFullTla}" title="Copy full address">
+                            <i class="fas fa-copy text-[10px]"></i>
+                        </button>
+                    </div>
+                    <div class="text-[10px] text-gray-500 mono">${tlaDisplayName.subtitle} • ${p.dex} • ${p.type || '-'}</div>
+                `;
+            } else {
+                tlaNameInner = `
+                    <div class="font-medium" title="${tlaDisplayName.full}">${tlaDisplayName.label}</div>
+                    <div class="text-[10px] text-gray-500">${p.dex} • ${p.type || '-'}</div>
+                `;
+            }
+            
             return `
             <tr class="${!isActive ? 'opacity-50' : ''}">
                 <td>
                     <div class="flex items-center gap-2">
                         <span class="active-dot ${isActive ? 'on' : 'off'}"></span>
-                        <div>
-                            <div class="font-medium">${p.normalized_name || p.name}</div>
-                            <div class="text-[10px] text-gray-500">${p.dex} • ${p.type || '-'}</div>
-                        </div>
+                        <div>${tlaNameInner}</div>
                     </div>
                 </td>
                 <td class="text-center">
@@ -9118,6 +9383,46 @@
         return store.currentRealEpoch || startFrom;
     }
     
+    // Global delegated click handler for the "copy full address" buttons next
+    // to Unknown pool labels. Works for both Pools tab and TLA Liquidity tab
+    // — no need to re-bind on each table render.
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('.copy-addr-btn');
+        if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const text = btn.dataset.copy;
+        if (!text) return;
+        const showCopied = () => {
+            btn.classList.add('copied');
+            btn.setAttribute('title', 'Copied!');
+            setTimeout(() => {
+                btn.classList.remove('copied');
+                btn.setAttribute('title', 'Copy full address');
+            }, 1500);
+        };
+        if (navigator.clipboard?.writeText) {
+            navigator.clipboard.writeText(text).then(showCopied, () => {
+                // Fallback handled below
+                try { fallbackCopy(text); showCopied(); } catch (_) {}
+            });
+        } else {
+            try { fallbackCopy(text); showCopied(); } catch (_) {}
+        }
+    });
+
+    function fallbackCopy(text) {
+        // execCommand path for older browsers / non-secure contexts
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+    }
+
     // Start
     document.addEventListener('DOMContentLoaded', init);
     </script>
