@@ -649,7 +649,12 @@
         .cron-health-trigger[data-overall="no-signal"] .dot { background: #10b981; box-shadow: 0 0 6px rgba(16,185,129,0.7); }
         .cron-health-trigger[data-overall="warning"]   .dot { background: #f59e0b; box-shadow: 0 0 6px rgba(245,158,11,0.7); }
         .cron-health-trigger[data-overall="stale"]     .dot { background: #ef4444; box-shadow: 0 0 6px rgba(239,68,68,0.8); }
+        .cron-health-trigger[data-overall="stuck"]     .dot { background: #dc2626; box-shadow: 0 0 8px rgba(220,38,38,0.9); animation: cronStuckPulse 1.5s ease-in-out infinite; }
         .cron-health-trigger[data-overall="unknown"]   .dot { background: #6b7280; }
+        @keyframes cronStuckPulse {
+            0%, 100% { box-shadow: 0 0 8px rgba(220,38,38,0.9); }
+            50%      { box-shadow: 0 0 14px rgba(220,38,38,1), 0 0 4px rgba(220,38,38,1) inset; }
+        }
 
         /* Cron health modal table */
         .cron-health-row {
@@ -667,6 +672,7 @@
         .cron-health-row[data-status="fresh"]    .status-dot { background: #10b981; }
         .cron-health-row[data-status="warning"]  .status-dot { background: #f59e0b; }
         .cron-health-row[data-status="stale"]    .status-dot { background: #ef4444; }
+        .cron-health-row[data-status="stuck"]    .status-dot { background: #dc2626; box-shadow: 0 0 6px rgba(220,38,38,0.8); }
         .cron-health-row[data-status="unknown"]  .status-dot { background: #6b7280; }
         .cron-health-row[data-status="no-signal"] .status-dot { background: #6b7280; outline: 1px dashed #9ca3af; outline-offset: 1px; }
         .cron-health-row .age-cell {
@@ -675,6 +681,7 @@
         }
         .cron-health-row[data-status="warning"] .age-cell { color: #fbbf24; }
         .cron-health-row[data-status="stale"] .age-cell   { color: #f87171; font-weight: 600; }
+        .cron-health-row[data-status="stuck"] .age-cell   { color: #fca5a5; font-weight: 600; }
         .cron-health-row .cadence-cell {
             font-size: 0.75rem; color: #9ca3af;
         }
@@ -2285,7 +2292,7 @@
             </div>
             <div class="mt-4 text-xs text-gray-500">
                 <button id="changelog-trigger" class="hover:text-cyan-400 transition-colors cursor-pointer">
-                    <span class="font-mono">Rev 1.15</span>
+                    <span class="font-mono">Rev 1.16</span>
                     <span class="opacity-60 mx-1">·</span>
                     <span>Changelog</span>
                 </button>
@@ -2443,7 +2450,7 @@
             cadenceMs: 60 * 60 * 1000,
             warningMs: 75 * 60 * 1000,  // 1h 15m
             staleMs: 2 * 60 * 60 * 1000, // 2h
-            sourceUrl: 'https://raw.githubusercontent.com/defipatriot/tla-snapshot-data_2026/main/data/tla-snapshot.json',
+            sourceUrl: 'https://raw.githubusercontent.com/defipatriot/tla-snapshot-data_2026/main/data/heartbeat.json',
             description: 'Unified aggregator — powers pools, pie, VP totals',
         },
         'network-and-prices': {
@@ -2452,7 +2459,7 @@
             cadenceMs: 60 * 60 * 1000,
             warningMs: 75 * 60 * 1000,
             staleMs: 2 * 60 * 60 * 1000,
-            sourceUrl: 'https://raw.githubusercontent.com/defipatriot/network-and-prices-data_2026/main/data/network-and-prices.json',
+            sourceUrl: 'https://raw.githubusercontent.com/defipatriot/network-and-prices-data_2026/main/data/heartbeat.json',
             description: 'LUNA price, LST ratios, token prices',
         },
         'bribes-history': {
@@ -2461,7 +2468,7 @@
             cadenceMs: 24 * 60 * 60 * 1000,
             warningMs: 26 * 60 * 60 * 1000,
             staleMs: 36 * 60 * 60 * 1000,
-            sourceUrl: 'https://raw.githubusercontent.com/defipatriot/bribes-data_2026/main/data/current-state.json',
+            sourceUrl: 'https://raw.githubusercontent.com/defipatriot/bribes-data_2026/main/data/heartbeat.json',
             description: 'PD bribes + epoch archives',
         },
         'adao-positions': {
@@ -2470,7 +2477,7 @@
             cadenceMs: 7 * 24 * 60 * 60 * 1000,
             warningMs: 8 * 24 * 60 * 60 * 1000,
             staleMs: 10 * 24 * 60 * 60 * 1000,
-            sourceUrl: 'https://raw.githubusercontent.com/defipatriot/adao-positions-data_2026/main/data/current.json',
+            sourceUrl: 'https://raw.githubusercontent.com/defipatriot/adao-positions-data_2026/main/data/heartbeat.json',
             description: 'Treasury + 46 member portfolios',
         },
         'astroport': {
@@ -2502,9 +2509,10 @@
             cadenceMs: 7 * 24 * 60 * 60 * 1000,
             warningMs: 8 * 24 * 60 * 60 * 1000,
             staleMs: 10 * 24 * 60 * 60 * 1000,
-            // Per-epoch JSON; latest is for the current canonical epoch
-            sourceUrlFn: (epoch) => `https://raw.githubusercontent.com/defipatriot/votion-data_2026/main/votion/votion-epoch-${epoch}.json`,
-            sourceUrlFallbackFn: (epoch) => `https://raw.githubusercontent.com/defipatriot/votion-data_2026/main/votion/votion-epoch-${epoch - 1}.json`,
+            // Heartbeat written by votion cron starting 2026-05-18 freshness rollout.
+            // Falls back to the per-epoch JSON for any captures before that date.
+            sourceUrl: 'https://raw.githubusercontent.com/defipatriot/votion-data_2026/main/data/heartbeat.json',
+            sourceUrlFallbackFn: (epoch) => `https://raw.githubusercontent.com/defipatriot/votion-data_2026/main/votion/votion-epoch-${epoch}.json`,
             description: 'Next-epoch vote optimization data',
         },
         'nft-inventory': {
@@ -2533,7 +2541,9 @@
     }
 
     // Record a capture time for a cron. Pass null for capturedAt if fetch failed.
-    function recordCronCapture(key, capturedAt, errorMessage = null) {
+    // freshness fields are optional — passed in when the heartbeat provides them
+    // (added 2026-05-18 to detect upstream-data-frozen failures).
+    function recordCronCapture(key, capturedAt, errorMessage = null, freshness = {}) {
         if (!CRON_REGISTRY[key]) {
             console.warn(`[cron-health] unknown cron key: ${key}`);
             return;
@@ -2543,21 +2553,46 @@
             capturedAt: ts,
             checkedAt: new Date(),
             error: errorMessage,
+            // Freshness data from the cron's heartbeat (may be null/undefined
+            // for crons that haven't been redeployed with freshness support yet)
+            dataFreshness:        freshness.dataFreshness ?? null,
+            consecutiveStuckRuns: freshness.consecutiveStuckRuns ?? 0,
+            dataFingerprint:      freshness.dataFingerprint ?? null,
+            heartbeatStatus:      freshness.heartbeatStatus ?? null,
         };
     }
 
     // Compute current status for one cron given its registry config + recorded capture.
+    //
+    // Status precedence (worst wins):
+    //   stuck   — heartbeat says dataFreshness='stuck' (upstream data is frozen)
+    //   stale   — capturedAt is too old (cron hasn't run, OR fetch failed)
+    //   warning — capturedAt is approaching stale, OR freshness='suspicious'
+    //   fresh   — everything green
+    //   no-signal — cron has no heartbeat at all (informational, not an error)
+    //   unknown — never checked yet
     function computeCronStatus(key) {
         const cfg = CRON_REGISTRY[key];
         const rec = store.cronHealth[key];
         if (!cfg) return 'unknown';
-        // Cron explicitly has no freshness signal — surface that distinctly, not as an error.
         if (cfg.noHeartbeat) return 'no-signal';
         if (!rec || rec.error) return 'stale';
         if (!rec.capturedAt) return 'unknown';
+
+        // Data-freshness check first — if heartbeat says the upstream data is
+        // frozen, that's a real bug even if the cron itself is running on time.
+        // 'stuck' beats age-based checks entirely.
+        if (rec.dataFreshness === 'stuck') return 'stuck';
+
+        // Age-based check next
         const age = Date.now() - rec.capturedAt.getTime();
         if (age >= cfg.staleMs) return 'stale';
         if (age >= cfg.warningMs) return 'warning';
+
+        // 'suspicious' freshness escalates a fresh cron to 'warning' so the
+        // user knows the next run might flip to stuck. Doesn't override stale.
+        if (rec.dataFreshness === 'suspicious') return 'warning';
+
         return 'fresh';
     }
 
@@ -2566,7 +2601,7 @@
     function getOverallCronHealth() {
         const keys = Object.keys(CRON_REGISTRY);
         let worst = 'fresh';
-        const rank = { fresh: 0, 'no-signal': 0, warning: 1, stale: 2, unknown: 1 };
+        const rank = { fresh: 0, 'no-signal': 0, warning: 1, stale: 2, stuck: 3, unknown: 1 };
         let anyKnown = false;
         for (const k of keys) {
             const s = computeCronStatus(k);
@@ -2659,12 +2694,23 @@
                 capturedStr = 'never';
             }
 
+            // Freshness badge (only shown when the cron's heartbeat carries the field)
+            let freshnessBadge = '';
+            if (rec?.dataFreshness === 'stuck') {
+                freshnessBadge = `<div class="text-[10px] text-red-300 mt-1">🔴 data stuck — ${rec.consecutiveStuckRuns || '3+'} consecutive identical runs</div>`;
+            } else if (rec?.dataFreshness === 'suspicious') {
+                freshnessBadge = `<div class="text-[10px] text-amber-300 mt-1">⚠ data suspicious — ${rec.consecutiveStuckRuns || 2} consecutive identical runs</div>`;
+            } else if (rec?.dataFreshness === 'fresh' && rec?.dataFingerprint) {
+                freshnessBadge = `<div class="text-[10px] text-gray-500 mt-1" title="${rec.dataFingerprint}">✓ fresh data</div>`;
+            }
+
             return `
                 <div class="cron-health-row" data-status="${status}">
                     <span class="status-dot"></span>
                     <div>
                         <div class="text-white font-medium">${cfg.label}</div>
                         <div class="text-[11px] text-gray-500">${cfg.description}</div>
+                        ${freshnessBadge}
                         ${errBlock}
                     </div>
                     <span class="cadence-cell">${cfg.cadence}</span>
@@ -2690,16 +2736,18 @@
     // Lightweight fetch of just the capturedAt for crons the page doesn't otherwise read.
     // Supports static sourceUrl, dynamic sourceUrlFn(epoch), and a fallback URL for crons
     // whose latest file might be on the previous epoch.
+    //
+    // Also extracts freshness fields (dataFingerprint, dataFreshness, consecutiveStuckRuns)
+    // when the heartbeat carries them — these are absent on pre-2026-05-18 heartbeats
+    // and on non-heartbeat URLs (votion fetches an epoch JSON, not a heartbeat).
     async function fetchCronCapturedAt(key) {
         const cfg = CRON_REGISTRY[key];
         if (!cfg) return;
         if (cfg.noHeartbeat) {
-            // Cron has no freshness signal — record a sentinel and move on
             recordCronCapture(key, null, cfg.noHeartbeatReason || 'no heartbeat available');
             return;
         }
         const epoch = store.currentRealEpoch || 0;
-        // Build the list of URLs to try in order: primary, fallback
         const urls = [];
         if (typeof cfg.sourceUrlFn === 'function') urls.push(cfg.sourceUrlFn(epoch));
         else if (cfg.sourceUrl) urls.push(cfg.sourceUrl);
@@ -2717,7 +2765,17 @@
                 if (!r.ok) { lastErr = `HTTP ${r.status}`; continue; }
                 const j = await r.json();
                 const ts = j.capturedAt || j.generatedAt || j.fetched_at || null;
-                if (ts) { recordCronCapture(key, ts); return; }
+                if (ts) {
+                    // Pull freshness fields from the heartbeat (may be undefined on
+                    // pre-2026-05-18 heartbeats or on non-heartbeat fallback URLs).
+                    recordCronCapture(key, ts, null, {
+                        dataFreshness:        j.dataFreshness,
+                        consecutiveStuckRuns: j.consecutiveStuckRuns,
+                        dataFingerprint:      j.dataFingerprint,
+                        heartbeatStatus:      j.status,
+                    });
+                    return;
+                }
                 lastErr = 'no capturedAt field';
             } catch (e) {
                 lastErr = e.message || 'fetch failed';
