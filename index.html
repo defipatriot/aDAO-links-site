@@ -1098,71 +1098,6 @@
             color: #60a5fa;
         }
 
-        /* ============================================================
-         * CRON HEALTH WIDGET (Rev 3.37 — fleet freshness monitoring)
-         * Mirrors the system in test.html for visual consistency.
-         * ============================================================ */
-        .cron-health-trigger {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.4rem;
-            cursor: pointer;
-            color: rgb(156, 163, 175);
-            background: transparent;
-            border: none;
-            padding: 2px 6px;
-            border-radius: 4px;
-            transition: color 0.15s, background 0.15s;
-            font-size: inherit;
-            font-family: inherit;
-        }
-        .cron-health-trigger:hover { color: #fff; background: rgba(255,255,255,0.05); }
-        .cron-health-trigger .dot {
-            width: 8px; height: 8px; border-radius: 50%; display: inline-block;
-            background: #6b7280; transition: background 0.2s, box-shadow 0.2s;
-        }
-        .cron-health-trigger[data-overall="fresh"]     .dot { background: #10b981; box-shadow: 0 0 6px rgba(16,185,129,0.7); }
-        .cron-health-trigger[data-overall="no-signal"] .dot { background: #10b981; box-shadow: 0 0 6px rgba(16,185,129,0.7); }
-        .cron-health-trigger[data-overall="warning"]   .dot { background: #f59e0b; box-shadow: 0 0 6px rgba(245,158,11,0.7); }
-        .cron-health-trigger[data-overall="stale"]     .dot { background: #ef4444; box-shadow: 0 0 6px rgba(239,68,68,0.8); }
-        .cron-health-trigger[data-overall="stuck"]     .dot { background: #dc2626; box-shadow: 0 0 8px rgba(220,38,38,0.9); animation: cronStuckPulse 1.5s ease-in-out infinite; }
-        .cron-health-trigger[data-overall="unknown"]   .dot { background: #6b7280; }
-        @keyframes cronStuckPulse {
-            0%, 100% { box-shadow: 0 0 8px rgba(220,38,38,0.9); }
-            50%      { box-shadow: 0 0 14px rgba(220,38,38,1), 0 0 4px rgba(220,38,38,1) inset; }
-        }
-        .cron-health-row {
-            display: grid;
-            grid-template-columns: 12px 1fr auto auto;
-            align-items: center;
-            gap: 0.75rem;
-            padding: 0.6rem 0.8rem;
-            border-bottom: 1px solid rgba(255,255,255,0.05);
-        }
-        .cron-health-row:last-child { border-bottom: none; }
-        .cron-health-row .status-dot {
-            width: 8px; height: 8px; border-radius: 50%; display: inline-block;
-        }
-        .cron-health-row[data-status="fresh"]     .status-dot { background: #10b981; }
-        .cron-health-row[data-status="warning"]   .status-dot { background: #f59e0b; }
-        .cron-health-row[data-status="stale"]     .status-dot { background: #ef4444; }
-        .cron-health-row[data-status="stuck"]     .status-dot { background: #dc2626; box-shadow: 0 0 6px rgba(220,38,38,0.8); }
-        .cron-health-row[data-status="unknown"]   .status-dot { background: #6b7280; }
-        .cron-health-row[data-status="no-signal"] .status-dot { background: #6b7280; outline: 1px dashed #9ca3af; outline-offset: 1px; }
-        .cron-health-row .age-cell {
-            font-size: 0.8rem;
-            color: rgb(156, 163, 175);
-            text-align: right;
-        }
-        .cron-health-row[data-status="warning"] .age-cell { color: #fbbf24; }
-        .cron-health-row[data-status="stale"] .age-cell   { color: #f87171; font-weight: 600; }
-        .cron-health-row[data-status="stuck"] .age-cell   { color: #fca5a5; font-weight: 600; }
-        .cron-health-row .cadence-cell {
-            font-size: 0.7rem;
-            color: rgb(107, 114, 128);
-            text-transform: lowercase;
-        }
-
     </style>
 </head>
 <body class="antialiased">
@@ -3115,14 +3050,9 @@ est. APR 58.53 %"></textarea>
             </div>
             <div class="mt-4 text-xs text-gray-500">
                 <button id="changelog-trigger" class="hover:text-cyan-400 transition-colors cursor-pointer">
-                    <span class="font-mono">Rev 3.37</span>
+                    <span class="font-mono">Rev 3.36</span>
                     <span class="opacity-60 mx-1">·</span>
                     <span>Changelog</span>
-                </button>
-                <span class="opacity-40 mx-2">·</span>
-                <button id="cronHealthTrigger" class="cron-health-trigger" data-overall="unknown" title="Click for cron status details">
-                    <span class="dot"></span>
-                    <span class="label">Cron status</span>
                 </button>
             </div>
         </div>
@@ -3201,35 +3131,6 @@ est. APR 58.53 %"></textarea>
                     <span id="pwa-pref-saved" class="text-cyan-400 opacity-0 transition-opacity text-xs">✓ saved</span>
                 </div>
             </div>
-        </div>
-    </div>
-    
-    <!-- Cron Health Modal — fleet freshness monitoring (Rev 3.37) -->
-    <div id="cronHealthModal" class="modal fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50 hidden opacity-0">
-        <div class="modal-content bg-[#0f1117] border border-cyan-700/40 rounded-xl shadow-xl w-full max-w-2xl relative text-white opacity-0 scale-95 p-6 max-h-[85vh] overflow-y-auto">
-            <button class="modal-close absolute top-4 right-4 text-gray-400 hover:text-white text-3xl leading-none">&times;</button>
-            <h3 class="text-2xl font-bold text-cyan-400 mb-1 flex items-center gap-3">
-                <i class="fas fa-heart-pulse"></i>
-                Cron Health
-            </h3>
-            <p class="text-gray-500 text-xs mb-4">
-                Data freshness for each scheduled job. Computed from each cron's <span class="font-mono">capturedAt</span> timestamp and <span class="font-mono">dataFingerprint</span>.
-            </p>
-            <div class="flex items-center gap-4 text-xs text-gray-400 mb-4 px-2 flex-wrap">
-                <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-green-500"></span>Fresh</span>
-                <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>Approaching stale</span>
-                <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-red-500"></span>Stale</span>
-                <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full" style="background:#dc2626; box-shadow:0 0 6px rgba(220,38,38,0.8)"></span>Data stuck</span>
-                <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-gray-500" style="outline:1px dashed #9ca3af; outline-offset:1px"></span>No freshness signal</span>
-            </div>
-            <div id="cronHealthModalBody" class="border border-white/5 rounded-lg overflow-hidden bg-black/20">
-                <div class="text-gray-500 text-center py-8">
-                    <i class="fas fa-spinner fa-spin mr-2"></i>Loading…
-                </div>
-            </div>
-            <p class="text-gray-600 text-[10px] text-center mt-4">
-                Re-checks every 30 seconds. Auto-refreshes when this modal is open.
-            </p>
         </div>
     </div>
     
@@ -3750,6 +3651,13 @@ est. APR 58.53 %"></textarea>
                 const DAO_MAIN_WALLET = 'terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm';
                 const LCD = 'https://terra-lcd.publicnode.com';
 
+                // Known cw20 asset address → friendly label mapping.
+                // Keep this small; only DAO-held lock asset types need entries.
+                const ASSET_LABELS = {
+                    'terra1se7rvuerys4kd2snt6vqswh9wugu49vhyzls8ymc02wl37g2p2ms5yz490': 'arbLUNA',
+                    'terra1ecgazyd0waaj3g7l9cmy5gulhxkps2gmxu9ghducvuypjq68mq2s5lvsct': 'ampLUNA',
+                };
+
                 const wrapFetch = async (url) => {
                     const ctrl = new AbortController();
                     const timeoutId = setTimeout(() => ctrl.abort(), 6000);
@@ -3764,17 +3672,20 @@ est. APR 58.53 %"></textarea>
                     }
                 };
 
+                const querySmart = async (contract, queryObj) => {
+                    const queryB64 = btoa(JSON.stringify(queryObj));
+                    return wrapFetch(`${LCD}/cosmwasm/wasm/v1/contract/${contract}/smart/${queryB64}`);
+                };
+
                 try {
-                    // Paginate the tokens query (CW721 standard limits to 30 by default,
-                    // most LCDs cap at 100). DAO unlikely to have many locks but be safe.
+                    // 1) Paginate token list (CW721 standard)
                     let allTokenIds = [];
                     let startAfter = null;
                     for (let page = 0; page < 5; page++) {
-                        const queryObj = startAfter
+                        const q = startAfter
                             ? { tokens: { owner: DAO_MAIN_WALLET, start_after: startAfter, limit: 100 } }
                             : { tokens: { owner: DAO_MAIN_WALLET, limit: 100 } };
-                        const queryB64 = btoa(JSON.stringify(queryObj));
-                        const data = await wrapFetch(`${LCD}/cosmwasm/wasm/v1/contract/${TLA_LOCKS_CONTRACT}/smart/${queryB64}`);
+                        const data = await querySmart(TLA_LOCKS_CONTRACT, q);
                         const tokens = data?.data?.tokens || [];
                         if (tokens.length === 0) break;
                         allTokenIds = allTokenIds.concat(tokens);
@@ -3788,75 +3699,83 @@ est. APR 58.53 %"></textarea>
                         return result;
                     }
 
-                    // Fetch all_nft_info for each token in parallel
+                    // 2) For each lock NFT, query BOTH lock_vamp and lock_info in parallel.
+                    //    lock_vamp returns the live VP ({ fixed, voting_power, vp } in micro-units).
+                    //    lock_info returns the underlying asset and amount.
+                    //    The ve3 contract's NFT-metadata fields (all_nft_info) do NOT carry the VP
+                    //    or asset info reliably — those are computed dynamically on each call.
                     const lockDetails = await Promise.all(allTokenIds.map(async (tokenId) => {
-                        const queryB64 = btoa(JSON.stringify({ all_nft_info: { token_id: String(tokenId) } }));
-                        const data = await wrapFetch(`${LCD}/cosmwasm/wasm/v1/contract/${TLA_LOCKS_CONTRACT}/smart/${queryB64}`);
-                        const info = data?.data?.info?.extension;
-                        if (!info) return null;
-                        const attrs = info.attributes || [];
-                        const getAttr = (name) => {
-                            const a = attrs.find(x => (x.trait_type || '').toLowerCase() === name.toLowerCase());
-                            return a?.value;
-                        };
+                        const idStr = String(tokenId);
+                        const [vampResp, infoResp] = await Promise.all([
+                            querySmart(TLA_LOCKS_CONTRACT, { lock_vamp: { token_id: idStr } }),
+                            querySmart(TLA_LOCKS_CONTRACT, { lock_info:  { token_id: idStr } }),
+                        ]);
+                        const vampData = vampResp?.data;
+                        const infoData = infoResp?.data;
+                        if (!vampData || !infoData) return null;
+
+                        // VP comes as micro-units (1e6). Use vp (= fixed + voting_power).
+                        const vpMicro = Number(vampData.vp || 0);
+                        const vp = vpMicro / 1e6;
+
+                        // lock_info.asset = { info: { cw20: <addr> } | { native: <denom> }, amount: <micro> }
+                        const assetInfo = infoData.asset?.info || {};
+                        const amountMicro = Number(infoData.asset?.amount || 0);
+                        const amount = amountMicro / 1e6;
+
+                        // Resolve asset label
+                        let assetLabel = 'unknown';
+                        if (assetInfo.cw20) {
+                            assetLabel = ASSET_LABELS[assetInfo.cw20] || assetInfo.cw20.slice(0, 12) + '…';
+                        } else if (assetInfo.native) {
+                            assetLabel = assetInfo.native === 'uluna' ? 'LUNA' : assetInfo.native;
+                        }
+
                         return {
-                            id: String(tokenId),
-                            asset: getAttr('asset') || getAttr('token') || getAttr('lock_asset'),
-                            amountRaw: getAttr('amount') || getAttr('locked_amount') || getAttr('balance'),
-                            multiplierRaw: getAttr('multiplier') || getAttr('power_factor') || getAttr('factor'),
-                            durationRaw: getAttr('duration') || getAttr('lock_duration'),
-                            attrsAll: attrs // keep raw for diagnostic
+                            id: idStr,
+                            asset: assetLabel,
+                            assetAddress: assetInfo.cw20 || assetInfo.native || null,
+                            amount,
+                            vp,
+                            end: infoData.end,         // 'permanent' or numeric block
+                            start: infoData.start,
+                            underlyingMicro: Number(infoData.underlying_amount || 0),
                         };
                     }));
 
-                    const valid = lockDetails.filter(x => x && x.amountRaw != null);
+                    const valid = lockDetails.filter(x => x && x.vp > 0);
                     if (valid.length === 0) {
-                        // Couldn't parse any locks — log diagnostic for the first attempt so we can
-                        // adjust attribute names if the contract uses different keys than expected.
-                        console.warn('DEBUG: fetchDaoTlaVp — found tokens but no locks parsed; first lock attrs:', lockDetails[0]?.attrsAll);
+                        console.warn('DEBUG: fetchDaoTlaVp — no valid locks parsed');
                         const result = null;
                         _daoTlaVpCache = { ts: now, result };
                         return result;
                     }
 
+                    // 3) Aggregate. totalUsdLuna = sum of (amount × LST→LUNA conversion)
+                    //    for the "underlying value" display. The VP itself is already final.
                     let totalVp = 0;
                     let totalUsdLuna = 0;
-                    const locks = valid.map(l => {
-                        // Amount is typically in micro-units (uluna, etc.) — divide by 1e6.
-                        // If it's already a decimal string with a "." treat as already-converted.
-                        let amt = parseFloat(l.amountRaw) || 0;
-                        if (String(l.amountRaw).indexOf('.') === -1 && amt > 1000) amt = amt / 1e6;
-
-                        // Multiplier — try numeric first, then map known duration strings.
-                        let mult = parseFloat(l.multiplierRaw);
-                        if (!mult || isNaN(mult)) {
-                            const dur = String(l.durationRaw || '').toLowerCase();
-                            if (dur.includes('max')) mult = 10;
-                            else if (dur.includes('3') && dur.includes('mo')) mult = 2;
-                            else if (dur.includes('1') && (dur.includes('wk') || dur.includes('week'))) mult = 1;
-                            else mult = 1; // default conservative
-                        }
-
-                        // Convert LST amounts to LUNA equivalent for "underlying assets" sum.
-                        const asset = String(l.asset || '').toLowerCase();
-                        let amtInLuna = amt;
-                        if (asset.includes('arbluna') && arbLunaToLunaRate) amtInLuna = amt * arbLunaToLunaRate;
-                        else if (asset.includes('ampluna') && ampLunaToLunaRate) amtInLuna = amt * ampLunaToLunaRate;
-
-                        const vp = amtInLuna * mult;
-                        totalVp += vp;
-                        totalUsdLuna += amtInLuna; // underlying LUNA equivalent
-                        return { id: l.id, asset: l.asset, amount: amt, multiplier: mult, vp };
-                    });
+                    for (const l of valid) {
+                        totalVp += l.vp;
+                        const a = String(l.asset).toLowerCase();
+                        let amtLuna = l.amount;
+                        if (a === 'arbluna' && arbLunaToLunaRate) amtLuna = l.amount * arbLunaToLunaRate;
+                        else if (a === 'ampluna' && ampLunaToLunaRate) amtLuna = l.amount * ampLunaToLunaRate;
+                        totalUsdLuna += amtLuna;
+                        // expose for downstream consumers (modal lock-row rendering)
+                        l.amountInLuna = amtLuna;
+                    }
 
                     const result = {
                         totalVp,
                         lockCount: valid.length,
-                        locks,
-                        totalUsdLuna // underlying LUNA equivalent (caller multiplies by LUNA price for USD)
+                        locks: valid,
+                        totalUsdLuna,
+                        source: 'live',
+                        fetchedAt: now,
                     };
                     _daoTlaVpCache = { ts: now, result };
-                    console.log(`DEBUG: fetchDaoTlaVp — DAO has ${valid.length} locks, ${totalVp.toFixed(0)} VP`);
+                    console.log(`DEBUG: fetchDaoTlaVp — DAO has ${valid.length} lock(s), ${totalVp.toFixed(0)} VP (live)`);
                     return result;
 
                 } catch (e) {
@@ -13233,306 +13152,6 @@ est. APR 58.53 %"></textarea>
             var bottomActive = document.querySelector('.mobile-bottom-nav-tab[data-page="' + path + '"]');
             if (bottomActive) bottomActive.classList.add('active');
         })();
-    </script>
-
-    <!-- ===================================================================
-         CRON HEALTH WIDGET (Rev 3.37 — fleet freshness monitoring)
-         Self-contained IIFE. Mirrors the system in test.html so both pages
-         report identical health states. Reads each cron's heartbeat from
-         its data repo, surfaces capturedAt age + dataFreshness (frozen-data
-         detector). Re-checks every 30 seconds.
-         =================================================================== -->
-    <script>
-    (function() {
-        'use strict';
-
-        // ============================================================
-        // CRON REGISTRY — config per cron
-        // ============================================================
-        var CRON_REGISTRY = {
-            'tla-snapshot': {
-                label: 'TLA Snapshot',
-                cadence: 'hourly',
-                warningMs: 75 * 60 * 1000,
-                staleMs:   2 * 60 * 60 * 1000,
-                sourceUrl: 'https://raw.githubusercontent.com/defipatriot/tla-snapshot-data_2026/main/data/heartbeat.json',
-                description: 'Unified aggregator — powers pools, pie, VP totals',
-            },
-            'network-and-prices': {
-                label: 'Network & Prices',
-                cadence: 'hourly',
-                warningMs: 75 * 60 * 1000,
-                staleMs:   2 * 60 * 60 * 1000,
-                sourceUrl: 'https://raw.githubusercontent.com/defipatriot/network-and-prices-data_2026/main/data/heartbeat.json',
-                description: 'LUNA price, LST ratios, token prices',
-            },
-            'bribes-history': {
-                label: 'Bribes History',
-                cadence: 'daily',
-                warningMs: 26 * 60 * 60 * 1000,
-                staleMs:   36 * 60 * 60 * 1000,
-                sourceUrl: 'https://raw.githubusercontent.com/defipatriot/bribes-data_2026/main/data/heartbeat.json',
-                description: 'PD bribes + epoch archives',
-            },
-            'adao-positions': {
-                label: 'aDAO Positions',
-                cadence: 'weekly',
-                warningMs:  8 * 24 * 60 * 60 * 1000,
-                staleMs:   10 * 24 * 60 * 60 * 1000,
-                sourceUrl: 'https://raw.githubusercontent.com/defipatriot/adao-positions-data_2026/main/data/heartbeat.json',
-                description: 'Treasury + 46 member portfolios',
-            },
-            'astroport': {
-                label: 'Astroport Pools',
-                cadence: 'daily',
-                warningMs: 26 * 60 * 60 * 1000,
-                staleMs:   36 * 60 * 60 * 1000,
-                sourceUrl: 'https://raw.githubusercontent.com/defipatriot/astroport-pool-data_2026/main/data/heartbeat.json',
-                description: 'Astroport pool TVL + volume (feeds TLA Snapshot)',
-            },
-            'skeletonswap': {
-                label: 'Skeleton Swap',
-                cadence: 'daily',
-                warningMs: 26 * 60 * 60 * 1000,
-                staleMs:   36 * 60 * 60 * 1000,
-                sourceUrl: 'https://raw.githubusercontent.com/defipatriot/ss-pool-data_2026/main/data/heartbeat.json',
-                description: 'Skeleton Swap pool data (feeds TLA Snapshot)',
-            },
-            'votion': {
-                label: 'Votion',
-                cadence: 'weekly',
-                warningMs:  8 * 24 * 60 * 60 * 1000,
-                staleMs:   10 * 24 * 60 * 60 * 1000,
-                sourceUrl: 'https://raw.githubusercontent.com/defipatriot/votion-data_2026/main/data/heartbeat.json',
-                description: 'Next-epoch vote optimization data',
-            },
-            'nft-inventory': {
-                label: 'NFT Inventory',
-                cadence: 'hourly',
-                warningMs: 75 * 60 * 1000,
-                staleMs:   2 * 60 * 60 * 1000,
-                sourceUrl: 'https://raw.githubusercontent.com/defipatriot/nft-inventory-data_2026/main/data/heartbeat.json',
-                description: 'Per-NFT chain ownership + broken status (10k NFTs)',
-            },
-            'marketplace-stats': {
-                label: 'Marketplace Stats',
-                cadence: 'hourly',
-                warningMs: 75 * 60 * 1000,
-                staleMs:   2 * 60 * 60 * 1000,
-                sourceUrl: 'https://raw.githubusercontent.com/defipatriot/marketplace-data_2026/main/data/heartbeat.json',
-                description: 'BBL + Boost floors, listings, activity, sales history',
-            },
-        };
-
-        // Local state — does NOT touch any other global. Each entry shape:
-        //   { capturedAt: Date|null, error: string|null,
-        //     dataFreshness, consecutiveStuckRuns, dataFingerprint }
-        var cronHealth = {};
-        var STUCK_THRESHOLD_INFO = 3; // For badge text only — actual threshold lives in each cron
-
-        // ============================================================
-        // HELPERS
-        // ============================================================
-        function recordCronCapture(key, capturedAt, errorMessage, freshness) {
-            if (!CRON_REGISTRY[key]) return;
-            cronHealth[key] = {
-                capturedAt: capturedAt ? new Date(capturedAt) : null,
-                error: errorMessage || null,
-                dataFreshness:        (freshness && freshness.dataFreshness)        || null,
-                consecutiveStuckRuns: (freshness && freshness.consecutiveStuckRuns) || 0,
-                dataFingerprint:      (freshness && freshness.dataFingerprint)      || null,
-                heartbeatStatus:      (freshness && freshness.heartbeatStatus)      || null,
-            };
-        }
-
-        // Status precedence (worst wins):
-        //   stuck > stale > warning > fresh > no-signal/unknown
-        function computeCronStatus(key) {
-            var cfg = CRON_REGISTRY[key];
-            var rec = cronHealth[key];
-            if (!cfg) return 'unknown';
-            if (!rec || rec.error) return rec ? 'stale' : 'unknown';
-            if (!rec.capturedAt) return 'unknown';
-            // Data-freshness override
-            if (rec.dataFreshness === 'stuck') return 'stuck';
-            var age = Date.now() - rec.capturedAt.getTime();
-            if (age >= cfg.staleMs) return 'stale';
-            if (age >= cfg.warningMs) return 'warning';
-            if (rec.dataFreshness === 'suspicious') return 'warning';
-            return 'fresh';
-        }
-
-        function getOverallCronHealth() {
-            var keys = Object.keys(CRON_REGISTRY);
-            var worst = 'fresh';
-            var rank = { fresh: 0, 'no-signal': 0, warning: 1, stale: 2, stuck: 3, unknown: 1 };
-            var anyKnown = false;
-            for (var i = 0; i < keys.length; i++) {
-                var s = computeCronStatus(keys[i]);
-                if (s !== 'unknown') anyKnown = true;
-                if ((rank[s] || 0) > (rank[worst] || 0)) worst = s;
-            }
-            return anyKnown ? worst : 'unknown';
-        }
-
-        function formatAge(ms) {
-            if (!isFinite(ms) || ms < 0) return '—';
-            var sec = Math.floor(ms / 1000);
-            if (sec < 60) return sec + 's ago';
-            var min = Math.floor(sec / 60);
-            if (min < 60) return min + 'm ago';
-            var hr = Math.floor(min / 60);
-            if (hr < 24) return hr + 'h ago';
-            return Math.floor(hr / 24) + 'd ago';
-        }
-
-        // ============================================================
-        // FETCH — pull capturedAt + freshness from each heartbeat
-        // ============================================================
-        function fetchCronHeartbeat(key) {
-            var cfg = CRON_REGISTRY[key];
-            if (!cfg) return Promise.resolve();
-            return fetch(cfg.sourceUrl)
-                .then(function(r) {
-                    if (!r.ok) throw new Error('HTTP ' + r.status);
-                    return r.json();
-                })
-                .then(function(j) {
-                    var ts = j.capturedAt || j.generatedAt || j.fetched_at || null;
-                    if (!ts) throw new Error('no capturedAt field');
-                    recordCronCapture(key, ts, null, {
-                        dataFreshness:        j.dataFreshness,
-                        consecutiveStuckRuns: j.consecutiveStuckRuns,
-                        dataFingerprint:      j.dataFingerprint,
-                        heartbeatStatus:      j.status,
-                    });
-                })
-                .catch(function(e) {
-                    recordCronCapture(key, null, e.message || 'fetch failed');
-                });
-        }
-
-        function fetchAllHeartbeats() {
-            var keys = Object.keys(CRON_REGISTRY);
-            return Promise.all(keys.map(fetchCronHeartbeat)).then(refreshUI);
-        }
-
-        // ============================================================
-        // RENDER
-        // ============================================================
-        function refreshTrigger() {
-            var trigger = document.getElementById('cronHealthTrigger');
-            if (trigger) trigger.setAttribute('data-overall', getOverallCronHealth());
-        }
-
-        function renderModal() {
-            var body = document.getElementById('cronHealthModalBody');
-            if (!body) return;
-            var keys = Object.keys(CRON_REGISTRY);
-            var rows = keys.map(function(key) {
-                var cfg = CRON_REGISTRY[key];
-                var rec = cronHealth[key];
-                var status = computeCronStatus(key);
-                var ageStr, capturedStr, errBlock = '';
-                if (rec && rec.error) {
-                    ageStr = '<span class="text-red-400">error</span>';
-                    capturedStr = 'never';
-                    errBlock = '<div class="text-[10px] text-red-400 mt-1">' + escapeHtml(rec.error) + '</div>';
-                } else if (rec && rec.capturedAt) {
-                    var age = Date.now() - rec.capturedAt.getTime();
-                    ageStr = formatAge(age);
-                    capturedStr = rec.capturedAt.toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
-                } else {
-                    ageStr = '—';
-                    capturedStr = 'never';
-                }
-                var freshnessBadge = '';
-                if (rec && rec.dataFreshness === 'stuck') {
-                    freshnessBadge = '<div class="text-[10px] text-red-300 mt-1">🔴 data stuck — ' + (rec.consecutiveStuckRuns || (STUCK_THRESHOLD_INFO + '+')) + ' consecutive identical runs</div>';
-                } else if (rec && rec.dataFreshness === 'suspicious') {
-                    freshnessBadge = '<div class="text-[10px] text-amber-300 mt-1">⚠ data suspicious — ' + (rec.consecutiveStuckRuns || 2) + ' consecutive identical runs</div>';
-                } else if (rec && rec.dataFreshness === 'fresh' && rec.dataFingerprint) {
-                    freshnessBadge = '<div class="text-[10px] text-gray-500 mt-1" title="' + escapeHtml(rec.dataFingerprint) + '">✓ fresh data</div>';
-                }
-                return '<div class="cron-health-row" data-status="' + status + '">' +
-                       '<span class="status-dot"></span>' +
-                       '<div>' +
-                         '<div class="text-white font-medium">' + escapeHtml(cfg.label) + '</div>' +
-                         '<div class="text-[11px] text-gray-500">' + escapeHtml(cfg.description) + '</div>' +
-                         freshnessBadge + errBlock +
-                       '</div>' +
-                       '<span class="cadence-cell">' + escapeHtml(cfg.cadence) + '</span>' +
-                       '<div class="text-right">' +
-                         '<div class="age-cell">' + ageStr + '</div>' +
-                         '<div class="text-[10px] text-gray-500">' + capturedStr + '</div>' +
-                       '</div>' +
-                       '</div>';
-            }).join('');
-            body.innerHTML = rows;
-        }
-
-        function escapeHtml(s) {
-            if (s == null) return '';
-            return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-        }
-
-        function refreshUI() {
-            refreshTrigger();
-            var modal = document.getElementById('cronHealthModal');
-            if (modal && !modal.classList.contains('hidden')) renderModal();
-        }
-
-        // ============================================================
-        // MODAL OPEN/CLOSE — matches the existing modal pattern in this page
-        // ============================================================
-        function wireModal() {
-            var modal = document.getElementById('cronHealthModal');
-            var trigger = document.getElementById('cronHealthTrigger');
-            var closeBtn = modal ? modal.querySelector('.modal-close') : null;
-            if (!modal || !trigger) return;
-            function openModal() {
-                renderModal();
-                modal.classList.remove('hidden');
-                requestAnimationFrame(function() {
-                    modal.style.opacity = '1';
-                    var content = modal.querySelector('.modal-content');
-                    if (content) {
-                        content.style.opacity = '1';
-                        content.style.transform = 'scale(1)';
-                        content.style.transition = 'opacity 0.2s, transform 0.2s';
-                    }
-                });
-            }
-            function closeModal() {
-                modal.style.opacity = '0';
-                var content = modal.querySelector('.modal-content');
-                if (content) {
-                    content.style.opacity = '0';
-                    content.style.transform = 'scale(0.95)';
-                }
-                setTimeout(function() { modal.classList.add('hidden'); }, 200);
-            }
-            trigger.addEventListener('click', openModal);
-            if (closeBtn) closeBtn.addEventListener('click', closeModal);
-            modal.addEventListener('click', function(e) {
-                if (e.target === modal) closeModal();
-            });
-            document.addEventListener('keydown', function(e) {
-                if (e.key === 'Escape' && !modal.classList.contains('hidden')) closeModal();
-            });
-        }
-
-        // ============================================================
-        // BOOTSTRAP
-        // ============================================================
-        document.addEventListener('DOMContentLoaded', function() {
-            wireModal();
-            fetchAllHeartbeats();
-            // Re-check every 30 seconds. Each cycle re-renders the modal too
-            // if it happens to be open.
-            setInterval(fetchAllHeartbeats, 30 * 1000);
-        });
-    })();
     </script>
 </body>
 </html>
