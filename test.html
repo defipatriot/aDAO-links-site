@@ -2292,7 +2292,7 @@
             </div>
             <div class="mt-4 text-xs text-gray-500">
                 <button id="changelog-trigger" class="hover:text-cyan-400 transition-colors cursor-pointer">
-                    <span class="font-mono">Rev 1.16</span>
+                    <span class="font-mono">Rev 1.17</span>
                     <span class="opacity-60 mx-1">·</span>
                     <span>Changelog</span>
                 </button>
@@ -2331,12 +2331,13 @@
                 Cron Health
             </h3>
             <p class="text-gray-500 text-xs mb-4">
-                Data freshness for each scheduled job. Computed from each cron's <span class="font-mono">capturedAt</span> timestamp.
+                Data freshness for each scheduled job. Computed from each cron's <span class="font-mono">capturedAt</span> timestamp and <span class="font-mono">dataFingerprint</span>.
             </p>
             <div class="flex items-center gap-4 text-xs text-gray-400 mb-4 px-2 flex-wrap">
                 <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-green-500"></span>Fresh</span>
                 <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>Approaching stale</span>
                 <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-red-500"></span>Stale</span>
+                <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full" style="background:#dc2626; box-shadow:0 0 6px rgba(220,38,38,0.8)"></span>Data stuck</span>
                 <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-gray-500" style="outline:1px dashed #9ca3af; outline-offset:1px"></span>No freshness signal</span>
             </div>
             <div id="cronHealthModalBody" class="border border-white/5 rounded-lg overflow-hidden bg-black/20">
@@ -3306,17 +3307,25 @@
             // case where selectedMemberWallet was preserved across re-loads.
             try { renderMemberStatsRow(); } catch (err) { console.warn('initial renderMemberStatsRow:', err); }
 
-            // === Record cron-health capturedAt for primary sources ===
-            recordCronCapture('tla-snapshot',       tlaSnapshotResp?.capturedAt   || null, tlaSnapshotResp   ? null : 'fetch failed');
-            recordCronCapture('network-and-prices', networkPricesResp?.capturedAt || null, networkPricesResp ? null : 'fetch failed');
-            recordCronCapture('adao-positions',     adaoPositionsResp?.capturedAt || null, adaoPositionsResp ? null : 'fetch failed');
-            recordCronCapture('bribes-history',     bribesCurrentResp?.capturedAt || null, bribesCurrentResp ? null : 'fetch failed');
-            recordCronCapture('votion',             votionResp?.fetched_at || votionResp?.capturedAt || null, votionResp ? null : 'fetch failed');
-            // Producer crons (page doesn't otherwise need them) — fetch timestamps in background, non-blocking
-            fetchCronCapturedAt('astroport').then(refreshCronHealthAll);
-            fetchCronCapturedAt('skeletonswap').then(refreshCronHealthAll);
-            fetchCronCapturedAt('nft-inventory').then(refreshCronHealthAll);
-            fetchCronCapturedAt('marketplace-stats').then(refreshCronHealthAll);
+            // === Cron-health: route every cron through fetchCronCapturedAt ===
+            // This reads each cron's data/heartbeat.json (which carries capturedAt
+            // PLUS the new freshness fields: dataFingerprint, dataFreshness,
+            // consecutiveStuckRuns). All fetches run in parallel — non-blocking;
+            // the modal re-renders as each one lands. We deliberately do NOT
+            // record capturedAt from the in-page data files (tla-snapshot.json,
+            // network-and-prices.json, etc.) because those don't have freshness
+            // fields — only the heartbeats do.
+            Promise.all([
+                fetchCronCapturedAt('tla-snapshot'),
+                fetchCronCapturedAt('network-and-prices'),
+                fetchCronCapturedAt('adao-positions'),
+                fetchCronCapturedAt('bribes-history'),
+                fetchCronCapturedAt('votion'),
+                fetchCronCapturedAt('astroport'),
+                fetchCronCapturedAt('skeletonswap'),
+                fetchCronCapturedAt('nft-inventory'),
+                fetchCronCapturedAt('marketplace-stats'),
+            ]).then(refreshCronHealthAll);
             refreshCronHealthAll();
 
             // === Build the LUNA price snap (replaces adaoSnap) ===
