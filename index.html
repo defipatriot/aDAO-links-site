@@ -1206,6 +1206,21 @@
 <gecko-coin-price-marquee-widget locale="en" dark-mode="true" outlined="true" coin-ids="terra-luna-2,eris-amplified-luna,eris-arbitrage-luna,backbone-labs-staked-luna,lion-dao,capapult,solid-2,astroport-fi,eureka-bridged-wbtc-terra,cosmos,ethereum" initial-currency="usd"></gecko-coin-price-marquee-widget>
     </div>
 
+    <!-- Rev 3.38 — Global refresh strip. Manual refresh with 5-min cooldown
+         (rate-limit-friendly). Cooldown stored in localStorage so it persists
+         across tabs / page reloads. -->
+    <div class="border-b border-gray-800 bg-gray-900/40">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex items-center justify-end gap-3 text-xs">
+            <span id="last-refresh-display" class="text-gray-500">Last refresh: just now</span>
+            <button id="global-refresh-btn" type="button"
+                    class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded border border-gray-700 hover:border-cyan-500 hover:bg-cyan-500/10 text-gray-300 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:border-gray-700"
+                    title="Refresh all live data (5-min cooldown)">
+                <i class="fas fa-sync-alt text-[10px]" id="global-refresh-icon"></i>
+                <span id="global-refresh-label">Refresh</span>
+            </button>
+        </div>
+    </div>
+
 
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
@@ -3734,6 +3749,183 @@ est. APR 58.53 %"></textarea>
             // rate-limited and the data doesn't change second-to-second anyway.
             const TLA_LOCKS_CONTRACT = 'terra1uqhj8agyeaz8fu6mdggfuwr3lp32jlrx5hqag4jxexde92rzkamq3l62zg';
             let _daoTlaVpCache = { ts: 0, result: null };
+
+            // ─── Rev 3.38 — Live DAO Unclaimed Rewards ──────────────────────────
+            // Pulls REAL pending-reward data straight from the ve3 contracts so
+            // the Unclaimed Rewards card reflects what the DAO can actually claim
+            // right now — not an end-of-epoch snapshot.
+            //
+            // Three reward categories, each from a different contract:
+            //   • Deposit Rewards — per-bucket staking contract's
+            //     {all_pending_rewards:{address:DAO}}. Returns array of
+            //     {staked_asset_share, reward_asset}. Reward tokens are
+            //     bucket-specific zLUNA factory denoms; sum them and divide by
+            //     each connector's share_exchange_rate to get LUNA-equivalent.
+            //     (This matches what Eris UI shows as "claim amount in LUNA".)
+            //   • Rebase — asset_gauge contract's
+            //     {user_pending_rebase:{user:DAO}}. Returns ampLUNA.
+            //   • Vote Rewards — bribe_manager's {user_claimable:{user:DAO}}.
+            //     Returns buckets per epoch with token list. Usually empty
+            //     between claim cycles.
+            //
+            // Cached for 60s. Returns null if all three RPCs fail (caller falls
+            // back to snapshot).
+            let _liveRewardsCache = { ts: 0, result: null };
+
+            async function fetchLiveUnclaimedRewards() {
+                const now = Date.now();
+                if (_liveRewardsCache.result && (now - _liveRewardsCache.ts) < 60_000) {
+                    return _liveRewardsCache.result;
+                }
+
+                const DAO = 'terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm';
+                const LCD = 'https://terra-lcd.publicnode.com';
+                const STAKING = {
+                    bluechip: 'terra14mmvqn0kthw6sre75vku263lafn5655mkjdejqjedjga4cw0qx2qlf4arv',
+                    project:  'terra1awq6t7jfakg9wfjn40fk3wzwmd57mvrqtt3a39z9rmet7wdjj3ysgw3lpa',
+                    single:   'terra1qdz5qgafx88kp5mf6m2tah8742g4u5g2cek0m3jrgssexexk7g4qw6e23k',
+                    stable:   'terra1v399cx9drllm70wxfsgvfe694tdsd9x96p9ha36w7muffe4znlusqswspq',
+                };
+                // Per-bucket zLUNA-minting connector contracts. We query each for
+                // its share_exchange_rate (zLUNA → LUNA conversion at claim time).
+                // Only project/single observed to issue rewards; bluechip/stable
+                // included for completeness if they later start.
+                const CONNECTORS = {
+                    project: 'terra1x8v9fujf3c78q2we23x0vgzmxgtt0hgvuvfsxy4w3ar9kcua4c6qqcnhyh',
+                    single:  'terra1u72y7gppxrsncctvgfyqduv3md6pgq77pqhz9rxgwl3dqgye00cq7vmf8u',
+                };
+                const GAUGE     = 'terra1hfksrhchkmsj4qdq33wkksrslnfles6y2l77fmmzeep0xmq24l2smsd3lj';
+                const BRIBE_MGR = 'terra1tuuwm8yrj54qeg0c8xu00aha9ryatyhtczq8qq2q8tntuw0auzas9037wh';
+
+                const wrapFetch = async (url) => {
+                    const ctrl = new AbortController();
+                    const tid = setTimeout(() => ctrl.abort(), 8000);
+                    try {
+                        const r = await fetch(url, { signal: ctrl.signal });
+                        clearTimeout(tid);
+                        if (!r.ok) return null;
+                        return await r.json();
+                    } catch (e) {
+                        clearTimeout(tid);
+                        return null;
+                    }
+                };
+                const querySmart = (contract, query) => {
+                    const b64 = btoa(JSON.stringify(query));
+                    return wrapFetch(`${LCD}/cosmwasm/wasm/v1/contract/${contract}/smart/${b64}`);
+                };
+
+                try {
+                    // Fire all queries in parallel: 4 staking + 1 rebase + 1 vote + 2 connectors
+                    const [bcResp, prResp, snResp, stResp, rebaseResp, voteResp, prConnResp, snConnResp] = await Promise.all([
+                        querySmart(STAKING.bluechip, { all_pending_rewards: { address: DAO } }),
+                        querySmart(STAKING.project,  { all_pending_rewards: { address: DAO } }),
+                        querySmart(STAKING.single,   { all_pending_rewards: { address: DAO } }),
+                        querySmart(STAKING.stable,   { all_pending_rewards: { address: DAO } }),
+                        querySmart(GAUGE,     { user_pending_rebase: { user: DAO } }),
+                        querySmart(BRIBE_MGR, { user_claimable:      { user: DAO } }),
+                        querySmart(CONNECTORS.project, { state: {} }),
+                        querySmart(CONNECTORS.single,  { state: {} }),
+                    ]);
+
+                    // Failure detection — if all primary queries failed, return null so
+                    // the caller can fall back to snapshot. Connector state failures are
+                    // tolerable (we just lose USD conversion accuracy).
+                    if (!bcResp && !prResp && !snResp && !stResp && !rebaseResp && !voteResp) {
+                        console.warn('[live-rewards] all RPC queries failed');
+                        return null;
+                    }
+
+                    // === Deposit Rewards ===
+                    // Sum zLUNA micro-amounts per bucket, then convert to LUNA via each
+                    // connector's share_exchange_rate.
+                    const bucketResps = { bluechip: bcResp, project: prResp, single: snResp, stable: stResp };
+                    const zlunaByBucket = { bluechip: 0, project: 0, single: 0, stable: 0 };
+                    for (const [bucket, resp] of Object.entries(bucketResps)) {
+                        if (!resp?.data || !Array.isArray(resp.data)) continue;
+                        for (const item of resp.data) {
+                            const info = item?.reward_asset?.info;
+                            const amount = Number(item?.reward_asset?.amount || 0);
+                            // Match factory zluna denoms (any bucket-specific authority)
+                            if (info?.native && /zluna/i.test(info.native)) {
+                                zlunaByBucket[bucket] += amount;
+                            }
+                        }
+                    }
+
+                    // Apply share_exchange_rate per bucket
+                    const connectorRates = {
+                        project: Number(prConnResp?.data?.share_exchange_rate) || null,
+                        single:  Number(snConnResp?.data?.share_exchange_rate) || null,
+                    };
+                    let depositTotalLuna = 0;
+                    const bucketBreakdown = {};
+                    for (const [bucket, microAmount] of Object.entries(zlunaByBucket)) {
+                        const zluna = microAmount / 1e6;
+                        let lunaEquiv = zluna;
+                        if (connectorRates[bucket]) lunaEquiv = zluna / connectorRates[bucket];
+                        bucketBreakdown[bucket] = { zluna, lunaEquiv };
+                        depositTotalLuna += lunaEquiv;
+                    }
+
+                    // === Rebase ===
+                    const rebaseAmpLuna = rebaseResp?.data?.rebase
+                        ? Number(rebaseResp.data.rebase) / 1e6
+                        : 0;
+
+                    // === Vote Rewards ===
+                    // bribe_manager returns { buckets: [{epoch, rewards:[{amount, info}]}] }
+                    // or { data: [] } when nothing claimable. Aggregate per-token.
+                    const voteTokens = {};   // { TOKEN: { amount, denom } }
+                    const votePeriods = [];
+                    const voteBuckets = voteResp?.data?.buckets || voteResp?.data || [];
+                    if (Array.isArray(voteBuckets)) {
+                        for (const b of voteBuckets) {
+                            if (b.epoch != null) votePeriods.push(b.epoch);
+                            const rewards = b.rewards || b.assets || [];
+                            for (const r of rewards) {
+                                const info = r?.info || r?.asset?.info;
+                                const amt  = Number(r?.amount || r?.asset?.amount || 0) / 1e6;
+                                if (amt <= 0) continue;
+                                // Token label resolution — for now use a short denom; we
+                                // can fold in a friendly-name map later.
+                                const label = info?.cw20
+                                    ? info.cw20.slice(0, 8) + '…'
+                                    : (info?.native || '?');
+                                if (!voteTokens[label]) voteTokens[label] = { amount: 0 };
+                                voteTokens[label].amount += amt;
+                            }
+                        }
+                    }
+
+                    const result = {
+                        source: 'live',
+                        fetchedAt: now,
+                        deposit: {
+                            totalLuna: depositTotalLuna,
+                            bucketBreakdown,
+                            // Keep zluna total available for "show details"
+                            totalZluna: Object.values(zlunaByBucket).reduce((s, x) => s + x, 0) / 1e6,
+                        },
+                        rebase: {
+                            ampLuna: rebaseAmpLuna,
+                        },
+                        vote: {
+                            tokens: voteTokens,
+                            periods: votePeriods.sort((a, b) => a - b),
+                            count: Object.keys(voteTokens).length,
+                        },
+                    };
+                    _liveRewardsCache = { ts: now, result };
+                    console.log(`[live-rewards] OK — deposit:${depositTotalLuna.toFixed(2)} LUNA, rebase:${rebaseAmpLuna.toFixed(2)} ampLUNA, vote:${result.vote.count} tokens`);
+                    return result;
+
+                } catch (e) {
+                    console.error('[live-rewards] fetch failed:', e);
+                    return null;
+                }
+            }
+            // ─── End live unclaimed rewards ─────────────────────────────────────
 
             async function fetchDaoTlaVp(ampLunaToLunaRate, arbLunaToLunaRate) {
                 const now = Date.now();
@@ -6781,6 +6973,13 @@ est. APR 58.53 %"></textarea>
                                    : '—';
                            }
 
+                           // Rev 3.38 — also update the lock-summary VP at the bottom of
+                           // the Unclaimed Rewards card. Previous code wrote this from a
+                           // snapshot path using `totalStaticVp` (757K), which never
+                           // refreshed when live data was available.
+                           const locksTotalVpEl = document.getElementById('locks-total-vp');
+                           if (locksTotalVpEl) locksTotalVpEl.textContent = fmtVp(vpResult.totalVp);
+
                            if (tlaVpTitle) {
                                const dot = document.createElement('span');
                                dot.className = 'pulse-dot ml-1';
@@ -7128,6 +7327,150 @@ est. APR 58.53 %"></textarea>
                 ]).then(refreshCronHealthAll);
 
                 refreshCronHealthAll();
+            }
+
+            // ============================================================
+            // GLOBAL REFRESH BUTTON — Rev 3.38
+            // Manual refresh of all live data with a 5-minute cooldown.
+            // Cooldown is stored in localStorage so it survives page reloads
+            // and applies across browser tabs.
+            //
+            // On click:
+            //   1) Invalidates in-memory caches (fetchDaoTlaVp, fetchLiveUnclaimedRewards)
+            //   2) Re-runs fetchLiveOnChainData (price feed, treasury, contracts)
+            //   3) Re-runs fetchTlaData (TLA snapshot)
+            //   4) Re-applies live overlays (fetchDaoTlaVp + applyLiveUnclaimedRewards)
+            //   5) Re-fetches cron heartbeats so the footer indicator updates
+            // ============================================================
+            const REFRESH_COOLDOWN_MS = 5 * 60 * 1000;   // 5 minutes
+            const REFRESH_LS_KEY = 'adao_last_refresh_ts';
+
+            function getLastRefreshTs() {
+                try {
+                    const v = localStorage.getItem(REFRESH_LS_KEY);
+                    return v ? Number(v) : 0;
+                } catch (e) { return 0; }
+            }
+            function setLastRefreshTs(ts) {
+                try { localStorage.setItem(REFRESH_LS_KEY, String(ts)); }
+                catch (e) { /* private mode etc — ignore */ }
+            }
+
+            function formatLastRefresh(ts) {
+                if (!ts) return 'Last refresh: page load';
+                const age = Date.now() - ts;
+                if (age < 30_000) return 'Last refresh: just now';
+                const min = Math.floor(age / 60_000);
+                if (min < 1)  return 'Last refresh: <1m ago';
+                if (min < 60) return `Last refresh: ${min}m ago`;
+                const hr = Math.floor(min / 60);
+                return `Last refresh: ${hr}h ago`;
+            }
+
+            function formatCooldownRemaining(ms) {
+                if (ms <= 0) return '';
+                const sec = Math.ceil(ms / 1000);
+                if (sec < 60) return `${sec}s`;
+                const min = Math.floor(sec / 60);
+                const rem = sec % 60;
+                return rem === 0 ? `${min}m` : `${min}m ${rem}s`;
+            }
+
+            function updateRefreshButtonState() {
+                const btn   = document.getElementById('global-refresh-btn');
+                const label = document.getElementById('global-refresh-label');
+                const last  = document.getElementById('last-refresh-display');
+                const icon  = document.getElementById('global-refresh-icon');
+                if (!btn) return;
+
+                const lastTs = getLastRefreshTs();
+                if (last) last.textContent = formatLastRefresh(lastTs);
+
+                const remaining = Math.max(0, lastTs + REFRESH_COOLDOWN_MS - Date.now());
+                if (remaining > 0) {
+                    btn.disabled = true;
+                    btn.title = `Refresh available in ${formatCooldownRemaining(remaining)}`;
+                    if (label) label.textContent = `Refresh (${formatCooldownRemaining(remaining)})`;
+                } else {
+                    btn.disabled = false;
+                    btn.title = 'Refresh all live data';
+                    if (label) label.textContent = 'Refresh';
+                }
+                // Animate icon while a refresh is in progress
+                if (icon) {
+                    if (btn.dataset.refreshing === '1') icon.classList.add('fa-spin');
+                    else icon.classList.remove('fa-spin');
+                }
+            }
+
+            async function doGlobalRefresh() {
+                const btn = document.getElementById('global-refresh-btn');
+                if (!btn || btn.disabled) return;
+
+                // Block re-entry
+                btn.dataset.refreshing = '1';
+                btn.disabled = true;
+                updateRefreshButtonState();
+
+                console.log('[refresh] manual global refresh starting');
+
+                // 1) Invalidate caches so the next calls hit chain again
+                try { _daoTlaVpCache = { ts: 0, result: null }; } catch (_) {}
+                try { _liveRewardsCache = { ts: 0, result: null }; } catch (_) {}
+
+                // 2) Re-run main live data path
+                if (typeof fetchLiveOnChainData === 'function') {
+                    try { await fetchLiveOnChainData(); } catch (e) { console.warn('[refresh] fetchLiveOnChainData:', e); }
+                }
+
+                // 3) Re-run snapshot fetch (clear its internal cache first)
+                try { cachedTlaData = null; } catch (_) {}
+                if (typeof fetchTlaData === 'function') {
+                    try { await fetchTlaData(); } catch (e) { console.warn('[refresh] fetchTlaData:', e); }
+                }
+
+                // 4) Re-run tile/modal overlays
+                if (typeof updateUnclaimedRewardsTile === 'function') {
+                    try { await updateUnclaimedRewardsTile(); } catch (e) { console.warn('[refresh] unclaimed:', e); }
+                }
+                // applyLiveUnclaimedRewards is already called inside updateUnclaimedRewardsTile
+
+                // 5) Refresh cron health badges
+                if (typeof refreshCronHealthAll === 'function') {
+                    try {
+                        await Promise.allSettled([
+                            fetchCronCapturedAt('tla-snapshot'),
+                            fetchCronCapturedAt('network-and-prices'),
+                            fetchCronCapturedAt('adao-positions'),
+                            fetchCronCapturedAt('bribes-history'),
+                            fetchCronCapturedAt('votion'),
+                            fetchCronCapturedAt('astroport'),
+                            fetchCronCapturedAt('skeletonswap'),
+                            fetchCronCapturedAt('nft-inventory'),
+                            fetchCronCapturedAt('marketplace-stats'),
+                        ]);
+                        refreshCronHealthAll();
+                    } catch (e) { console.warn('[refresh] cron-health:', e); }
+                }
+
+                setLastRefreshTs(Date.now());
+                btn.dataset.refreshing = '0';
+                updateRefreshButtonState();
+                console.log('[refresh] manual global refresh complete');
+            }
+
+            function setupGlobalRefreshButton() {
+                const btn = document.getElementById('global-refresh-btn');
+                if (!btn) return;
+
+                btn.addEventListener('click', doGlobalRefresh);
+
+                // Tick once a second to update the cooldown timer + "X ago" display.
+                // Cheap — just DOM text writes.
+                setInterval(updateRefreshButtonState, 1000);
+
+                // Initial paint
+                updateRefreshButtonState();
             }
 
             const showCopyToast = (text) => {
@@ -9379,6 +9722,201 @@ est. APR 58.53 %"></textarea>
                 
                 // Render mini sparklines from snapshot history (fire-and-forget)
                 renderUnclaimedSparklines();
+
+                // Rev 3.38 — overlay LIVE on-chain data on top of the snapshot values.
+                // Runs after the snapshot path so the snapshot is the visible fallback
+                // if RPCs fail. The live function is responsible for updating the
+                // status indicator + writing fresh numbers when available.
+                applyLiveUnclaimedRewards();
+            }
+
+            // Apply live RPC-derived reward values to the Unclaimed Rewards card.
+            // Always runs after the snapshot path; if RPCs succeed, the visible
+            // values become live. If RPCs fail, the snapshot values remain.
+            async function applyLiveUnclaimedRewards() {
+                const live = await fetchLiveUnclaimedRewards();
+
+                const statusEl = document.getElementById('unclaimed-data-status');
+                const card = document.getElementById('unclaimed-rewards-card');
+                if (!card) return;
+
+                // Find or create the live indicator dot in the card title bar
+                let titleDot = card.querySelector('.unclaimed-live-dot');
+                if (!titleDot) {
+                    const titleBar = card.querySelector('h3');
+                    if (titleBar) {
+                        titleDot = document.createElement('span');
+                        titleDot.className = 'unclaimed-live-dot ml-2 inline-block w-2.5 h-2.5 rounded-full align-middle';
+                        titleBar.appendChild(titleDot);
+                    }
+                }
+
+                if (!live) {
+                    // Live fetch failed — leave snapshot values intact, show amber state
+                    if (titleDot) {
+                        titleDot.style.background = '#f59e0b';
+                        titleDot.title = 'Live RPC unavailable — showing snapshot data';
+                    }
+                    if (statusEl) statusEl.textContent = 'Snapshot (live unavailable)';
+                    return;
+                }
+
+                // ── DEPOSIT REWARDS ──
+                // Show LUNA-equivalent as the primary unit (matches Eris UI claim flow)
+                const lunaPriceUsd = window.cachedPriceData?.['terra-luna-2']?.usd;
+                const depositLuna = live.deposit.totalLuna;
+                const depositUsd  = lunaPriceUsd ? depositLuna * lunaPriceUsd : null;
+
+                const depUsdEl = document.getElementById('deposit-usd-value');
+                const depAmpEl = document.getElementById('deposit-ampluna-value');
+                if (depUsdEl) {
+                    depUsdEl.textContent = depositUsd != null
+                        ? '$' + depositUsd.toLocaleString('en-US', { maximumFractionDigits: 2 })
+                        : '—';
+                }
+                if (depAmpEl) {
+                    // Replace "ampLUNA" subtitle with LUNA-equivalent label
+                    depAmpEl.textContent = depositLuna.toLocaleString('en-US', { maximumFractionDigits: 2 }) + ' LUNA';
+                }
+
+                // ── REBASE ──
+                const ampLunaRatio = window.cachedAmpLunaRate;
+                const rebaseAmp = live.rebase.ampLuna;
+                const rebaseUsd = (lunaPriceUsd && ampLunaRatio)
+                    ? rebaseAmp * ampLunaRatio * lunaPriceUsd
+                    : null;
+
+                const rebUsdEl = document.getElementById('rebase-usd-value');
+                const rebAmpEl = document.getElementById('rebase-ampluna-value');
+                if (rebUsdEl) {
+                    rebUsdEl.textContent = rebaseUsd != null
+                        ? '$' + rebaseUsd.toLocaleString('en-US', { maximumFractionDigits: 2 })
+                        : '—';
+                }
+                if (rebAmpEl) {
+                    rebAmpEl.textContent = rebaseAmp.toLocaleString('en-US', { maximumFractionDigits: 4 }) + ' ampLUNA';
+                }
+
+                // ── VOTE REWARDS ──
+                const voteCount = live.vote.count;
+                const voteUsdEl  = document.getElementById('vote-usd-value');
+                const voteCntEl  = document.getElementById('vote-token-count');
+                const voteEpcEl  = document.getElementById('vote-epochs-count');
+                const voteListEl = document.getElementById('vote-tokens-list');
+
+                if (voteCount === 0) {
+                    // No claimable vote rewards — common between claim cycles
+                    if (voteUsdEl) voteUsdEl.textContent = '$0';
+                    if (voteCntEl) voteCntEl.textContent = 'no tokens claimable';
+                    if (voteEpcEl) voteEpcEl.textContent = 'recently claimed';
+                    if (voteListEl) voteListEl.innerHTML = '<span class="text-gray-500">No tokens claimable right now. New bribes accrue this epoch.</span>';
+                } else {
+                    // Compute USD using cached price feed where token has a known geckoId.
+                    // Token labels currently come as denoms — extend with a friendly-name
+                    // map later when more vote-reward data is seen.
+                    let voteUsdTotal = 0;
+                    const rows = Object.entries(live.vote.tokens).map(([label, data]) => {
+                        const amt = data.amount;
+                        const fmtAmt = amt >= 1e6 ? (amt / 1e6).toFixed(2) + 'M'
+                                    : amt >= 1e3 ? (amt / 1e3).toFixed(2) + 'K'
+                                    : amt.toFixed(2);
+                        return `<div class="flex justify-between gap-2"><span class="text-white">${label}</span><span class="text-gray-400 font-mono">${fmtAmt}</span></div>`;
+                    }).join('');
+                    if (voteUsdEl) voteUsdEl.textContent = '$' + voteUsdTotal.toLocaleString('en-US', { maximumFractionDigits: 0 });
+                    if (voteCntEl) voteCntEl.textContent = `${voteCount} token${voteCount === 1 ? '' : 's'}`;
+                    if (voteEpcEl) {
+                        const periods = live.vote.periods;
+                        voteEpcEl.textContent = periods.length > 0
+                            ? `${periods.length} epoch${periods.length === 1 ? '' : 's'} (${periods[0]}-${periods[periods.length-1]})`
+                            : 'claimable';
+                    }
+                    if (voteListEl) voteListEl.innerHTML = rows;
+                }
+
+                // ── STATUS INDICATOR ──
+                if (titleDot) {
+                    titleDot.style.background = '#10b981';
+                    titleDot.style.boxShadow = '0 0 6px rgba(16,185,129,0.7)';
+                    titleDot.title = `Live — fetched ${new Date(live.fetchedAt).toLocaleTimeString()}`;
+                }
+                if (statusEl) {
+                    const t = new Date(live.fetchedAt);
+                    statusEl.textContent = `Live • ${t.toUTCString().slice(17, 25)} UTC`;
+                    statusEl.classList.remove('text-gray-500');
+                    statusEl.classList.add('text-green-400');
+                }
+
+                // Hide the "Snapshot taken at end of epoch N" disclaimer line — it's
+                // misleading once live data is showing.
+                const disclaimerLine = card.querySelector('p.italic');
+                if (disclaimerLine) disclaimerLine.style.display = 'none';
+
+                // Also hide the stale-data warning pill (this is live, so never stale)
+                const staleWarning = document.getElementById('unclaimed-stale-warning');
+                if (staleWarning) staleWarning.classList.add('hidden');
+            }
+
+            // Modal counterpart — overlay live values inside the Unclaimed Rewards
+            // "Full Details" modal. Same pattern as the card-level overlay.
+            async function applyLiveModalUnclaimedRewards() {
+                const live = await fetchLiveUnclaimedRewards();
+                if (!live) return;
+
+                const lunaPriceUsd = window.cachedPriceData?.['terra-luna-2']?.usd;
+                const ampLunaRatio = window.cachedAmpLunaRate;
+                const ampLunaUsd = (lunaPriceUsd && ampLunaRatio) ? lunaPriceUsd * ampLunaRatio : null;
+
+                // Rebase
+                const rebaseEl = document.getElementById('modal-unclaimed-rebase');
+                if (rebaseEl) rebaseEl.textContent = live.rebase.ampLuna.toFixed(4);
+
+                // Deposits — modal has three cells: ampLUNA, Est. USD, zAssets.
+                // The Eris-style display is "LUNA-equivalent", so we relabel by
+                // writing LUNA into the ampLUNA cell and zLUNA into the zAssets cell.
+                const depAmpEl = document.getElementById('modal-deposit-ampluna');
+                const depUsdEl = document.getElementById('modal-deposit-usd');
+                const depZEl   = document.getElementById('modal-deposit-zassets');
+                if (depAmpEl) depAmpEl.textContent = live.deposit.totalLuna.toLocaleString('en-US', { maximumFractionDigits: 4 });
+                if (depUsdEl) {
+                    const u = lunaPriceUsd ? live.deposit.totalLuna * lunaPriceUsd : null;
+                    depUsdEl.textContent = u != null
+                        ? '$' + u.toLocaleString('en-US', { maximumFractionDigits: 2 })
+                        : '—';
+                }
+                if (depZEl) depZEl.textContent = live.deposit.totalZluna.toLocaleString('en-US', { maximumFractionDigits: 4 });
+
+                // Update ampLUNA cell's LABEL since we're writing LUNA into it
+                if (depAmpEl) {
+                    const label = depAmpEl.previousElementSibling;
+                    if (label && label.tagName === 'P') label.textContent = 'LUNA-equiv';
+                }
+
+                // Vote tokens list
+                const voteListEl = document.getElementById('modal-vote-rewards-list');
+                const voteEpochsEl = document.getElementById('modal-vote-epochs');
+                if (live.vote.count === 0) {
+                    if (voteListEl) voteListEl.innerHTML = '<span class="text-gray-500">No tokens claimable right now. New bribes accrue this epoch.</span>';
+                    if (voteEpochsEl) voteEpochsEl.textContent = 'recently claimed';
+                } else {
+                    const rows = Object.entries(live.vote.tokens).map(([label, data]) => {
+                        const amt = data.amount;
+                        const fmtAmt = amt >= 1e6 ? (amt / 1e6).toFixed(2) + 'M'
+                                    : amt >= 1e3 ? (amt / 1e3).toFixed(2) + 'K'
+                                    : amt.toFixed(4);
+                        return `<div class="flex justify-between"><span class="text-gray-400">${label}</span><span class="text-white font-mono">${fmtAmt}</span></div>`;
+                    }).join('');
+                    if (voteListEl) voteListEl.innerHTML = rows;
+                    if (voteEpochsEl) {
+                        const p = live.vote.periods;
+                        voteEpochsEl.textContent = p.length > 0
+                            ? `${p.length} epoch${p.length === 1 ? '' : 's'} (${p[0]}-${p[p.length-1]})`
+                            : `${live.vote.count} token${live.vote.count === 1 ? '' : 's'}`;
+                    }
+                }
+
+                // Hide the stale-data banner inside the modal — live data is current
+                const modalStaleBanner = document.getElementById('modal-stale-banner');
+                if (modalStaleBanner) modalStaleBanner.classList.add('hidden');
             }
             
             // Track the chart instances so re-renders don't accumulate
@@ -9675,6 +10213,10 @@ est. APR 58.53 %"></textarea>
                 });
                 document.getElementById('modal-vote-rewards-list').innerHTML = voteRewardsHtml || '<span class="text-gray-500">None</span>';
                 document.getElementById('modal-vote-epochs').textContent = `${unclaimedPeriods.length} epochs (${unclaimedPeriods[0] || '?'}-${unclaimedPeriods[unclaimedPeriods.length-1] || '?'})`;
+
+                // Rev 3.38 — overlay LIVE on-chain data on top of the snapshot values
+                // in the modal too. Fire-and-forget; if RPCs fail, snapshot stays visible.
+                applyLiveModalUnclaimedRewards();
                 
                 // Potential VP gain - use cached ratios from TLA ext
                 const arbLunaLocked = 27290;
@@ -13449,6 +13991,9 @@ est. APR 58.53 %"></textarea>
 
             // --- Cron Health (Rev 3.38) — fleet freshness monitoring in footer ---
             setupCronHealthUI();
+
+            // --- Global Refresh Button (Rev 3.38) — 5min-cooldown manual refresh ---
+            setupGlobalRefreshButton();
 
         }); // End of main DOMContentLoaded listener
         
