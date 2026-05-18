@@ -566,7 +566,66 @@
             border-radius: 50%;
             background-color: #ef4444; /* red-500 */
         }
-        
+
+        /* ============================================================
+           CRON HEALTH — footer indicator + modal
+           Ported from test.html Rev 1.17 (May 2026). Monitors heartbeat
+           files across the 9-cron data fleet; flags 'stuck' upstream-data
+           via dataFingerprint when the heartbeat carries it.
+           ============================================================ */
+        .cron-health-trigger {
+            display: inline-flex; align-items: center; gap: 6px;
+            font-size: 0.75rem; color: #9ca3af;
+            background: transparent; border: none; cursor: pointer;
+            padding: 2px 6px; border-radius: 4px;
+            transition: color 0.15s, background 0.15s;
+        }
+        .cron-health-trigger:hover { color: #fff; background: rgba(255,255,255,0.05); }
+        .cron-health-trigger .dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: #6b7280; transition: background 0.3s;
+        }
+        .cron-health-trigger[data-overall="fresh"]     .dot { background: #10b981; box-shadow: 0 0 6px rgba(16,185,129,0.7); }
+        .cron-health-trigger[data-overall="no-signal"] .dot { background: #10b981; box-shadow: 0 0 6px rgba(16,185,129,0.7); }
+        .cron-health-trigger[data-overall="warning"]   .dot { background: #f59e0b; box-shadow: 0 0 6px rgba(245,158,11,0.7); }
+        .cron-health-trigger[data-overall="stale"]     .dot { background: #ef4444; box-shadow: 0 0 6px rgba(239,68,68,0.8); }
+        .cron-health-trigger[data-overall="stuck"]     .dot { background: #dc2626; box-shadow: 0 0 8px rgba(220,38,38,0.9); animation: cronStuckPulse 1.5s ease-in-out infinite; }
+        .cron-health-trigger[data-overall="unknown"]   .dot { background: #6b7280; }
+        @keyframes cronStuckPulse {
+            0%, 100% { box-shadow: 0 0 8px rgba(220,38,38,0.9); }
+            50%      { box-shadow: 0 0 14px rgba(220,38,38,1), 0 0 4px rgba(220,38,38,1) inset; }
+        }
+
+        /* Cron health modal table */
+        .cron-health-row {
+            display: grid;
+            grid-template-columns: auto 1fr auto auto;
+            gap: 12px; align-items: center;
+            padding: 10px 12px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            font-size: 0.875rem;
+        }
+        .cron-health-row:last-child { border-bottom: none; }
+        .cron-health-row .status-dot {
+            width: 10px; height: 10px; border-radius: 50%;
+        }
+        .cron-health-row[data-status="fresh"]    .status-dot { background: #10b981; }
+        .cron-health-row[data-status="warning"]  .status-dot { background: #f59e0b; }
+        .cron-health-row[data-status="stale"]    .status-dot { background: #ef4444; }
+        .cron-health-row[data-status="stuck"]    .status-dot { background: #dc2626; box-shadow: 0 0 6px rgba(220,38,38,0.8); }
+        .cron-health-row[data-status="unknown"]  .status-dot { background: #6b7280; }
+        .cron-health-row[data-status="no-signal"] .status-dot { background: #6b7280; outline: 1px dashed #9ca3af; outline-offset: 1px; }
+        .cron-health-row .age-cell {
+            font-family: ui-monospace, monospace;
+            color: #d1d5db;
+        }
+        .cron-health-row[data-status="warning"] .age-cell { color: #fbbf24; }
+        .cron-health-row[data-status="stale"] .age-cell   { color: #f87171; font-weight: 600; }
+        .cron-health-row[data-status="stuck"] .age-cell   { color: #fca5a5; font-weight: 600; }
+        .cron-health-row .cadence-cell {
+            font-size: 0.75rem; color: #9ca3af;
+        }
+
         /* --- Modal Styles (Generic) --- */
         .modal {
             transition: opacity 0.3s ease;
@@ -3050,14 +3109,48 @@ est. APR 58.53 %"></textarea>
             </div>
             <div class="mt-4 text-xs text-gray-500">
                 <button id="changelog-trigger" class="hover:text-cyan-400 transition-colors cursor-pointer">
-                    <span class="font-mono">Rev 3.36</span>
+                    <span class="font-mono">Rev 3.38</span>
                     <span class="opacity-60 mx-1">·</span>
                     <span>Changelog</span>
+                </button>
+                <span class="opacity-40 mx-2">·</span>
+                <button id="cronHealthTrigger" class="cron-health-trigger" data-overall="unknown" title="Click for cron status details">
+                    <span class="dot"></span>
+                    <span class="label">Cron status</span>
                 </button>
             </div>
         </div>
     </footer>
-    
+
+    <!-- Cron Health Modal — fleet freshness monitoring (Rev 3.38) -->
+    <div id="cronHealthModal" class="modal fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50 hidden opacity-0">
+        <div class="modal-content bg-[#0f1117] border border-cyan-700/40 rounded-xl shadow-xl w-full max-w-2xl relative text-white opacity-0 scale-95 p-6 max-h-[85vh] overflow-y-auto">
+            <button class="modal-close absolute top-4 right-4 text-gray-400 hover:text-white text-3xl leading-none" data-close="cronHealthModal">&times;</button>
+            <h3 class="text-2xl font-bold text-cyan-400 mb-1 flex items-center gap-3">
+                <i class="fas fa-heart-pulse"></i>
+                Cron Health
+            </h3>
+            <p class="text-gray-500 text-xs mb-4">
+                Data freshness for each scheduled job. Computed from each cron's <span class="font-mono">capturedAt</span> timestamp and <span class="font-mono">dataFingerprint</span>.
+            </p>
+            <div class="flex items-center gap-4 text-xs text-gray-400 mb-4 px-2 flex-wrap">
+                <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-green-500"></span>Fresh</span>
+                <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>Approaching stale</span>
+                <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-red-500"></span>Stale</span>
+                <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full" style="background:#dc2626; box-shadow:0 0 6px rgba(220,38,38,0.8)"></span>Data stuck</span>
+                <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-gray-500" style="outline:1px dashed #9ca3af; outline-offset:1px"></span>No freshness signal</span>
+            </div>
+            <div id="cronHealthModalBody" class="border border-white/5 rounded-lg overflow-hidden bg-black/20">
+                <div class="text-gray-500 text-center py-8">
+                    <i class="fas fa-spinner fa-spin mr-2"></i>Loading…
+                </div>
+            </div>
+            <p class="text-[10px] text-gray-600 mt-4 text-center">
+                Re-checks every 30 seconds. Auto-refreshes when this modal is open.
+            </p>
+        </div>
+    </div>
+
     <!-- Changelog Modal -->
     <div id="changelogModal" class="modal fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50 hidden opacity-0">
         <div class="modal-content bg-[#0f1117] border border-cyan-700/40 rounded-xl shadow-xl w-full max-w-2xl relative text-white opacity-0 scale-95 p-6 max-h-[85vh] overflow-y-auto">
@@ -6658,13 +6751,36 @@ est. APR 58.53 %"></textarea>
                                console.warn('DEBUG: fetchDaoTlaVp returned null — buildTlaVp will fall back to snapshot');
                                return;
                            }
-                           // Live data — write to the VP tile directly.
+                           // Live data — write to the VP tile.
+                           // Rev 3.38 — fix DOM IDs. The actual tile IDs are 'dao-tla-vp'
+                           // (main) and 'dao-tla-vp-usd' (sub). The previous code looked
+                           // for 'dao-tla-vp-total'/'dao-tla-vp-main' and '...-subtext'/
+                           // '...-luna' which don't exist anywhere in the HTML, so the
+                           // live result silently failed to render and the tile kept the
+                           // snapshot value.
                            const lunaPriceUSD = window.cachedLunaPrice || null;
-                           const totalLunaText = vpResult.totalUsdLuna ? `${vpResult.totalUsdLuna.toLocaleString('en-US',{maximumFractionDigits:0})} LUNA` : '—';
-                           const vpMainEl = document.getElementById('dao-tla-vp-total') || document.getElementById('dao-tla-vp-main');
-                           if (vpMainEl) vpMainEl.textContent = vpResult.totalVp.toLocaleString('en-US',{maximumFractionDigits:0});
-                           const vpSubEl = document.getElementById('dao-tla-vp-subtext') || document.getElementById('dao-tla-vp-luna');
-                           if (vpSubEl) vpSubEl.textContent = `${vpResult.lockCount} lock${vpResult.lockCount === 1 ? '' : 's'} · ${totalLunaText}`;
+
+                           // Format VP to match the snapshot's "757.0K VP" style
+                           const fmtVp = (n) => {
+                               if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M VP';
+                               if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K VP';
+                               return n.toLocaleString('en-US', { maximumFractionDigits: 0 }) + ' VP';
+                           };
+
+                           const vpMainEl = document.getElementById('dao-tla-vp');
+                           if (vpMainEl) vpMainEl.textContent = fmtVp(vpResult.totalVp);
+
+                           const vpUsdEl = document.getElementById('dao-tla-vp-usd');
+                           if (vpUsdEl) {
+                               // Match snapshot format: "$5,188" — USD value of underlying
+                               const vpUsd = (vpResult.totalUsdLuna != null && lunaPriceUSD != null)
+                                   ? vpResult.totalUsdLuna * lunaPriceUSD
+                                   : null;
+                               vpUsdEl.textContent = vpUsd != null
+                                   ? '$' + vpUsd.toLocaleString('en-US', { maximumFractionDigits: 0 })
+                                   : '—';
+                           }
+
                            if (tlaVpTitle) {
                                const dot = document.createElement('span');
                                dot.className = 'pulse-dot ml-1';
@@ -6690,6 +6806,329 @@ est. APR 58.53 %"></textarea>
             }
             
             // --- Helper Functions ---
+
+            // ============================================================
+            // CRON HEALTH — fleet freshness monitoring (Rev 3.38)
+            // Ported from test.html Rev 1.17 (May 2026). Same logic; adapted
+            // to index.html's environment (uses window.cronHealth instead of
+            // a `store` object, and uses tlaDataMeta.currentEpoch for the
+            // fallback URL helpers).
+            // ============================================================
+            window.cronHealth = {};   // { [cronKey]: { capturedAt, error, dataFreshness, ... } }
+
+            const CRON_REGISTRY = {
+                'tla-snapshot': {
+                    label: 'TLA Snapshot',
+                    cadence: 'hourly',
+                    cadenceMs: 60 * 60 * 1000,
+                    warningMs: 75 * 60 * 1000,
+                    staleMs: 2 * 60 * 60 * 1000,
+                    sourceUrl: 'https://raw.githubusercontent.com/defipatriot/tla-snapshot-data_2026/main/data/heartbeat.json',
+                    description: 'Unified aggregator — powers pools, pie, VP totals',
+                },
+                'network-and-prices': {
+                    label: 'Network & Prices',
+                    cadence: 'hourly',
+                    cadenceMs: 60 * 60 * 1000,
+                    warningMs: 75 * 60 * 1000,
+                    staleMs: 2 * 60 * 60 * 1000,
+                    sourceUrl: 'https://raw.githubusercontent.com/defipatriot/network-and-prices-data_2026/main/data/heartbeat.json',
+                    description: 'LUNA price, LST ratios, token prices',
+                },
+                'bribes-history': {
+                    label: 'Bribes History',
+                    cadence: 'daily',
+                    cadenceMs: 24 * 60 * 60 * 1000,
+                    warningMs: 26 * 60 * 60 * 1000,
+                    staleMs: 36 * 60 * 60 * 1000,
+                    sourceUrl: 'https://raw.githubusercontent.com/defipatriot/bribes-data_2026/main/data/heartbeat.json',
+                    description: 'PD bribes + epoch archives',
+                },
+                'adao-positions': {
+                    label: 'aDAO Positions',
+                    cadence: 'weekly',
+                    cadenceMs: 7 * 24 * 60 * 60 * 1000,
+                    warningMs: 8 * 24 * 60 * 60 * 1000,
+                    staleMs: 10 * 24 * 60 * 60 * 1000,
+                    sourceUrl: 'https://raw.githubusercontent.com/defipatriot/adao-positions-data_2026/main/data/heartbeat.json',
+                    description: 'Treasury + 46 member portfolios',
+                },
+                'astroport': {
+                    label: 'Astroport Pools',
+                    cadence: 'daily',
+                    cadenceMs: 24 * 60 * 60 * 1000,
+                    warningMs: 26 * 60 * 60 * 1000,
+                    staleMs: 36 * 60 * 60 * 1000,
+                    sourceUrl: 'https://raw.githubusercontent.com/defipatriot/astroport-pool-data_2026/main/data/heartbeat.json',
+                    sourceUrlFallbackFn: (epoch) => `https://raw.githubusercontent.com/defipatriot/astroport-pool-data_2026/main/astroport/astroport-epoch-${epoch - 1}.json`,
+                    description: 'Astroport pool TVL + volume (feeds TLA Snapshot)',
+                },
+                'skeletonswap': {
+                    label: 'Skeleton Swap',
+                    cadence: 'daily',
+                    cadenceMs: 24 * 60 * 60 * 1000,
+                    warningMs: 26 * 60 * 60 * 1000,
+                    staleMs: 36 * 60 * 60 * 1000,
+                    sourceUrl: 'https://raw.githubusercontent.com/defipatriot/ss-pool-data_2026/main/data/heartbeat.json',
+                    description: 'Skeleton Swap pool data (feeds TLA Snapshot)',
+                },
+                'votion': {
+                    label: 'Votion',
+                    cadence: 'weekly',
+                    cadenceMs: 7 * 24 * 60 * 60 * 1000,
+                    warningMs: 8 * 24 * 60 * 60 * 1000,
+                    staleMs: 10 * 24 * 60 * 60 * 1000,
+                    sourceUrl: 'https://raw.githubusercontent.com/defipatriot/votion-data_2026/main/data/heartbeat.json',
+                    sourceUrlFallbackFn: (epoch) => `https://raw.githubusercontent.com/defipatriot/votion-data_2026/main/votion/votion-epoch-${epoch}.json`,
+                    description: 'Next-epoch vote optimization data',
+                },
+                'nft-inventory': {
+                    label: 'NFT Inventory',
+                    cadence: 'hourly',
+                    cadenceMs: 60 * 60 * 1000,
+                    warningMs: 75 * 60 * 1000,
+                    staleMs: 2 * 60 * 60 * 1000,
+                    sourceUrl: 'https://raw.githubusercontent.com/defipatriot/nft-inventory-data_2026/main/data/heartbeat.json',
+                    description: 'Per-NFT chain ownership + broken status (10k NFTs)',
+                },
+                'marketplace-stats': {
+                    label: 'Marketplace Stats',
+                    cadence: 'hourly',
+                    cadenceMs: 60 * 60 * 1000,
+                    warningMs: 75 * 60 * 1000,
+                    staleMs: 2 * 60 * 60 * 1000,
+                    sourceUrl: 'https://raw.githubusercontent.com/defipatriot/marketplace-data_2026/main/data/heartbeat.json',
+                    description: 'BBL + Boost floors, listings, activity, sales history',
+                },
+            };
+
+            function recordCronCapture(key, capturedAt, errorMessage = null, freshness = {}) {
+                if (!CRON_REGISTRY[key]) {
+                    console.warn(`[cron-health] unknown cron key: ${key}`);
+                    return;
+                }
+                const ts = capturedAt ? new Date(capturedAt) : null;
+                window.cronHealth[key] = {
+                    capturedAt: ts,
+                    checkedAt: new Date(),
+                    error: errorMessage,
+                    dataFreshness:        freshness.dataFreshness ?? null,
+                    consecutiveStuckRuns: freshness.consecutiveStuckRuns ?? 0,
+                    dataFingerprint:      freshness.dataFingerprint ?? null,
+                    heartbeatStatus:      freshness.heartbeatStatus ?? null,
+                };
+            }
+
+            function computeCronStatus(key) {
+                const cfg = CRON_REGISTRY[key];
+                const rec = window.cronHealth[key];
+                if (!cfg) return 'unknown';
+                if (cfg.noHeartbeat) return 'no-signal';
+                if (!rec || rec.error) return 'stale';
+                if (!rec.capturedAt) return 'unknown';
+                // 'stuck' (dataFreshness from heartbeat) beats age-based checks
+                if (rec.dataFreshness === 'stuck') return 'stuck';
+                const age = Date.now() - rec.capturedAt.getTime();
+                if (age >= cfg.staleMs) return 'stale';
+                if (age >= cfg.warningMs) return 'warning';
+                if (rec.dataFreshness === 'suspicious') return 'warning';
+                return 'fresh';
+            }
+
+            function getOverallCronHealth() {
+                const keys = Object.keys(CRON_REGISTRY);
+                let worst = 'fresh';
+                const rank = { fresh: 0, 'no-signal': 0, warning: 1, stale: 2, stuck: 3, unknown: 1 };
+                let anyKnown = false;
+                for (const k of keys) {
+                    const s = computeCronStatus(k);
+                    if (s !== 'unknown') anyKnown = true;
+                    if ((rank[s] ?? 0) > (rank[worst] ?? 0)) worst = s;
+                }
+                if (!anyKnown) return 'unknown';
+                return worst;
+            }
+
+            function formatCronAge(ms) {
+                if (!isFinite(ms) || ms < 0) return '—';
+                const sec = Math.floor(ms / 1000);
+                if (sec < 60) return `${sec}s ago`;
+                const min = Math.floor(sec / 60);
+                if (min < 60) return `${min}m ago`;
+                const hr = Math.floor(min / 60);
+                if (hr < 24) return `${hr}h ago`;
+                const day = Math.floor(hr / 24);
+                return `${day}d ago`;
+            }
+
+            function refreshHealthIndicator() {
+                const btn = document.getElementById('cronHealthTrigger');
+                if (!btn) return;
+                const overall = getOverallCronHealth();
+                btn.setAttribute('data-overall', overall);
+                const label = btn.querySelector('.label');
+                if (label) {
+                    label.textContent = ({
+                        'fresh':     'Crons healthy',
+                        'no-signal': 'Crons healthy',
+                        'warning':   'Cron stale soon',
+                        'stale':     'Cron stale',
+                        'stuck':     'Cron data stuck',
+                        'unknown':   'Cron status',
+                    })[overall] || 'Cron status';
+                }
+            }
+
+            function renderCronHealthModal() {
+                const body = document.getElementById('cronHealthModalBody');
+                if (!body) return;
+                const rows = Object.keys(CRON_REGISTRY).map(key => {
+                    const cfg = CRON_REGISTRY[key];
+                    const rec = window.cronHealth[key];
+                    const status = computeCronStatus(key);
+
+                    let ageStr, capturedStr, errBlock = '';
+                    if (status === 'no-signal') {
+                        ageStr = `<span class="text-gray-400">no signal</span>`;
+                        capturedStr = `<span class="text-[10px] text-gray-600">${cfg.noHeartbeatReason || 'no heartbeat'}</span>`;
+                    } else if (rec?.error) {
+                        ageStr = `<span class="text-red-400">error</span>`;
+                        capturedStr = 'never';
+                        errBlock = `<div class="text-[10px] text-red-400 mt-1">${rec.error}</div>`;
+                    } else if (rec?.capturedAt) {
+                        const age = Date.now() - rec.capturedAt.getTime();
+                        ageStr = formatCronAge(age);
+                        capturedStr = rec.capturedAt.toISOString().replace('T',' ').slice(0,19) + ' UTC';
+                    } else {
+                        ageStr = '—';
+                        capturedStr = 'never';
+                    }
+
+                    let freshnessBadge = '';
+                    if (rec?.dataFreshness === 'stuck') {
+                        freshnessBadge = `<div class="text-[10px] text-red-300 mt-1">🔴 data stuck — ${rec.consecutiveStuckRuns || '3+'} consecutive identical runs</div>`;
+                    } else if (rec?.dataFreshness === 'suspicious') {
+                        freshnessBadge = `<div class="text-[10px] text-amber-300 mt-1">⚠ data suspicious — ${rec.consecutiveStuckRuns || 2} consecutive identical runs</div>`;
+                    } else if (rec?.dataFreshness === 'fresh' && rec?.dataFingerprint) {
+                        freshnessBadge = `<div class="text-[10px] text-gray-500 mt-1" title="${rec.dataFingerprint}">✓ fresh data</div>`;
+                    }
+
+                    return `
+                        <div class="cron-health-row" data-status="${status}">
+                            <span class="status-dot"></span>
+                            <div>
+                                <div class="text-white font-medium">${cfg.label}</div>
+                                <div class="text-[11px] text-gray-500">${cfg.description}</div>
+                                ${freshnessBadge}
+                                ${errBlock}
+                            </div>
+                            <span class="cadence-cell">${cfg.cadence}</span>
+                            <div class="text-right">
+                                <div class="age-cell">${ageStr}</div>
+                                <div class="text-[10px] text-gray-500">${capturedStr}</div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+                body.innerHTML = rows;
+            }
+
+            function refreshCronHealthAll() {
+                refreshHealthIndicator();
+                const modal = document.getElementById('cronHealthModal');
+                if (modal && !modal.classList.contains('hidden')) renderCronHealthModal();
+            }
+
+            async function fetchCronCapturedAt(key) {
+                const cfg = CRON_REGISTRY[key];
+                if (!cfg) return;
+                if (cfg.noHeartbeat) {
+                    recordCronCapture(key, null, cfg.noHeartbeatReason || 'no heartbeat available');
+                    return;
+                }
+                // Use tlaDataMeta.currentEpoch when available for fallback URL helpers
+                const epoch = (typeof tlaDataMeta !== 'undefined' && tlaDataMeta.currentEpoch) || 0;
+                const urls = [];
+                if (typeof cfg.sourceUrlFn === 'function') urls.push(cfg.sourceUrlFn(epoch));
+                else if (cfg.sourceUrl) urls.push(cfg.sourceUrl);
+                if (typeof cfg.sourceUrlFallbackFn === 'function') urls.push(cfg.sourceUrlFallbackFn(epoch));
+
+                if (urls.length === 0) {
+                    recordCronCapture(key, null, 'no sourceUrl configured');
+                    return;
+                }
+
+                let lastErr = null;
+                for (const url of urls) {
+                    try {
+                        const r = await fetch(url);
+                        if (!r.ok) { lastErr = `HTTP ${r.status}`; continue; }
+                        const j = await r.json();
+                        const ts = j.capturedAt || j.generatedAt || j.fetched_at || null;
+                        if (ts) {
+                            recordCronCapture(key, ts, null, {
+                                dataFreshness:        j.dataFreshness,
+                                consecutiveStuckRuns: j.consecutiveStuckRuns,
+                                dataFingerprint:      j.dataFingerprint,
+                                heartbeatStatus:      j.status,
+                            });
+                            return;
+                        }
+                        lastErr = 'no capturedAt field';
+                    } catch (e) {
+                        lastErr = e.message || 'fetch failed';
+                    }
+                }
+                recordCronCapture(key, null, lastErr);
+            }
+
+            function setupCronHealthUI() {
+                const trigger = document.getElementById('cronHealthTrigger');
+                const modal   = document.getElementById('cronHealthModal');
+                if (!trigger || !modal) return;
+
+                const openModal = () => {
+                    renderCronHealthModal();
+                    modal.classList.remove('hidden');
+                    requestAnimationFrame(() => {
+                        modal.classList.remove('opacity-0');
+                        const content = modal.querySelector('.modal-content');
+                        if (content) content.classList.remove('opacity-0','scale-95');
+                    });
+                };
+                const closeModal = () => {
+                    modal.classList.add('opacity-0');
+                    const content = modal.querySelector('.modal-content');
+                    if (content) content.classList.add('opacity-0','scale-95');
+                    setTimeout(() => modal.classList.add('hidden'), 200);
+                };
+
+                trigger.addEventListener('click', openModal);
+                modal.querySelectorAll('.modal-close, [data-close="cronHealthModal"]').forEach(b =>
+                    b.addEventListener('click', closeModal));
+                modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+                document.addEventListener('keydown', e => {
+                    if (e.key === 'Escape' && !modal.classList.contains('hidden')) closeModal();
+                });
+
+                // Periodic refresh — recompute relative ages every 30s
+                setInterval(refreshCronHealthAll, 30 * 1000);
+
+                // Kick off all heartbeat fetches in parallel; refresh UI when done
+                Promise.allSettled([
+                    fetchCronCapturedAt('tla-snapshot'),
+                    fetchCronCapturedAt('network-and-prices'),
+                    fetchCronCapturedAt('adao-positions'),
+                    fetchCronCapturedAt('bribes-history'),
+                    fetchCronCapturedAt('votion'),
+                    fetchCronCapturedAt('astroport'),
+                    fetchCronCapturedAt('skeletonswap'),
+                    fetchCronCapturedAt('nft-inventory'),
+                    fetchCronCapturedAt('marketplace-stats'),
+                ]).then(refreshCronHealthAll);
+
+                refreshCronHealthAll();
+            }
 
             const showCopyToast = (text) => {
                 let toast = document.getElementById('copy-toast');
@@ -13007,6 +13446,9 @@ est. APR 58.53 %"></textarea>
             
             // --- Live Proposal Detection & Popup ---
             checkForLiveProposals();
+
+            // --- Cron Health (Rev 3.38) — fleet freshness monitoring in footer ---
+            setupCronHealthUI();
 
         }); // End of main DOMContentLoaded listener
         
