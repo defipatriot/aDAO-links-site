@@ -3101,7 +3101,7 @@ est. APR 58.53 %"></textarea>
             </div>
             <div class="mt-4 text-xs text-gray-500">
                 <button id="changelog-trigger" class="hover:text-cyan-400 transition-colors cursor-pointer">
-                    <span class="font-mono">Rev 3.39</span>
+                    <span class="font-mono">Rev 3.40</span>
                     <span class="opacity-60 mx-1">·</span>
                     <span>Changelog</span>
                 </button>
@@ -3748,6 +3748,87 @@ est. APR 58.53 %"></textarea>
             // Cached for 60s. Returns null if all three RPCs fail (caller falls
             // back to snapshot).
             let _liveRewardsCache = { ts: 0, result: null };
+
+            // ─── Rev 3.40 — Live DAO TLA Deposits ──────────────────────────────
+            // Replaces the stale snapshot path that read from `tla-data-epoch-N-end.json`.
+            // The adao-positions cron writes `treasury.summary.total_lp_position_usd`
+            // (and per-position breakdown in `treasury.lp_positions[]`) live every hour.
+            //
+            // Returns:
+            //   { source: 'live', fetchedAt,
+            //     totalLpUsd, amplifiedUsd, nonAmplifiedUsd,
+            //     positions: [{ pool_name, usd_value, is_amplified, status, ... }],
+            //     pendingRewardsUsd, pendingBribesUsd,
+            //     capturedAt }    // when the cron captured this
+            // Cached for 5 minutes.
+            let _liveTlaDepositsCache = { ts: 0, result: null };
+
+            async function fetchLiveTlaDeposits() {
+                const now = Date.now();
+                if (_liveTlaDepositsCache.result && (now - _liveTlaDepositsCache.ts) < 5 * 60_000) {
+                    return _liveTlaDepositsCache.result;
+                }
+                try {
+                    const r = await fetch('https://raw.githubusercontent.com/defipatriot/adao-positions-data_2026/main/data/current.json');
+                    if (!r.ok) return null;
+                    const data = await r.json();
+                    const t = data?.treasury;
+                    if (!t?.summary) return null;
+                    const s = t.summary;
+                    const result = {
+                        source: 'live',
+                        fetchedAt: now,
+                        capturedAt: data.capturedAt,
+                        totalLpUsd:        s.total_lp_position_usd     || 0,
+                        amplifiedUsd:      s.amplified_lp_usd          || 0,
+                        nonAmplifiedUsd:   s.non_amplified_lp_usd      || 0,
+                        activePositions:   s.active_lp_position_count  || 0,
+                        atRiskPositions:   s.at_risk_lp_position_count || 0,
+                        inactivePositions: s.inactive_lp_position_count || 0,
+                        amplifiedCount:    s.amplified_lp_position_count || 0,
+                        nonAmplifiedCount: s.non_amplified_lp_position_count || 0,
+                        positions:         Array.isArray(t.lp_positions) ? t.lp_positions : [],
+                        pendingRewardsUsd: s.total_pending_rewards_usd || 0,
+                        pendingBribesUsd:  s.total_pending_bribes_usd  || 0,
+                    };
+                    _liveTlaDepositsCache = { ts: now, result };
+                    console.log(`[live-tla-deposits] OK — total LP $${result.totalLpUsd.toFixed(2)} across ${result.positions.length} positions`);
+                    return result;
+                } catch (e) {
+                    console.warn('[live-tla-deposits] fetch failed:', e);
+                    return null;
+                }
+            }
+
+            // Apply live TLA deposits data to the dashboard tile + DAO Total Value.
+            // The snapshot path runs first (writes from end-of-epoch data), this then
+            // overwrites with the cron-captured live total.
+            async function applyLiveTlaDeposits() {
+                const live = await fetchLiveTlaDeposits();
+                if (!live) return;
+                const tileEl = document.getElementById('dao-tla-total');
+                if (tileEl) {
+                    tileEl.textContent = '$' + live.totalLpUsd.toLocaleString('en-US', { maximumFractionDigits: 0 });
+                }
+                // The APR isn't directly in current.json — leave whatever snapshot wrote
+                // (we can compute APR from pending_rewards × 365 ÷ lp_usd later if wanted).
+
+                // Pulse-dot indicator on title (replaces any existing snapshot/stale dot)
+                const titleEl = document.getElementById('dao-tla-title');
+                if (titleEl) {
+                    const existingDot = titleEl.querySelector('.pulse-dot, .static-dot-red');
+                    if (existingDot) existingDot.remove();
+                    const dot = document.createElement('span');
+                    dot.className = 'pulse-dot ml-1';
+                    dot.title = `Live — $${live.totalLpUsd.toFixed(0)} across ${live.positions.length} LP positions (captured ${new Date(live.capturedAt).toLocaleTimeString()})`;
+                    titleEl.appendChild(dot);
+                }
+
+                // Expose for DAO Total Value aggregation
+                window.liveTlaDepositsUsd = live.totalLpUsd;
+                if (typeof updateDaoTotalValue === 'function') updateDaoTotalValue();
+            }
+            // ─── End live TLA deposits ────────────────────────────────────────
 
             // ─── Rev 3.39 — TLA VP history from cron archives ─────────────────
             // Pulls the DAO's TLA voting power per epoch from the `adao-positions`
@@ -7035,13 +7116,17 @@ est. APR 58.53 %"></textarea>
                        
                        // Rev 3.31 — DAO Broken/Held NFTs tile: documented governance count.
                        // Fixes the perpetual spinner on the #dao-broken-total tile.
+                       // Rev 3.40 — pulse dot tooltip clarifies this is a verified governance
+                       // count (1,000 across 3 wallets per Props 64-69 / TLA-2 / TLA-3) rather
+                       // than a live RPC sum, because the third wallet (old enterprise staking)
+                       // holds the entire 503-NFT enterprise pool, not just DAO's portion.
                        const daoBrokenTotalEl = document.getElementById('dao-broken-total');
                        if (daoBrokenTotalEl) daoBrokenTotalEl.textContent = DAO_BROKEN_HELD_COUNT.toLocaleString();
                        const daoBrokenTitleEl = document.querySelector('#dao-broken-total')?.closest('.stat-card')?.querySelector('h3');
                        if (daoBrokenTitleEl && !daoBrokenTitleEl.querySelector('.pulse-dot, .static-dot-red')) {
                            const dot = document.createElement('span');
                            dot.className = 'pulse-dot ml-1';
-                           dot.title = 'Live — DAO holds 1,000 broken NFTs (Props 64-69)';
+                           dot.title = 'Verified governance count — DAO holds ~1,000 broken NFTs across 3 wallets (multisig vetoer + enterprise treasury + 100 staked in old enterprise contract). Per Props 64-69.';
                            daoBrokenTitleEl.appendChild(dot);
                        }
                        
@@ -7606,6 +7691,8 @@ est. APR 58.53 %"></textarea>
                 // 1) Invalidate caches so the next calls hit chain again
                 try { _daoTlaVpCache = { ts: 0, result: null }; } catch (_) {}
                 try { _liveRewardsCache = { ts: 0, result: null }; } catch (_) {}
+                try { _liveTlaDepositsCache = { ts: 0, result: null }; } catch (_) {}
+                try { _tlaVpCronHistoryCache = { ts: 0, result: null }; } catch (_) {}
 
                 // 2) Re-run main live data path
                 if (typeof fetchLiveOnChainData === 'function') {
@@ -8728,6 +8815,10 @@ est. APR 58.53 %"></textarea>
                  // restores a spinner (line 8529 logic), which wiped the dollar value we
                  // just wrote at line 7644. The dot is owned by applyTlaStaleness now anyway.
                  // Was: updateTile('dao-tla-total', null, false, { titleId: 'dao-tla-title' });
+
+                 // Rev 3.40 — overlay LIVE TLA Deposits from the adao-positions cron.
+                 // Snapshot wrote first; live data wins on final paint.
+                 applyLiveTlaDeposits();
                  
                  // Update modal header
                  if (modalTotalUsdEl) modalTotalUsdEl.textContent = `$${tlaData.totalDeposit.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
