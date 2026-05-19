@@ -3749,6 +3749,109 @@ est. APR 58.53 %"></textarea>
             // back to snapshot).
             let _liveRewardsCache = { ts: 0, result: null };
 
+            // ─── Rev 3.39 — TLA VP history from cron archives ─────────────────
+            // Pulls the DAO's TLA voting power per epoch from the `adao-positions`
+            // weekly archives (data/weekly/epoch-{N}.json). Each archive's
+            // `treasury.summary.display_voting_power_human` is the canonical DAO VP
+            // at that epoch's snapshot moment. Plus the live current.json for the
+            // running epoch.
+            //
+            // STRATEGY (hybrid mode): the chart in #tlaVpModal currently uses old
+            // `tla-data-epoch-N-end.json` snapshots whose historical math is fragile
+            // (lock contents change over time but snapshot's lock hardcodes don't).
+            // As cron archives accumulate, this function provides authoritative VP
+            // per epoch. The chart logic prefers cron data when present and falls
+            // back to the old snapshot data otherwise. After ~10 epochs of cron
+            // coverage we can flip a config flag (CRON_FULL_TAKEOVER below) to skip
+            // the snapshot fetcher entirely.
+            //
+            // Returns { byEpoch: { 184: { vp, source: 'cron', ... }, 186: {...} },
+            //          coverage: { cronEpochs: [184,186], cronEpochCount: 2 } }
+            // Cached for 5 minutes.
+            const CRON_FULL_TAKEOVER = false;   // flip true when cron coverage is sufficient
+            let _tlaVpCronHistoryCache = { ts: 0, result: null };
+
+            async function fetchTlaVpHistoryFromCron(currentEpoch) {
+                const now = Date.now();
+                if (_tlaVpCronHistoryCache.result && (now - _tlaVpCronHistoryCache.ts) < 5 * 60_000) {
+                    return _tlaVpCronHistoryCache.result;
+                }
+
+                const BASE = 'https://raw.githubusercontent.com/defipatriot/adao-positions-data_2026/main/data';
+                const wrapFetch = async (url) => {
+                    try {
+                        const r = await fetch(url);
+                        if (!r.ok) return null;
+                        return await r.json();
+                    } catch { return null; }
+                };
+
+                // Probe a window: current epoch + last 15 epochs. Stop early when we
+                // hit 3 consecutive misses (likely older than cron-start date).
+                const startEp = Math.max(1, (currentEpoch || 186) - 15);
+                const endEp   = currentEpoch || 186;
+                const epochsToProbe = [];
+                for (let e = endEp; e >= startEp; e--) epochsToProbe.push(e);
+
+                // Fetch in parallel; ignore 404s
+                const results = await Promise.all(epochsToProbe.map(async ep => {
+                    const data = await wrapFetch(`${BASE}/weekly/epoch-${ep}.json`);
+                    return { epoch: ep, data };
+                }));
+
+                // Also fetch current.json for the running epoch (in case epoch-N.json
+                // hasn't been frozen yet)
+                const currentData = await wrapFetch(`${BASE}/current.json`);
+
+                const byEpoch = {};
+                for (const { epoch, data } of results) {
+                    if (!data?.treasury?.summary) continue;
+                    const s = data.treasury.summary;
+                    byEpoch[epoch] = {
+                        epoch,
+                        source: 'cron',
+                        vp:                s.display_voting_power_human  || s.voting_power_human || 0,
+                        underlyingLuna:    s.total_locked_luna_equivalent || 0,
+                        usd:               s.total_locked_usd              || 0,
+                        lockCount:         s.lock_count                    || 0,
+                        capturedAt:        data.capturedAt,
+                    };
+                }
+
+                // Merge in current.json under its current epoch (if not already present
+                // via the weekly archive)
+                if (currentData?.treasury?.summary && currentData?.epoch?.number) {
+                    const ep = currentData.epoch.number;
+                    const s  = currentData.treasury.summary;
+                    if (!byEpoch[ep]) {
+                        byEpoch[ep] = {
+                            epoch: ep,
+                            source: 'cron-current',
+                            vp:                s.display_voting_power_human  || s.voting_power_human || 0,
+                            underlyingLuna:    s.total_locked_luna_equivalent || 0,
+                            usd:               s.total_locked_usd              || 0,
+                            lockCount:         s.lock_count                    || 0,
+                            capturedAt:        currentData.capturedAt,
+                        };
+                    }
+                }
+
+                const cronEpochs = Object.keys(byEpoch).map(Number).sort((a, b) => b - a);
+                const result = {
+                    byEpoch,
+                    coverage: {
+                        cronEpochs,
+                        cronEpochCount: cronEpochs.length,
+                        oldestCronEpoch: cronEpochs[cronEpochs.length - 1] || null,
+                        newestCronEpoch: cronEpochs[0] || null,
+                    },
+                };
+                _tlaVpCronHistoryCache = { ts: now, result };
+                console.log(`[tla-vp-cron] ${cronEpochs.length} epoch(s) from cron:`, cronEpochs);
+                return result;
+            }
+            // ─── End TLA VP cron history ───────────────────────────────────────
+
             async function fetchLiveUnclaimedRewards() {
                 const now = Date.now();
                 if (_liveRewardsCache.result && (now - _liveRewardsCache.ts) < 60_000) {
@@ -5203,6 +5306,16 @@ est. APR 58.53 %"></textarea>
                     
                     // Fetch snapshots to get historical ratios
                     const snapshots = await fetchAllSnapshots();
+
+                    // Rev 3.39 — fetch cron-archived TLA VP history. This is the
+                    // authoritative source going forward (adao-positions weekly
+                    // archives). Older epochs (pre-cron-start) fall back to the
+                    // snapshot-derived math below. Each row gets tagged with which
+                    // source produced its numbers so we can verify the transition
+                    // in the UI.
+                    const cronEpoch = (typeof tlaDataMeta !== 'undefined' && tlaDataMeta.currentEpoch) || null;
+                    const cronHistory = await fetchTlaVpHistoryFromCron(cronEpoch).catch(() => null);
+                    const cronByEpoch = cronHistory?.byEpoch || {};
                     
                     // Show limited rows (newest first due to reversal)
                     const visibleData = reversedData.slice(0, chartTableVisibleRows);
@@ -5214,9 +5327,14 @@ est. APR 58.53 %"></textarea>
                         
                         // Find corresponding snapshot for this epoch
                         const snapshot = snapshots.find(s => s.epoch == d.epoch) || {};
+
+                        // Cron data takes precedence when available
+                        const cronEntry = cronByEpoch[d.epoch];
                         
-                        // Current VP is FIXED from TLA file
-                        const currentVp = fixedTotalVp;
+                        // Current VP: cron when available, else fixedTotalVp (latest live).
+                        // For older epochs without cron coverage, fixedTotalVp is wrong (it's
+                        // today's VP not historical VP). Cron data fixes this.
+                        let currentVp = cronEntry ? cronEntry.vp : fixedTotalVp;
                         
                         // Check if we have REAL captured LST ratios in the NEW lst_ratios format
                         const snapshotLstRatios = snapshot.tlaDeposits?.lstRatios || snapshot.lstRatios || {};
@@ -5225,12 +5343,24 @@ est. APR 58.53 %"></textarea>
                         let underlyingLuna = null;
                         let potentialVp = null;
                         let hasValidRatios = false;
-                        
+                        let dataSource = null;   // 'live' | 'cron' | 'snapshot'
+
                         if (isLatest && tlaVpData?.totalUnderlyingLuna) {
+                            // Latest row — use live RPC data
                             underlyingLuna = tlaVpData.totalUnderlyingLuna;
                             potentialVp = Math.floor(underlyingLuna * 10);
                             hasValidRatios = true;
+                            dataSource = 'live';
+                        } else if (cronEntry) {
+                            // Cron data is authoritative for its epoch
+                            underlyingLuna = cronEntry.underlyingLuna;
+                            potentialVp = Math.floor(underlyingLuna * 10);
+                            hasValidRatios = underlyingLuna > 0;
+                            dataSource = 'cron';
                         } else if (hasNewFormatRatios) {
+                            // Snapshot fallback (legacy path) — math uses today's lock
+                            // contents against historical LST ratios, so older rows
+                            // can be wrong if locks have been adjusted since.
                             const ampRate = snapshotLstRatios.ampLUNA;
                             const arbRate = snapshotLstRatios.arbLUNA;
                             
@@ -5243,14 +5373,17 @@ est. APR 58.53 %"></textarea>
                             if (underlyingLuna > 0) {
                                 potentialVp = Math.floor(underlyingLuna * 10);
                                 hasValidRatios = true;
+                                dataSource = 'snapshot';
                             }
                         }
                         
-                        const boostPct = (hasValidRatios && potentialVp) ? (((potentialVp - fixedTotalVp) / fixedTotalVp) * 100).toFixed(1) : null;
+                        const boostPct = (hasValidRatios && potentialVp) ? (((potentialVp - currentVp) / currentVp) * 100).toFixed(1) : null;
                         
                         let usdValue = null;
                         if (isLatest && tlaVpData?.totalUsd) {
                             usdValue = tlaVpData.totalUsd;
+                        } else if (cronEntry) {
+                            usdValue = cronEntry.usd;
                         } else {
                             const tlaVpLocks = snapshot.tlaVpLocks || [];
                             if (tlaVpLocks.length > 0 && tlaVpLocks.some(l => l.usd)) {
@@ -5261,17 +5394,24 @@ est. APR 58.53 %"></textarea>
                         }
                         
                         let underlyingDisplay, potentialDisplay, valueDisplay;
-                        
+
+                        // Rev 3.39 — badge by data source. live=green pulse, cron=cyan check,
+                        // snapshot=gray @snap. This lets us watch cron coverage grow over time.
+                        const badgeFor = (src) => {
+                            if (src === 'live')     return { dot: '<span class="pulse-dot ml-1"></span>',                                     label: '<span class="text-green-400 text-[9px]">LIVE</span>' };
+                            if (src === 'cron')     return { dot: '<span class="text-cyan-400 ml-1" title="From adao-positions cron">✓</span>', label: '<span class="text-cyan-400 text-[9px]">CRON</span>' };
+                            return                          { dot: '',                                                                          label: '<span class="text-gray-600 text-[9px]">@snap</span>' };
+                        };
+                        const badge = badgeFor(dataSource);
+
                         if (hasValidRatios && underlyingLuna !== null) {
-                            const liveIndicator = isLatest ? '<span class="pulse-dot ml-1"></span>' : '';
-                            const liveLabel = isLatest ? '<span class="text-green-400 text-[9px]">LIVE</span>' : '<span class="text-gray-600 text-[9px]">@snap</span>';
                             underlyingDisplay = `
                                 <span class="text-white">${underlyingLuna.toLocaleString('en-US', {maximumFractionDigits: 0})}</span>
-                                ${liveIndicator}
-                                <span class="block">${liveLabel}</span>`;
+                                ${badge.dot}
+                                <span class="block">${badge.label}</span>`;
                             potentialDisplay = `
                                 <span class="text-cyan-400">${(potentialVp / 1000).toFixed(1)}K</span>
-                                <span class="text-green-400 text-[9px] block">+${boostPct}%</span>`;
+                                <span class="text-green-400 text-[9px] block">${boostPct > 0 ? '+' : ''}${boostPct}%</span>`;
                         } else {
                             underlyingDisplay = `
                                 <span class="text-red-400" title="LST ratios not captured">--</span>
@@ -5282,14 +5422,17 @@ est. APR 58.53 %"></textarea>
                         }
                         
                         if (usdValue !== null && usdValue > 0) {
-                            const liveIndicator = isLatest ? '<span class="pulse-dot ml-1"></span>' : '';
-                            const label = isLatest ? '<span class="text-green-400 text-[9px]">LIVE</span>' : '<span class="text-gray-600 text-[9px]">@snap</span>';
-                            valueDisplay = `<span class="text-green-400">$${usdValue.toLocaleString('en-US', {maximumFractionDigits: 0})}</span>${liveIndicator}
-                                <span class="block">${label}</span>`;
+                            valueDisplay = `<span class="text-green-400">$${usdValue.toLocaleString('en-US', {maximumFractionDigits: 0})}</span>${badge.dot}
+                                <span class="block">${badge.label}</span>`;
                         } else {
                             valueDisplay = `<span class="text-red-400" title="USD not captured">--</span>
                                 <span class="text-red-400 text-[9px] block">⚠</span>`;
                         }
+                        
+                        // "Current VP" column — change "fixed" label to show source too
+                        const currentVpSourceLabel = dataSource === 'cron' ? 'cron'
+                                                  : dataSource === 'live' ? 'live'
+                                                  : 'fixed';
                         
                         html += `
                             <tr class="border-t border-gray-700 hover:bg-gray-800/50 cursor-pointer ${isLatest ? 'bg-gray-800/30' : ''}" data-index="${reversedData.length - 1 - i}" onclick="handlePointClick(chartDataGlobal[${reversedData.length - 1 - i}], ${reversedData.length - 1 - i})">
@@ -5297,7 +5440,7 @@ est. APR 58.53 %"></textarea>
                                 <td class="p-2 text-gray-300">${date.toLocaleDateString()}</td>
                                 <td class="p-2 text-right font-mono">
                                     <span class="text-purple-300">${(currentVp / 1000).toFixed(1)}K</span>
-                                    <span class="text-gray-600 text-[9px] block">fixed</span>
+                                    <span class="text-gray-600 text-[9px] block">${currentVpSourceLabel}</span>
                                 </td>
                                 <td class="p-2 text-right font-mono">${underlyingDisplay}</td>
                                 <td class="p-2 text-right font-mono">${potentialDisplay}</td>
@@ -9894,6 +10037,12 @@ est. APR 58.53 %"></textarea>
                 // Hide the stale-data banner inside the modal — live data is current
                 const modalStaleBanner = document.getElementById('modal-stale-banner');
                 if (modalStaleBanner) modalStaleBanner.classList.add('hidden');
+
+                // Rev 3.39 — also clear the "(showing epoch 185 data)" subtitle next to
+                // the Current Epoch line. That parenthetical was a stale-data indicator;
+                // it's misleading when live RPC data is showing.
+                const modalDataEpochEl = document.getElementById('modal-data-epoch');
+                if (modalDataEpochEl) modalDataEpochEl.textContent = '';
 
                 // Rev 3.39 — Live Lock Status + Potential VP Boost.
                 // Pulls per-lock data from fetchDaoTlaVp (already cached for 60s), which
