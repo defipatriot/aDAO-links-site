@@ -2107,37 +2107,27 @@
                     <p>The Alliance DAO has officially migrated its governance from Enterprise to DAODAO. Any members who have not yet migrated their NFTs must do so to participate in governance proposals, promotions, and future DAO-distributed rewards.</p>
                 </div>
 
-                <!-- Rev 3.42 — Unmigrated Enterprise NFTs breakdown.
-                     Reframed from earlier "trapped/lost" framing: these NFTs are NOT
-                     lost. Owners can still migrate via Boost's migration tool, break
-                     the NFT, and redeem accumulated ALLY backing. While unmigrated,
-                     they DO still earn (dilute the unbroken pool). The owners just
-                     haven't reclaimed yet — likely abandoned wallets, lost keys, or
-                     people who simply forgot. -->
+                <!-- Rev 3.43 — Supply Distribution panel.
+                     Reframed from "Trapped/Unmigrated NFTs" (a niche detail) to a
+                     full supply distribution view that's useful for investors: where
+                     every NFT is, what's locked/governance-locked, and what could
+                     hit the market. The Enterprise count split (DAO custody vs
+                     actual stakers) is now part of the broader supply picture. -->
                 <div class="bg-gray-800/50 border border-gray-700 rounded-lg p-4 flex-shrink-0">
                     <div class="flex items-center justify-between mb-3">
-                        <h4 class="font-bold text-white text-base"><i class="fas fa-clock text-amber-400 mr-2"></i>Unmigrated Enterprise NFTs</h4>
-                        <span id="enterprise-trapped-status" class="text-[10px] text-gray-500">
+                        <h4 class="font-bold text-white text-base"><i class="fas fa-chart-pie text-cyan-400 mr-2"></i>Supply Distribution</h4>
+                        <span id="supply-dist-status" class="text-[10px] text-gray-500">
                             <i class="fas fa-spinner fa-spin"></i> Loading…
                         </span>
                     </div>
-                    <p class="text-xs text-gray-400 mb-3">NFTs still held by the old enterprise staking contract. The migration window is still open via Boost — owners can unstake, break their NFT, and redeem ALLY at any time. Until they do, each unbroken NFT continues to share the unbroken-backing pool.</p>
-                    <div class="grid grid-cols-3 gap-3 text-sm">
-                        <div class="bg-gray-900/50 rounded p-3 text-center">
-                            <p class="text-[10px] text-gray-500 uppercase tracking-wide">Total in Old Contract</p>
-                            <p id="enterprise-trapped-total" class="text-xl font-bold text-white mt-1">--</p>
-                        </div>
-                        <div class="bg-gray-900/50 rounded p-3 text-center">
-                            <p class="text-[10px] text-gray-500 uppercase tracking-wide">DAO Controlled (Broken)</p>
-                            <p id="enterprise-trapped-broken" class="text-xl font-bold text-cyan-400 mt-1">--</p>
-                        </div>
-                        <div class="bg-gray-900/50 rounded p-3 text-center">
-                            <p class="text-[10px] text-gray-500 uppercase tracking-wide">Unbroken (Unmigrated)</p>
-                            <p id="enterprise-trapped-unbroken" class="text-xl font-bold text-amber-400 mt-1">--</p>
-                        </div>
+                    <p class="text-xs text-gray-400 mb-3">Where every minted NFT is held right now. Locked supply is unlikely to enter the market in the short term; liquid supply could move at any time.</p>
+
+                    <div class="space-y-1.5 text-sm" id="supply-dist-rows">
+                        <div class="text-gray-500 text-center py-3"><i class="fas fa-spinner fa-spin"></i> Loading…</div>
                     </div>
+
                     <p class="text-[11px] text-gray-500 mt-3 italic">
-                        <i class="fas fa-info-circle mr-1"></i><span id="enterprise-trapped-explainer">Loading explanation…</span>
+                        <i class="fas fa-info-circle mr-1"></i><span id="supply-dist-explainer">Loading explanation…</span>
                     </p>
                 </div>
 
@@ -2176,9 +2166,9 @@
                             <li>Wallet ending in: ...417v</li>
                         </ul>
                     </li>
-                    <li><strong class="text-green-400">100 NFTs (Staked):</strong> Held in the Enterprise staking wallet.
+                    <li><strong class="text-green-400">100 NFTs (Staked):</strong> Held in the old Enterprise staking contract.
                          <ul class="list-circle list-inside ml-6 text-sm">
-                             <li>Wallet ending in: ...6ugw</li>
+                             <li>Wallet ending in: ...8tdv</li>
                          </ul>
                     </li>
                 </ul>
@@ -3136,7 +3126,7 @@ est. APR 58.53 %"></textarea>
             </div>
             <div class="mt-4 text-xs text-gray-500">
                 <button id="changelog-trigger" class="hover:text-cyan-400 transition-colors cursor-pointer">
-                    <span class="font-mono">Rev 3.42</span>
+                    <span class="font-mono">Rev 3.43</span>
                     <span class="opacity-60 mx-1">·</span>
                     <span>Changelog</span>
                 </button>
@@ -3865,22 +3855,27 @@ est. APR 58.53 %"></textarea>
             }
             // ─── End live TLA deposits ────────────────────────────────────────
 
-            // ─── Rev 3.41 — Live Trapped NFT breakdown ─────────────────────────
-            // Computes from the live nft-inventory cron (data/nfts.json) — same
-            // dataset the dashboard already loads. Identifies NFTs held by the
-            // old enterprise staking contract wallet and splits them by broken
-            // (DAO-controlled) vs unbroken (lost individual NFTs that missed
-            // the migration deadline).
+            // ─── Rev 3.43 — Live Supply Distribution ────────────────────────────
+            // Investor-focused breakdown of all 10,000 NFTs by where they're held.
+            // Categories (ordered most-locked → most-liquid):
+            //   1. Unminted (DAO main wallet) — still in mint pool
+            //   2. DAO Controlled (Broken) — used for liquidity/strategic reserves
+            //   3. DAODAO Staked — governance-locked, soft-illiquid
+            //   4. Enterprise Staked (Actual Holders) — semi-locked, individual stakers
+            //   5. Wallet Held (Liquid) — could be listed/sold at any time
             //
-            // The breakdown matters because the 403 unbroken NFTs still accrue
-            // backing rewards but their owners can no longer redeem — they're
-            // sitting in a contract that nobody can withdraw from.
-            //
-            // Cached for 5 minutes (NFT inventory cron only updates hourly).
+            // Each category shows count + % of minted supply.
+            // Pulled live from nft-inventory-data_2026/data/nfts.json (hourly cron).
+            // Cached for 5 minutes.
             const OLD_ENTERPRISE_WALLET = 'terra1e54tcdyulrtslvf79htx4zntqntd4r550cg22sj24r6gfm0anrvq0y8tdv';
+            const DAO_MAIN_WALLET_ADDR  = 'terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm';
+            const DAO_HOLDING_WALLETS   = [
+                'terra1yqv0af22675wlcmgflxk4ve07vt8qlm999gk0cuw5l64r5xxgadsyg8ywv',   // multisig vetoer (2 broken)
+                'terra1h8psjgcsg9fef7w2yv0j6262sfcaszj8vs4tsy3uwla6zwtaspvqrp4l7v',   // enterprise treasury (898 broken)
+            ];
             let _trappedNftsCache = { ts: 0, result: null };
 
-            async function fetchTrappedNftBreakdown() {
+            async function fetchSupplyDistribution() {
                 const now = Date.now();
                 if (_trappedNftsCache.result && (now - _trappedNftsCache.ts) < 5 * 60_000) {
                     return _trappedNftsCache.result;
@@ -3890,42 +3885,71 @@ est. APR 58.53 %"></textarea>
                     if (!r.ok) return null;
                     const data = await r.json();
                     const records = data?.records || [];
-                    const inWallet = records.filter(n => n.owner === OLD_ENTERPRISE_WALLET);
+
+                    let unminted = 0;
+                    let daoBrokenLiquid = 0;       // broken NFTs in DAO holding wallets (yields liquidity)
+                    let daoBrokenInOldEnt = 0;     // broken NFTs stuck in old enterprise wallet (100)
+                    let daodaoStaked = 0;
+                    let enterpriseUnbroken = 0;    // 403 — actual individual stakers
+                    let walletHeld = 0;            // everything else = liquid in third-party wallets
+
+                    for (const n of records) {
+                        if (!n.minted) { unminted++; continue; }
+                        if (n.owner === DAO_MAIN_WALLET_ADDR) { unminted++; continue; }
+
+                        const inOldEnterprise = (n.owner === OLD_ENTERPRISE_WALLET);
+                        const inDaoHolding    = DAO_HOLDING_WALLETS.includes(n.owner);
+
+                        if (inOldEnterprise) {
+                            if (n.broken) daoBrokenInOldEnt++;
+                            else          enterpriseUnbroken++;
+                            continue;
+                        }
+                        if (inDaoHolding) {
+                            daoBrokenLiquid++;
+                            continue;
+                        }
+                        if (n.daodao) { daodaoStaked++; continue; }
+                        walletHeld++;
+                    }
+
+                    const mintedTotal = records.length - unminted;
+                    const daoControlledTotal = daoBrokenLiquid + daoBrokenInOldEnt;   // ~1,000
+
                     const result = {
                         source: 'live',
                         fetchedAt: now,
                         capturedAt: data.capturedAt,
-                        total:    inWallet.length,
-                        broken:   inWallet.filter(n => n.broken).length,
-                        unbroken: inWallet.filter(n => !n.broken).length,
+                        totalRecords: records.length,
+                        mintedTotal,
+                        unminted,
+                        daoControlledTotal,
+                        daoBrokenLiquid,
+                        daoBrokenInOldEnt,
+                        daodaoStaked,
+                        enterpriseUnbroken,
+                        walletHeld,
                     };
                     _trappedNftsCache = { ts: now, result };
-                    console.log(`[trapped-nfts] OK — ${result.total} in old enterprise contract (${result.broken} broken, ${result.unbroken} lost)`);
+                    console.log(`[supply-dist] OK — minted:${mintedTotal} dao:${daoControlledTotal} daodao:${daodaoStaked} enterprise:${enterpriseUnbroken} liquid:${walletHeld}`);
                     return result;
                 } catch (e) {
-                    console.warn('[trapped-nfts] fetch failed:', e);
+                    console.warn('[supply-dist] fetch failed:', e);
                     return null;
                 }
             }
 
-            // Populate the Enterprise Staked modal's trapped-NFT breakdown.
-            // Triggered on modal open + at periodic intervals.
-            async function applyTrappedNftBreakdown() {
-                const result = await fetchTrappedNftBreakdown();
-                const statusEl    = document.getElementById('enterprise-trapped-status');
-                const totalEl     = document.getElementById('enterprise-trapped-total');
-                const brokenEl    = document.getElementById('enterprise-trapped-broken');
-                const unbrokenEl  = document.getElementById('enterprise-trapped-unbroken');
-                const explainerEl = document.getElementById('enterprise-trapped-explainer');
+            // Populate Supply Distribution panel inside the Enterprise modal.
+            async function applySupplyDistribution() {
+                const result = await fetchSupplyDistribution();
+                const statusEl    = document.getElementById('supply-dist-status');
+                const rowsEl      = document.getElementById('supply-dist-rows');
+                const explainerEl = document.getElementById('supply-dist-explainer');
 
                 if (!result) {
                     if (statusEl) statusEl.innerHTML = '<span class="text-amber-400">unavailable</span>';
                     return;
                 }
-
-                if (totalEl)    totalEl.textContent    = result.total.toLocaleString();
-                if (brokenEl)   brokenEl.textContent   = result.broken.toLocaleString();
-                if (unbrokenEl) unbrokenEl.textContent = result.unbroken.toLocaleString();
 
                 if (statusEl) {
                     const t = new Date(result.capturedAt);
@@ -3934,15 +3958,61 @@ est. APR 58.53 %"></textarea>
                     statusEl.classList.add('text-green-400');
                 }
 
+                const m = result.mintedTotal;
+                const pct = (n) => m > 0 ? ((n / m) * 100).toFixed(1) + '%' : '—';
+
+                // Build rows: each is a labeled count with a percent-of-minted bar
+                const buildRow = (label, value, color, note) => `
+                    <div class="flex items-center gap-3 py-1.5 border-b border-gray-700/50 last:border-b-0">
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-baseline justify-between">
+                                <span class="text-gray-300">${label}</span>
+                                <span class="text-white font-mono font-bold ml-2">${value.toLocaleString()}</span>
+                            </div>
+                            ${note ? `<div class="text-[10px] text-gray-500">${note}</div>` : ''}
+                        </div>
+                        <div class="w-16 text-right text-xs ${color}">${pct(value)}</div>
+                    </div>
+                `;
+
+                if (rowsEl) {
+                    rowsEl.innerHTML = `
+                        <div class="bg-gray-900/30 p-2 rounded">
+                            <div class="text-[11px] text-gray-500 uppercase tracking-wide mb-1">Locked / Illiquid</div>
+                            ${buildRow('DAO Controlled (Broken)',  result.daoControlledTotal, 'text-cyan-400',
+                                      'NFTs the DAO holds across 3 wallets — used for liquidity & strategic reserves.')}
+                            ${buildRow('DAODAO Staked',             result.daodaoStaked,      'text-purple-400',
+                                      'Governance-locked. Soft-illiquid (would need to unstake).')}
+                            ${buildRow('Enterprise Staked (Holders)', result.enterpriseUnbroken, 'text-amber-400',
+                                      'Stuck in old enterprise contract. Owners can still migrate via Boost.')}
+                        </div>
+                        <div class="bg-gray-900/30 p-2 rounded mt-2">
+                            <div class="text-[11px] text-gray-500 uppercase tracking-wide mb-1">Liquid (could move)</div>
+                            ${buildRow('Wallet Held',                result.walletHeld,        'text-red-400',
+                                      'Held by individual wallets and not staked. Could be listed or sold at any time.')}
+                        </div>
+                        <div class="flex items-baseline justify-between pt-2 mt-2 border-t border-gray-700 text-sm">
+                            <span class="text-gray-400">Total Minted</span>
+                            <span class="text-white font-bold font-mono">${m.toLocaleString()} / 10,000</span>
+                        </div>
+                        <div class="flex items-baseline justify-between text-xs text-gray-500">
+                            <span>Unminted (DAO main wallet)</span>
+                            <span class="font-mono">${result.unminted.toLocaleString()}</span>
+                        </div>
+                    `;
+                }
+
                 if (explainerEl) {
+                    const locked = result.daoControlledTotal + result.daodaoStaked + result.enterpriseUnbroken;
+                    const lockedPct = m > 0 ? ((locked / m) * 100).toFixed(1) : '—';
+                    const liquidPct = m > 0 ? ((result.walletHeld / m) * 100).toFixed(1) : '—';
                     explainerEl.innerHTML = `
-                        The DAO controls the <span class="text-cyan-400 font-medium">${result.broken}</span> broken NFTs in this contract.
-                        The <span class="text-amber-400 font-medium">${result.unbroken}</span> unbroken NFTs are individually owned and still earn ALLY backing — they dilute the unbroken pool until migrated. Each owner can still
-                        unstake via Boost's migration tool, break their NFT, and redeem their accumulated backing at any time.
+                        <span class="text-cyan-300 font-medium">${lockedPct}%</span> of minted supply is locked or governance-staked.
+                        <span class="text-red-300 font-medium">${liquidPct}%</span> sits in third-party wallets and could enter the market at any time.
                     `.trim();
                 }
             }
-            // ─── End trapped NFT breakdown ──────────────────────────────────────
+            // ─── End supply distribution ──────────────────────────────────────
 
             // ─── Rev 3.39 — TLA VP history from cron archives ─────────────────
             // Pulls the DAO's TLA voting power per epoch from the `adao-positions`
@@ -6940,9 +7010,23 @@ est. APR 58.53 %"></textarea>
                     const daodaoCount = daodaoStakers.length;
                     const brokenCount = nfts.filter(nft => nft.broken).length;
                     const daoMembers = collection_stats?.unique_stakers || 0;
-                    const daoEnterpriseWallet = 'terra1nn7yrgjzj6zvle7ms9vlpg4cj3kaxjls4g6ugw';
-                    const enterpriseStakers = nfts.filter(nft => nft.enterprise === true && nft.owner !== daoEnterpriseWallet);
-                    const enterpriseStakedByHolder = enterpriseStakers.length;
+                    // Rev 3.43 — corrected enterprise wallet (the truncated `...6ugw` address
+                    // that was here previously matched 0 NFTs). The verified address is the
+                    // old enterprise staking contract that holds the entire enterprise pool.
+                    // We exclude DAO-controlled (broken) NFTs from the displayed count: those
+                    // 100 are the DAO's own NFTs in custody, not third-party stakers, and
+                    // showing them inflates the "individual stakers" metric people care about.
+                    //
+                    // Robust filter: prefer owner match, fall back to the legacy `enterprise`
+                    // flag. statsData schema has both, so either path identifies the same
+                    // set of 503 NFTs in the old contract.
+                    const OLD_ENTERPRISE_STAKING_WALLET = 'terra1e54tcdyulrtslvf79htx4zntqntd4r550cg22sj24r6gfm0anrvq0y8tdv';
+                    const enterpriseTotalInContract = nfts.filter(nft =>
+                        nft.owner === OLD_ENTERPRISE_STAKING_WALLET || nft.enterprise === true
+                    );
+                    const enterpriseDaoControlled   = enterpriseTotalInContract.filter(nft => nft.broken);   // 100 broken = DAO custody
+                    const enterpriseStakers         = enterpriseTotalInContract.filter(nft => !nft.broken); // 403 unbroken = actual stakers
+                    const enterpriseStakedByHolder  = enterpriseStakers.length;
                     
                     // Derive mintedCount / unmintedCount from live nfts array (was previously
                     // pulled from static snapshot fallback which Rev 3.21 honest-data cleanup removed,
@@ -7931,10 +8015,10 @@ est. APR 58.53 %"></textarea>
                             }
                         }, 10);
 
-                        // Rev 3.41 — when Enterprise modal opens, fetch live trapped-NFT
-                        // breakdown. Cheap call (single GitHub fetch, cached 5min).
-                        if (modalId === 'enterpriseModal' && typeof applyTrappedNftBreakdown === 'function') {
-                            applyTrappedNftBreakdown();
+                        // Rev 3.43 — when Enterprise modal opens, fetch live supply
+                        // distribution. Cheap call (single GitHub fetch, cached 5min).
+                        if (modalId === 'enterpriseModal' && typeof applySupplyDistribution === 'function') {
+                            applySupplyDistribution();
                         }
                     }
                 };
