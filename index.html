@@ -1366,9 +1366,6 @@
                      </div>
                      <p id="deposit-usd-value" class="text-xl font-bold text-white">--</p>
                      <p id="deposit-ampluna-value" class="text-sm text-gray-400">-- ampLUNA</p>
-                     <div class="mt-2 pt-2 border-t border-gray-700">
-                         <p class="text-xs text-gray-500">Last: <span id="deposit-last-claim" class="text-gray-400">A-28 (Dec 17)</span></p>
-                     </div>
                  </div>
                  
                  <!-- Vote Rewards -->
@@ -1387,9 +1384,6 @@
                          <i class="fas fa-chevron-down text-[10px] mr-0.5"></i>Show tokens
                      </button>
                      <div id="vote-tokens-list" class="hidden mt-1 text-[10px] text-gray-300 space-y-0.5 max-h-24 overflow-y-auto pr-1"></div>
-                     <div class="mt-2 pt-2 border-t border-gray-700">
-                         <p class="text-xs text-gray-500">Last: <span id="vote-last-claim" class="text-gray-400">A-29 (Dec 17)</span></p>
-                     </div>
                  </div>
                  
                  <!-- Rebase -->
@@ -1402,17 +1396,14 @@
                      </div>
                      <p id="rebase-usd-value" class="text-xl font-bold text-white">--</p>
                      <p id="rebase-ampluna-value" class="text-sm text-gray-400">-- ampLUNA</p>
-                     <div class="mt-2 pt-2 border-t border-gray-700">
-                         <p class="text-xs text-gray-500">Last: <span id="rebase-last-claim" class="text-gray-400">A-26 (Sep 7)</span></p>
-                     </div>
                  </div>
              </div>
              
-             <!-- Snapshot disclaimer: makes it clear this section is from end-of-prior-epoch data,
-                  not live. New epoch's rewards (e.g. just-paid voter rewards) won't appear until
-                  the next snapshot is uploaded. -->
+             <!-- Rev 3.39 — Replaces the snapshot disclaimer. Live data is shown above;
+                  for historical claim records, point users to DAODAO governance. -->
              <p class="text-[11px] text-gray-500 mt-2 italic">
-                 <i class="fas fa-info-circle mr-1"></i>Snapshot taken at end of epoch <span id="unclaimed-snapshot-epoch">--</span>. New rewards earned this epoch are not yet reflected here.
+                 <i class="fas fa-info-circle mr-1"></i>Pending rewards shown live from chain. For claim history, see
+                 <a href="https://daodao.zone/dao/terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm/proposals" target="_blank" rel="noopener noreferrer" class="text-cyan-400 hover:text-cyan-300 underline">DAODAO proposals</a>.
              </p>
              
              <!-- Lock Status Summary -->
@@ -2474,7 +2465,10 @@
                             <p class="text-xl font-bold text-cyan-400" id="tla-vp-modal-usd"><i class="fas fa-spinner fa-spin text-cyan-400"></i></p>
                         </div>
                     </div>
-                    <p class="text-xs text-gray-500 mt-2 text-center">Last Adjusted: September 7th, 2025 (Prop A-26)</p>
+                    <p class="text-xs text-gray-500 mt-2 text-center">
+                        <i class="fas fa-info-circle mr-1"></i>Live from chain.
+                        VP recalculates only when a lock is adjusted (re-locking captures LST ratio growth).
+                    </p>
                 </div>
                 
                 <div id="tla-vp-locks-container">
@@ -2584,53 +2578,36 @@
                     </div>
                 </div>
                 
-                <!-- Lock Status -->
+                <!-- Lock Status — Rev 3.39 live from chain -->
                 <div class="bg-gray-800/50 p-4 rounded-lg">
                     <div class="flex justify-between items-center mb-2">
                         <h4 class="text-lg font-bold text-white"><i class="fas fa-lock mr-2"></i>Lock Status</h4>
-                        <span class="text-xs text-gray-500">Last adjusted: Sep 7, 2025 (A-26)</span>
+                        <span id="modal-locks-status" class="text-xs text-gray-500">
+                            <i class="fas fa-spinner fa-spin"></i> Loading live data…
+                        </span>
                     </div>
-                    <div class="space-y-2 text-sm">
-                        <div class="flex justify-between items-center py-2 border-b border-gray-700">
-                            <span class="text-gray-400">Lock #600 (arbLUNA)</span>
-                            <div class="text-right">
-                                <span class="text-white font-mono">27,290</span>
-                                <span class="text-gray-500 ml-2">→ 631.57K VP</span>
-                            </div>
-                        </div>
-                        <div class="flex justify-between items-center py-2 border-b border-gray-700">
-                            <span class="text-gray-400">Lock #711 (ampLUNA)</span>
-                            <div class="text-right">
-                                <span class="text-white font-mono">413.03</span>
-                                <span class="text-gray-500 ml-2">→ 7.32K VP</span>
-                            </div>
-                        </div>
-                        <div class="flex justify-between items-center py-2 text-cyan-400 font-bold">
-                            <span>Total VP (Static)</span>
-                            <span>638,890 VP</span>
-                        </div>
+                    <div id="modal-locks-list" class="space-y-2 text-sm">
+                        <!-- Live lock rows injected by applyLiveModalUnclaimedRewards() -->
+                        <div class="text-gray-500 text-center py-3"><i class="fas fa-spinner fa-spin mr-2"></i>Loading…</div>
                     </div>
                 </div>
                 
-                <!-- Potential VP Gain -->
+                <!-- Potential VP Boost — Rev 3.39 live from chain.
+                     Formula: (current_underlying_LUNA - locked_underlying_LUNA) × multiplier
+                     where current_underlying = LST_amount × current_LST_rate, and the locked
+                     underlying_amount is what the contract stored at lock-creation time. As LST
+                     rates increase via staking rewards, the boost grows; re-locking captures it. -->
                 <div id="potential-vp-gain" class="bg-green-900/30 border border-green-700 p-4 rounded-lg hidden">
                     <h4 class="text-lg font-bold text-green-400 mb-2"><i class="fas fa-bolt mr-2"></i>Potential VP Boost</h4>
-                    <p class="text-sm text-gray-300">If locks were adjusted today (adding to existing locks), VP would increase due to LST ratio growth:</p>
+                    <p class="text-sm text-gray-300">If locks were adjusted today (re-locking the LST tokens), VP would increase by the amount the underlying LUNA has grown since the last lock adjustment:</p>
                     <div class="mt-2 text-right">
-                        <span class="text-green-400 font-bold text-xl" id="potential-vp-value">+XX,XXX VP</span>
+                        <span class="text-green-400 font-bold text-xl" id="potential-vp-value">+0 VP</span>
                     </div>
+                    <p class="text-xs text-gray-500 mt-2"><i class="fas fa-info-circle mr-1"></i>Max-lock multiplier is 10× — so 1 LUNA of growth = 10 TLA VP of boost.</p>
                 </div>
                 
-                <!-- Actions Summary -->
-                <div class="bg-gray-900/50 p-4 rounded-lg text-sm">
-                    <h4 class="font-bold text-gray-300 mb-2">Last Claim Actions (Prop A-26 - Sep 7, 2025)</h4>
-                    <ul class="text-gray-500 space-y-1">
-                        <li>• Extended Lock #600 with +183.06 arbLUNA</li>
-                        <li>• Extended Lock #711 with +88.06 ampLUNA (from rebase)</li>
-                        <li>• Claimed TLA deposit rewards, vote bribes, rebase</li>
-                        <li>• Claimed LUNA staking rewards from LionDAO validator</li>
-                    </ul>
-                </div>
+                <!-- Rev 3.39 — Hardcoded "Last Claim Actions" section removed. The
+                     DAODAO proposals page below shows the authoritative claim history. -->
                 
                 <a href="https://daodao.zone/dao/terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm/proposals" target="_blank" rel="noopener noreferrer" class="inline-block mt-4 bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-lg transition-colors w-full text-center">
                     View Proposals on DAODAO &rarr;
@@ -3124,7 +3101,7 @@ est. APR 58.53 %"></textarea>
             </div>
             <div class="mt-4 text-xs text-gray-500">
                 <button id="changelog-trigger" class="hover:text-cyan-400 transition-colors cursor-pointer">
-                    <span class="font-mono">Rev 3.38</span>
+                    <span class="font-mono">Rev 3.39</span>
                     <span class="opacity-60 mx-1">·</span>
                     <span>Changelog</span>
                 </button>
@@ -9917,6 +9894,74 @@ est. APR 58.53 %"></textarea>
                 // Hide the stale-data banner inside the modal — live data is current
                 const modalStaleBanner = document.getElementById('modal-stale-banner');
                 if (modalStaleBanner) modalStaleBanner.classList.add('hidden');
+
+                // Rev 3.39 — Live Lock Status + Potential VP Boost.
+                // Pulls per-lock data from fetchDaoTlaVp (already cached for 60s), which
+                // returns { totalVp, lockCount, locks: [{ id, asset, amount, vp, end,
+                // underlyingMicro, amountInLuna }], totalUsdLuna }. The "underlyingMicro"
+                // field is the LUNA amount baked in at lock-creation time (stored on chain).
+                // "amountInLuna" is the live LST_amount × current_LST_rate calculation.
+                // Boost per lock = (amountInLuna - underlyingMicro/1e6) × 10  (max-lock mult).
+                const vpResult = await fetchDaoTlaVp(
+                    window.cachedAmpLunaRate || 2.10,
+                    window.cachedArbLunaRate || 2.90
+                );
+                if (vpResult && Array.isArray(vpResult.locks)) {
+                    const locksListEl   = document.getElementById('modal-locks-list');
+                    const locksStatusEl = document.getElementById('modal-locks-status');
+                    if (locksStatusEl) {
+                        locksStatusEl.innerHTML = '<span class="pulse-dot inline-block align-middle mr-1"></span>Live';
+                        locksStatusEl.classList.remove('text-gray-500');
+                        locksStatusEl.classList.add('text-green-400');
+                    }
+
+                    // Aggregate boost across all locks
+                    let totalBoostVp = 0;
+                    const rows = vpResult.locks.map(l => {
+                        const lockedUnderlyingLuna = (l.underlyingMicro || 0) / 1e6;
+                        const liveUnderlyingLuna   = l.amountInLuna || 0;
+                        // Each unit of underlying-LUNA growth produces 10 VP (max lock).
+                        // Clamp negative values to 0 (LST rates only grow, but rounding can drift).
+                        const boost = Math.max(0, (liveUnderlyingLuna - lockedUnderlyingLuna) * 10);
+                        totalBoostVp += boost;
+                        const vpDisplay = l.vp >= 1000 ? (l.vp / 1000).toFixed(1) + 'K VP' : Math.round(l.vp) + ' VP';
+                        return `
+                            <div class="flex justify-between items-center py-2 border-b border-gray-700">
+                                <span class="text-gray-400">Lock #${l.id} (${l.asset})</span>
+                                <div class="text-right">
+                                    <span class="text-white font-mono">${l.amount.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>
+                                    <span class="text-gray-500 ml-2">→ ${vpDisplay}</span>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+
+                    // Total VP row at the bottom of the list
+                    const totalRow = `
+                        <div class="flex justify-between items-center py-2 text-cyan-400 font-bold">
+                            <span>Total VP</span>
+                            <span>${(vpResult.totalVp >= 1000 ? (vpResult.totalVp / 1000).toFixed(1) + 'K' : Math.round(vpResult.totalVp))} VP</span>
+                        </div>
+                    `;
+                    if (locksListEl) locksListEl.innerHTML = rows + totalRow;
+
+                    // Potential VP Boost — show whenever there's any boost > 0. The boost
+                    // grows over time as LST rates increase from staking rewards; right
+                    // after a re-lock the value will be near 0 and grow from there.
+                    const boostCard  = document.getElementById('potential-vp-gain');
+                    const boostValue = document.getElementById('potential-vp-value');
+                    if (boostCard && boostValue) {
+                        if (totalBoostVp > 0) {
+                            boostCard.classList.remove('hidden');
+                            const fmtBoost = totalBoostVp >= 1000
+                                ? '+' + (totalBoostVp / 1000).toFixed(2) + 'K VP'
+                                : '+' + totalBoostVp.toFixed(1) + ' VP';
+                            boostValue.textContent = fmtBoost;
+                        } else {
+                            boostCard.classList.add('hidden');
+                        }
+                    }
+                }
             }
             
             // Track the chart instances so re-renders don't accumulate
