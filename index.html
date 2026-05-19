@@ -7100,13 +7100,82 @@ est. APR 58.53 %"></textarea>
                            const locksTotalVpEl = document.getElementById('locks-total-vp');
                            if (locksTotalVpEl) locksTotalVpEl.textContent = fmtVp(vpResult.totalVp);
 
+                           // Rev 3.39 — also update ALL the modal VP elements that
+                           // were being overwritten by the older `buildTlaVp` snapshot
+                           // path. The snapshot path computes from stale lock contents
+                           // (pre-prop-36) and outputs a wrong 757K → 814K "potential".
+                           // Live data wins on final paint because this .then() runs
+                           // after buildTlaVp's .then().
+                           const liveTotalVp        = vpResult.totalVp;
+                           const liveUnderlyingLuna = vpResult.totalUsdLuna || 0;   // sum of per-lock amountInLuna
+                           const livePotentialVp    = liveUnderlyingLuna * 10;       // max-lock multiplier
+                           const liveVpGain         = Math.max(0, livePotentialVp - liveTotalVp);
+                           const liveVpGainPct      = liveTotalVp > 0
+                               ? ((liveVpGain / liveTotalVp) * 100).toFixed(2)
+                               : '0';
+                           const liveTotalUsd       = (vpResult.totalUsdLuna != null && lunaPriceUSD != null)
+                               ? vpResult.totalUsdLuna * lunaPriceUSD
+                               : 0;
+
+                           // "Live Underlying LUNA" + "USD Value" cards in modal
+                           const modalLunaEl = document.getElementById('tla-vp-modal-luna');
+                           if (modalLunaEl) modalLunaEl.textContent = '~' + liveUnderlyingLuna.toLocaleString('en-US', { maximumFractionDigits: 1 }) + ' LUNA';
+                           const modalUsdEl = document.getElementById('tla-vp-modal-usd');
+                           if (modalUsdEl) modalUsdEl.textContent = liveTotalUsd > 0
+                               ? '$' + liveTotalUsd.toLocaleString('en-US', { maximumFractionDigits: 2 })
+                               : '—';
+
+                           // Current/Potential VP big numbers in the modal header
+                           const currentTotalEl = document.getElementById('vp-current-total');
+                           if (currentTotalEl) currentTotalEl.textContent = Math.round(liveTotalVp).toLocaleString();
+                           const potentialTotalEl = document.getElementById('vp-potential-total');
+                           if (potentialTotalEl) potentialTotalEl.textContent = Math.round(livePotentialVp).toLocaleString();
+
+                           // "If Adjusted +X.X% / +X VP" pill
+                           const potentialGainEl    = document.getElementById('vp-potential-gain');
+                           const potentialGainPctEl = document.getElementById('vp-potential-gain-pct');
+                           if (potentialGainEl)    potentialGainEl.textContent    = `+${Math.round(liveVpGain).toLocaleString()} VP`;
+                           if (potentialGainPctEl) potentialGainPctEl.textContent = `+${liveVpGainPct}%`;
+
+                           // Progress bar labels
+                           const fmtBarVp = (v) => v >= 1000 ? (v / 1000).toFixed(1) + 'K' : Math.round(v).toString();
+                           const barCurrentEl   = document.getElementById('vp-bar-current');
+                           const barPotentialEl = document.getElementById('vp-bar-potential');
+                           if (barCurrentEl)   barCurrentEl.textContent   = fmtBarVp(liveTotalVp);
+                           if (barPotentialEl) barPotentialEl.textContent = fmtBarVp(livePotentialVp);
+
+                           // Progress bar widths (current = 96%, potential = 96% × ratio)
+                           const currentBarEl   = document.getElementById('vp-current-bar');
+                           const potentialBarEl = document.getElementById('vp-potential-bar');
+                           if (currentBarEl && potentialBarEl && liveTotalVp > 0) {
+                               const ratio = livePotentialVp / liveTotalVp;
+                               currentBarEl.style.width   = '96%';
+                               potentialBarEl.style.width = (96 * ratio) + '%';
+                           }
+
+                           // Critical: also OVERWRITE window.tlaVpData with live values
+                           // so the chart's row-loop reads the right `fixedTotalVp` and
+                           // `totalUnderlyingLuna`. Without this, the chart's blue line
+                           // stays at 757K (the snapshot's totalStaticVp).
+                           // Preserve other fields the chart might read.
+                           const existingVpData = window.tlaVpData || {};
+                           window.tlaVpData = {
+                               ...existingVpData,
+                               totalVp:             liveTotalVp,
+                               totalUnderlyingLuna: liveUnderlyingLuna,
+                               totalUsd:            liveTotalUsd,
+                               potentialVp:         livePotentialVp,
+                               locks:               vpResult.locks || existingVpData.locks || [],
+                               source:              'live',
+                           };
+
                            if (tlaVpTitle) {
                                const dot = document.createElement('span');
                                dot.className = 'pulse-dot ml-1';
                                dot.title = `Live — ${vpResult.lockCount} lock${vpResult.lockCount === 1 ? '' : 's'}, ${vpResult.totalVp.toFixed(0)} VP`;
                                tlaVpTitle.appendChild(dot);
                            }
-                           console.log(`DEBUG: DAO TLA VP tile updated (live: ${vpResult.totalVp.toFixed(0)} VP across ${vpResult.lockCount} locks)`);
+                           console.log(`DEBUG: DAO TLA VP tile updated (live: ${vpResult.totalVp.toFixed(0)} VP across ${vpResult.lockCount} locks, +${Math.round(liveVpGain)} VP potential)`);
                            // Rev 3.34 — expose VP USD for DAO Total Value tile.
                            // VP USD = underlying LUNA × LUNA price (best available estimate).
                            if (vpResult.totalUsdLuna != null && lunaPriceUSD != null) {
