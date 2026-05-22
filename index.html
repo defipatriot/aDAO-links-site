@@ -2052,7 +2052,7 @@
 
     
     <div id="daodaoModal" class="modal fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50 hidden opacity-0">
-        <div class="modal-content bg-[#1a1a1a] border border-gray-700 rounded-xl shadow-xl w-full max-w-3xl relative text-white opacity-0 scale-95 p-8 flex flex-col"> <button class="modal-close absolute top-4 right-4 text-gray-400 hover:text-white text-3xl">&times;</button>
+        <div class="modal-content bg-[#1a1a1a] border border-gray-700 rounded-xl shadow-xl w-full max-w-3xl relative text-white opacity-0 scale-95 p-8 flex flex-col max-h-[90vh] overflow-y-auto"> <button class="modal-close absolute top-4 right-4 text-gray-400 hover:text-white text-3xl">&times;</button>
             <h3 class="text-2xl font-bold text-cyan-400 mb-4 flex-shrink-0">DAODAO Staking & Supply Details</h3> <div id="supply-breakdown" class="grid grid-cols-2 gap-x-8 gap-y-4 mb-6 p-4 bg-gray-800/50 rounded-lg border border-gray-700 text-sm flex-shrink-0"> <div class="flex justify-between border-b border-gray-600 pb-2">
                     <span class="text-gray-400">Total Minted:</span>
                     <span id="supply-minted" class="font-bold text-white"><i class="fas fa-spinner fa-spin"></i></span>
@@ -2161,7 +2161,7 @@
     </div>
 
     <div id="enterpriseModal" class="modal fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50 hidden opacity-0">
-        <div class="modal-content bg-[#1a1a1a] border border-gray-700 rounded-xl shadow-xl w-full max-w-3xl relative text-white opacity-0 scale-95 p-8 flex flex-col"> <button class="modal-close absolute top-4 right-4 text-gray-400 hover:text-white text-3xl">&times;</button>
+        <div class="modal-content bg-[#1a1a1a] border border-gray-700 rounded-xl shadow-xl w-full max-w-3xl relative text-white opacity-0 scale-95 p-8 flex flex-col max-h-[90vh] overflow-y-auto"> <button class="modal-close absolute top-4 right-4 text-gray-400 hover:text-white text-3xl">&times;</button>
             <h3 class="text-2xl font-bold text-cyan-400 mb-4 flex-shrink-0">Enterprise Staking Details</h3> <div class="space-y-4 text-gray-300 flex flex-col min-h-0"> <div class="bg-blue-900/30 border border-blue-700 p-3 rounded-lg flex-shrink-0"> <p class="font-bold text-lg text-white">Action Required: Migrate Your NFTs</p>
                     <p>The Alliance DAO has officially migrated its governance from Enterprise to DAODAO. Any members who have not yet migrated their NFTs must do so to participate in governance proposals, promotions, and future DAO-distributed rewards.</p>
                 </div>
@@ -3215,7 +3215,7 @@ est. APR 58.53 %"></textarea>
             </div>
             <div class="mt-4 text-xs text-gray-500">
                 <button id="changelog-trigger" class="hover:text-cyan-400 transition-colors cursor-pointer">
-                    <span class="font-mono">Rev 3.44</span>
+                    <span class="font-mono">Rev 3.46</span>
                     <span class="opacity-60 mx-1">·</span>
                     <span>Changelog</span>
                 </button>
@@ -3876,12 +3876,87 @@ est. APR 58.53 %"></textarea>
             //     capturedAt }    // when the cron captured this
             // Cached for 5 minutes.
             let _liveTlaDepositsCache = { ts: 0, result: null };
+            let _tlaSharedCatalogCache = { ts: 0, result: null };
 
-            async function fetchLiveTlaDeposits() {
+            // ─── Rev 3.46 — Shared TLA pool catalog ─────────────────────────────
+            // Loaded once and cached for 5 minutes. Provides:
+            //   - pool catalog: lp_address → { name, bucket, depth_usd, lp_health, ... }
+            //   - amp configs: bucket → [[gauge, asset_info], ...] for batched user_infos
+            // Both come from the existing tla-snapshot cron output (updated hourly) and
+            // a single chain query for amp configs (rarely changes).
+            //
+            // This is the same data the adao-positions cron uses internally — by reading
+            // the snapshot directly we avoid replicating the 67-pool catalog construction.
+            const TLA_ASSET_COMPOUNDER = 'terra1zly98gvcec54m3caxlqexce7rus6rzgplz7eketsdz7nh750h2rqvu8uzx';
+            async function fetchTlaSharedCatalog() {
                 const now = Date.now();
-                if (_liveTlaDepositsCache.result && (now - _liveTlaDepositsCache.ts) < 5 * 60_000) {
-                    return _liveTlaDepositsCache.result;
+                if (_tlaSharedCatalogCache.result && (now - _tlaSharedCatalogCache.ts) < 5 * 60_000) {
+                    return _tlaSharedCatalogCache.result;
                 }
+                try {
+                    const [snapshotRes, ampConfigsRes, pricesRes] = await Promise.all([
+                        fetch('https://raw.githubusercontent.com/defipatriot/tla-snapshot-data_2026/main/data/tla-snapshot.json'),
+                        queryChain(TLA_ASSET_COMPOUNDER, { asset_configs: {} }),
+                        fetch('https://raw.githubusercontent.com/defipatriot/network-and-prices-data_2026/main/data/network-and-prices.json'),
+                    ]);
+                    if (!snapshotRes.ok) return null;
+                    const snap = await snapshotRes.json();
+                    const tokenPrices = pricesRes.ok ? (await pricesRes.json()).token_prices || {} : {};
+
+                    // Build poolByLpAddr + poolByGaugeId indexes for fast lookup during position processing
+                    const poolByLpAddr = new Map();
+                    const poolByGaugeId = new Map();
+                    for (const p of (snap.pools || [])) {
+                        if (p.lp_address) poolByLpAddr.set(p.lp_address.toLowerCase(), p);
+                        if (p.gauge_pool_id) poolByGaugeId.set(p.gauge_pool_id, p);
+                    }
+
+                    // Group amp configs by gauge (= bucket name) for batched user_infos queries
+                    const ampConfigsByGauge = {};
+                    if (Array.isArray(ampConfigsRes)) {
+                        for (const cfg of ampConfigsRes) {
+                            const gauge = cfg.gauge;
+                            if (!ampConfigsByGauge[gauge]) ampConfigsByGauge[gauge] = [];
+                            ampConfigsByGauge[gauge].push([gauge, cfg.asset_info]);
+                        }
+                    }
+
+                    const result = { poolByLpAddr, poolByGaugeId, ampConfigsByGauge, tokenPrices, capturedAt: snap.capturedAt };
+                    _tlaSharedCatalogCache = { ts: now, result };
+                    console.log(`[tla-shared] OK — ${poolByLpAddr.size} pools, ${Object.keys(ampConfigsByGauge).length} amp buckets, ${Object.keys(tokenPrices).length} token prices`);
+                    return result;
+                } catch (e) {
+                    console.warn('[tla-shared] failed:', e);
+                    return null;
+                }
+            }
+
+            // Thin wrapper around publicnode RPC. Returns parsed `data` field on success,
+            // null on failure. Single retry with brief delay on null.
+            async function queryChain(contractAddr, query) {
+                const enc = btoa(JSON.stringify(query));
+                const url = `https://terra.publicnode.com/cosmwasm/wasm/v1/contract/${contractAddr}/smart/${enc}`;
+                const tryOnce = async () => {
+                    try {
+                        const r = await fetch(url);
+                        if (!r.ok) return null;
+                        const j = await r.json();
+                        return j.data;
+                    } catch (_) { return null; }
+                };
+                let result = await tryOnce();
+                if (result === null) {
+                    await new Promise(res => setTimeout(res, 250));
+                    result = await tryOnce();
+                }
+                return result;
+            }
+            // ─── End shared catalog ─────────────────────────────────────────────
+
+            // ─── Rev 3.46 — Cron fallback for TLA Deposits ──────────────────────
+            // Reads adao-positions/current.json. Used when live chain queries fail.
+            // Same composite-total rule (LPs + rewards + bribes + zLUNA).
+            async function fetchTlaDepositsFromCron() {
                 try {
                     const r = await fetch('https://raw.githubusercontent.com/defipatriot/adao-positions-data_2026/main/data/current.json');
                     if (!r.ok) return null;
@@ -3889,29 +3964,304 @@ est. APR 58.53 %"></textarea>
                     const t = data?.treasury;
                     if (!t?.summary) return null;
                     const s = t.summary;
-                    const result = {
-                        source: 'live',
-                        fetchedAt: now,
-                        capturedAt: data.capturedAt,
-                        totalLpUsd:        s.total_lp_position_usd     || 0,
-                        amplifiedUsd:      s.amplified_lp_usd          || 0,
-                        nonAmplifiedUsd:   s.non_amplified_lp_usd      || 0,
-                        activePositions:   s.active_lp_position_count  || 0,
-                        atRiskPositions:   s.at_risk_lp_position_count || 0,
-                        inactivePositions: s.inactive_lp_position_count || 0,
-                        amplifiedCount:    s.amplified_lp_position_count || 0,
-                        nonAmplifiedCount: s.non_amplified_lp_position_count || 0,
+
+                    const walletBalances = Array.isArray(t.wallet_balances) ? t.wallet_balances : [];
+                    const zlunaBalances = walletBalances.filter(b => /zluna/i.test(b.symbol || b.denom || ''));
+                    const zlunaUsd  = zlunaBalances.reduce((sum, b) => sum + (b.usd_value || 0), 0);
+                    const zlunaLuna = zlunaBalances.reduce((sum, b) => sum + (b.luna_equivalent || 0), 0);
+
+                    const totalLpUsd        = s.total_lp_position_usd     || 0;
+                    const pendingRewardsUsd = s.total_pending_rewards_usd || 0;
+                    const pendingBribesUsd  = s.total_pending_bribes_usd  || 0;
+
+                    return {
+                        source:            'cron',
+                        capturedAt:        data.capturedAt,
+                        totalTlaUsd:       totalLpUsd + pendingRewardsUsd + pendingBribesUsd + zlunaUsd,
+                        totalLpUsd, pendingRewardsUsd, pendingBribesUsd, zlunaUsd, zlunaLuna,
                         positions:         Array.isArray(t.lp_positions) ? t.lp_positions : [],
-                        pendingRewardsUsd: s.total_pending_rewards_usd || 0,
-                        pendingBribesUsd:  s.total_pending_bribes_usd  || 0,
+                        positionCount:     (t.lp_positions || []).length,
                     };
-                    _liveTlaDepositsCache = { ts: now, result };
-                    console.log(`[live-tla-deposits] OK — total LP $${result.totalLpUsd.toFixed(2)} across ${result.positions.length} positions`);
-                    return result;
                 } catch (e) {
-                    console.warn('[live-tla-deposits] fetch failed:', e);
+                    console.warn('[tla-deposits-cron-fallback] failed:', e);
                     return null;
                 }
+            }
+
+            // ─── Rev 3.46 — LIVE TLA Deposits from chain ────────────────────────
+            // Primary data path. Queries publicnode RPC directly for the DAO's
+            // current positions across all 4 buckets, both amp and non-amp.
+            //
+            // Strategy mirrors the adao-positions cron's per-member capture, but
+            // for just the DAO main wallet and running in the browser:
+            //   - parallel: 4× all_staked_balances + 4× user_infos = 8 chain queries
+            //   - pricing: pool catalog from tla-snapshot.json (depth_usd, lp_health)
+            //   - composite: LP USD + pending rewards + bribes + zLUNA wallet
+            //
+            // Falls back to cron's current.json if any step fails (returns null).
+            // Cached 5 minutes.
+            const DAO_MAIN_WALLET_ADDR_TLA = 'terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm';
+            const TLA_STAKING_BY_BUCKET = {
+                bluechip: 'terra14mmvqn0kthw6sre75vku263lafn5655mkjdejqjedjga4cw0qx2qlf4arv',
+                project:  'terra1awq6t7jfakg9wfjn40fk3wzwmd57mvrqtt3a39z9rmet7wdjj3ysgw3lpa',
+                single:   'terra1qdz5qgafx88kp5mf6m2tah8742g4u5g2cek0m3jrgssexexk7g4qw6e23k',
+                stable:   'terra1v399cx9drllm70wxfsgvfe694tdsd9x96p9ha36w7muffe4znlusqswspq',
+            };
+            const TLA_BUCKETS = ['bluechip', 'project', 'single', 'stable'];
+
+            async function fetchLiveTlaDepositsFromChain(catalog) {
+                const wallet = DAO_MAIN_WALLET_ADDR_TLA;
+
+                // 1) Per-bucket queries in parallel (8 total)
+                const stakingPromises = TLA_BUCKETS.map(async b => {
+                    const staked = await queryChain(TLA_STAKING_BY_BUCKET[b], { all_staked_balances: { address: wallet } });
+                    if (staked === null) return { bucket: b, staked: null, _err: true };
+                    return { bucket: b, staked: Array.isArray(staked) ? staked : [] };
+                });
+                const ampPromises = TLA_BUCKETS.map(async b => {
+                    const assets = catalog.ampConfigsByGauge?.[b];
+                    if (!assets || assets.length === 0) return { bucket: b, entries: [] };
+                    const r = await queryChain(TLA_ASSET_COMPOUNDER, { user_infos: { addr: wallet, assets } });
+                    if (r === null) return { bucket: b, entries: null, _err: true };
+                    return { bucket: b, entries: Array.isArray(r) ? r : [] };
+                });
+
+                const [stakingResults, ampResults] = await Promise.all([
+                    Promise.all(stakingPromises),
+                    Promise.all(ampPromises),
+                ]);
+
+                // If ANY query failed, surrender to cron fallback — we want consistent
+                // data, not a partial view that under-counts deposits.
+                const failedQueries = [
+                    ...stakingResults.filter(r => r._err).map(r => `staked[${r.bucket}]`),
+                    ...ampResults.filter(r => r._err).map(r => `amp[${r.bucket}]`),
+                ];
+                if (failedQueries.length > 0) {
+                    console.warn(`[live-tla-chain] partial failure (${failedQueries.join(', ')}) — caller will fall back to cron`);
+                    return null;
+                }
+
+                // 2) Process positions
+                const positions = [];
+
+                // Non-amplified positions from staking contracts
+                for (const { bucket, staked } of stakingResults) {
+                    for (const entry of (staked || [])) {
+                        const assetInfo = entry.asset?.info;
+                        const shares = parseFloat(entry.shares) || 0;
+                        const balance = parseFloat(entry.asset?.amount) || 0;
+                        const totalShares = parseFloat(entry.total_shares) || 0;
+
+                        // Dust filter (matches cron logic)
+                        if (shares <= 1 && balance === 0) continue;
+                        if (shares === 0 && balance === 0) continue;
+
+                        // Same pool lookup logic as amp path
+                        let pool = null;
+                        if (assetInfo?.cw20) {
+                            pool = catalog.poolByLpAddr.get(assetInfo.cw20.toLowerCase()) || null;
+                            if (!pool) pool = catalog.poolByGaugeId.get(`cw20:${assetInfo.cw20}`) || null;
+                        } else if (assetInfo?.native) {
+                            pool = catalog.poolByGaugeId.get(`native:${assetInfo.native}`) || null;
+                        }
+                        const lpAddr = assetInfo?.cw20?.toLowerCase() || assetInfo?.native || null;
+
+                        let positionUsd = null;
+                        let pctOfPool = null;
+                        if (totalShares > 0 && pool?.staked_in_tla_usd) {
+                            pctOfPool = (shares / totalShares) * 100;
+                            positionUsd = pool.staked_in_tla_usd * (pctOfPool / 100);
+                        }
+
+                        positions.push({
+                            bucket,
+                            pool_name: pool?.name || null,
+                            lp_address: lpAddr,
+                            is_amplified: false,
+                            user_shares_human: shares / 1e6,
+                            user_balance_human: balance / 1e6,
+                            user_pct_of_pool: pctOfPool,
+                            estimated_position_usd: positionUsd,
+                        });
+                    }
+                }
+
+                // Amplified positions from asset-compounder
+                for (const { bucket, entries } of ampResults) {
+                    for (const entry of (entries || [])) {
+                        const userLp = parseFloat(entry.user_lp) || 0;
+                        const userAmplp = parseFloat(entry.user_amplp) || 0;
+                        if (userLp === 0 && userAmplp === 0) continue;
+
+                        const assetInfo = entry.asset;
+                        // Pool lookup: cw20 LP tokens use lp_address index, native/factory
+                        // tokens (single-asset pools like ampCAPA, ampROAR-ROAR) use
+                        // gauge_pool_id index with "native:" prefix. Matches cron's
+                        // findPoolByAssetInfo logic exactly.
+                        let pool = null;
+                        if (assetInfo?.cw20) {
+                            pool = catalog.poolByLpAddr.get(assetInfo.cw20.toLowerCase()) || null;
+                            // Fallback: some cw20 entries match gauge_pool_id "cw20:..." form
+                            if (!pool) pool = catalog.poolByGaugeId.get(`cw20:${assetInfo.cw20}`) || null;
+                        } else if (assetInfo?.native) {
+                            pool = catalog.poolByGaugeId.get(`native:${assetInfo.native}`) || null;
+                        }
+                        const lpAddr = assetInfo?.cw20?.toLowerCase() || assetInfo?.native || null;
+                        let positionUsd = null;
+                        let pctOfPool = null;
+
+                        // Two valuation paths matching the cron's logic:
+                        //   - LP pools (has lp_health.total_share): user_lp / total_share × pool depth_usd
+                        //   - Single-asset pools (no lp_health): user_lp directly × token price
+                        if (pool?.lp_health?.total_share) {
+                            const totalShare = parseFloat(pool.lp_health.total_share) || 0;
+                            if (totalShare > 0) {
+                                pctOfPool = (userLp / totalShare) * 100;
+                                const refUsd = pool.depth_usd ?? pool.staked_in_tla_usd;
+                                if (refUsd) positionUsd = refUsd * (pctOfPool / 100);
+                            }
+                        } else if (pool) {
+                            // Single-asset pool (e.g. ampCAPA, xASTRO, ampROAR-ROAR).
+                            // Primary path: token_prices lookup by pool name (matches cron's
+                            // most-accurate valuation). Fall back to lp_health.asset_0 price,
+                            // then to compounder share × pool TLA-staked USD.
+                            const symbolPrice = catalog.tokenPrices?.[pool.name]?.final_price_usd;
+                            const asset0Price = pool.lp_health?.asset_0?.price_usd;
+                            if (symbolPrice) {
+                                positionUsd = (userLp / 1e6) * symbolPrice;
+                            } else if (asset0Price) {
+                                positionUsd = (userLp / 1e6) * asset0Price;
+                            } else if (pool.staked_in_tla_usd) {
+                                // Last-resort: compounder share fallback (matches cron's
+                                // compounder_share_fallback path)
+                                const totalLp = parseFloat(entry.total_lp) || 0;
+                                if (totalLp > 0) {
+                                    pctOfPool = (userLp / totalLp) * 100;
+                                    positionUsd = pool.staked_in_tla_usd * (userLp / totalLp);
+                                }
+                            }
+                        }
+
+                        positions.push({
+                            bucket,
+                            pool_name: pool?.name || null,
+                            lp_address: lpAddr,
+                            is_amplified: true,
+                            user_lp_human: userLp / 1e6,
+                            user_amplp_human: userAmplp / 1e6,
+                            user_pct_of_pool: pctOfPool,
+                            estimated_position_usd: positionUsd,
+                        });
+                    }
+                }
+
+                const totalLpUsd = positions.reduce((s, p) => s + (p.estimated_position_usd || 0), 0);
+
+                return {
+                    source:         'live',
+                    capturedAt:     new Date().toISOString(),
+                    catalogCapturedAt: catalog.capturedAt,
+                    totalLpUsd,
+                    positions,
+                    positionCount:  positions.length,
+                };
+            }
+
+            // Main entry: live RPC primary, cron fallback.
+            //
+            // The DAO TLA Deposits tile should reflect TRUE current state of TLA
+            // participation, not the last hourly cron snapshot. Chain queries are
+            // the source of truth. The cron is only useful for historical capture
+            // and as a fallback when RPC is unreachable.
+            async function fetchLiveTlaDeposits() {
+                const now = Date.now();
+                if (_liveTlaDepositsCache.result && (now - _liveTlaDepositsCache.ts) < 5 * 60_000) {
+                    return _liveTlaDepositsCache.result;
+                }
+
+                // Load shared catalog (pool prices, amp configs) — required for both paths
+                const catalog = await fetchTlaSharedCatalog();
+
+                // Try LIVE chain queries first
+                let liveResult = null;
+                if (catalog) {
+                    try {
+                        liveResult = await fetchLiveTlaDepositsFromChain(catalog);
+                    } catch (e) {
+                        console.warn('[live-tla] chain capture threw:', e);
+                    }
+                }
+
+                // Pending rewards + zLUNA wallet balances: reuse fetchLiveUnclaimedRewards
+                // which already pulls these live. Falls back to cron data inside that
+                // function if RPC fails.
+                let pendingRewardsUsd = 0;
+                let pendingBribesUsd  = 0;
+                let zlunaUsd          = 0;
+                let zlunaLuna         = 0;
+                try {
+                    const rewards = (typeof fetchLiveUnclaimedRewards === 'function')
+                        ? await fetchLiveUnclaimedRewards()
+                        : null;
+                    if (rewards) {
+                        const lunaPrice = window.cachedLunaPrice
+                            || window.cachedPriceData?.['terra-luna-2']?.usd
+                            || null;
+                        // depositLuna = total pending deposit rewards in LUNA-equivalent
+                        // rebaseLuna  = pending rebase in LUNA-equivalent
+                        // (voteUsd is already in USD if priced)
+                        const lunaUsd = lunaPrice
+                            ? ((rewards.depositLuna || 0) + (rewards.rebaseLuna || 0)) * lunaPrice
+                            : 0;
+                        pendingRewardsUsd = lunaUsd;
+                        pendingBribesUsd  = rewards.voteUsd || 0;
+                    }
+                } catch (e) {
+                    console.warn('[live-tla] rewards inclusion failed:', e);
+                }
+
+                // If live chain capture succeeded, use it
+                if (liveResult) {
+                    // Also fetch zLUNA wallet balance directly from chain (cheap — just bank query)
+                    try {
+                        const r = await fetch(`https://terra.publicnode.com/cosmos/bank/v1beta1/balances/${DAO_MAIN_WALLET_ADDR_TLA}`);
+                        if (r.ok) {
+                            const j = await r.json();
+                            for (const b of (j.balances || [])) {
+                                if (/zluna/i.test(b.denom)) {
+                                    const amt = Number(b.amount) / 1e6;
+                                    zlunaLuna += amt; // 1:1 LUNA equivalent assumption per cron
+                                }
+                            }
+                            const lunaPrice = window.cachedLunaPrice
+                                || window.cachedPriceData?.['terra-luna-2']?.usd
+                                || null;
+                            if (lunaPrice) zlunaUsd = zlunaLuna * lunaPrice;
+                        }
+                    } catch (_) { /* non-fatal */ }
+
+                    const result = {
+                        ...liveResult,
+                        pendingRewardsUsd,
+                        pendingBribesUsd,
+                        zlunaUsd,
+                        zlunaLuna,
+                        totalTlaUsd: liveResult.totalLpUsd + pendingRewardsUsd + pendingBribesUsd + zlunaUsd,
+                    };
+                    _liveTlaDepositsCache = { ts: now, result };
+                    console.log(`[live-tla] LIVE ✓ — composite $${result.totalTlaUsd.toFixed(2)} (LP $${result.totalLpUsd.toFixed(2)} + rewards $${pendingRewardsUsd.toFixed(2)} + bribes $${pendingBribesUsd.toFixed(2)} + zLUNA $${zlunaUsd.toFixed(2)}) across ${result.positions.length} positions`);
+                    return result;
+                }
+
+                // Fall back to cron data
+                console.warn('[live-tla] chain capture unavailable — falling back to cron');
+                const cronResult = await fetchTlaDepositsFromCron();
+                if (cronResult) {
+                    _liveTlaDepositsCache = { ts: now, result: cronResult };
+                    console.log(`[live-tla] CRON-FALLBACK — composite $${cronResult.totalTlaUsd.toFixed(2)}`);
+                }
+                return cronResult;
             }
 
             // Apply live TLA deposits data to the dashboard tile + DAO Total Value.
@@ -3922,24 +4272,35 @@ est. APR 58.53 %"></textarea>
                 if (!live) return;
                 const tileEl = document.getElementById('dao-tla-total');
                 if (tileEl) {
-                    tileEl.textContent = '$' + live.totalLpUsd.toLocaleString('en-US', { maximumFractionDigits: 0 });
+                    // Show composite TLA total (LPs + rewards + bribes + zLUNA),
+                    // matching user's rule that TLA Deposits includes "anything in TLA
+                    // aside from LOCKs".
+                    tileEl.textContent = '$' + live.totalTlaUsd.toLocaleString('en-US', { maximumFractionDigits: 0 });
                 }
-                // The APR isn't directly in current.json — leave whatever snapshot wrote
-                // (we can compute APR from pending_rewards × 365 ÷ lp_usd later if wanted).
 
-                // Pulse-dot indicator on title (replaces any existing snapshot/stale dot)
+                // Pulse-dot indicator on title with composition tooltip.
+                // Dot color/freshness indicates source: live = green, cron = amber.
                 const titleEl = document.getElementById('dao-tla-title');
                 if (titleEl) {
-                    const existingDot = titleEl.querySelector('.pulse-dot, .static-dot-red');
+                    const existingDot = titleEl.querySelector('.pulse-dot, .static-dot-red, .static-dot-amber');
                     if (existingDot) existingDot.remove();
                     const dot = document.createElement('span');
-                    dot.className = 'pulse-dot ml-1';
-                    dot.title = `Live — $${live.totalLpUsd.toFixed(0)} across ${live.positions.length} LP positions (captured ${new Date(live.capturedAt).toLocaleTimeString()})`;
+                    dot.className = live.source === 'live' ? 'pulse-dot ml-1' : 'static-dot-amber ml-1';
+                    const capturedTime = new Date(live.capturedAt).toLocaleTimeString();
+                    const sourceLabel = live.source === 'live' ? 'Live (chain)' : 'Cron snapshot';
+                    dot.title =
+                        `${sourceLabel} — captured ${capturedTime}\n` +
+                        `  LP positions:    $${live.totalLpUsd.toFixed(2)}  (${live.positionCount} pools)\n` +
+                        `  Pending rewards: $${(live.pendingRewardsUsd || 0).toFixed(2)}\n` +
+                        `  Pending bribes:  $${(live.pendingBribesUsd  || 0).toFixed(2)}\n` +
+                        `  zLUNA in wallet: $${(live.zlunaUsd          || 0).toFixed(2)}\n` +
+                        `  ─────────────────────\n` +
+                        `  Total TLA:       $${live.totalTlaUsd.toFixed(2)}`;
                     titleEl.appendChild(dot);
                 }
 
-                // Expose for DAO Total Value aggregation
-                window.liveTlaDepositsUsd = live.totalLpUsd;
+                // Expose for DAO Total Value aggregation — use composite total
+                window.liveTlaDepositsUsd = live.totalTlaUsd;
                 if (typeof updateDaoTotalValue === 'function') updateDaoTotalValue();
             }
             // ─── End live TLA deposits ────────────────────────────────────────
@@ -8114,6 +8475,7 @@ est. APR 58.53 %"></textarea>
                 try { _daoTlaVpCache = { ts: 0, result: null }; } catch (_) {}
                 try { _liveRewardsCache = { ts: 0, result: null }; } catch (_) {}
                 try { _liveTlaDepositsCache = { ts: 0, result: null }; } catch (_) {}
+                try { _tlaSharedCatalogCache = { ts: 0, result: null }; } catch (_) {}
                 try { _tlaVpCronHistoryCache = { ts: 0, result: null }; } catch (_) {}
                 try { _trappedNftsCache = { ts: 0, result: null }; } catch (_) {}
 
