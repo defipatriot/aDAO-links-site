@@ -9,6 +9,10 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+
+    <!-- Shared live-data library — provides aDAOLive.getDaoTlaDeposits() etc.
+         Used to overlay live RPC data on top of the snapshot baseline. -->
+    <script src="./lib/adao-live-data.js"></script>
     <style>
         body { font-family: 'Inter', sans-serif; background-color: #0D0D0D; color: #EAEAEA; }
         .stat-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); }
@@ -1001,11 +1005,62 @@
             const ok=await loadData();
             if(!ok){document.getElementById('positions-table').innerHTML='<div class="text-center py-4 text-red-400"><i class="fas fa-exclamation-triangle mr-2"></i>Failed to load</div>';return;}
             
+            // Rev 1.1 — Overlay live data on top of the snapshot.
+            // The snapshot is the historical comparison baseline (used for charts,
+            // comparison views, value breakdown), but for the headline numbers we
+            // want what's actually on-chain RIGHT NOW. If the library is loaded
+            // and live capture succeeds, overlay its values.
+            let liveSource = 'snapshot';
+            let liveCapturedAt = null;
+            try {
+                if (typeof aDAOLive !== 'undefined') {
+                    const live = await aDAOLive.getDaoTlaDeposits();
+                    if (live && (live.source === 'live' || live.source === 'cron')) {
+                        liveSource = live.source;
+                        liveCapturedAt = live.capturedAt;
+                        // Update the dashboard.adao_deposits fields the rest of init() reads
+                        if (!currentData.liquidity) currentData.liquidity = {};
+                        if (!currentData.liquidity.adao_deposits) currentData.liquidity.adao_deposits = {};
+                        currentData.liquidity.adao_deposits.total_usd = live.totalTlaUsd;
+                        // Reconstruct active_pools from live positions so renderPositions sees them.
+                        // Group by pool name (amp + non-amp may share a name).
+                        const byPool = {};
+                        for (const p of (live.positions || [])) {
+                            const name = p.pool_name || p.pool_address || 'Unknown';
+                            if (!byPool[name]) byPool[name] = { name, dex: p.dex || '?', type: p.bucket || '?', tla_staked: 0, adao_deposit: { non_amp: 0, amplified: 0 }, apr: {} };
+                            const usd = p.estimated_position_usd || 0;
+                            if (p.is_amplified) byPool[name].adao_deposit.amplified += usd;
+                            else                byPool[name].adao_deposit.non_amp   += usd;
+                        }
+                        currentData.liquidity.active_pools = Object.values(byPool);
+                        // Update pending rewards
+                        if (!currentData.dashboard) currentData.dashboard = {};
+                        if (!currentData.dashboard.unclaimed_rewards) currentData.dashboard.unclaimed_rewards = {};
+                        currentData.dashboard.unclaimed_rewards.deposit_rewards_usd = live.pendingRewardsUsd || 0;
+                        currentData.dashboard.unclaimed_rewards.zAssets = live.zlunaUsd || 0;
+                        console.log(`[dao_tla_deposits] overlaid LIVE data — total $${live.totalTlaUsd.toFixed(2)} across ${live.positionCount} positions (source: ${live.source})`);
+                    }
+                }
+            } catch (e) {
+                console.warn('[dao_tla_deposits] live overlay failed, using snapshot only:', e);
+            }
+            
             // Fetch DAO proposals for chart annotations and TLA actions list
             await fetchDaoProps();
             renderTlaActions();
             
-            document.getElementById('epoch-badge').textContent=`E${compareData?.meta?.epoch||'--'} → ${currentData.meta?.epoch||'--'}`;
+            // Source badge — show whether headline numbers are live or snapshot
+            const epochBadge = document.getElementById('epoch-badge');
+            if (liveSource === 'live') {
+                epochBadge.innerHTML = `<span class="inline-block w-2 h-2 rounded-full bg-green-400 mr-1 animate-pulse"></span>Live · E${currentData.meta?.epoch||'--'}`;
+                epochBadge.className = 'text-xs bg-green-900/40 border border-green-700 px-2 py-1 rounded text-green-300';
+                if (liveCapturedAt) epochBadge.title = `Live captured ${new Date(liveCapturedAt).toLocaleTimeString()}`;
+            } else if (liveSource === 'cron') {
+                epochBadge.innerHTML = `<span class="inline-block w-2 h-2 rounded-full bg-amber-400 mr-1"></span>Cron · E${currentData.meta?.epoch||'--'}`;
+                epochBadge.className = 'text-xs bg-amber-900/40 border border-amber-700 px-2 py-1 rounded text-amber-300';
+            } else {
+                epochBadge.textContent = `E${compareData?.meta?.epoch||'--'} → ${currentData.meta?.epoch||'--'}`;
+            }
             
             const actualCurrent=CURRENT_EPOCH;
             if(actualCurrent>(currentData.meta?.epoch||0)){
