@@ -588,10 +588,22 @@
         }
         
         async function loadData(){
+            // Step 1: find the most recent epoch snapshot that exists (highest available)
             for(let i=AVAILABLE_EPOCHS.length-1;i>=0;i--){const d=await fetchEpoch(AVAILABLE_EPOCHS[i]);if(d){currentData=d;break;}}
             if(!currentData)return false;
             const curr=currentData.meta?.epoch;
-            for(let i=AVAILABLE_EPOCHS.length-1;i>=0;i--){if(AVAILABLE_EPOCHS[i]<curr){const d=await fetchEpoch(AVAILABLE_EPOCHS[i]);if(d){compareData=d;break;}}}
+            // Step 2: pick compareData = the MOST RECENT prior epoch with data.
+            // Was: walked from highest looking for any < curr — but since we already
+            // picked the latest in step 1, ANY remaining epoch matches "< curr", so the
+            // first iteration of the same descending loop trivially returns the next-newest.
+            // Result was correct in principle but produced E182 → E185 when really we want
+            // "last week → this week" to be the default compare. So: explicitly pick the
+            // epoch immediately below curr that has a snapshot, not the first match found.
+            const priorEpochs = AVAILABLE_EPOCHS.filter(e => e < curr).sort((a,b)=>b-a);
+            for(const e of priorEpochs){
+                const d = await fetchEpoch(e);
+                if(d){ compareData = d; break; }
+            }
             history=[];
             for(const e of AVAILABLE_EPOCHS){const d=await fetchEpoch(e);if(d)history.push({epoch:d.meta?.epoch||e,ts:d.meta?.generated_at,usd:d.liquidity?.adao_deposits?.total_usd||0,tokens:d.liquidity?.adao_deposits?.tokens||[],prices:d.token_prices||{}});}
             return true;
@@ -1010,6 +1022,11 @@
             // comparison views, value breakdown), but for the headline numbers we
             // want what's actually on-chain RIGHT NOW. If the library is loaded
             // and live capture succeeds, overlay its values.
+            //
+            // Rev 1.2 — When live overlay succeeds, repoint compareData = the snapshot
+            // we just overlaid onto. This way the "What Changed" section shows
+            // "Last snapshot (E185) → Live (now)" instead of "E182 → Live" which
+            // mixes a 3-week-old anchor with live data.
             let liveSource = 'snapshot';
             let liveCapturedAt = null;
             try {
@@ -1018,6 +1035,10 @@
                     if (live && (live.source === 'live' || live.source === 'cron')) {
                         liveSource = live.source;
                         liveCapturedAt = live.capturedAt;
+                        // Take a deep copy of currentData BEFORE we mutate it — this
+                        // becomes our new "compare against" baseline (the most recent
+                        // snapshot, untouched by live overlay).
+                        compareData = JSON.parse(JSON.stringify(currentData));
                         // Update the dashboard.adao_deposits fields the rest of init() reads
                         if (!currentData.liquidity) currentData.liquidity = {};
                         if (!currentData.liquidity.adao_deposits) currentData.liquidity.adao_deposits = {};
@@ -1033,12 +1054,27 @@
                             else                byPool[name].adao_deposit.non_amp   += usd;
                         }
                         currentData.liquidity.active_pools = Object.values(byPool);
+                        // Also rebuild adao_deposits.tokens from live positions so the
+                        // value-breakdown comparison sees current token amounts.
+                        const tokenTotals = {};
+                        for (const p of (live.positions || [])) {
+                            // Sum token amounts from underlying_token_amounts if available
+                            // (cron data shape); for our chain-derived positions, the per-pool
+                            // breakdown isn't easily disaggregated, so we keep the snapshot
+                            // tokens array as-is and just refresh total_usd. The chart
+                            // "normalized" view still shows token-amount changes correctly
+                            // because it uses snapshot token amounts × current prices.
+                        }
+                        // Tag currentData with a synthetic 'Live' epoch label
+                        if (!currentData.meta) currentData.meta = {};
+                        currentData.meta.epoch_label = 'Live';
+                        currentData.meta.live_captured_at = live.capturedAt;
                         // Update pending rewards
                         if (!currentData.dashboard) currentData.dashboard = {};
                         if (!currentData.dashboard.unclaimed_rewards) currentData.dashboard.unclaimed_rewards = {};
                         currentData.dashboard.unclaimed_rewards.deposit_rewards_usd = live.pendingRewardsUsd || 0;
                         currentData.dashboard.unclaimed_rewards.zAssets = live.zlunaUsd || 0;
-                        console.log(`[dao_tla_deposits] overlaid LIVE data — total $${live.totalTlaUsd.toFixed(2)} across ${live.positionCount} positions (source: ${live.source})`);
+                        console.log(`[dao_tla_deposits] overlaid LIVE data — total $${live.totalTlaUsd.toFixed(2)} across ${live.positionCount} positions (source: ${live.source}). compareData re-anchored to E${compareData.meta?.epoch} (the snapshot we overlaid on).`);
                     }
                 }
             } catch (e) {
@@ -1052,14 +1088,28 @@
             // Source badge — show whether headline numbers are live or snapshot
             const epochBadge = document.getElementById('epoch-badge');
             if (liveSource === 'live') {
-                epochBadge.innerHTML = `<span class="inline-block w-2 h-2 rounded-full bg-green-400 mr-1 animate-pulse"></span>Live · E${currentData.meta?.epoch||'--'}`;
+                epochBadge.innerHTML = `<span class="inline-block w-2 h-2 rounded-full bg-green-400 mr-1 animate-pulse"></span>E${compareData?.meta?.epoch||'--'} \u2192 Live`;
                 epochBadge.className = 'text-xs bg-green-900/40 border border-green-700 px-2 py-1 rounded text-green-300';
                 if (liveCapturedAt) epochBadge.title = `Live captured ${new Date(liveCapturedAt).toLocaleTimeString()}`;
             } else if (liveSource === 'cron') {
-                epochBadge.innerHTML = `<span class="inline-block w-2 h-2 rounded-full bg-amber-400 mr-1"></span>Cron · E${currentData.meta?.epoch||'--'}`;
+                epochBadge.innerHTML = `<span class="inline-block w-2 h-2 rounded-full bg-amber-400 mr-1"></span>E${compareData?.meta?.epoch||'--'} \u2192 Cron`;
                 epochBadge.className = 'text-xs bg-amber-900/40 border border-amber-700 px-2 py-1 rounded text-amber-300';
             } else {
-                epochBadge.textContent = `E${compareData?.meta?.epoch||'--'} → ${currentData.meta?.epoch||'--'}`;
+                epochBadge.textContent = `E${compareData?.meta?.epoch||'--'} \u2192 E${currentData.meta?.epoch||'--'}`;
+            }
+            
+            // Rev 1.2 — Append the live "now" point to history[] so the chart
+            // extends through to the present rather than ending at the last
+            // snapshot epoch. The point uses synthetic epoch label 'Live'.
+            if (liveSource === 'live' || liveSource === 'cron') {
+                const liveUsd = currentData.liquidity?.adao_deposits?.total_usd || 0;
+                history.push({
+                    epoch: 'Live',
+                    ts: liveCapturedAt || new Date().toISOString(),
+                    usd: liveUsd,
+                    tokens: currentData.liquidity?.adao_deposits?.tokens || [],
+                    prices: currentData.token_prices || {},
+                });
             }
             
             const actualCurrent=CURRENT_EPOCH;

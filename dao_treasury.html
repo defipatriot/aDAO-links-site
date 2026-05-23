@@ -241,44 +241,48 @@
         </div>
     </header>
     
-    <!-- Main Content -->
-    <main class="container mx-auto px-4 py-8">
-        <!-- Summary Cards - Clickable to switch views -->
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-            <div id="card-treasury" class="stat-card rounded-xl p-4 cursor-pointer card-active" onclick="switchView('treasury')">
-                <p class="text-sm text-gray-400">DAO Treasury</p>
-                <p id="dao-treasury-total" class="text-2xl font-bold text-white mt-1">
-                    <i class="fas fa-spinner fa-spin text-cyan-400"></i>
-                </p>
-                <p class="text-xs text-green-400 mt-1"><i class="fas fa-circle text-[8px] mr-1"></i>Live</p>
+        <!-- Main Content -->
+        <main class="container mx-auto px-4 py-8">
+            <!-- Rev 3.0 — Summary tiles (display only, no tab switching).
+                 Previously these were clickable tabs that hid 3 of 4 content sections.
+                 Now all sections are shown together below, so these are pure summaries. -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                <div id="card-treasury" class="stat-card rounded-xl p-4">
+                    <p class="text-sm text-gray-400">DAO Treasury</p>
+                    <p id="dao-treasury-total" class="text-2xl font-bold text-white mt-1">
+                        <i class="fas fa-spinner fa-spin text-cyan-400"></i>
+                    </p>
+                    <p class="text-xs text-green-400 mt-1"><i class="fas fa-circle text-[8px] mr-1"></i>Live</p>
+                </div>
+                <div id="card-staked" class="stat-card rounded-xl p-4">
+                    <p class="text-sm text-gray-400">DAO Staked</p>
+                    <p id="dao-staked-total" class="text-2xl font-bold text-white mt-1">
+                        <i class="fas fa-spinner fa-spin text-cyan-400"></i>
+                    </p>
+                    <p class="text-xs text-yellow-400 mt-1"><i class="fas fa-lock text-[8px] mr-1"></i>Alliance Positions</p>
+                </div>
+                <div id="card-council" class="stat-card rounded-xl p-4">
+                    <p class="text-sm text-gray-400">Council Treasury</p>
+                    <p id="council-treasury-total" class="text-2xl font-bold text-white mt-1">
+                        <i class="fas fa-spinner fa-spin text-cyan-400"></i>
+                    </p>
+                    <p class="text-xs text-green-400 mt-1"><i class="fas fa-circle text-[8px] mr-1"></i>Live</p>
+                </div>
+                <div id="card-total" class="stat-card rounded-xl p-4 border-cyan-600/50">
+                    <p class="text-sm text-gray-400">Combined Total</p>
+                    <p id="combined-total" class="text-2xl font-bold text-cyan-400 mt-1">
+                        <i class="fas fa-spinner fa-spin text-cyan-400"></i>
+                    </p>
+                    <a href="tla_deposits.html" class="text-xs text-cyan-400 mt-1 flex items-center hover:text-cyan-300">
+                        + TLA Deposits <i class="fas fa-arrow-right ml-1 text-[10px]"></i>
+                    </a>
+                </div>
             </div>
-            <div id="card-staked" class="stat-card rounded-xl p-4 cursor-pointer" onclick="switchView('staked')">
-                <p class="text-sm text-gray-400">DAO Staked</p>
-                <p id="dao-staked-total" class="text-2xl font-bold text-white mt-1">
-                    <i class="fas fa-spinner fa-spin text-cyan-400"></i>
-                </p>
-                <p class="text-xs text-yellow-400 mt-1"><i class="fas fa-lock text-[8px] mr-1"></i>Alliance Positions</p>
-            </div>
-            <div id="card-council" class="stat-card rounded-xl p-4 cursor-pointer" onclick="switchView('council')">
-                <p class="text-sm text-gray-400">Council Treasury</p>
-                <p id="council-treasury-total" class="text-2xl font-bold text-white mt-1">
-                    <i class="fas fa-spinner fa-spin text-cyan-400"></i>
-                </p>
-                <p class="text-xs text-green-400 mt-1"><i class="fas fa-circle text-[8px] mr-1"></i>Live</p>
-            </div>
-            <div id="card-total" class="stat-card rounded-xl p-4 border-cyan-600/50 cursor-pointer" onclick="switchView('total')">
-                <p class="text-sm text-gray-400">Total</p>
-                <p id="combined-total" class="text-2xl font-bold text-cyan-400 mt-1">
-                    <i class="fas fa-spinner fa-spin text-cyan-400"></i>
-                </p>
-                <a href="tla_deposits.html" class="text-xs text-cyan-400 mt-1 flex items-center hover:text-cyan-300" onclick="event.stopPropagation()">
-                    TLA Deposits <i class="fas fa-arrow-right ml-1 text-[10px]"></i>
-                </a>
-            </div>
-        </div>
         
-        <!-- Value Change Breakdown -->
-        <div id="value-breakdown" class="stat-card rounded-xl p-4 mb-8 hidden">
+        <!-- Value Change Breakdown — the hero "What Changed" story panel.
+             Always visible (was hidden by default, only unhid after data loaded).
+             Shows price movement vs position growth, and the story behind treasury value changes. -->
+        <div id="value-breakdown" class="stat-card rounded-xl p-4 mb-8">
             <div class="flex items-center justify-between mb-3">
                 <div class="flex items-center gap-2">
                     <i class="fas fa-book-open text-cyan-400"></i>
@@ -340,35 +344,38 @@
         
         <!-- Main Layout: Chart First, Then Tables -->
         
-        <!-- Balance History Chart - Full Width Below Summary Cards -->
+        <!-- Token Performance Chart — the hero stock-chart-with-prop-annotations view.
+             Auto-loads ampLUNA on init. Token pills above let users switch in one click.
+             Amount/USD toggle reveals the core insight: amounts grow even when USD lags. -->
         <div class="stat-card rounded-xl p-4 mb-6">
-            <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+                <h2 class="text-lg font-bold text-white">
+                    <i class="fas fa-chart-line text-green-400 mr-2"></i>Token Performance
+                    <span id="chart-epoch-count" class="text-xs text-gray-500 font-normal ml-2"></span>
+                </h2>
                 <div class="flex items-center gap-3 flex-wrap">
-                    <h2 class="text-lg font-bold text-white">
-                        <i class="fas fa-chart-line text-green-400 mr-2"></i>Balance History
-                        <span id="chart-epoch-count" class="text-xs text-gray-500 font-normal ml-2"></span>
-                    </h2>
-                    <div id="chart-range-tabs" class="items-center gap-1" style="display: none;">
-                        <button data-range="30d" class="range-btn px-2.5 py-1 text-xs rounded bg-gray-800 text-gray-400 hover:bg-gray-700 transition-colors">30d</button>
-                        <button data-range="90d" class="range-btn px-2.5 py-1 text-xs rounded bg-cyan-600 text-white transition-colors">90d</button>
+                    <!-- Amount vs USD toggle -->
+                    <div id="chart-value-toggle" class="flex items-center bg-gray-800 rounded p-0.5">
+                        <button data-mode="amount" class="value-mode-btn px-3 py-1 text-xs rounded bg-cyan-600 text-white transition-colors" title="Show token amount over time">Amount</button>
+                        <button data-mode="usd"    class="value-mode-btn px-3 py-1 text-xs rounded bg-transparent text-gray-400 hover:text-white transition-colors" title="Show USD value over time">USD</button>
+                    </div>
+                    <!-- Time range -->
+                    <div id="chart-range-tabs" class="flex items-center gap-1">
+                        <button data-range="30d"  class="range-btn px-2.5 py-1 text-xs rounded bg-gray-800 text-gray-400 hover:bg-gray-700 transition-colors">30d</button>
+                        <button data-range="90d"  class="range-btn px-2.5 py-1 text-xs rounded bg-cyan-600 text-white transition-colors">90d</button>
                         <button data-range="180d" class="range-btn px-2.5 py-1 text-xs rounded bg-gray-800 text-gray-400 hover:bg-gray-700 transition-colors">180d</button>
                     </div>
                 </div>
-                <div id="chart-token-badge" class="text-sm text-gray-400 hidden">
-                    Showing: <span id="chart-token-name" class="text-cyan-400 font-medium">--</span>
-                </div>
             </div>
             
-            <!-- Chart Placeholder -->
-            <div id="chart-placeholder" class="flex flex-col items-center justify-center h-64 text-gray-500">
-                <i class="fas fa-hand-pointer text-4xl mb-3 text-gray-600"></i>
-                <p class="text-center">Click on any token row to see<br>its balance history over time</p>
-                <p class="text-xs text-gray-600 mt-2">Historical data from weekly snapshots</p>
+            <!-- Token pills — populated dynamically with top holdings -->
+            <div id="chart-token-pills" class="flex flex-wrap gap-2 mb-3">
+                <div class="text-xs text-gray-500"><i class="fas fa-spinner fa-spin mr-1"></i>Loading tokens...</div>
             </div>
             
-            <!-- Chart Container (hidden until token selected) -->
-            <div id="chart-wrapper" class="hidden">
-                <div class="chart-container" style="height: 250px;">
+            <!-- Chart Container (auto-loads ampLUNA on init) -->
+            <div id="chart-wrapper">
+                <div class="chart-container" style="height: 280px;">
                     <canvas id="balance-chart"></canvas>
                 </div>
                 
@@ -389,6 +396,12 @@
                 </div>
             </div>
             
+            <!-- Placeholder (kept for cases where no token can be auto-selected) -->
+            <div id="chart-placeholder" class="hidden flex flex-col items-center justify-center h-64 text-gray-500">
+                <i class="fas fa-hand-pointer text-4xl mb-3 text-gray-600"></i>
+                <p class="text-center">Select a token above to view its history</p>
+            </div>
+            
             <!-- No History Message -->
             <div id="no-history-msg" class="hidden flex flex-col items-center justify-center h-64 text-gray-500">
                 <i class="fas fa-database text-4xl mb-3 text-gray-600"></i>
@@ -397,9 +410,10 @@
             </div>
         </div>
         
-        <!-- Tables Grid -->
+        <!-- Holdings Tables — all shown together (was previously tabbed via switchView).
+             Each card is now a section, not an exclusive view. -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <!-- Left: Dynamic Content Area (Tables) -->
+            <!-- Left column: holdings tables -->
             <div class="space-y-6">
                 <!-- DAO Treasury Table -->
                 <div id="view-treasury" class="stat-card rounded-xl p-4">
@@ -422,7 +436,7 @@
                 </div>
                 
                 <!-- DAO Staked Positions -->
-                <div id="view-staked" class="stat-card rounded-xl p-4 hidden">
+                <div id="view-staked" class="stat-card rounded-xl p-4">
                     <div class="flex items-center justify-between mb-4">
                         <h2 class="text-lg font-bold text-white">
                             <i class="fas fa-lock text-yellow-400 mr-2"></i>DAO Staked Positions
@@ -438,7 +452,7 @@
                 </div>
                 
                 <!-- Council Treasury Table -->
-                <div id="view-council" class="stat-card rounded-xl p-4 hidden">
+                <div id="view-council" class="stat-card rounded-xl p-4">
                     <div class="flex items-center justify-between mb-4">
                         <h2 class="text-lg font-bold text-white">
                             <i class="fas fa-users text-yellow-400 mr-2"></i>Council Treasury
@@ -457,11 +471,11 @@
                     </div>
                 </div>
                 
-                <!-- Total Overview -->
-                <div id="view-total" class="stat-card rounded-xl p-4 hidden">
+                <!-- Total Overview — kept for grand-total breakdown context -->
+                <div id="view-total" class="stat-card rounded-xl p-4">
                     <div class="flex items-center justify-between mb-4">
                         <h2 class="text-lg font-bold text-white">
-                            <i class="fas fa-chart-pie text-cyan-400 mr-2"></i>Total Holdings Overview
+                            <i class="fas fa-chart-pie text-cyan-400 mr-2"></i>Total Holdings Breakdown
                         </h2>
                     </div>
                     <div id="total-overview-table" class="space-y-3">
@@ -609,10 +623,14 @@
             
             console.log('Available epochs for selector:', epochs);
             
-            // Start epoch options (all historical epochs)
+            // Rev 2.4 — Default the START dropdown to the MOST RECENT historical
+            // snapshot (epochs[0]) so the default comparison is "last snapshot → Live".
+            // Previously defaulted to idx === 1 (second-newest), which produced
+            // confusing 3-week-old anchors like "E182 → Live" when E185 was right there.
+            // Users wanting deeper history can still pick older epochs from the dropdown.
             let startHtml = '';
             epochs.forEach((epoch, idx) => {
-                const selected = idx === 1 ? 'selected' : ''; // Default to second-to-last
+                const selected = idx === 0 ? 'selected' : ''; // Default to most recent snapshot
                 startHtml += `<option value="${epoch}" ${selected}>E${epoch}</option>`;
             });
             startSelect.innerHTML = startHtml;
@@ -625,7 +643,7 @@
             endSelect.innerHTML = endHtml;
             
             // Set initial values
-            selectedStartEpoch = epochs.length > 1 ? epochs[1] : epochs[0]; // Second-to-last epoch
+            selectedStartEpoch = epochs[0]; // Most recent snapshot
             selectedEndEpoch = 'live'; // Default to Live
             
             // Add change listeners
@@ -1234,33 +1252,10 @@
         }
         
         function switchView(view) {
-            currentView = view;
-            
-            // Update card active states
-            ['treasury', 'staked', 'council', 'total'].forEach(v => {
-                document.getElementById(`card-${v}`).classList.remove('card-active');
-            });
-            document.getElementById(`card-${view}`).classList.add('card-active');
-            
-            // Hide all views
-            ['treasury', 'staked', 'council', 'total'].forEach(v => {
-                document.getElementById(`view-${v}`).classList.add('hidden');
-            });
-            
-            // Show selected view
-            document.getElementById(`view-${view}`).classList.remove('hidden');
-            
-            // Auto-select first item in the view for chart
-            if (view === 'treasury' && daoAssets.length > 0) {
-                const defaultToken = daoAssets.find(a => (a.token || a.name) === 'ampLUNA') || daoAssets[0];
-                selectToken(defaultToken.token || defaultToken.name, 'dao');
-            } else if (view === 'staked' && stakedPositions.length > 0) {
-                selectStakedPosition(stakedPositions[0].name);
-            } else if (view === 'council' && councilAssets.length > 0) {
-                selectToken(councilAssets[0].token || councilAssets[0].name, 'council');
-            } else if (view === 'total') {
-                renderTotalChart();
-            }
+            // Rev 3.0 — Cards are no longer tabs. switchView is kept as a no-op
+            // for any leftover callers (e.g. browser back-forward state). All view
+            // sections are now visible together.
+            return;
         }
         
         // ==================== Data Fetching ====================
@@ -2133,24 +2128,61 @@
             });
         }
         
+        // Rev 3.0 — Populate the token pill bar above the chart.
+        // Top holdings from DAO Treasury wallet, sorted by USD value (largest first).
+        // Clicking a pill swaps the chart instantly.
+        function populateTokenPills() {
+            const container = document.getElementById('chart-token-pills');
+            if (!container) return;
+            const tokens = (daoAssets || [])
+                .filter(a => (a.usd || 0) > 0.01)
+                .sort((a, b) => (b.usd || 0) - (a.usd || 0))
+                .slice(0, 8); // Top 8 by USD
+            if (tokens.length === 0) {
+                container.innerHTML = '<div class="text-xs text-gray-500">No tokens to display</div>';
+                return;
+            }
+            container.innerHTML = tokens.map(t => {
+                const name = t.token || t.name;
+                return `<button class="token-pill text-xs px-3 py-1 rounded-full bg-gray-800 text-gray-300 hover:bg-cyan-900 hover:text-white transition-colors border border-gray-700" data-token="${name}" data-wallet="dao">${name}</button>`;
+            }).join('');
+            // Wire clicks
+            container.querySelectorAll('.token-pill').forEach(pill => {
+                pill.addEventListener('click', () => {
+                    selectToken(pill.dataset.token, pill.dataset.wallet);
+                });
+            });
+        }
+
+        // Chart value mode: 'amount' (token amount over time) or 'usd' (USD value over time).
+        // The amount view reveals positions growing even when USD is flat — the core insight
+        // about treasury health that gets lost in pure USD charts.
+        let chartValueMode = 'amount';
+
         function selectToken(tokenName, walletType) {
-            // Update selection UI
+            // Update token-row selection in tables (existing behavior)
             document.querySelectorAll('.token-row').forEach(row => {
                 row.classList.remove('selected');
             });
             const selectedRow = document.querySelector(`.token-row[data-token="${tokenName}"][data-wallet="${walletType}"]`);
             if (selectedRow) selectedRow.classList.add('selected');
             
+            // Update token-pill selection (Rev 3.0 — replaces chart-token-badge)
+            document.querySelectorAll('.token-pill').forEach(pill => {
+                if (pill.dataset.token === tokenName && pill.dataset.wallet === walletType) {
+                    pill.className = 'token-pill text-xs px-3 py-1 rounded-full bg-cyan-600 text-white border border-cyan-500 transition-colors';
+                } else {
+                    pill.className = 'token-pill text-xs px-3 py-1 rounded-full bg-gray-800 text-gray-300 hover:bg-cyan-900 hover:text-white transition-colors border border-gray-700';
+                }
+            });
+            
             selectedToken = { name: tokenName, wallet: walletType };
             
-            // Show chart
-            document.getElementById('chart-placeholder').classList.add('hidden');
-            document.getElementById('chart-token-badge').classList.remove('hidden');
-            document.getElementById('chart-token-name').textContent = `${tokenName} (${walletType === 'dao' ? 'DAO' : 'Council'})`;
-            
-            // Show range tabs (only relevant for token balance charts)
-            const rangeTabs = document.getElementById('chart-range-tabs');
-            if (rangeTabs) rangeTabs.style.display = 'flex';
+            // Hide placeholder, show chart wrapper
+            const placeholder = document.getElementById('chart-placeholder');
+            if (placeholder) placeholder.classList.add('hidden');
+            const wrapper = document.getElementById('chart-wrapper');
+            if (wrapper) wrapper.classList.remove('hidden');
             
             renderBalanceChart(tokenName, walletType);
         }
@@ -2160,7 +2192,23 @@
             const noHistoryMsg = document.getElementById('no-history-msg');
             const epochCountEl = document.getElementById('chart-epoch-count');
             
-            console.log(`Rendering chart for ${tokenName} (${walletType}), ${historicalSnapshots.length} snapshots available`);
+            console.log(`Rendering chart for ${tokenName} (${walletType}), mode=${chartValueMode}, ${historicalSnapshots.length} snapshots available`);
+            
+            // Rev 3.0 — helper to price a token amount at a given snapshot, using
+            // that snapshot's token_prices. Falls back to current price if missing.
+            function priceAt(snapshot, name, amount) {
+                const prices = snapshot?.tokenPrices || {};
+                const p = prices[name]?.price ?? prices[name];
+                if (typeof p === 'number' && p > 0) return amount * p;
+                // Fall back to current CoinGecko price via geckoIdPrices + denomMap
+                for (const [denom, info] of Object.entries(denomMap)) {
+                    if (info.name === name && info.geckoId) {
+                        const cur = geckoIdPrices[info.geckoId]?.usd;
+                        if (cur) return amount * cur;
+                    }
+                }
+                return 0;
+            }
             
             // Build historical data for this token
             const dataPoints = [];
@@ -2172,9 +2220,13 @@
                     // Use normalized name for comparison to handle case/variation differences
                     const tokenData = assets.find(a => normalizeTokenName(a.token || a.name) === normalizedSearchName);
                     if (tokenData) {
+                        const y = chartValueMode === 'usd'
+                            ? priceAt(snapshot, tokenName, tokenData.amount)
+                            : tokenData.amount;
                         dataPoints.push({
                             x: new Date(snapshot.timestamp),
-                            y: tokenData.amount,
+                            y: y,
+                            amount: tokenData.amount,
                             epoch: snapshot.epoch
                         });
                     }
@@ -2185,9 +2237,13 @@
             const currentAssets = walletType === 'dao' ? daoAssets : councilAssets;
             const currentToken = currentAssets.find(a => (a.token || a.name) === tokenName);
             if (currentToken) {
+                const y = chartValueMode === 'usd'
+                    ? (currentToken.usd || 0)
+                    : (currentToken.amount || 0);
                 dataPoints.push({
                     x: new Date(),
-                    y: currentToken.amount,
+                    y: y,
+                    amount: currentToken.amount,
                     epoch: 'Live'
                 });
             }
@@ -2238,12 +2294,15 @@
             const changePercent = oldestBalance > 0 ? (change / oldestBalance * 100) : 0;
             const avgWeeklyGain = filteredPoints.length > 1 ? change / (filteredPoints.length - 1) : 0;
             
-            // Update stats display
-            document.getElementById('stat-current').textContent = currentBalance.toLocaleString(undefined, { maximumFractionDigits: 2 });
+            // Update stats display — prefix with $ when in USD mode
+            const valuePrefix = chartValueMode === 'usd' ? '$' : '';
+            document.getElementById('stat-current').textContent = valuePrefix + currentBalance.toLocaleString(undefined, { maximumFractionDigits: 2 });
             
             const changeEl = document.getElementById('stat-change');
             if (filteredPoints.length > 1) {
-                changeEl.textContent = `${change >= 0 ? '+' : ''}${change.toLocaleString(undefined, { maximumFractionDigits: 2 })} (${changePercent.toFixed(1)}%)`;
+                const changeAbs = Math.abs(change).toLocaleString(undefined, { maximumFractionDigits: 2 });
+                const sign = change >= 0 ? '+' : '-';
+                changeEl.textContent = `${sign}${valuePrefix}${changeAbs} (${changePercent.toFixed(1)}%)`;
                 changeEl.className = `text-lg font-bold ${change >= 0 ? 'text-green-400' : 'text-red-400'}`;
             } else {
                 changeEl.textContent = 'N/A (need more data)';
@@ -2251,7 +2310,7 @@
             }
             
             document.getElementById('stat-avg').textContent = filteredPoints.length > 1 
-                ? `${avgWeeklyGain >= 0 ? '+' : ''}${avgWeeklyGain.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+                ? `${avgWeeklyGain >= 0 ? '+' : ''}${valuePrefix}${avgWeeklyGain.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
                 : 'N/A';
             
             // Get token color
@@ -2310,7 +2369,11 @@
                                 label: function(context) {
                                     const value = context.raw.y;
                                     const idx = context.dataIndex;
-                                    let label = `${tokenName}: ${value.toLocaleString(undefined, { maximumFractionDigits: 4 })}`;
+                                    // Format value with $ prefix when in USD mode
+                                    const valueStr = chartValueMode === 'usd'
+                                        ? '$' + value.toLocaleString(undefined, { maximumFractionDigits: 2 })
+                                        : value.toLocaleString(undefined, { maximumFractionDigits: 4 });
+                                    let label = `${tokenName}: ${valueStr}`;
                                     
                                     // Show change from previous point
                                     if (idx > 0) {
@@ -2318,7 +2381,10 @@
                                         const diff = value - prevValue;
                                         const pctDiff = prevValue > 0 ? ((diff / prevValue) * 100) : 0;
                                         const sign = diff >= 0 ? '+' : '';
-                                        label += ` (${sign}${diff.toLocaleString(undefined, { maximumFractionDigits: 2 })} | ${sign}${pctDiff.toFixed(1)}%)`;
+                                        const diffStr = chartValueMode === 'usd'
+                                            ? '$' + Math.abs(diff).toLocaleString(undefined, { maximumFractionDigits: 2 })
+                                            : Math.abs(diff).toLocaleString(undefined, { maximumFractionDigits: 2 });
+                                        label += ` (${sign}${diffStr} | ${sign}${pctDiff.toFixed(1)}%)`;
                                     }
                                     return label;
                                 },
@@ -2364,9 +2430,10 @@
                             ticks: {
                                 color: '#888',
                                 callback: function(value) {
-                                    if (value >= 1000000) return (value/1000000).toFixed(1) + 'M';
-                                    if (value >= 1000) return (value/1000).toFixed(1) + 'K';
-                                    return value.toLocaleString();
+                                    const prefix = chartValueMode === 'usd' ? '$' : '';
+                                    if (value >= 1000000) return prefix + (value/1000000).toFixed(1) + 'M';
+                                    if (value >= 1000) return prefix + (value/1000).toFixed(1) + 'K';
+                                    return prefix + value.toLocaleString();
                                 }
                             }
                         }
@@ -2508,9 +2575,14 @@
             await fetchDaoProps();
             renderDaoEvents();
             
-            // Auto-select ampLUNA from DAO Treasury for chart (default view)
+            // Rev 3.0 — Populate token pill bar above the chart with top holdings
+            // by USD value (largest first). Each pill auto-selects that token's chart
+            // on click — no need to scroll down to the table to switch.
+            populateTokenPills();
+            
+            // Auto-select ampLUNA from DAO Treasury for chart (default view).
+            // If no ampLUNA, picks the largest USD holding instead.
             if (daoAssets.length > 0) {
-                // Find ampLUNA or fall back to first token
                 const defaultToken = daoAssets.find(a => (a.token || a.name) === 'ampLUNA') || daoAssets[0];
                 const tokenName = defaultToken.token || defaultToken.name;
                 selectToken(tokenName, 'dao');
@@ -2546,6 +2618,29 @@
                 }
             });
         });
+
+        // Rev 3.0 — Wire Amount vs USD toggle.
+        // Switches the chart between showing token amount over time (the "amounts are
+        // growing" view) and USD value over time (the "prices are lagging" view).
+        // The two together let users see the divergence clearly.
+        document.querySelectorAll('#chart-value-toggle .value-mode-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const mode = btn.dataset.mode;
+                if (!mode || mode === chartValueMode) return;
+                chartValueMode = mode;
+                document.querySelectorAll('#chart-value-toggle .value-mode-btn').forEach(b => {
+                    if (b.dataset.mode === chartValueMode) {
+                        b.className = 'value-mode-btn px-3 py-1 text-xs rounded bg-cyan-600 text-white transition-colors';
+                    } else {
+                        b.className = 'value-mode-btn px-3 py-1 text-xs rounded bg-transparent text-gray-400 hover:text-white transition-colors';
+                    }
+                });
+                // Re-render with new value mode
+                if (selectedToken && (selectedToken.wallet === 'dao' || selectedToken.wallet === 'council')) {
+                    renderBalanceChart(selectedToken.name, selectedToken.wallet);
+                }
+            });
+        });
         
         // Start
         init();
@@ -2568,7 +2663,7 @@
             </div>
             <div class="mt-4 text-xs text-gray-500">
                 <button id="changelog-trigger" class="hover:text-cyan-400 transition-colors cursor-pointer">
-                    <span class="font-mono">Rev 2.3</span>
+                    <span class="font-mono">Rev 3.0</span>
                     <span class="opacity-60 mx-1">·</span>
                     <span>Changelog</span>
                 </button>
