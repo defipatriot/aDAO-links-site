@@ -3220,7 +3220,7 @@ est. APR 58.53 %"></textarea>
             </div>
             <div class="mt-4 text-xs text-gray-500">
                 <button id="changelog-trigger" class="hover:text-cyan-400 transition-colors cursor-pointer">
-                    <span class="font-mono">Rev 3.47</span>
+                    <span class="font-mono">Rev 3.48</span>
                     <span class="opacity-60 mx-1">·</span>
                     <span>Changelog</span>
                 </button>
@@ -4807,9 +4807,31 @@ est. APR 58.53 %"></textarea>
                         : 0;
 
                     // === Vote Rewards ===
-                    // bribe_manager returns { buckets: [{epoch, rewards:[{amount, info}]}] }
-                    // or { data: [] } when nothing claimable. Aggregate per-token.
-                    const voteTokens = {};   // { TOKEN: { amount, denom } }
+                    // bribe_manager returns { buckets: [{ gauge, asset, assets:[{info, amount}] }] }
+                    // or { data: [] } when nothing claimable. Each bucket can have multiple
+                    // reward tokens; aggregate per-token across all buckets.
+                    //
+                    // Token identity (cw20 address or native denom) is preserved so the
+                    // renderer can price each token using cachedPriceData. Previously we
+                    // stored only a truncated label, losing the info needed for pricing.
+                    //
+                    // Friendly names: derive from a small map for known tokens (LUNA,
+                    // ASTRO, CAPA, etc.). Unknown tokens fall back to a truncated id.
+                    const NATIVE_DENOM_NAMES = {
+                        'uluna': { name: 'LUNA', decimals: 6, geckoId: 'terra-luna-2' },
+                        'ibc/8D8A7F7253615E5F76CB6252A1E1BD921D5EDB7BBAAF8913FB1C77FF125D9995': { name: 'ASTRO', decimals: 6, geckoId: 'astroport-fi' },
+                        'ibc/2C962DAB9F57FE0921435426AE75196009FAA1981BF86991203C8411F8980FDB': { name: 'USDC', decimals: 6, geckoId: 'usd-coin' },
+                        'ibc/88386AC48152D48B34B082648DF836F975506F0B57DBBFC10A54213B1BF484CB': { name: 'wBTC', decimals: 8, geckoId: 'wrapped-bitcoin' },
+                    };
+                    const CW20_NAMES = {
+                        'terra1t4p3u8khpd7f8qzurwyafxt648dya6mp6vur3vaapswt6m24gkuqrfdhar': { name: 'CAPA',    decimals: 6, geckoId: 'capapult' },
+                        'terra1ecgazyd0waaj3g7l9cmy5gulhxkps2gmxu9ghducvuypjq68mq2s5lvsct': { name: 'ampLUNA', decimals: 6, geckoId: 'eris-amplified-luna' },
+                        'terra10aa3zdkrc7jwuf8ekl3zq7e7m42vmzqehcmu74e4egc7xkm5kr2s0muyst': { name: 'SOLID',   decimals: 6, geckoId: 'solid-2' },
+                        'terra1lxx40s29qvkrcj8fsa3yzyehy7w50umdvvnls2r830rys6lu2zns63eelv': { name: 'ROAR',    decimals: 6, geckoId: 'lion-dao' },
+                        'terra17aj4ty4sz4yhgm08na8drc0v03v2jwr3waxcqrwhajj729zhl7zqnpc0ml': { name: 'bLUNA',   decimals: 6, geckoId: 'backbone-labs-staked-luna' },
+                    };
+
+                    const voteTokens = {};   // keyed by token identity, value = { name, amount, geckoId, denom, cw20 }
                     const votePeriods = [];
                     const voteBuckets = voteResp?.data?.buckets || voteResp?.data || [];
                     if (Array.isArray(voteBuckets)) {
@@ -4818,15 +4840,28 @@ est. APR 58.53 %"></textarea>
                             const rewards = b.rewards || b.assets || [];
                             for (const r of rewards) {
                                 const info = r?.info || r?.asset?.info;
-                                const amt  = Number(r?.amount || r?.asset?.amount || 0) / 1e6;
+                                if (!info) continue;
+                                const cw20  = info.cw20  || null;
+                                const denom = info.native || null;
+                                const lookup = cw20 ? CW20_NAMES[cw20] : (denom ? NATIVE_DENOM_NAMES[denom] : null);
+                                const decimals = lookup?.decimals ?? 6;
+                                const amt = Number(r?.amount || r?.asset?.amount || 0) / Math.pow(10, decimals);
                                 if (amt <= 0) continue;
-                                // Token label resolution — for now use a short denom; we
-                                // can fold in a friendly-name map later.
-                                const label = info?.cw20
-                                    ? info.cw20.slice(0, 8) + '…'
-                                    : (info?.native || '?');
-                                if (!voteTokens[label]) voteTokens[label] = { amount: 0 };
-                                voteTokens[label].amount += amt;
+                                const name = lookup?.name
+                                    || (cw20 ? cw20.slice(0, 10) + '…' : (denom ? denom.slice(0, 12) + '…' : '?'));
+                                // Key by identity so different display names for the same
+                                // token can't collide and so rendering can re-price live.
+                                const key = cw20 || denom || name;
+                                if (!voteTokens[key]) {
+                                    voteTokens[key] = {
+                                        name,
+                                        amount: 0,
+                                        cw20,
+                                        denom,
+                                        geckoId: lookup?.geckoId || null,
+                                    };
+                                }
+                                voteTokens[key].amount += amt;
                             }
                         }
                     }
@@ -10892,16 +10927,37 @@ est. APR 58.53 %"></textarea>
                     if (voteEpcEl) voteEpcEl.textContent = 'recently claimed';
                     if (voteListEl) voteListEl.innerHTML = '<span class="text-gray-500">No tokens claimable right now. New bribes accrue this epoch.</span>';
                 } else {
-                    // Compute USD using cached price feed where token has a known geckoId.
-                    // Token labels currently come as denoms — extend with a friendly-name
-                    // map later when more vote-reward data is seen.
+                    // Rev 3.48 — Price each token using cachedPriceData (CoinGecko).
+                    // Each token entry has a geckoId attached at capture time so we can
+                    // look up its USD price live. Tokens without a known geckoId render
+                    // their amount but contribute $0 to the total (and we hint at that
+                    // in the row so the discrepancy isn't silent).
                     let voteUsdTotal = 0;
-                    const rows = Object.entries(live.vote.tokens).map(([label, data]) => {
-                        const amt = data.amount;
+                    const rows = Object.entries(live.vote.tokens).map(([key, data]) => {
+                        const amt  = data.amount;
+                        const name = data.name || key;
                         const fmtAmt = amt >= 1e6 ? (amt / 1e6).toFixed(2) + 'M'
                                     : amt >= 1e3 ? (amt / 1e3).toFixed(2) + 'K'
                                     : amt.toFixed(2);
-                        return `<div class="flex justify-between gap-2"><span class="text-white">${label}</span><span class="text-gray-400 font-mono">${fmtAmt}</span></div>`;
+
+                        // Price lookup via geckoId in the cached CoinGecko feed
+                        const priceUsd = data.geckoId
+                            ? (window.cachedPriceData?.[data.geckoId]?.usd ?? 0)
+                            : 0;
+                        const tokenUsd = amt * priceUsd;
+                        voteUsdTotal += tokenUsd;
+
+                        const usdLabel = priceUsd > 0
+                            ? `<span class="text-green-300 font-mono text-xs">$${tokenUsd.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>`
+                            : `<span class="text-gray-500 text-xs italic" title="No price feed for this token">no price</span>`;
+
+                        return `<div class="flex justify-between items-center gap-2">
+                            <span class="text-white">${name}</span>
+                            <div class="flex items-center gap-2">
+                                <span class="text-gray-400 font-mono">${fmtAmt}</span>
+                                ${usdLabel}
+                            </div>
+                        </div>`;
                     }).join('');
                     if (voteUsdEl) voteUsdEl.textContent = '$' + voteUsdTotal.toLocaleString('en-US', { maximumFractionDigits: 0 });
                     if (voteCntEl) voteCntEl.textContent = `${voteCount} token${voteCount === 1 ? '' : 's'}`;
