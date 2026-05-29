@@ -1215,6 +1215,23 @@
                 </div>
             </div>
             
+            <!-- Pool Health & Exit Risk Section -->
+            <div class="glass-card p-6 mt-6">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h3 class="font-semibold text-lg flex items-center gap-2">
+                            <i class="fas fa-heart-pulse text-rose-400"></i>
+                            Pool Health &amp; Exit Risk
+                        </h3>
+                        <p class="text-xs text-gray-500 mt-1">Pools draining faster than their bucket peers, or showing a combined exit signal (liquidity, base reserve, and token price falling together). Live data vs the previous epoch. Reflects TLA's view of each pool.</p>
+                    </div>
+                </div>
+                <div id="exit-risk-summary" class="mb-4"></div>
+                <div id="exit-risk-panel" class="space-y-2">
+                    <div class="text-gray-500 text-sm">Loading...</div>
+                </div>
+            </div>
+
             <!-- Threshold Watch Section -->
             <div class="glass-card p-6 mt-6">
                 <div class="flex items-center justify-between mb-4">
@@ -1233,7 +1250,7 @@
                     <div>
                         <div class="flex items-center gap-2 mb-3">
                             <span class="text-[10px] px-2 py-1 rounded bg-amber-500/20 text-amber-400 font-medium">AT RISK</span>
-                            <span class="text-xs text-gray-500">Between 1% - 2% of bucket votes</span>
+                            <span class="text-xs text-gray-500">Active, within 1-2% of bucket votes — trend vs last epoch</span>
                         </div>
                         <div id="threshold-at-risk" class="space-y-2">
                             <div class="text-gray-500 text-sm">Loading...</div>
@@ -1243,16 +1260,16 @@
                     <!-- Inactive / Below Threshold -->
                     <div>
                         <div class="flex items-center gap-2 mb-3">
-                            <span class="text-[10px] px-2 py-1 rounded bg-red-500/20 text-red-400 font-medium">RECENTLY DROPPED</span>
-                            <span class="text-xs text-gray-500">Pools that lost active status</span>
+                            <span class="text-[10px] px-2 py-1 rounded bg-red-500/20 text-red-400 font-medium">DROPPED THIS EPOCH</span>
+                            <span class="text-xs text-gray-500">Lost active status this epoch</span>
                         </div>
                         <div id="threshold-recently-dropped" class="space-y-2 mb-4">
                             <div class="text-gray-500 text-sm">Loading...</div>
                         </div>
                         
                         <div class="flex items-center gap-2 mb-3 mt-4 pt-4 border-t border-white/5">
-                            <span class="text-[10px] px-2 py-1 rounded bg-gray-500/20 text-gray-400 font-medium">OTHER INACTIVE</span>
-                            <span class="text-xs text-gray-500">Previously inactive pools</span>
+                            <span class="text-[10px] px-2 py-1 rounded bg-gray-500/20 text-gray-400 font-medium">RECENT DROPS</span>
+                            <span class="text-xs text-gray-500">Dropped in the last 4 epochs</span>
                         </div>
                         <div id="threshold-inactive" class="space-y-2">
                             <div class="text-gray-500 text-sm">Loading...</div>
@@ -2307,6 +2324,7 @@
         // New continuous data sources (post-2026 cron rebuild)
         tlaSnapshotUrl:    'https://raw.githubusercontent.com/defipatriot/tla-snapshot-data_2026/main/data/tla-snapshot.json',
         aprHistoryUrl:     'https://raw.githubusercontent.com/defipatriot/tla-snapshot-data_2026/main/data/apr-history.json',
+        poolStatusHistoryUrl: 'https://raw.githubusercontent.com/defipatriot/tla-snapshot-data_2026/main/data/pool-status-history.json',
         networkPricesUrl:  'https://raw.githubusercontent.com/defipatriot/network-and-prices-data_2026/main/data/network-and-prices.json',
         adaoPositionsUrl:  'https://raw.githubusercontent.com/defipatriot/adao-positions-data_2026/main/data/current.json',
         adaoMembersUrl:    'https://raw.githubusercontent.com/defipatriot/adao-positions-data_2026/main/data/members.json',
@@ -2380,6 +2398,8 @@
         previousEpochData: null,
         prevLeaderboardAvg: null, // independent leaderboard movement index (Overview cards only) — NOT used by trend charts
         prevAprByName: {}, // { poolName: last-completed-epoch amplified APR } for the APR movement badge (apr-history cron)
+        poolStatusHistory: null, // raw pool-status-history cron rollup (per-epoch VP + active status)
+        poolHistoryByKey: null,  // Map "name|bucket" -> { dex, epochs } built from poolStatusHistory
         previousAdaoSnap: null,
         previousEpochNumber: null, // Actual epoch number of loaded previous data (may not be epoch-1 if gaps exist)
         historyData: [], // Array of {epoch, metrics} for trend display
@@ -3214,6 +3234,7 @@
                 ssWeeklyAvgText,
                 knownTokensResp,
                 aprHistResp,
+                poolStatusResp,
             ] = await Promise.all([
                 fetch(CONFIG.tlaSnapshotUrl).then(r => r.ok ? r.json() : null).catch(e => { console.warn('tla-snapshot fetch:', e.message); return null; }),
                 fetch(CONFIG.networkPricesUrl).then(r => r.ok ? r.json() : null).catch(e => { console.warn('network-prices fetch:', e.message); return null; }),
@@ -3240,6 +3261,9 @@
                 fetch(CONFIG.knownTokensUrl).then(r => r.ok ? r.json() : null).catch(() => null),
                 // Per-epoch APR rollup (apr-history cron). Graceful null until the file exists.
                 fetch(CONFIG.aprHistoryUrl).then(r => r.ok ? r.json() : null).catch(() => null),
+                // Per-epoch pool VP + active-status history (pool-status-history cron).
+                // Powers Threshold Watch trend + the 4-epoch drop list. Graceful null until it exists.
+                fetch(CONFIG.poolStatusHistoryUrl).then(r => r.ok ? r.json() : null).catch(() => null),
             ]);
 
             // Populate the runtime token-names map. Underscore-prefixed keys
@@ -3377,6 +3401,22 @@
                 const nm = k.split('|')[0];
                 if (v > 0) store.prevAprByName[nm] = Math.max(store.prevAprByName[nm] || 0, v);
             });
+
+            // Pool status/VP history -> fast lookup keyed "name|bucket" (matches the
+            // name+bucket convention used throughout Threshold Watch). On duplicate
+            // name+bucket (rare), keep the entry with more epochs of coverage.
+            store.poolStatusHistory = poolStatusResp;
+            store.poolHistoryByKey = new Map();
+            if (poolStatusResp?.pools) {
+                for (const hp of poolStatusResp.pools) {
+                    const key = `${hp.name}|${hp.bucket}`;
+                    const existing = store.poolHistoryByKey.get(key);
+                    const nEp = Object.keys(hp.epochs || {}).length;
+                    if (!existing || nEp > Object.keys(existing.epochs || {}).length) {
+                        store.poolHistoryByKey.set(key, { dex: hp.dex, epochs: hp.epochs || {} });
+                    }
+                }
+            }
 
             // Try to load the previous weekly archive for trend comparison (if exists)
             try {
@@ -4754,6 +4794,7 @@
         renderTopPools();
         renderWaterfallChart('STABLE');
         renderThresholdWatch();
+        try { renderExitRisk(); } catch (err) { console.warn('renderExitRisk:', err); }
         setupVotionFilters();
     }
     
@@ -5172,376 +5213,303 @@
         `).join('');
     }
     
-    // Render Threshold Watch section
+    // Render Pool Health & Exit Risk panel (TLA-wide; not member-filtered).
+    // Detection tiers (validated against real daily archives):
+    //   - Relative outflow: a pool's depth draining materially faster than its
+    //     bucket's MEDIAN move — market-normalized so a broad price dip (every pool
+    //     down ~10%) does NOT false-alarm; only genuine outliers flag.
+    //   - Combined exit signal: pool depth + base-asset reserve + token price ALL
+    //     falling together (the actual rug pattern). Single signals are informational;
+    //     the combination is the alarm.
+    // Current depth/staked come from the LIVE snapshot (freshest); reserves come from
+    // the pool-status-history rollup (the live pool objects don't carry lp_health).
+    function renderExitRisk() {
+        const panel = document.getElementById('exit-risk-panel');
+        const summaryEl = document.getElementById('exit-risk-summary');
+        if (!panel) return;
+
+        // Derive the comparison epochs from the history file itself (robust to cron lag).
+        // We compare WITHIN each pool's own pool_address|bucket series — never by name —
+        // so the genuine old/new same-name pools (LUNA-WBTC, LUNA-SOLID, ...) can't
+        // cross-wire and produce phantom -99% drops.
+        const heps = (store.poolStatusHistory?.epochs || []).slice().sort((a, b) => a - b);
+        if (heps.length < 2) {
+            if (summaryEl) summaryEl.innerHTML = '';
+            panel.innerHTML = `<div class="p-3 rounded-lg bg-white/[0.02] text-gray-500 text-sm">Exit-risk tracking needs at least two epochs of history. It will populate as the pool-status-history cron accumulates data.</div>`;
+            return;
+        }
+        const curEpoch = heps[heps.length - 1], prevEpoch = heps[heps.length - 2];
+        const curE = String(curEpoch), prevE = String(prevEpoch);
+
+        const BASE = new Set(['LUNA','USDC','USDT','EURe','axlUSDC','USDC.axl','wBTC','WBTC','wstETH','WETH','PAXG','axlUSDT','bLUNA','ampLUNA','stLUNA','arbLUNA']);
+        const chg = (a, b) => (a && a > 0) ? ((b - a) / a) * 100 : null;
+
+        // Per-pool deltas from each pool's OWN history series (curEpoch vs prevEpoch).
+        const recs = [];
+        let totalCurStaked = 0, totalPrevStaked = 0;
+        for (const p of store.poolStatusHistory.pools) {
+            const hp = p.epochs?.[prevE], hc = p.epochs?.[curE];
+            if (!hp || !hc) continue;
+            totalCurStaked += (hc.staked_usd || 0); totalPrevStaked += (hp.staked_usd || 0);
+            if ((hp.depth_usd || 0) < 5000) continue; // skip dust pools
+            const dDepth = chg(hp.depth_usd, hc.depth_usd);
+            const dStaked = chg(hp.staked_usd, hc.staked_usd);
+            let dBase = null, dTok = null, tokSym = null;
+            const a0b = BASE.has(hc.a0_sym), a1b = BASE.has(hc.a1_sym);
+            if (a0b && !a1b) { dBase = chg(hp.a0_amt, hc.a0_amt); dTok = chg(hp.a1_px, hc.a1_px); tokSym = hc.a1_sym; }
+            else if (a1b && !a0b) { dBase = chg(hp.a1_amt, hc.a1_amt); dTok = chg(hp.a0_px, hc.a0_px); tokSym = hc.a0_sym; }
+            recs.push({ name: p.name, bucket: p.bucket, dex: p.dex, dDepth, dStaked, dBase, dTok, tokSym });
+        }
+
+        // Market normalization: bucket median depth change.
+        const byBucket = {};
+        recs.forEach(r => { if (r.dDepth != null) (byBucket[r.bucket] ||= []).push(r.dDepth); });
+        const median = (arr) => { if (!arr.length) return 0; const s = [...arr].sort((a, b) => a - b); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+        const bucketMed = {}; Object.keys(byBucket).forEach(b => bucketMed[b] = median(byBucket[b]));
+
+        // Flagging.
+        const flagged = [];
+        for (const r of recs) {
+            const rel = (r.dDepth != null) ? r.dDepth - (bucketMed[r.bucket] ?? 0) : null;
+            r.rel = rel;
+            const flags = [];
+            if (r.dDepth != null && r.dDepth < -15 && r.dBase != null && r.dBase < -15 && r.dTok != null && r.dTok < -15)
+                flags.push({ label: 'Combined exit signal', sev: 'high' });
+            if (rel != null && rel < -15)
+                flags.push({ label: 'Draining faster than peers', sev: 'med' });
+            if (flags.length) { r.flags = flags; r.maxSev = flags.some(f => f.sev === 'high') ? 'high' : 'med'; flagged.push(r); }
+        }
+        flagged.sort((a, b) => ((b.maxSev === 'high') - (a.maxSev === 'high')) || ((a.dDepth ?? 0) - (b.dDepth ?? 0)));
+
+        // Net-flow summary (TLA-wide).
+        const netStaked = totalCurStaked - totalPrevStaked;
+        const netPct = totalPrevStaked > 0 ? (netStaked / totalPrevStaked * 100) : 0;
+        if (summaryEl) {
+            const up = netStaked >= 0;
+            summaryEl.innerHTML = `
+              <div class="flex items-center justify-between p-3 rounded-lg bg-white/[0.02] border border-white/5">
+                <div class="text-sm text-gray-400">Net TLA staked flow: E${prevEpoch} → E${curEpoch}</div>
+                <div class="mono text-sm font-bold ${up ? 'text-emerald-400' : 'text-red-400'}">${up ? '+' : ''}${fmt$(netStaked)} <span class="text-[11px] text-gray-500">(${up ? '+' : ''}${netPct.toFixed(1)}%)</span></div>
+              </div>`;
+        }
+
+        const arrow = (v) => (v == null) ? '<span class="text-gray-500">\u00b7</span>'
+            : `<span class="${v < 0 ? 'text-red-400' : 'text-emerald-400'} mono">${v >= 0 ? '+' : ''}${v.toFixed(1)}%</span>`;
+        const sevBadge = (sev) => sev === 'high'
+            ? '<span class="text-[9px] px-1.5 py-0.5 rounded bg-red-500/30 text-red-300 font-semibold">HIGH RISK</span>'
+            : '<span class="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 font-semibold">WATCH</span>';
+
+        if (!flagged.length) {
+            panel.innerHTML = `
+              <div class="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                <div class="flex items-center gap-2 text-emerald-400"><i class="fas fa-shield-alt"></i><span class="text-sm font-medium">All clear \u2014 no pools showing exit-risk signals vs last epoch</span></div>
+                <div class="text-xs text-gray-500 mt-1">Watching ${recs.length} pools for accelerated outflow and combined exit signals.</div>
+              </div>`;
+            return;
+        }
+
+        panel.innerHTML = flagged.map(r => {
+            const leftPool = (r.dDepth != null && r.dDepth < -15);
+            const unstakedOnly = (!leftPool && r.dStaked != null && r.dStaked < -15);
+            const typeNote = leftPool ? 'Liquidity leaving the pool' : (unstakedOnly ? 'Unstaked from TLA (stayed in pool)' : '');
+            const flagLabels = r.flags.map(f => `<span class="text-[10px] text-gray-400">${f.label}</span>`).join('<span class="text-gray-600 mx-1">\u00b7</span>');
+            return `
+            <div class="p-3 rounded-lg ${r.maxSev === 'high' ? 'bg-red-500/5 border-red-500/20' : 'bg-amber-500/5 border-amber-500/10'} border">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2"><span class="font-medium">${r.name}</span>${sevBadge(r.maxSev)}<span class="text-[9px] px-1 py-0.5 rounded bg-gray-500/20 text-gray-400">${r.bucket}</span></div>
+                <div class="text-[10px] text-gray-500">${typeNote}</div>
+              </div>
+              <div class="flex items-center flex-wrap gap-x-4 gap-y-1 mt-2 text-[11px]">
+                <div title="Pool depth change vs last epoch">Depth ${arrow(r.dDepth)} <span class="text-gray-600">(peers ${(bucketMed[r.bucket] ?? 0).toFixed(1)}%)</span></div>
+                <div title="TLA staked change">TLA ${arrow(r.dStaked)}</div>
+                ${r.dBase != null ? `<div title="Base-asset reserve change">Base reserve ${arrow(r.dBase)}</div>` : ''}
+                ${r.dTok != null ? `<div title="${r.tokSym || 'Token'} price change">${r.tokSym || 'Token'} px ${arrow(r.dTok)}</div>` : ''}
+              </div>
+              <div class="mt-1">${flagLabels}</div>
+            </div>`;
+        }).join('');
+    }
+
+    // Render Threshold Watch section.
+    // Threshold rule: a pool needs >1% of its bucket's VP to stay active. Activation
+    // is CONCURRENT (current vote share decides current active status), so "about to
+    // drop" can't be read from status alone — we use per-epoch VP history
+    // (pool-status-history cron) to (a) tag danger-band pools with their epoch-over-
+    // epoch trend, and (b) reconstruct which pools dropped in each of the last 4 epochs.
     function renderThresholdWatch() {
         const allPools = store.pools || [];
-        const prevPools = store.previousEpochData?.pools || [];
+        const currentEpoch = store.epoch || 0;
+        const histByKey = store.poolHistoryByKey || new Map();
+        const histFor = (name, bucket) => histByKey.get(`${name}|${bucket}`)?.epochs || {};
 
-        // Member filter: when a member is selected, only show pools they voted for.
-        // Note: ideally we'd filter by "LPs they staked in," but per-member LP staking
-        // is not currently captured in adao-positions. Their VOTES are the closest proxy
-        // we have to "pools they care about." Future cron extension could add LP staking.
+        // Member filter: when a member is selected, restrict to pools they voted for.
         const memberAlloc = getSelectedMemberAllocations();
-        const memberPoolSet = memberAlloc
-            ? new Set([...memberAlloc.votesByPool.keys()])
-            : null;
+        const memberPoolSet = memberAlloc ? new Set([...memberAlloc.votesByPool.keys()]) : null;
         const memberName = memberAlloc
-            ? (memberAlloc.member.name || memberAlloc.member.wallet.slice(0, 12) + '…')
+            ? (memberAlloc.member.name || memberAlloc.member.wallet.slice(0, 12) + '\u2026')
             : null;
-
-        // Update the section header badge + description
         const badge = document.getElementById('threshold-member-badge');
         const desc = document.getElementById('threshold-description');
         if (badge) {
-            if (memberName) {
-                badge.textContent = `Filtered: ${memberName}`;
-                badge.classList.remove('hidden');
-            } else {
-                badge.classList.add('hidden');
-            }
+            if (memberName) { badge.textContent = `Filtered: ${memberName}`; badge.classList.remove('hidden'); }
+            else { badge.classList.add('hidden'); }
         }
         if (desc) {
             desc.textContent = memberName
-                ? `Pools need >1% of bucket votes to stay active. Showing ${memberName}'s pools that are at risk or inactive.`
-                : 'Pools need >1% of bucket votes to stay active. Showing pools at risk and recently inactive.';
+                ? `Pools need >1% of bucket votes to stay active. Showing ${memberName}'s at-risk and recently dropped pools.`
+                : 'Pools need >1% of bucket votes to stay active. Showing pools trending toward the threshold and pools that recently dropped.';
         }
-        
-        // Group by bucket and calculate bucket totals (use ALL pools, not filtered —
-        // bucket percentages must reflect the true bucket-level VP totals)
+
+        // Live bucket VP totals (all pools — bucketPct must reflect true bucket totals).
         const bucketTotals = {};
-        allPools.forEach(p => {
-            if (!bucketTotals[p.bucket]) bucketTotals[p.bucket] = 0;
-            bucketTotals[p.bucket] += (p.vp || 0);
-        });
-        
-        // Previous epoch bucket totals for ranking comparison
-        const prevBucketTotals = {};
-        prevPools.forEach(p => {
-            if (!prevBucketTotals[p.bucket]) prevBucketTotals[p.bucket] = 0;
-            prevBucketTotals[p.bucket] += (p.vp || 0);
-        });
-        
-        // Calculate percentage of bucket for each pool — then optionally filter to member's pools
-        let poolsWithPct = allPools.map(p => {
-            const bucketTotal = bucketTotals[p.bucket] || 1;
-            const pct = ((p.vp || 0) / bucketTotal) * 100;
-            return { ...p, bucketPct: pct };
-        });
-        if (memberPoolSet) {
-            poolsWithPct = poolsWithPct.filter(p => {
-                const key = poolKeyForLookup(p);
-                return key && memberPoolSet.has(key);
-            });
-        }
-        
-        // Previous epoch percentages
-        const prevPoolsWithPct = prevPools.map(p => {
-            const bucketTotal = prevBucketTotals[p.bucket] || 1;
-            const pct = ((p.vp || 0) / bucketTotal) * 100;
-            return { name: p.name, bucket: p.bucket, bucketPct: pct };
-        });
-        
-        // At Risk: Active but between 1% - 2%
-        const atRisk = poolsWithPct
-            .filter(p => p.is_active !== false && p.bucketPct >= 1 && p.bucketPct < 2)
-            .sort((a, b) => a.bucketPct - b.bucketPct); // Lowest first (most at risk)
-        
-        // Inactive: Below 1% or marked inactive
-        const inactive = poolsWithPct
-            .filter(p => p.is_active === false || p.bucketPct < 1)
-            .sort((a, b) => b.bucketPct - a.bucketPct); // Highest first (closest to threshold)
-        
-        // Helper for DEX label
+        allPools.forEach(p => { bucketTotals[p.bucket] = (bucketTotals[p.bucket] || 0) + (p.vp || 0); });
+        const poolsWithPct = allPools.map(p => ({ ...p, bucketPct: ((p.vp || 0) / (bucketTotals[p.bucket] || 1)) * 100 }));
+
+        // Member predicate (keyed by gauge_pool_id, same as poolKeyForLookup).
+        const applyMemberFilter = (arr) => memberPoolSet
+            ? arr.filter(p => p.gauge_pool_id && memberPoolSet.has(p.gauge_pool_id))
+            : arr;
+
+        // ---- Helpers ----
         const getDexLabel = (dex) => {
             if (dex?.includes('Astro')) return '<span class="text-[9px] px-1 py-0.5 rounded bg-blue-500/20 text-blue-400">Astro</span>';
             if (dex?.includes('Skeleton')) return '<span class="text-[9px] px-1 py-0.5 rounded bg-emerald-500/20 text-emerald-400">Skeleton</span>';
             return '';
         };
-        
-        // Helper for bucket badge
         const getBucketBadge = (bucket) => {
-            const colors = {
-                'STABLE': 'bg-cyan-500/20 text-cyan-400',
-                'PROJECT': 'bg-purple-500/20 text-purple-400',
-                'BLUECHIP': 'bg-blue-500/20 text-blue-400',
-                'SINGLE': 'bg-amber-500/20 text-amber-400'
-            };
+            const colors = { 'STABLE': 'bg-cyan-500/20 text-cyan-400', 'PROJECT': 'bg-purple-500/20 text-purple-400', 'BLUECHIP': 'bg-blue-500/20 text-blue-400', 'SINGLE': 'bg-amber-500/20 text-amber-400' };
             return `<span class="text-[9px] px-1 py-0.5 rounded ${colors[bucket] || 'bg-gray-500/20 text-gray-400'}">${bucket}</span>`;
         };
-        
-        // Helper for position change - also detects activation state changes
-        const getPositionChange = (poolName, bucket, currentPct) => {
-            const prevPool = prevPoolsWithPct.find(p => p.name === poolName && p.bucket === bucket);
-            if (!prevPool) return '<span class="text-[9px] px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400">NEW</span>';
-            
-            const pctChange = currentPct - prevPool.bucketPct;
-            const wasActive = prevPool.bucketPct >= 1;
-            const isActive = currentPct >= 1;
-            
-            // Check for state transitions
-            if (!wasActive && isActive) {
-                // Just became active!
-                return `<span class="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/30 text-emerald-300 font-semibold animate-pulse">🎉 JUST ACTIVATED</span>`;
-            } else if (wasActive && !isActive) {
-                // Just became inactive!
-                return `<span class="text-[9px] px-1.5 py-0.5 rounded bg-red-500/30 text-red-300 font-semibold">⚠️ JUST DROPPED</span>`;
-            }
-            
-            // Normal change display
-            if (pctChange > 0.1) {
-                return `<span class="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400">▲ +${pctChange.toFixed(2)}%</span>`;
-            } else if (pctChange < -0.1) {
-                return `<span class="text-[9px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400">▼ ${pctChange.toFixed(2)}%</span>`;
-            } else {
-                return '<span class="text-[9px] px-1.5 py-0.5 rounded bg-gray-500/20 text-gray-400">No Change</span>';
-            }
+        // Trend of an active pool vs its previous-epoch bucket % (from history).
+        const trendBadge = (name, bucket, curPct) => {
+            const prev = histFor(name, bucket)[String(currentEpoch - 1)]?.bucket_pct;
+            if (prev == null) return '<span class="text-[9px] px-1.5 py-0.5 rounded bg-gray-500/20 text-gray-400" title="No prior-epoch data yet">\u2014 no trend</span>';
+            const d = curPct - prev;
+            if (d < -0.02) return `<span class="text-[9px] px-1.5 py-0.5 rounded bg-red-500/25 text-red-300 font-semibold" title="Falling toward the 1% threshold">\u25bc falling ${d.toFixed(2)}%</span>`;
+            if (d > 0.02) return `<span class="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400" title="Gaining share">\u25b2 rising +${d.toFixed(2)}%</span>`;
+            return '<span class="text-[9px] px-1.5 py-0.5 rounded bg-gray-500/20 text-gray-400">steady</span>';
         };
-        
-        // Render At Risk
-        const atRiskContainer = document.getElementById('threshold-at-risk');
-        const hasMoreAtRisk = atRisk.length > 5;
-        
-        if (atRisk.length === 0) {
-            const emptyMsg = memberName
-                ? `None of ${memberName}'s pools are currently at risk`
-                : 'No pools currently at risk - all active pools are above 2%';
-            atRiskContainer.innerHTML = `
-                <div class="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                    <div class="flex items-center gap-2 text-emerald-400">
-                        <i class="fas fa-shield-alt"></i>
-                        <span class="text-sm">${emptyMsg}</span>
-                    </div>
-                </div>
-            `;
+        // Activation status at an epoch: live for currentEpoch, history otherwise.
+        const activeAt = (name, bucket, e) => {
+            if (e === currentEpoch) {
+                const lp = allPools.find(x => x.name === name && x.bucket === bucket);
+                return lp ? (lp.is_active === true) : null;
+            }
+            const ed = histFor(name, bucket)[String(e)];
+            return ed ? ed.active : null;
+        };
+
+        // =====================================================================
+        // SECTION 1 — Threshold Watch: active danger-band pools (1-2%), most at
+        // risk first, each tagged with its epoch-over-epoch trend. Top 5 shown;
+        // the rest of the band is behind an expand button.
+        // =====================================================================
+        const danger = applyMemberFilter(poolsWithPct.filter(p => p.is_active === true && p.bucketPct >= 1 && p.bucketPct < 2))
+            .sort((a, b) => a.bucketPct - b.bucketPct);
+        const atRiskC = document.getElementById('threshold-at-risk');
+        if (!danger.length) {
+            atRiskC.innerHTML = `<div class="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20"><div class="flex items-center gap-2 text-emerald-400"><i class="fas fa-shield-alt"></i><span class="text-sm">${memberName ? `None of ${memberName}'s pools are near the threshold` : 'No active pools are within 1-2% of the threshold'}</span></div></div>`;
         } else {
-            const renderAtRiskPool = (p, isHidden = false) => `
-                <div class="flex items-center justify-between p-3 rounded-lg bg-amber-500/5 border border-amber-500/10 hover:bg-amber-500/10 transition-colors at-risk-pool-item ${isHidden ? 'at-risk-pool-hidden hidden' : ''}">
+            const row = (p, hidden) => `
+                <div class="flex items-center justify-between p-3 rounded-lg bg-amber-500/5 border border-amber-500/10 hover:bg-amber-500/10 transition-colors at-risk-pool-item ${hidden ? 'at-risk-pool-hidden hidden' : ''}">
                     <div class="flex flex-col gap-1">
-                        <div class="flex items-center gap-2">
-                            <span class="font-medium">${p.name}</span>
-                            ${getPositionChange(p.name, p.bucket, p.bucketPct)}
-                        </div>
-                        <div class="flex items-center gap-1">
-                            ${getDexLabel(p.dex)}
-                            ${getBucketBadge(p.bucket)}
-                        </div>
+                        <div class="flex items-center gap-2"><span class="font-medium">${p.name}</span>${trendBadge(p.name, p.bucket, p.bucketPct)}</div>
+                        <div class="flex items-center gap-1">${getDexLabel(p.dex)}${getBucketBadge(p.bucket)}</div>
                     </div>
                     <div class="text-right cursor-pointer hover:scale-105 transition-transform pool-history-trigger bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-lg px-3 py-2" data-pool="${p.name}" data-bucket="${p.bucket}" title="Click for history">
-                        <div class="mono text-amber-400 font-bold flex items-center gap-1">
-                            ${p.bucketPct.toFixed(2)}%
-                            <i class="fas fa-chart-line text-[10px] opacity-60"></i>
-                        </div>
+                        <div class="mono text-amber-400 font-bold flex items-center gap-1">${p.bucketPct.toFixed(2)}%<i class="fas fa-chart-line text-[10px] opacity-60"></i></div>
                         <div class="text-[10px] text-gray-500">${fmtNum(p.vp)} VP</div>
                     </div>
-                </div>
-            `;
-            
-            const visibleHtml = atRisk.slice(0, 5).map(p => renderAtRiskPool(p, false)).join('');
-            const hiddenHtml = hasMoreAtRisk ? atRisk.slice(5).map(p => renderAtRiskPool(p, true)).join('') : '';
-            const expandBtnHtml = hasMoreAtRisk ? `
-                <button id="expand-at-risk-btn" class="w-full mt-2 py-2 px-3 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 text-amber-400 text-sm transition-colors flex items-center justify-center gap-2">
-                    <i class="fas fa-chevron-down"></i>
-                    <span>Show ${atRisk.length - 5} more at-risk pools</span>
-                </button>
-            ` : '';
-            
-            atRiskContainer.innerHTML = visibleHtml + hiddenHtml + expandBtnHtml;
-            
-            // Add expand button listener
-            if (hasMoreAtRisk) {
-                document.getElementById('expand-at-risk-btn')?.addEventListener('click', function() {
-                    document.querySelectorAll('.at-risk-pool-hidden').forEach(el => el.classList.remove('hidden'));
-                    this.remove();
-                });
-            }
+                </div>`;
+            const visible = danger.slice(0, 5).map(p => row(p, false)).join('');
+            const hidden = danger.length > 5 ? danger.slice(5).map(p => row(p, true)).join('') : '';
+            const btn = danger.length > 5 ? `<button id="expand-at-risk-btn" class="w-full mt-2 py-2 px-3 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 text-amber-400 text-sm transition-colors flex items-center justify-center gap-2"><i class="fas fa-chevron-down"></i><span>Show ${danger.length - 5} more within 1-2%</span></button>` : '';
+            atRiskC.innerHTML = visible + hidden + btn;
+            if (danger.length > 5) document.getElementById('expand-at-risk-btn')?.addEventListener('click', function () { document.querySelectorAll('.at-risk-pool-hidden').forEach(el => el.classList.remove('hidden')); this.remove(); });
         }
-        
-        // Separate recently dropped (this epoch) from other inactive pools
-        const currentEpoch = store.epoch || 166;
-        const prevEpoch = store.previousEpochNumber || (currentEpoch - 1);
-        
-        // Find pools that JUST dropped (were active in previous epoch, now inactive)
-        const justDropped = inactive.filter(p => {
-            const prevPool = prevPoolsWithPct.find(pp => pp.name === p.name && pp.bucket === p.bucket);
-            if (!prevPool) return false; // Not in previous data, can't determine
-            const wasActive = prevPool.bucketPct >= 1;
-            const isActive = p.bucketPct >= 1;
-            return wasActive && !isActive; // Was active, now inactive
-        });
-        
-        // Other inactive pools (were already inactive or new)
-        const otherInactive = inactive.filter(p => {
-            const prevPool = prevPoolsWithPct.find(pp => pp.name === p.name && pp.bucket === p.bucket);
-            if (!prevPool) return true; // New pool or no previous data
-            const wasActive = prevPool.bucketPct >= 1;
-            const isActive = p.bucketPct >= 1;
-            return !(wasActive && !isActive); // NOT a just-dropped pool
-        });
-        
-        // Render Recently Dropped section
-        const recentlyDroppedContainer = document.getElementById('threshold-recently-dropped');
-        const showAllDropped = justDropped.length > 10; // If big shift, show all regardless
-        const initialLimit = showAllDropped ? justDropped.length : 5;
-        const hasMoreDropped = !showAllDropped && justDropped.length > 5;
-        
-        if (justDropped.length === 0) {
-            const emptyMsg = memberName
-                ? `None of ${memberName}'s pools dropped this epoch`
-                : 'No pools dropped this epoch - all active pools maintained their status';
-            recentlyDroppedContainer.innerHTML = `
-                <div class="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                    <div class="flex items-center gap-2 text-emerald-400">
-                        <i class="fas fa-check-circle"></i>
-                        <span class="text-sm">${emptyMsg}</span>
-                    </div>
-                </div>
-            `;
-        } else {
-            let headerHtml = '';
-            if (showAllDropped) {
-                headerHtml = `
-                    <div class="p-3 rounded-lg bg-red-500/20 border border-red-500/30 mb-3">
-                        <div class="flex items-center gap-2 text-red-400">
-                            <i class="fas fa-exclamation-triangle"></i>
-                            <span class="font-semibold">Major Shift Detected!</span>
-                        </div>
-                        <div class="text-sm text-red-300 mt-1">${justDropped.length} pools dropped in E${currentEpoch} - showing all</div>
-                    </div>
-                `;
+
+        // =====================================================================
+        // SECTION 2 — Inactive: pools that dropped THIS epoch (primary), plus an
+        // expandable list of all OTHER drops within the last 4 epochs.
+        // =====================================================================
+        const universe = new Map();
+        allPools.forEach(p => universe.set(`${p.name}|${p.bucket}`, { name: p.name, bucket: p.bucket, dex: p.dex, gauge_pool_id: p.gauge_pool_id }));
+        (store.poolStatusHistory?.pools || []).forEach(hp => { const k = `${hp.name}|${hp.bucket}`; if (!universe.has(k)) universe.set(k, { name: hp.name, bucket: hp.bucket, dex: hp.dex, gauge_pool_id: null }); });
+
+        const windowEpochs = [];
+        for (let e = currentEpoch - 3; e <= currentEpoch; e++) if (e >= 1) windowEpochs.push(e);
+
+        const dropsThisEpoch = [];
+        const dropsEarlier = [];
+        for (const u of universe.values()) {
+            let dropEpoch = null;
+            for (let i = 1; i < windowEpochs.length; i++) {
+                const e0 = windowEpochs[i - 1], e1 = windowEpochs[i];
+                if (activeAt(u.name, u.bucket, e0) === true && activeAt(u.name, u.bucket, e1) === false) dropEpoch = e1;
             }
-            
-            const droppedPoolsHtml = justDropped.slice(0, initialLimit).map(p => `
-                <div class="flex items-center justify-between p-3 rounded-lg bg-red-500/5 border border-red-500/10 hover:bg-red-500/10 transition-colors dropped-pool-item">
+            if (dropEpoch == null) continue;
+            const cur = poolsWithPct.find(p => p.name === u.name && p.bucket === u.bucket);
+            const rec = {
+                name: u.name, bucket: u.bucket, dex: u.dex, dropEpoch,
+                gauge_pool_id: cur ? cur.gauge_pool_id : u.gauge_pool_id,
+                bucketPct: cur ? cur.bucketPct : (histFor(u.name, u.bucket)[String(currentEpoch)]?.bucket_pct ?? 0),
+                vp: cur ? cur.vp : 0,
+            };
+            if (dropEpoch === currentEpoch) dropsThisEpoch.push(rec); else dropsEarlier.push(rec);
+        }
+        const dropsThisEpochF = applyMemberFilter(dropsThisEpoch).sort((a, b) => b.bucketPct - a.bucketPct);
+        const dropsEarlierF = applyMemberFilter(dropsEarlier).sort((a, b) => (b.dropEpoch - a.dropEpoch) || (b.bucketPct - a.bucketPct));
+
+        // ---- Primary: dropped this epoch ----
+        const rc = document.getElementById('threshold-recently-dropped');
+        if (!dropsThisEpochF.length) {
+            rc.innerHTML = `<div class="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20"><div class="flex items-center gap-2 text-emerald-400"><i class="fas fa-check-circle"></i><span class="text-sm">${memberName ? `None of ${memberName}'s pools dropped this epoch` : `No pools dropped in E${currentEpoch} \u2014 all active pools held their status`}</span></div></div>`;
+        } else {
+            const major = dropsThisEpochF.length > 8;
+            const header = major ? `<div class="p-3 rounded-lg bg-red-500/20 border border-red-500/30 mb-3"><div class="flex items-center gap-2 text-red-400"><i class="fas fa-exclamation-triangle"></i><span class="font-semibold">Major Shift Detected!</span></div><div class="text-sm text-red-300 mt-1">${dropsThisEpochF.length} pools dropped in E${currentEpoch}</div></div>` : '';
+            const row = (p) => `
+                <div class="flex items-center justify-between p-3 rounded-lg bg-red-500/5 border border-red-500/10 hover:bg-red-500/10 transition-colors">
                     <div class="flex flex-col gap-1">
-                        <div class="flex items-center gap-2">
-                            <span class="font-medium text-red-300">${p.name}</span>
-                            <span class="text-[9px] px-1.5 py-0.5 rounded bg-red-500/30 text-red-300 font-semibold">Dropped E${currentEpoch}</span>
-                        </div>
-                        <div class="flex items-center gap-1">
-                            ${getDexLabel(p.dex)}
-                            ${getBucketBadge(p.bucket)}
-                        </div>
+                        <div class="flex items-center gap-2"><span class="font-medium text-red-300">${p.name}</span><span class="text-[9px] px-1.5 py-0.5 rounded bg-red-500/30 text-red-300 font-semibold">Dropped E${currentEpoch}</span></div>
+                        <div class="flex items-center gap-1">${getDexLabel(p.dex)}${getBucketBadge(p.bucket)}</div>
                     </div>
                     <div class="text-right cursor-pointer hover:scale-105 transition-transform pool-history-trigger bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-lg px-3 py-2" data-pool="${p.name}" data-bucket="${p.bucket}" title="Click for history">
-                        <div class="mono text-red-400 font-bold flex items-center gap-1">
-                            ${p.bucketPct.toFixed(2)}%
-                            <i class="fas fa-chart-line text-[10px] opacity-60"></i>
-                        </div>
+                        <div class="mono text-red-400 font-bold flex items-center gap-1">${p.bucketPct.toFixed(2)}%<i class="fas fa-chart-line text-[10px] opacity-60"></i></div>
                         <div class="text-[10px] text-gray-500">${fmtNum(p.vp)} VP</div>
                     </div>
-                </div>
-            `).join('');
-            
-            // Hidden pools (shown when expanded)
-            const hiddenPoolsHtml = hasMoreDropped ? justDropped.slice(5).map(p => `
-                <div class="flex items-center justify-between p-3 rounded-lg bg-red-500/5 border border-red-500/10 hover:bg-red-500/10 transition-colors dropped-pool-hidden hidden">
-                    <div class="flex flex-col gap-1">
-                        <div class="flex items-center gap-2">
-                            <span class="font-medium text-red-300">${p.name}</span>
-                            <span class="text-[9px] px-1.5 py-0.5 rounded bg-red-500/30 text-red-300 font-semibold">Dropped E${currentEpoch}</span>
-                        </div>
-                        <div class="flex items-center gap-1">
-                            ${getDexLabel(p.dex)}
-                            ${getBucketBadge(p.bucket)}
-                        </div>
-                    </div>
-                    <div class="text-right cursor-pointer hover:scale-105 transition-transform pool-history-trigger bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-lg px-3 py-2" data-pool="${p.name}" data-bucket="${p.bucket}" title="Click for history">
-                        <div class="mono text-red-400 font-bold flex items-center gap-1">
-                            ${p.bucketPct.toFixed(2)}%
-                            <i class="fas fa-chart-line text-[10px] opacity-60"></i>
-                        </div>
-                        <div class="text-[10px] text-gray-500">${fmtNum(p.vp)} VP</div>
-                    </div>
-                </div>
-            `).join('') : '';
-            
-            const expandBtnHtml = hasMoreDropped ? `
-                <button id="expand-dropped-btn" class="w-full mt-2 py-2 px-3 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 text-sm transition-colors flex items-center justify-center gap-2">
-                    <i class="fas fa-chevron-down"></i>
-                    <span>Show ${justDropped.length - 5} more dropped pools</span>
-                </button>
-            ` : '';
-            
-            recentlyDroppedContainer.innerHTML = headerHtml + droppedPoolsHtml + hiddenPoolsHtml + expandBtnHtml;
-            
-            // Add expand button listener
-            if (hasMoreDropped) {
-                document.getElementById('expand-dropped-btn')?.addEventListener('click', function() {
-                    document.querySelectorAll('.dropped-pool-hidden').forEach(el => el.classList.remove('hidden'));
-                    this.remove();
-                });
-            }
+                </div>`;
+            rc.innerHTML = header + dropsThisEpochF.map(row).join('');
         }
-        
-        // Render Other Inactive
-        const inactiveContainer = document.getElementById('threshold-inactive');
-        const hasMoreInactive = otherInactive.length > 5;
-        
-        if (otherInactive.length === 0) {
-            inactiveContainer.innerHTML = '<div class="text-gray-500 text-sm p-3 bg-white/[0.02] rounded-lg">No other inactive pools</div>';
+
+        // ---- Expandable: other drops within the last 4 epochs ----
+        const ic = document.getElementById('threshold-inactive');
+        if (!dropsEarlierF.length) {
+            ic.innerHTML = `<div class="text-gray-500 text-sm p-3 bg-white/[0.02] rounded-lg">${memberName ? 'No earlier drops for this member' : 'No earlier drops in the last 4 epochs'}</div>`;
         } else {
-            const renderInactivePool = (p, isHidden = false) => {
-                // Try to determine when this pool was last active
-                const prevPool = prevPoolsWithPct.find(pp => pp.name === p.name && pp.bucket === p.bucket);
-                let statusBadge = '';
-                if (!prevPool) {
-                    statusBadge = '<span class="text-[9px] px-1.5 py-0.5 rounded bg-gray-500/20 text-gray-400">Unknown</span>';
-                } else if (prevPool.bucketPct < 1) {
-                    statusBadge = `<span class="text-[9px] px-1.5 py-0.5 rounded bg-gray-500/20 text-gray-400">Inactive since before E${prevEpoch}</span>`;
-                }
-                
-                return `
-                <div class="flex items-center justify-between p-3 rounded-lg bg-gray-500/5 border border-gray-500/10 hover:bg-gray-500/10 transition-colors inactive-pool-item ${isHidden ? 'inactive-pool-hidden hidden' : ''}">
+            const row = (p, hidden) => `
+                <div class="flex items-center justify-between p-3 rounded-lg bg-gray-500/5 border border-gray-500/10 hover:bg-gray-500/10 transition-colors inactive-pool-item ${hidden ? 'inactive-pool-hidden hidden' : ''}">
                     <div class="flex flex-col gap-1">
-                        <div class="flex items-center gap-2">
-                            <span class="font-medium text-gray-400">${p.name}</span>
-                            ${statusBadge}
-                        </div>
-                        <div class="flex items-center gap-1">
-                            ${getDexLabel(p.dex)}
-                            ${getBucketBadge(p.bucket)}
-                        </div>
+                        <div class="flex items-center gap-2"><span class="font-medium text-gray-400">${p.name}</span><span class="text-[9px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400">Dropped E${p.dropEpoch}</span></div>
+                        <div class="flex items-center gap-1">${getDexLabel(p.dex)}${getBucketBadge(p.bucket)}</div>
                     </div>
                     <div class="text-right cursor-pointer hover:scale-105 transition-transform pool-history-trigger bg-gray-500/10 hover:bg-gray-500/20 border border-gray-500/30 rounded-lg px-3 py-2" data-pool="${p.name}" data-bucket="${p.bucket}" title="Click for history">
-                        <div class="mono text-gray-400 font-bold flex items-center gap-1">
-                            ${p.bucketPct.toFixed(2)}%
-                            <i class="fas fa-chart-line text-[10px] opacity-60"></i>
-                        </div>
+                        <div class="mono text-gray-400 font-bold flex items-center gap-1">${p.bucketPct.toFixed(2)}%<i class="fas fa-chart-line text-[10px] opacity-60"></i></div>
                         <div class="text-[10px] text-gray-500">${fmtNum(p.vp)} VP</div>
                     </div>
-                </div>
-            `};
-            
-            const visibleHtml = otherInactive.slice(0, 5).map(p => renderInactivePool(p, false)).join('');
-            const hiddenHtml = hasMoreInactive ? otherInactive.slice(5).map(p => renderInactivePool(p, true)).join('') : '';
-            const expandBtnHtml = hasMoreInactive ? `
-                <button id="expand-inactive-btn" class="w-full mt-2 py-2 px-3 rounded-lg bg-gray-500/10 hover:bg-gray-500/20 border border-gray-500/20 text-gray-400 text-sm transition-colors flex items-center justify-center gap-2">
-                    <i class="fas fa-chevron-down"></i>
-                    <span>Show ${otherInactive.length - 5} more inactive pools</span>
-                </button>
-            ` : '';
-            
-            inactiveContainer.innerHTML = visibleHtml + hiddenHtml + expandBtnHtml;
-            
-            // Add expand button listener
-            if (hasMoreInactive) {
-                document.getElementById('expand-inactive-btn')?.addEventListener('click', function() {
-                    document.querySelectorAll('.inactive-pool-hidden').forEach(el => el.classList.remove('hidden'));
-                    this.remove();
-                });
-            }
+                </div>`;
+            const visible = dropsEarlierF.slice(0, 5).map(p => row(p, false)).join('');
+            const hidden = dropsEarlierF.length > 5 ? dropsEarlierF.slice(5).map(p => row(p, true)).join('') : '';
+            const btn = dropsEarlierF.length > 5 ? `<button id="expand-inactive-btn" class="w-full mt-2 py-2 px-3 rounded-lg bg-gray-500/10 hover:bg-gray-500/20 border border-gray-500/20 text-gray-400 text-sm transition-colors flex items-center justify-center gap-2"><i class="fas fa-chevron-down"></i><span>Show ${dropsEarlierF.length - 5} more recent drops</span></button>` : '';
+            ic.innerHTML = visible + hidden + btn;
+            if (dropsEarlierF.length > 5) document.getElementById('expand-inactive-btn')?.addEventListener('click', function () { document.querySelectorAll('.inactive-pool-hidden').forEach(el => el.classList.remove('hidden')); this.remove(); });
         }
-        
-        // Add click listeners for pool history
+
+        // History click triggers.
         document.querySelectorAll('.pool-history-trigger').forEach(el => {
-            el.addEventListener('click', () => {
-                const poolName = el.dataset.pool;
-                const bucket = el.dataset.bucket;
-                showPoolHistory(poolName, bucket);
-            });
+            el.addEventListener('click', () => showPoolHistory(el.dataset.pool, el.dataset.bucket));
         });
     }
-    
+
     // Track which epoch view is selected for waterfall
     let waterfallEpochView = 'current'; // 'current' or 'next'
     
