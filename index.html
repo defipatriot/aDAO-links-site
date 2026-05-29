@@ -2988,7 +2988,7 @@
             </div>
             <div class="mt-4 text-xs text-gray-500">
                 <button id="changelog-trigger" class="hover:text-cyan-400 transition-colors cursor-pointer">
-                    <span class="font-mono">Rev 3.50</span>
+                    <span class="font-mono">Rev 3.51</span>
                     <span class="opacity-60 mx-1">·</span>
                     <span>Changelog</span>
                 </button>
@@ -7928,6 +7928,9 @@
                     consecutiveStuckRuns: freshness.consecutiveStuckRuns ?? 0,
                     dataFingerprint:      freshness.dataFingerprint ?? null,
                     heartbeatStatus:      freshness.heartbeatStatus ?? null,
+                    // Optional cron-specific stats — currently used by bribes-history's
+                    // epoch-coverage variant. Will be null/undefined for other crons.
+                    stats:                freshness.stats ?? null,
                 };
             }
 
@@ -8016,13 +8019,35 @@
                         capturedStr = 'never';
                     }
 
+                    // Freshness badge (only shown when the cron's heartbeat carries the field).
+                    // For bribes-history specifically, the semantics are epoch coverage
+                    // (see cron source), not raw fingerprint comparison — so the badges
+                    // there read in terms of funded epochs, not consecutive runs.
                     let freshnessBadge = '';
+                    const isBribes = (key === 'bribes-history');
+                    const stats    = rec?.stats || {};
+                    const maxFundedEp = stats.max_funded_epoch;
+                    const epochsAhead = stats.epochs_funded_ahead;
+
                     if (rec?.dataFreshness === 'stuck') {
-                        freshnessBadge = `<div class="text-[10px] text-red-300 mt-1">🔴 data stuck — ${rec.consecutiveStuckRuns || '3+'} consecutive identical runs</div>`;
+                        if (isBribes && typeof maxFundedEp === 'number' && typeof epochsAhead === 'number') {
+                            // epochsAhead is negative when stuck; epochs missed = (-ahead - 1)
+                            const missed = Math.max(1, -epochsAhead - 1);
+                            freshnessBadge = `<div class="text-[10px] text-red-300 mt-1">🔴 ${missed} epoch${missed === 1 ? '' : 's'} unfunded since epoch ${maxFundedEp}</div>`;
+                        } else {
+                            freshnessBadge = `<div class="text-[10px] text-red-300 mt-1">🔴 data stuck — ${rec.consecutiveStuckRuns || '3+'} consecutive identical runs</div>`;
+                        }
                     } else if (rec?.dataFreshness === 'suspicious') {
                         freshnessBadge = `<div class="text-[10px] text-amber-300 mt-1">⚠ data suspicious — ${rec.consecutiveStuckRuns || 2} consecutive identical runs</div>`;
                     } else if (rec?.dataFreshness === 'fresh' && rec?.dataFingerprint) {
-                        freshnessBadge = `<div class="text-[10px] text-gray-500 mt-1" title="${rec.dataFingerprint}">✓ fresh data</div>`;
+                        if (isBribes && typeof maxFundedEp === 'number' && typeof epochsAhead === 'number') {
+                            const aheadText = epochsAhead > 0
+                                ? `${epochsAhead} epoch${epochsAhead === 1 ? '' : 's'} ahead`
+                                : (epochsAhead === 0 ? 'current epoch funded' : 'grace epoch');
+                            freshnessBadge = `<div class="text-[10px] text-gray-500 mt-1" title="${rec.dataFingerprint}">✓ funded through epoch ${maxFundedEp} (${aheadText})</div>`;
+                        } else {
+                            freshnessBadge = `<div class="text-[10px] text-gray-500 mt-1" title="${rec.dataFingerprint}">✓ fresh data</div>`;
+                        }
                     }
 
                     return `
@@ -8083,6 +8108,7 @@
                                 consecutiveStuckRuns: j.consecutiveStuckRuns,
                                 dataFingerprint:      j.dataFingerprint,
                                 heartbeatStatus:      j.status,
+                                stats:                j.stats,
                             });
                             return;
                         }
