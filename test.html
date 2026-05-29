@@ -1032,23 +1032,8 @@
         
         <!-- OVERVIEW TAB -->
         <div id="tab-overview" class="tab-content active" data-cron-source="tla-snapshot,network-and-prices,bribes-history">
-            <!-- Skeleton Swap Data Notice -->
-            <div id="skeleton-swap-notice" class="mb-4 p-4 rounded-lg bg-amber-500/10 border border-amber-500/20">
-                <div class="flex items-start gap-3">
-                    <i class="fas fa-info-circle text-amber-400 mt-0.5"></i>
-                    <div class="flex-1">
-                        <div class="flex items-center justify-between">
-                            <span class="font-medium text-amber-400">Skeleton Swap Data Limitation</span>
-                            <button onclick="document.getElementById('skeleton-swap-notice').classList.add('hidden')" class="text-gray-500 hover:text-gray-300 text-xs">
-                                <i class="fas fa-times"></i>
-                            </button>
-                        </div>
-                        <p class="text-sm text-gray-400 mt-1">
-                            Currently there isn't a reliable way to retrieve Skeleton Swap's liquidity and volume data. We hope this becomes available in the future. Because our mission is to reward LP performance based on historical chain-based data, many visuals and grading systems have no choice but to exclude Skeleton Swap pools from these grades — we simply don't have the data to grade them fairly.
-                        </p>
-                    </div>
-                </div>
-            </div>
+            <!-- Skeleton Swap Data Limitation banner removed — SS grading-exclusion note
+                 still surfaces contextually on the chart line tooltip. -->
             
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <!-- TLA Total VP Chart -->
@@ -2436,6 +2421,11 @@
             staleMs: 36 * 60 * 60 * 1000,
             sourceUrl: 'https://raw.githubusercontent.com/defipatriot/bribes-data_2026/main/data/heartbeat.json',
             description: 'PD bribes + epoch archives',
+            // Bribes are SPORADIC — a single briber, additions days/weeks apart. An
+            // unchanged data fingerprint is normal, not a failure, so dataFreshness
+            // 'stuck' must NOT escalate to a page-wide red alarm here. A genuinely
+            // dead cron is still caught by the age-based warning/stale thresholds above.
+            sporadicData: true,
         },
         'adao-positions': {
             label: 'aDAO Positions',
@@ -2550,8 +2540,9 @@
 
         // Data-freshness check first — if heartbeat says the upstream data is
         // frozen, that's a real bug even if the cron itself is running on time.
-        // 'stuck' beats age-based checks entirely.
-        if (rec.dataFreshness === 'stuck') return 'stuck';
+        // 'stuck' beats age-based checks entirely — EXCEPT for sporadicData crons
+        // (e.g. bribes), where an unchanged fingerprint is expected, not a failure.
+        if (rec.dataFreshness === 'stuck' && !cfg.sporadicData) return 'stuck';
 
         // Age-based check next
         const age = Date.now() - rec.capturedAt.getTime();
