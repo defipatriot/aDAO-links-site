@@ -1680,51 +1680,10 @@
         </div>
     </div>
     
-    <!-- Stale Data Warning Modal -->
-    <div id="stale-data-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] hidden items-center justify-center overflow-y-auto py-8">
-        <div class="bg-gray-900 border-2 border-amber-500/50 rounded-2xl p-6 max-w-lg w-full mx-4 shadow-2xl my-auto" onclick="event.stopPropagation()">
-            <div class="flex items-center gap-4 mb-4">
-                <div class="w-14 h-14 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0">
-                    <i class="fas fa-exclamation-triangle text-amber-400 text-2xl"></i>
-                </div>
-                <div>
-                    <h3 class="text-xl font-bold text-amber-400">Snapshot Missed</h3>
-                    <p class="text-sm text-gray-400">Showing older epoch data</p>
-                </div>
-            </div>
-            
-            <div class="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 mb-4">
-                <p class="text-lg text-center mb-4">
-                    <strong id="stale-data-missed" class="text-amber-400">1 snapshot missed</strong>
-                </p>
-                <p class="text-sm text-gray-300 mb-3">
-                    Showing <strong id="stale-data-epoch" class="text-cyan-400">Epoch 163</strong> data
-                    <span class="text-gray-500">—</span>
-                    <strong id="stale-data-failed" class="text-red-400">Epoch 164</strong> snapshot failed
-                </p>
-                <p class="text-sm text-gray-400 mb-3">
-                    <i class="fas fa-clock text-gray-500 mr-1"></i>
-                    Current epoch is <strong id="stale-data-current" class="text-emerald-400">Epoch 165</strong>
-                </p>
-                <p class="text-sm text-gray-500">
-                    <i class="fas fa-info-circle text-amber-400/60 mr-1"></i>
-                    The snapshot process encountered a connection issue. All charts and statistics reflect the older data shown above.
-                </p>
-            </div>
-            
-            <div class="flex gap-3">
-                <button onclick="acknowledgeStaleData()" class="flex-1 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-400 font-semibold py-3 px-4 rounded-lg transition-colors">
-                    <i class="fas fa-check mr-2"></i>I Understand
-                </button>
-            </div>
-            
-            <div class="mt-4 text-center text-xs text-gray-600">
-                We hope to capture the next epoch successfully
-            </div>
-        </div>
-    </div>
-    
-    <!-- History Modal -->
+    <!-- Stale Data Warning ("Snapshot Missed") modal removed — pivot to cron data;
+         per-epoch snapshot-failure warnings are obsolete under the continuous cron feed. -->
+
+        <!-- History Modal -->
     <div id="history-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden items-center justify-center overflow-y-auto py-8" onclick="closeHistoryModal(event)">
         <div class="bg-gray-900 border border-white/10 rounded-2xl p-6 max-w-2xl w-full mx-4 shadow-2xl my-auto" onclick="event.stopPropagation()">
             <div class="flex items-center justify-between mb-4">
@@ -4251,58 +4210,9 @@
         };
     }
     
-    // Check if data is stale (2+ epochs behind current)
-    function checkForStaleData() {
-        if (!store.currentRealEpoch || !store.epoch) return;
-        
-        const epochsBehind = store.currentRealEpoch - store.epoch;
-        console.log(`Stale check: Data is E${store.epoch}, Current should be E${store.currentRealEpoch}, ${epochsBehind} epoch(s) behind`);
-        
-        if (epochsBehind >= 2) {
-            // Check if user has already acknowledged this session
-            const acknowledged = sessionStorage.getItem('staleDataAcknowledged');
-            if (acknowledged === String(store.epoch)) {
-                console.log('Stale data already acknowledged this session');
-                return;
-            }
-            
-            showStaleDataWarning(store.epoch, store.currentRealEpoch);
-        }
-    }
-    
-    // Show stale data warning modal
-    function showStaleDataWarning(dataEpoch, currentEpoch) {
-        const snapshotsMissed = currentEpoch - dataEpoch - 1; // -1 because current epoch hasn't ended yet
-        const missedText = snapshotsMissed === 1 ? '1 snapshot missed' : `${snapshotsMissed} snapshots missed`;
-        
-        // Calculate which epochs failed (the ones between dataEpoch and currentEpoch)
-        const failedEpochs = [];
-        for (let e = dataEpoch + 1; e < currentEpoch; e++) {
-            failedEpochs.push(e);
-        }
-        const failedText = failedEpochs.length === 1 
-            ? `Epoch ${failedEpochs[0]}` 
-            : `Epochs ${failedEpochs.join(', ')}`;
-        
-        document.getElementById('stale-data-missed').textContent = missedText;
-        document.getElementById('stale-data-epoch').textContent = `Epoch ${dataEpoch}`;
-        document.getElementById('stale-data-failed').textContent = failedText;
-        document.getElementById('stale-data-current').textContent = `Epoch ${currentEpoch}`;
-        
-        const modal = document.getElementById('stale-data-modal');
-        modal.classList.remove('hidden');
-        modal.classList.add('flex');
-    }
-    
-    // Acknowledge stale data warning
-    function acknowledgeStaleData() {
-        sessionStorage.setItem('staleDataAcknowledged', String(store.epoch));
-        
-        const modal = document.getElementById('stale-data-modal');
-        modal.classList.add('hidden');
-        modal.classList.remove('flex');
-    }
-    
+    // Stale-data warning logic (checkForStaleData / showStaleDataWarning /
+    // acknowledgeStaleData) removed — obsolete under continuous cron data feed.
+
     function updateStatus(status, timestamp) {
         const el = document.getElementById('load-status');
         if (status === 'Loaded') {
