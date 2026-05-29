@@ -289,9 +289,7 @@
             #vote-rewards-section button,
             #rebase-rewards-section button { font-size: 0.55rem !important; }
             #vote-tokens-toggle, #vote-tokens-list { display: none !important; }
-            #unclaimed-stale-banner { padding: 0.5rem !important; }
-            #unclaimed-stale-banner .text-sm { font-size: 0.75rem !important; }
-            #unclaimed-stale-banner .text-xs { font-size: 0.65rem !important; line-height: 0.85rem !important; }
+            /* (Rev 3.50: removed dead #unclaimed-stale-banner mobile rules — banner removed) */
 
             /* Rev 3.34 — Mobile-only: shrink Backing / Floor numbers so $12.72 / $137.84
                fits the tile width without truncation. Targets the two specific value
@@ -679,19 +677,6 @@
         }
         .control-btn:hover:not(:disabled) {
             background-color: #4b5563; /* gray-600 */
-        }
-        
-        /* --- Snapshot Link Style --- */
-        #snapshot-link { /* Changed ID from snapshot-btn */
-             cursor: pointer;
-        }
-        #snapshot-link.disabled { /* Style for disabled link */
-             opacity: 0.5;
-             cursor: not-allowed;
-             text-decoration: none; /* Remove underline when disabled */
-        }
-        #snapshot-link.disabled:hover { /* Prevent hover effect when disabled */
-             color: #9ca3af; /* gray-400 */
         }
         
         /* --- Chart Icon Style --- */
@@ -1343,22 +1328,17 @@
                      <h3 class="text-base sm:text-xl font-bold text-white">DAO Unclaimed Rewards</h3>
                  </div>
                  <div class="flex items-center gap-2 flex-shrink-0 hide-on-mobile">
-                     <span id="unclaimed-data-status" class="text-[10px] sm:text-xs text-gray-500 whitespace-nowrap">Data from TLA Snapshot</span>
+                     <span id="unclaimed-data-status" class="text-[10px] sm:text-xs text-gray-500 whitespace-nowrap">Loading...</span>
                      <span id="unclaimed-stale-warning" class="hidden text-[10px] sm:text-xs bg-red-600/80 text-white px-2 py-0.5 rounded-full whitespace-nowrap">
                          <i class="fas fa-exclamation-triangle mr-1"></i>Stale Data
                      </span>
                  </div>
              </div>
-             <!-- Stale Data Alert Banner (hidden by default) -->
-             <div id="unclaimed-stale-banner" class="hide-on-mobile hidden bg-red-900/50 border border-red-500 rounded-lg p-3 mb-4">
-                 <div class="flex items-start gap-2">
-                     <i class="fas fa-exclamation-circle text-red-400 mt-0.5"></i>
-                     <div>
-                         <p class="text-sm text-red-300 font-medium">Snapshot data is outdated</p>
-                         <p id="unclaimed-stale-message" class="text-xs text-red-400/80 mt-1">Showing data from epoch <span id="stale-epoch-num">--</span>. Current epoch is <span id="current-epoch-num">--</span>. This data may not reflect recent claims or changes. Next snapshot will be captured at epoch end.</p>
-                     </div>
-                 </div>
-             </div>
+             <!-- Stale Data Alert Banner removed Rev 3.50.
+                  Was already hidden by applyTlaStaleness on every render (Rev 3.30 replaced
+                  it with the launch modal, which was then itself disabled in Rev 3.49). The
+                  small "Stale Data" pill above (#unclaimed-stale-warning) remains as a
+                  low-noise indicator if it's ever needed. -->
              
              <div class="grid grid-cols-3 gap-2 sm:gap-4">
                  <!-- Deposit Rewards -->
@@ -2747,218 +2727,6 @@
         </div>
     </div>
 
-    <!-- Snapshot Modal -->
-    <div id="snapshotModal" class="modal fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50 hidden opacity-0">
-        <div class="modal-content bg-[#1a1a1a] border border-gray-700 rounded-xl shadow-xl w-full max-w-2xl relative text-white opacity-0 scale-95 p-8 max-h-[90vh] overflow-y-auto">
-            <button class="modal-close absolute top-4 right-4 text-gray-400 hover:text-white text-3xl">&times;</button>
-            <h2 class="text-2xl font-bold text-cyan-400 mb-4">Snapshot Manager</h2>
-            
-            <!-- Mode Toggle -->
-            <div class="flex gap-2 mb-4">
-                <button id="snapshot-mode-paste" onclick="setSnapshotMode('paste')" class="flex-1 px-3 py-2 rounded bg-cyan-600 text-white text-sm font-medium transition-colors">
-                    <i class="fas fa-paste mr-1"></i>Paste from Eris
-                </button>
-                <button id="snapshot-mode-manual" onclick="setSnapshotMode('manual')" class="flex-1 px-3 py-2 rounded bg-gray-700 text-gray-400 text-sm font-medium transition-colors hover:bg-gray-600">
-                    <i class="fas fa-keyboard mr-1"></i>Manual Entry
-                </button>
-            </div>
-            
-            <div class="space-y-6">
-                <!-- PASTE MODE -->
-                <div id="snapshot-paste-mode">
-                    <!-- TLA Token Balances Input -->
-                    <div class="mb-4">
-                        <label class="block text-sm font-medium text-gray-300 mb-2">
-                            TLA Token Balances <span class="text-gray-500">(paste tab-separated: TOKEN &lt;tab&gt; AMOUNT)</span>
-                        </label>
-                        <textarea id="tla-tokens-input" class="w-full h-40 bg-gray-800 border border-gray-600 rounded-lg p-3 text-white font-mono text-sm focus:border-cyan-400 focus:outline-none" placeholder="CAPA	290916.6598134378
-LUNA	39155.8974720723
-ROAR	1832769202.6573815
-ampLUNA	12246.314451128243
-ampCAPA	313947.96729
-ampROAR	505786636.43734485
-xASTRO	20607.544605"></textarea>
-                    </div>
-                    
-                    <!-- TLA USD and APR Input -->
-                    <div class="mb-4">
-                        <label class="block text-sm font-medium text-gray-300 mb-2">
-                            TLA Deposit Value & APR <span class="text-gray-500">(paste from Eris)</span>
-                        </label>
-                        <textarea id="tla-usd-input" class="w-full h-24 bg-gray-800 border border-gray-600 rounded-lg p-3 text-white font-mono text-sm focus:border-cyan-400 focus:outline-none" placeholder="Your deposit
-14 765.85$
-est. APR 58.53 %"></textarea>
-                    </div>
-                </div>
-                
-                <!-- MANUAL MODE -->
-                <div id="snapshot-manual-mode" class="hidden">
-                    <div class="bg-yellow-900/30 border border-yellow-700 p-3 rounded-lg text-sm mb-4">
-                        <p><strong class="text-yellow-300"><i class="fas fa-exclamation-triangle mr-1"></i>Manual Mode:</strong> Use when Eris/DAODAO is unavailable. Enter values directly.</p>
-                    </div>
-                    
-                    <!-- Manual TLA Deposit Value -->
-                    <div class="grid grid-cols-2 gap-4 mb-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-300 mb-2">Total Deposit Value (USD)</label>
-                            <input type="number" id="manual-deposit-usd" class="w-full bg-gray-800 border border-gray-600 rounded-lg p-3 text-white font-mono text-sm focus:border-cyan-400 focus:outline-none" placeholder="14765.85" step="0.01">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-300 mb-2">Est. APR (%)</label>
-                            <input type="number" id="manual-apr" class="w-full bg-gray-800 border border-gray-600 rounded-lg p-3 text-white font-mono text-sm focus:border-cyan-400 focus:outline-none" placeholder="58.53" step="0.01">
-                        </div>
-                    </div>
-                    
-                    <!-- Manual Token Balances -->
-                    <div class="mb-4">
-                        <label class="block text-sm font-medium text-gray-300 mb-2">Token Balances</label>
-                        <div class="grid grid-cols-2 gap-3">
-                            <div class="flex items-center gap-2">
-                                <span class="text-gray-400 w-20 text-sm">LUNA</span>
-                                <input type="number" id="manual-token-LUNA" class="flex-1 bg-gray-800 border border-gray-600 rounded px-2 py-1.5 text-white font-mono text-sm focus:border-cyan-400 focus:outline-none" placeholder="39155.89" step="0.0001">
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <span class="text-gray-400 w-20 text-sm">ampLUNA</span>
-                                <input type="number" id="manual-token-ampLUNA" class="flex-1 bg-gray-800 border border-gray-600 rounded px-2 py-1.5 text-white font-mono text-sm focus:border-cyan-400 focus:outline-none" placeholder="12246.31" step="0.0001">
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <span class="text-gray-400 w-20 text-sm">CAPA</span>
-                                <input type="number" id="manual-token-CAPA" class="flex-1 bg-gray-800 border border-gray-600 rounded px-2 py-1.5 text-white font-mono text-sm focus:border-cyan-400 focus:outline-none" placeholder="290916.65" step="0.0001">
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <span class="text-gray-400 w-20 text-sm">ampCAPA</span>
-                                <input type="number" id="manual-token-ampCAPA" class="flex-1 bg-gray-800 border border-gray-600 rounded px-2 py-1.5 text-white font-mono text-sm focus:border-cyan-400 focus:outline-none" placeholder="313947.96" step="0.0001">
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <span class="text-gray-400 w-20 text-sm">ROAR</span>
-                                <input type="number" id="manual-token-ROAR" class="flex-1 bg-gray-800 border border-gray-600 rounded px-2 py-1.5 text-white font-mono text-sm focus:border-cyan-400 focus:outline-none" placeholder="1832769202" step="0.0001">
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <span class="text-gray-400 w-20 text-sm">ampROAR</span>
-                                <input type="number" id="manual-token-ampROAR" class="flex-1 bg-gray-800 border border-gray-600 rounded px-2 py-1.5 text-white font-mono text-sm focus:border-cyan-400 focus:outline-none" placeholder="505786636" step="0.0001">
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <span class="text-gray-400 w-20 text-sm">xASTRO</span>
-                                <input type="number" id="manual-token-xASTRO" class="flex-1 bg-gray-800 border border-gray-600 rounded px-2 py-1.5 text-white font-mono text-sm focus:border-cyan-400 focus:outline-none" placeholder="20607.54" step="0.0001">
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Use Last Snapshot Values Button -->
-                    <button onclick="loadLastSnapshotValues()" class="w-full bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors mb-4">
-                        <i class="fas fa-history mr-2"></i>Load Last Snapshot Values
-                    </button>
-                </div>
-                
-                <!-- LST Ratios Status (auto-loaded from TLA ext file) -->
-                <div id="lst-ratios-status" class="bg-gray-800/50 border border-gray-700 rounded-lg p-3">
-                    <div class="flex justify-between items-center mb-2">
-                        <label class="block text-sm font-medium text-gray-300">
-                            LST Ratios <span class="text-gray-500">(from TLA ext file)</span>
-                        </label>
-                        <button onclick="loadLstRatiosFromExt()" class="text-xs bg-cyan-600 hover:bg-cyan-700 text-white px-2 py-1 rounded">
-                            <i class="fas fa-sync-alt mr-1"></i>Refresh
-                        </button>
-                    </div>
-                    <div id="lst-ratios-grid" class="grid grid-cols-3 gap-2 text-xs">
-                        <div class="bg-gray-900 rounded p-2 text-center">
-                            <span class="text-gray-500">ampLUNA</span>
-                            <span id="lst-ratio-display-ampLUNA" class="block text-teal-400 font-mono">--</span>
-                        </div>
-                        <div class="bg-gray-900 rounded p-2 text-center">
-                            <span class="text-gray-500">arbLUNA</span>
-                            <span id="lst-ratio-display-arbLUNA" class="block text-orange-400 font-mono">--</span>
-                        </div>
-                        <div class="bg-gray-900 rounded p-2 text-center">
-                            <span class="text-gray-500">bLUNA</span>
-                            <span id="lst-ratio-display-bLUNA" class="block text-cyan-400 font-mono">--</span>
-                        </div>
-                        <div class="bg-gray-900 rounded p-2 text-center">
-                            <span class="text-gray-500">ampCAPA</span>
-                            <span id="lst-ratio-display-ampCAPA" class="block text-purple-400 font-mono">--</span>
-                        </div>
-                        <div class="bg-gray-900 rounded p-2 text-center">
-                            <span class="text-gray-500">ampROAR</span>
-                            <span id="lst-ratio-display-ampROAR" class="block text-yellow-400 font-mono">--</span>
-                        </div>
-                        <div class="bg-gray-900 rounded p-2 text-center">
-                            <span class="text-gray-500">xASTRO</span>
-                            <span id="lst-ratio-display-xASTRO" class="block text-blue-400 font-mono">--</span>
-                        </div>
-                    </div>
-                    <p id="lst-ratios-source" class="text-xs text-gray-600 mt-2">Source: Not loaded</p>
-                </div>
-                
-                <!-- Custom Token Prices Section -->
-                <div class="bg-gray-800/50 border border-gray-700 rounded-lg p-3">
-                    <div class="flex justify-between items-center mb-2">
-                        <label class="block text-sm font-medium text-gray-300">
-                            <i class="fas fa-dollar-sign mr-1 text-green-400"></i>Custom Token Prices <span class="text-gray-500">(manual entry)</span>
-                        </label>
-                        <button onclick="addCustomTokenRow()" class="text-xs bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded">
-                            <i class="fas fa-plus mr-1"></i>Add Token
-                        </button>
-                    </div>
-                    <p class="text-xs text-gray-500 mb-2">Add prices for tokens not in the CoinGecko banner (e.g., ampCAPA, ampROAR calculated from ratios)</p>
-                    
-                    <!-- Custom Token Rows Container -->
-                    <div id="custom-token-rows" class="space-y-2">
-                        <!-- Dynamic rows will be added here -->
-                    </div>
-                    
-                    <!-- Quick Add Calculated LST Prices -->
-                    <div class="mt-3 pt-3 border-t border-gray-700">
-                        <p class="text-xs text-gray-400 mb-2">Quick add calculated LST prices (base price × ratio):</p>
-                        <div class="flex flex-wrap gap-2">
-                            <button onclick="addCalculatedLstPrice('ampCAPA')" class="text-xs bg-purple-700 hover:bg-purple-600 text-white px-2 py-1 rounded">
-                                + ampCAPA
-                            </button>
-                            <button onclick="addCalculatedLstPrice('ampROAR')" class="text-xs bg-yellow-700 hover:bg-yellow-600 text-white px-2 py-1 rounded">
-                                + ampROAR
-                            </button>
-                            <button onclick="addCalculatedLstPrice('xASTRO')" class="text-xs bg-blue-700 hover:bg-blue-600 text-white px-2 py-1 rounded">
-                                + xASTRO
-                            </button>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Preview Section -->
-                <div id="tla-preview" class="bg-gray-800/50 border border-gray-700 rounded-lg p-4 hidden">
-                    <h4 class="font-bold text-white mb-2">Preview</h4>
-                    <div id="tla-preview-content" class="text-sm text-gray-300 space-y-1"></div>
-                </div>
-                
-                <!-- Parse Button -->
-                <button id="parse-tla-btn" class="w-full bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">
-                    <i class="fas fa-eye mr-2"></i>Preview Parsed Data
-                </button>
-                
-                <!-- Status Message -->
-                <div id="snapshot-status" class="text-center text-sm hidden"></div>
-                
-                <!-- Action Buttons -->
-                <div class="flex gap-4">
-                    <button id="download-snapshot-btn" class="flex-1 bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>
-                        <i class="fas fa-download mr-2"></i>Download Snapshot
-                    </button>
-                </div>
-                
-                <!-- Info -->
-                <div class="bg-blue-900/30 border border-blue-700 p-3 rounded-lg text-sm">
-                    <p><strong class="text-blue-300">How to use:</strong></p>
-                    <ol class="list-decimal list-inside mt-2 space-y-1 text-gray-300">
-                        <li>Paste your TLA token balances from Eris (tab-separated)</li>
-                        <li>Paste your deposit value and APR text</li>
-                        <li>Click "Preview" to verify the data</li>
-                        <li>Click "Download Snapshot" to save the weekly snapshot file</li>
-                        <li>Upload the file to GitHub: <code class="bg-gray-800 px-1 rounded">adao_json_storage</code></li>
-                    </ol>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <!-- Historical Chart Modal -->
     <div id="chartModal" class="modal fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50 hidden opacity-0">
         <div class="modal-content bg-[#1a1a1a] border border-gray-700 rounded-xl shadow-xl w-full max-w-4xl relative text-white opacity-0 scale-95 p-6 max-h-[90vh] overflow-y-auto">
@@ -3220,7 +2988,7 @@ est. APR 58.53 %"></textarea>
             </div>
             <div class="mt-4 text-xs text-gray-500">
                 <button id="changelog-trigger" class="hover:text-cyan-400 transition-colors cursor-pointer">
-                    <span class="font-mono">Rev 3.48</span>
+                    <span class="font-mono">Rev 3.50</span>
                     <span class="opacity-60 mx-1">·</span>
                     <span>Changelog</span>
                 </button>
@@ -6923,67 +6691,15 @@ est. APR 58.53 %"></textarea>
                 }
             }
             
-            // --- Snapshot Mode Toggle ---
-            window.snapshotMode = 'paste';
-            
-            window.setSnapshotMode = function(mode) {
-                window.snapshotMode = mode;
-                const pasteBtn = document.getElementById('snapshot-mode-paste');
-                const manualBtn = document.getElementById('snapshot-mode-manual');
-                const pasteMode = document.getElementById('snapshot-paste-mode');
-                const manualMode = document.getElementById('snapshot-manual-mode');
-                
-                if (mode === 'paste') {
-                    pasteBtn.className = 'flex-1 px-3 py-2 rounded bg-cyan-600 text-white text-sm font-medium transition-colors';
-                    manualBtn.className = 'flex-1 px-3 py-2 rounded bg-gray-700 text-gray-400 text-sm font-medium transition-colors hover:bg-gray-600';
-                    pasteMode.classList.remove('hidden');
-                    manualMode.classList.add('hidden');
-                } else {
-                    manualBtn.className = 'flex-1 px-3 py-2 rounded bg-yellow-600 text-white text-sm font-medium transition-colors';
-                    pasteBtn.className = 'flex-1 px-3 py-2 rounded bg-gray-700 text-gray-400 text-sm font-medium transition-colors hover:bg-gray-600';
-                    pasteMode.classList.add('hidden');
-                    manualMode.classList.remove('hidden');
-                }
-            }
-            
-            window.loadLastSnapshotValues = function() {
-                // Get the most recent snapshot from loaded data
-                if (!dashboardData.snapshots || dashboardData.snapshots.length === 0) {
-                    alert('No previous snapshots found');
-                    return;
-                }
-                
-                const lastSnapshot = dashboardData.snapshots[dashboardData.snapshots.length - 1];
-                const tlaData = lastSnapshot.tlaDeposits;
-                
-                if (!tlaData) {
-                    alert('No TLA data in last snapshot');
-                    return;
-                }
-                
-                // Fill in the manual fields
-                document.getElementById('manual-deposit-usd').value = tlaData.totalDeposit || '';
-                document.getElementById('manual-apr').value = tlaData.estApr || '';
-                
-                // Fill in token balances
-                if (tlaData.tokenBalances) {
-                    for (const token of tlaData.tokenBalances) {
-                        const input = document.getElementById('manual-token-' + token.name);
-                        if (input) {
-                            input.value = token.amount || '';
-                        }
-                    }
-                }
-                
-                // Show status
-                const statusDiv = document.getElementById('snapshot-status');
-                if (statusDiv) {
-                    statusDiv.classList.remove('hidden');
-                    statusDiv.className = 'text-center text-sm text-green-400';
-                    statusDiv.innerHTML = `<i class="fas fa-check mr-1"></i>Loaded values from E${lastSnapshot.epoch} (${new Date(lastSnapshot.timestamp).toLocaleDateString()})`;
-                }
-            }
-            
+            // --- Snapshot Mode Toggle removed Rev 3.50 ---
+            // The snapshotModal admin UI (paste/manual snapshot capture) was orphaned —
+            // the trigger element (id="snapshot-link") didn't exist anywhere, so the
+            // modal couldn't open. The capture flow lives in tla_tool.html now (per
+            // PROJECT_KNOWLEDGE admin/dev pages section). Removed the modal DOM (~212
+            // lines), setSnapshotMode + loadLastSnapshotValues functions, the
+            // modalTriggers mapping entry, and the special-case click handler for the
+            // missing trigger.
+
             // --- Custom Token Prices ---
             let customTokenPriceCounter = 0;
             window.customTokenPrices = {}; // Store custom prices
@@ -8623,9 +8339,9 @@ est. APR 58.53 %"></textarea>
                     'dao-broken-card': 'daoBrokenModal',
                     'unminted-backing-card': 'unmintedModal',
                     'logo-modal-trigger': 'logoModal', 
-                    'dao-tla-vp-card': 'tlaVpModal',
-                    'snapshot-link': 'snapshotModal'
+                    'dao-tla-vp-card': 'tlaVpModal'
                     // Treasury and TLA cards now link directly to separate pages
+                    // 'snapshot-link' removed Rev 3.50 — orphan trigger, modal also removed
                 };
 
                 const openModal = (modalId) => {
@@ -8670,12 +8386,6 @@ est. APR 58.53 %"></textarea>
                     const trigger = document.getElementById(triggerId);
                     if (trigger) {
                         trigger.addEventListener('click', (e) => {
-                            // For snapshot-link (span), don't check for a tags
-                            if (triggerId === 'snapshot-link') {
-                                e.preventDefault();
-                                openModal(modalTriggers[triggerId]);
-                                return;
-                            }
                             // Prevent opening if clicking a link inside the card
                             if (e.target.tagName === 'A' || e.target.closest('a')) return;
                             openModal(modalTriggers[triggerId]);
@@ -8867,28 +8577,34 @@ est. APR 58.53 %"></textarea>
                 }
             };
             
+            // Rev 3.50 — Migrated from `tla-ext_json_storage/Staking APR.csv` (legacy
+            // manual capture) to the live `network-and-prices` cron output. The cron
+            // computes `network.staking_apr` hourly from chain queries (inflation,
+            // bonded ratio, community tax), matching the same calculation that produced
+            // the CSV values. The CSV is still consulted by `fetchStakingAprHistory()`
+            // when the chart modal needs the FULL historical series — only this "what's
+            // the latest" path was redundant.
             async function loadStakingApr() {
                 try {
-                    const csvUrl = 'https://raw.githubusercontent.com/defipatriot/tla-ext_json_storage/main/Staking%20APR.csv';
-                    const response = await fetch(csvUrl);
-                    if (!response.ok) throw new Error('Failed to fetch');
-                    
-                    const text = await response.text();
-                    const lines = text.trim().split('\n');
-                    
-                    // Get last line (most recent data point)
-                    const lastLine = lines[lines.length - 1];
-                    const match = lastLine.match(/"([^"]+)","([^"]+)"/);
-                    
-                    if (match) {
+                    const response = await fetch('https://raw.githubusercontent.com/defipatriot/network-and-prices-data_2026/main/data/network-and-prices.json');
+                    if (!response.ok) throw new Error('HTTP ' + response.status);
+                    const data = await response.json();
+                    const apr = data?.network?.staking_apr;
+                    if (typeof apr === 'number' && apr > 0) {
+                        // Use cron's capturedAt as the date so the UI reflects when the
+                        // value was measured. Format YYYY-MM-DD to match the prior CSV shape.
+                        const captured = data.capturedAt ? new Date(data.capturedAt) : new Date();
                         chainStakingApr = {
-                            date: match[1],
-                            apr: parseFloat(match[2])
+                            date: captured.toISOString().slice(0, 10),
+                            apr: apr,
                         };
-                        console.log('Loaded staking APR:', chainStakingApr);
+                        console.log('Loaded staking APR from cron:', chainStakingApr);
+                    } else {
+                        console.warn('Staking APR not found in network-and-prices cron output');
+                        chainStakingApr = null;
                     }
                 } catch (err) {
-                    console.error('Failed to load staking APR:', err);
+                    console.error('Failed to load staking APR from cron:', err);
                     chainStakingApr = null;
                 }
             }
@@ -9924,27 +9640,30 @@ est. APR 58.53 %"></textarea>
                 // Nothing to render until fetchTlaData has resolved at least once
                 if (meta.loadedEpoch == null) return;
 
-                // Dot indicator on TLA tile titles. Green pulse = fresh, red static = stale.
-                ['dao-tla-title', 'dao-tla-vp-title'].forEach(id => {
-                    const el = document.getElementById(id);
-                    if (!el) return;
-                    const existing = el.querySelector('.pulse-dot, .static-dot-red');
-                    if (existing) existing.remove();
-                    const dot = document.createElement('span');
-                    dot.className = (meta.isStale ? 'static-dot-red' : 'pulse-dot') + ' ml-1';
-                    dot.title = meta.isStale
-                        ? `Stale — showing epoch ${meta.loadedEpoch} data (current is ${meta.currentEpoch}, ${meta.epochsOld} epoch${meta.epochsOld === 1 ? '' : 's'} behind)`
-                        : `Live — epoch ${meta.loadedEpoch} data`;
-                    el.appendChild(dot);
-                });
+                // Dot indicators on TLA tile titles — Rev 3.49: REMOVED from this function.
+                //
+                // dao-tla-title (TLA Deposits) and dao-tla-vp-title (TLA VP) are now
+                // owned by their respective live-data setters:
+                //   - applyLiveTlaDeposits()  → sets dao-tla-title dot (live=green pulse,
+                //                                cron=amber static) with composition tooltip
+                //   - the TLA VP live fetcher → sets dao-tla-vp-title dot
+                //
+                // applyTlaStaleness used to also set these dots based on snapshot-epoch
+                // staleness, but that fought the live setters in a race (whichever ran
+                // last won, usually live since they're async). The snapshot-based dot
+                // would also lie — claim "stale" while the live data underneath was fresh.
+                //
+                // The small "Stale Data" pill on the unclaimed-rewards card below remains
+                // as a low-noise indicator for the snapshot path that's still in use
+                // there. It's a pill, not a tile-level dot, so it doesn't conflict.
 
                 // Small "Stale Data" pill in the unclaimed-rewards-card header (kept).
                 const pill = document.getElementById('unclaimed-stale-warning');
                 if (pill) pill.classList.toggle('hidden', !meta.isStale);
 
-                // Hide the legacy big red banner — replaced by modal on launch.
-                const banner = document.getElementById('unclaimed-stale-banner');
-                if (banner) banner.classList.add('hidden');
+                // (Rev 3.50: legacy `unclaimed-stale-banner` HTML removed entirely —
+                // it was hidden by default and never shown after Rev 3.49 disabled the
+                // launch modal. No JS hide-call needed.)
 
                 // The "Epoch X data" subtle text in the rewards header.
                 const dataStatus = document.getElementById('unclaimed-data-status');
@@ -9952,10 +9671,30 @@ est. APR 58.53 %"></textarea>
                     dataStatus.textContent = meta.isStale ? `Epoch ${meta.loadedEpoch} data` : '';
                 }
 
-                // Modal: show once per session if stale and not yet acknowledged.
-                if (meta.isStale && !sessionStorage.getItem('aDAO_stale_modal_dismissed')) {
-                    showStaleDataModal(meta);
-                }
+                // Modal: trigger disabled in Rev 3.49.
+                //
+                // Original purpose: warn users at launch that they were looking at a
+                // stale per-epoch snapshot. That made sense when tiles were snapshot-
+                // driven. Architecture has changed:
+                //
+                //   - TLA VP, TLA Deposits, Unclaimed Rewards, Treasury, Broken NFTs
+                //     all read live RPC primary now (Rev 3.38, 3.41, 3.46, 3.47).
+                //     Snapshots are fallback only.
+                //   - Cron health has its own visible surface — the footer cron-status
+                //     widget shipped in Rev 3.37 with freshness fingerprinting catches
+                //     stuck/stale crons explicitly and surfaces them in the UI.
+                //   - The modal as written ("TLA deposits, VP, unclaimed rewards may
+                //     not reflect recent changes") names exactly the tiles that are NO
+                //     LONGER snapshot-based. It would lie to the user.
+                //
+                // The function showStaleDataModal() is kept below as a one-line revert
+                // path in case some edge case is discovered, but no caller triggers it
+                // now. The small "Stale Data" pill above remains for the rare case
+                // where the inline snapshot data does drift visibly behind.
+                //
+                // if (meta.isStale && !sessionStorage.getItem('aDAO_stale_modal_dismissed')) {
+                //     showStaleDataModal(meta);
+                // }
             }
 
             function showStaleDataModal(meta) {
