@@ -1093,6 +1093,7 @@
                         <i class="fas fa-chart-line text-orange-400"></i> Top Avg Volume
                         <i class="fas fa-external-link-alt text-gray-500 text-xs ml-auto"></i>
                     </h3>
+                    <p class="text-[11px] text-gray-500 -mt-2 mb-3" title="Average of each pool's daily-average volume across the last 4 completed epochs — smoothed to resist single-day spikes. Arrows show rank movement vs the previous epoch's window.">4-epoch avg · ▲▼ vs prev epoch</p>
                     <div id="top-vp-pools" class="space-y-3">
                         <div class="loading-pulse text-gray-500 text-sm">Loading...</div>
                     </div>
@@ -1102,6 +1103,7 @@
                         <i class="fas fa-water text-cyan-400"></i> Top Avg DEX Liquidity
                         <i class="fas fa-external-link-alt text-gray-500 text-xs ml-auto"></i>
                     </h3>
+                    <p class="text-[11px] text-gray-500 -mt-2 mb-3" title="Average of each pool's daily-average DEX liquidity (TVL) across the last 4 completed epochs. Arrows show rank movement vs the previous epoch's window.">4-epoch avg · ▲▼ vs prev epoch</p>
                     <div id="top-depth-pools" class="space-y-3">
                         <div class="loading-pulse text-gray-500 text-sm">Loading...</div>
                     </div>
@@ -1111,6 +1113,7 @@
                         <i class="fas fa-percentage text-green-400"></i> Top by APR
                         <i class="fas fa-external-link-alt text-gray-500 text-xs ml-auto"></i>
                     </h3>
+                    <p class="text-[11px] text-gray-500 -mt-2 mb-3" title="Current amplified APR (annualized emissions ÷ value staked in TLA, × bucket factor). Arrows show rank movement vs the last completed epoch's average APR.">live · ▲▼ vs last epoch</p>
                     <div id="top-apr-pools" class="space-y-3">
                         <div class="loading-pulse text-gray-500 text-sm">Loading...</div>
                     </div>
@@ -2318,6 +2321,7 @@
     const CONFIG = {
         // New continuous data sources (post-2026 cron rebuild)
         tlaSnapshotUrl:    'https://raw.githubusercontent.com/defipatriot/tla-snapshot-data_2026/main/data/tla-snapshot.json',
+        aprHistoryUrl:     'https://raw.githubusercontent.com/defipatriot/tla-snapshot-data_2026/main/data/apr-history.json',
         networkPricesUrl:  'https://raw.githubusercontent.com/defipatriot/network-and-prices-data_2026/main/data/network-and-prices.json',
         adaoPositionsUrl:  'https://raw.githubusercontent.com/defipatriot/adao-positions-data_2026/main/data/current.json',
         adaoMembersUrl:    'https://raw.githubusercontent.com/defipatriot/adao-positions-data_2026/main/data/members.json',
@@ -2389,6 +2393,8 @@
         charts: {},
         // History tracking
         previousEpochData: null,
+        prevLeaderboardAvg: null, // independent leaderboard movement index (Overview cards only) — NOT used by trend charts
+        prevAprByName: {}, // { poolName: last-completed-epoch amplified APR } for the APR movement badge (apr-history cron)
         previousAdaoSnap: null,
         previousEpochNumber: null, // Actual epoch number of loaded previous data (may not be epoch-1 if gaps exist)
         historyData: [], // Array of {epoch, metrics} for trend display
@@ -3216,6 +3222,7 @@
                 astroEpochResp,
                 ssWeeklyAvgText,
                 knownTokensResp,
+                aprHistResp,
             ] = await Promise.all([
                 fetch(CONFIG.tlaSnapshotUrl).then(r => r.ok ? r.json() : null).catch(e => { console.warn('tla-snapshot fetch:', e.message); return null; }),
                 fetch(CONFIG.networkPricesUrl).then(r => r.ok ? r.json() : null).catch(e => { console.warn('network-prices fetch:', e.message); return null; }),
@@ -3240,6 +3247,8 @@
                     .catch(e => { console.warn('ss-weekly-avg fetch:', e.message); return null; }),
                 // Known-token name overrides (manual mapping for raw cw20:/native: addresses)
                 fetch(CONFIG.knownTokensUrl).then(r => r.ok ? r.json() : null).catch(() => null),
+                // Per-epoch APR rollup (apr-history cron). Graceful null until the file exists.
+                fetch(CONFIG.aprHistoryUrl).then(r => r.ok ? r.json() : null).catch(() => null),
             ]);
 
             // Populate the runtime token-names map. Underscore-prefixed keys
@@ -3360,6 +3369,24 @@
             store.previousAdaoSnap = null;
             store.previousEpochNumber = null;
 
+            // Independent previous-window index for the Overview leaderboard movement
+            // badges + "% vs prev" deltas. Trailing window ending ONE epoch before the
+            // displayed window. Deliberately SEPARATE from store.previousEpochData
+            // (which drives the trend charts) so the leaderboards are their own system
+            // and don't affect any other delta on the page.
+            store.prevLeaderboardAvg = buildEpochAvgIndex(astroEpochResp, ssWeeklyAvgText, lastCompleteEpoch - 1);
+
+            // APR movement baseline: last COMPLETED epoch's average APR per pool, from
+            // the apr-history cron rollup, transformed with the SAME amp-factor + $20K
+            // filter + 200% cap the live APR uses (so current vs prev is apples-to-apples).
+            // Empty until apr-history.json exists -> the APR badge simply doesn't render.
+            store.prevAprByName = {};
+            const aprBaseIdx = buildAprBaselineIndex(aprHistResp, lastCompleteEpoch);
+            Object.entries(aprBaseIdx).forEach(([k, v]) => {
+                const nm = k.split('|')[0];
+                if (v > 0) store.prevAprByName[nm] = Math.max(store.prevAprByName[nm] || 0, v);
+            });
+
             // Try to load the previous weekly archive for trend comparison (if exists)
             try {
                 const prevEpoch = currentEpoch - 1;
@@ -3403,12 +3430,11 @@
         // Votion data is already embedded in pool.voting_power.votion_current_vp / votion_optimized_vp
         // and pool.voting_power.lockup_contributions[] — use those, ignore external votion file
 
-        // Build per-pool epoch averages from the new cron repos.
+        // Build per-pool trailing-window averages from the new cron repos.
         // Returns { "PoolName|DEX": { liq_4ep_avg, vol_4ep_avg, ... } } — same shape
-        // as the old buildHistoricalIndex but the values are the LAST COMPLETE
-        // EPOCH's daily-averages (not a 4-epoch rolling average). Field names are
-        // preserved so downstream code is untouched; the column label is updated
-        // to "Epoch Avg" to reflect the new semantics.
+        // as the old buildHistoricalIndex. Values are now a TRUE trailing 4-epoch
+        // rolling average (Astroport), smoothed to resist single-epoch spikes.
+        // Field names are preserved so downstream code is untouched.
         const lastCompleteEpoch = currentEpoch - 1;
         const historicalByPool = buildEpochAvgIndex(astroEpoch, ssWeeklyAvgCsv, lastCompleteEpoch);
 
@@ -3829,48 +3855,68 @@
         return rows;
     }
 
-    // Build last-completed-epoch averages from the new cron data repos.
-    // Returns the same SHAPE as buildHistoricalIndex so downstream consumers
-    // are unchanged. Field names `liq_4ep_avg` / `vol_4ep_avg` are preserved
-    // for now (semantically they now represent the SINGLE most-recently-
-    // completed epoch's daily-average, not a 4-epoch rolling average).
+    // Build trailing-window averages from the new cron data repos.
+    // Returns the same SHAPE as buildHistoricalIndex so downstream consumers are
+    // unchanged. Field names `liq_4ep_avg` / `vol_4ep_avg` are preserved; they now
+    // hold a TRUE trailing-window rolling average (default 4 epochs) for Astroport.
     //
     //   astroEpochJson: JSON from astroport-pool-data_2026/astroport/astroport-epoch-{currentEpoch}.json
-    //                   (live file — carries epochs[currentEpoch-1] frozen inside)
-    //   ssWeeklyAvgCsv: text from ss-pool-data_2026/data/weekly-avg/2026-epoch-{currentEpoch-1}.csv
-    //   lastCompleteEpoch: integer, the target epoch we want averages for
+    //                   (live file — carries an epochs{} map with several past epochs)
+    //   ssWeeklyAvgCsv: text from ss-pool-data_2026/data/weekly-avg/2026-epoch-{N}.csv
+    //   endEpoch:       the most-recent epoch the window ends on (inclusive)
+    //   windowSize:     how many epochs back to average over (default 4)
     //
     // Volume normalization: both DEXes contribute a DAILY-AVERAGE volume
     // (Astroport's epochs[N].avgVolume is already daily; SS's total_volume_usd
     // is the epoch sum, divided here by snapshot_count to get daily-avg).
-    function buildEpochAvgIndex(astroEpochJson, ssWeeklyAvgCsv, lastCompleteEpoch) {
+    function buildEpochAvgIndex(astroEpochJson, ssWeeklyAvgCsv, endEpoch, windowSize = 4) {
         const idx = {};
-        const targetKey = String(lastCompleteEpoch);
+        // Epoch keys for the trailing window, e.g. endEpoch=186,size=4 -> ['183'..'186'].
+        const windowKeys = [];
+        for (let e = endEpoch - windowSize + 1; e <= endEpoch; e++) {
+            if (e >= 1) windowKeys.push(String(e));
+        }
 
-        // === Astroport ===
+        // === Astroport — true trailing-window rolling average ===
+        // Average each pool's per-epoch daily-averages across the window, counting
+        // ONLY epochs that actually carried real samples (pointCount > 0). Missing
+        // epochs are skipped, so a pool with 4/4 epochs and one with 2/4 each get a
+        // fair mean over the data they have.
         if (astroEpochJson?.pools && Array.isArray(astroEpochJson.pools)) {
             for (const p of astroEpochJson.pools) {
                 const name = p.name;
                 if (!name) continue;
-                const epData = p.epochs?.[targetKey] || {};
-                const avgLiq = Number(epData.avgLiquidity) || 0;
-                const avgVol = Number(epData.avgVolume) || 0;
-                const liqPts = Number(epData.liqPointCount) || 0;
-                const volPts = Number(epData.volPointCount) || 0;
-                // Weekly turnover ratio: (daily-avg volume * 7) / avg liquidity
-                const efficiency = avgLiq > 0 ? (avgVol * 7) / avgLiq : 0;
+                const eps = p.epochs || {};
+                const liqVals = [], volVals = [], usedLiq = [], usedVol = [];
+                for (const k of windowKeys) {
+                    const ed = eps[k];
+                    if (!ed) continue;
+                    if (Number(ed.liqPointCount) > 0 && Number.isFinite(Number(ed.avgLiquidity))) {
+                        liqVals.push(Number(ed.avgLiquidity)); usedLiq.push(Number(k));
+                    }
+                    if (Number(ed.volPointCount) > 0 && Number.isFinite(Number(ed.avgVolume))) {
+                        volVals.push(Number(ed.avgVolume)); usedVol.push(Number(k));
+                    }
+                }
+                const avgLiq = liqVals.length ? liqVals.reduce((s, x) => s + x, 0) / liqVals.length : 0;
+                const avgVol = volVals.length ? volVals.reduce((s, x) => s + x, 0) / volVals.length : 0;
+                const efficiency = avgLiq > 0 ? (avgVol * 7) / avgLiq : 0; // weekly turnover ratio
+                const epochsUsed = [...new Set([...usedLiq, ...usedVol])].sort((a, b) => a - b);
                 idx[`${name}|Astroport`] = {
                     liq_4ep_avg: avgLiq,
                     vol_4ep_avg: avgVol,
-                    liq_4ep_count: liqPts,
-                    vol_4ep_count: volPts,
+                    liq_4ep_count: liqVals.length,  // # epochs averaged (not point count)
+                    vol_4ep_count: volVals.length,
                     efficiency: efficiency,
-                    epochs_used: (avgLiq || avgVol) ? [lastCompleteEpoch] : [],
+                    epochs_used: epochsUsed,
                 };
             }
         }
 
         // === Skeleton Swap ===
+        // SS publishes a single per-epoch CSV (no multi-epoch history in one file
+        // yet), so it stays single-epoch regardless of windowSize. SS pools are
+        // excluded from grading anyway; this just keeps them in the index.
         if (ssWeeklyAvgCsv && typeof ssWeeklyAvgCsv === 'string') {
             const rows = parseCsv(ssWeeklyAvgCsv);
             for (const row of rows) {
@@ -3887,11 +3933,31 @@
                     liq_4ep_count: n,
                     vol_4ep_count: n,
                     efficiency: efficiency,
-                    epochs_used: (avgLiq || avgVol) ? [lastCompleteEpoch] : [],
+                    epochs_used: (avgLiq || avgVol) ? [endEpoch] : [],
                 };
             }
         }
 
+        return idx;
+    }
+
+    // Build a per-pool amplified-APR baseline for a single completed epoch from the
+    // apr-history cron rollup (data/apr-history.json). Applies the SAME transform as
+    // the live APR path: zero under $20K staked, cap 200%, then the bucket amp factor —
+    // so the movement badge compares like with like. Returns { "name|dex": apr_amp }.
+    function buildAprBaselineIndex(aprHistJson, epoch) {
+        const idx = {};
+        if (!aprHistJson || !Array.isArray(aprHistJson.pools)) return idx;
+        const key = String(epoch);
+        for (const p of aprHistJson.pools) {
+            const ed = p.epochs?.[key];
+            if (!ed) continue;
+            const staked = Number(ed.staked_usd_avg) || 0;
+            const aprPct = Number(ed.apr_pct_avg) || 0;
+            const aprNon = staked < 20000 ? 0 : Math.min(aprPct, 200);
+            const aprAmp = aprNon * computeAmpFactor(p.bucket);
+            if (aprAmp > 0) idx[`${p.name}|${p.dex}`] = aprAmp;
+        }
         return idx;
     }
 
@@ -4961,8 +5027,42 @@
         const active = store.pools.filter(p => p.is_active !== false);
         const tlaPools = store.tlaPools || [];
         
-        // Get previous epoch data for comparison
-        const prevPools = store.previousEpochData?.pools?.filter(p => p.is_active !== false) || [];
+        // Previous-window leaderboard averages — INDEPENDENT of store.previousEpochData
+        // (which drives the trend charts). Used only for the rank-movement badges and
+        // the "% vs prev" deltas on these three cards. Window ends one epoch before the
+        // displayed window; built in the loader as store.prevLeaderboardAvg.
+        const prevAvg = store.prevLeaderboardAvg || {};
+        // Full prior-window rankings (NOT sliced) so rank deltas are exact even for
+        // pools that were just outside the visible top 5 last window. Keyed by name.
+        const prevByVol = Object.entries(prevAvg)
+            .map(([k, v]) => ({ name: k.split('|')[0], avgVolume: v.vol_4ep_avg || 0 }))
+            .filter(p => p.avgVolume > 0)
+            .sort((a, b) => b.avgVolume - a.avgVolume);
+        const prevByLiq = Object.entries(prevAvg)
+            .map(([k, v]) => ({ name: k.split('|')[0], avgLiquidity: v.liq_4ep_avg || 0 }))
+            .filter(p => p.avgLiquidity > 0)
+            .sort((a, b) => b.avgLiquidity - a.avgLiquidity);
+        // Name -> prev metric value, for the % delta sub-line.
+        const prevVolByName = {}, prevLiqByName = {};
+        Object.entries(prevAvg).forEach(([k, v]) => {
+            const nm = k.split('|')[0];
+            if (v.vol_4ep_avg) prevVolByName[nm] = Math.max(prevVolByName[nm] || 0, v.vol_4ep_avg);
+            if (v.liq_4ep_avg) prevLiqByName[nm] = Math.max(prevLiqByName[nm] || 0, v.liq_4ep_avg);
+        });
+        // Small "+N% vs prev" sub-line. Empty when there's no prior value to compare.
+        const deltaLine = (cur, prev) => {
+            if (!(prev > 0) || !(cur >= 0)) return '';
+            const pct = ((cur - prev) / prev) * 100;
+            if (!isFinite(pct)) return '';
+            const up = pct >= 0;
+            return `<div class="text-[10px] mono ${up ? 'text-emerald-400/70' : 'text-red-400/70'}">${up ? '+' : ''}${pct.toFixed(0)}% vs prev</div>`;
+        };
+        // APR movement baseline (last completed epoch, from apr-history cron).
+        const prevAprByName = store.prevAprByName || {};
+        const prevByApr = Object.entries(prevAprByName)
+            .map(([name, v]) => ({ name, value: v }))
+            .filter(p => p.value > 0)
+            .sort((a, b) => b.value - a.value);
         
         // Create map of TLA pool data by name for quick lookup
         const tlaMap = {};
@@ -4984,7 +5084,7 @@
             const prevRank = prevRankings.findIndex(p => p.name === poolName);
             
             if (prevRank === -1) {
-                // Not in top 5 last epoch
+                // No ranking last window (newly tracked / first epoch with data)
                 return '<span class="text-[9px] px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400 ml-1">NEW</span>';
             }
             
@@ -5010,13 +5110,6 @@
             .sort((a, b) => b.avgVolume - a.avgVolume)
             .slice(0, 5);
         
-        // Get previous epoch volume rankings
-        const prevTopVolume = [...prevPools]
-            .map(p => ({ name: p.name, avgVolume: p.vol_4ep_avg || 0 }))
-            .filter(p => p.avgVolume > 0)
-            .sort((a, b) => b.avgVolume - a.avgVolume)
-            .slice(0, 5);
-        
         document.getElementById('top-vp-pools').innerHTML = topVolume.map((p, i) => `
             <div class="flex items-center justify-between p-2 rounded-lg bg-white/[0.02] hover:bg-white/[0.04]">
                 <div class="flex items-center gap-2">
@@ -5024,12 +5117,15 @@
                     <div class="flex flex-col">
                         <div class="flex items-center">
                             <span class="text-sm font-medium">${p.name}</span>
-                            ${getRankBadge(p.name, i, prevTopVolume)}
+                            ${getRankBadge(p.name, i, prevByVol)}
                         </div>
                         <div class="flex items-center gap-1">${getDexLabel(p.dex)}</div>
                     </div>
                 </div>
-                <span class="mono text-orange-400 text-sm">${fmt$(p.avgVolume)}</span>
+                <div class="flex flex-col items-end">
+                    <span class="mono text-orange-400 text-sm">${fmt$(p.avgVolume)}</span>
+                    ${deltaLine(p.avgVolume, prevVolByName[p.name])}
+                </div>
             </div>
         `).join('') || '<div class="text-gray-500 text-sm">No volume data</div>';
         
@@ -5043,13 +5139,6 @@
             .sort((a, b) => b.avgLiquidity - a.avgLiquidity)
             .slice(0, 5);
         
-        // Get previous epoch liquidity rankings
-        const prevTopLiquidity = [...prevPools]
-            .map(p => ({ name: p.name, avgLiquidity: p.liq_4ep_avg || 0 }))
-            .filter(p => p.avgLiquidity > 0)
-            .sort((a, b) => b.avgLiquidity - a.avgLiquidity)
-            .slice(0, 5);
-        
         document.getElementById('top-depth-pools').innerHTML = topLiquidity.map((p, i) => `
             <div class="flex items-center justify-between p-2 rounded-lg bg-white/[0.02] hover:bg-white/[0.04]">
                 <div class="flex items-center gap-2">
@@ -5057,23 +5146,20 @@
                     <div class="flex flex-col">
                         <div class="flex items-center">
                             <span class="text-sm font-medium">${p.name}</span>
-                            ${getRankBadge(p.name, i, prevTopLiquidity)}
+                            ${getRankBadge(p.name, i, prevByLiq)}
                         </div>
                         <div class="flex items-center gap-1">${getDexLabel(p.dex)}</div>
                     </div>
                 </div>
-                <span class="mono text-cyan-400 text-sm">${fmt$(p.avgLiquidity)}</span>
+                <div class="flex flex-col items-end">
+                    <span class="mono text-cyan-400 text-sm">${fmt$(p.avgLiquidity)}</span>
+                    ${deltaLine(p.avgLiquidity, prevLiqByName[p.name])}
+                </div>
             </div>
         `).join('') || '<div class="text-gray-500 text-sm">No liquidity data</div>';
         
         // Top by APR
         const topAPR = [...active].filter(p => p.apr_amp > 0).sort((a, b) => (b.apr_amp || 0) - (a.apr_amp || 0)).slice(0, 5);
-        
-        // Get previous epoch APR rankings
-        const prevTopAPR = [...prevPools]
-            .filter(p => p.apr_amp > 0)
-            .sort((a, b) => (b.apr_amp || 0) - (a.apr_amp || 0))
-            .slice(0, 5);
         
         document.getElementById('top-apr-pools').innerHTML = topAPR.map((p, i) => `
             <div class="flex items-center justify-between p-2 rounded-lg bg-white/[0.02] hover:bg-white/[0.04]">
@@ -5082,12 +5168,15 @@
                     <div class="flex flex-col">
                         <div class="flex items-center">
                             <span class="text-sm font-medium">${p.name}</span>
-                            ${getRankBadge(p.name, i, prevTopAPR)}
+                            ${getRankBadge(p.name, i, prevByApr)}
                         </div>
                         <div class="flex items-center gap-1">${getDexLabel(p.dex)}</div>
                     </div>
                 </div>
-                <span class="mono text-green-400 text-sm">${fmtPct(p.apr_amp)}</span>
+                <div class="flex flex-col items-end">
+                    <span class="mono text-green-400 text-sm">${fmtPct(p.apr_amp)}</span>
+                    ${deltaLine(p.apr_amp, prevAprByName[p.name])}
+                </div>
             </div>
         `).join('');
     }
@@ -9304,16 +9393,56 @@
         document.getElementById('ranking-sort-label').textContent = rankingState.sortAsc ? 'Low to High' : 'High to Low';
         document.getElementById('ranking-sort-btn').querySelector('i').className = rankingState.sortAsc ? 'fas fa-sort-amount-up' : 'fas fa-sort-amount-down';
         
+        // ---- Change indicators (rank movement + % delta vs previous window) ----
+        // Reuses the same independent sources as the Overview cards:
+        //   volume/liquidity -> store.prevLeaderboardAvg ; apr -> store.prevAprByName.
+        let prevList = [];
+        const prevValByName = {};
+        if (rankingState.type === 'apr') {
+            const m = store.prevAprByName || {};
+            prevList = Object.entries(m).map(([name, v]) => ({ name, value: v }))
+                .filter(x => x.value > 0).sort((a, b) => b.value - a.value);
+        } else {
+            const field = rankingState.type === 'liquidity' ? 'liq_4ep_avg' : 'vol_4ep_avg';
+            const prevAvg = store.prevLeaderboardAvg || {};
+            prevList = Object.entries(prevAvg).map(([k, v]) => ({ name: k.split('|')[0], value: v[field] || 0 }))
+                .filter(x => x.value > 0).sort((a, b) => b.value - a.value);
+        }
+        prevList.forEach(x => { prevValByName[x.name] = Math.max(prevValByName[x.name] || 0, x.value); });
+        // Movement is by METRIC rank (desc), independent of the high/low display sort.
+        const curRankByName = {};
+        [...rankingState.data].sort((a, b) => b.value - a.value).forEach((p, idx) => { curRankByName[p.name] = idx; });
+        const moveBadge = (name) => {
+            if (!prevList.length) return '';
+            const cur = curRankByName[name] ?? -1;
+            const prev = prevList.findIndex(x => x.name === name);
+            if (prev === -1) return '<span class="text-[9px] px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400 ml-2">NEW</span>';
+            const ch = prev - cur;
+            if (ch > 0) return `<span class="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 ml-2">▲${ch}</span>`;
+            if (ch < 0) return `<span class="text-[9px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 ml-2">▼${Math.abs(ch)}</span>`;
+            return '<span class="text-[9px] px-1.5 py-0.5 rounded bg-gray-500/20 text-gray-400 ml-2">—</span>';
+        };
+        const moveDelta = (cur, prev) => {
+            if (!(prev > 0) || !(cur >= 0)) return '';
+            const pct = ((cur - prev) / prev) * 100;
+            if (!isFinite(pct)) return '';
+            const up = pct >= 0;
+            return `<div class="text-[10px] mono ${up ? 'text-emerald-400/70' : 'text-red-400/70'}">${up ? '+' : ''}${pct.toFixed(0)}% vs prev</div>`;
+        };
+
         const html = data.map((p, i) => `
             <div class="flex items-center justify-between p-3 rounded-lg bg-white/[0.02] hover:bg-white/[0.05]">
                 <div class="flex items-center gap-3">
                     <span class="w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold ${i < 3 ? `rank-${i+1}` : 'bg-white/10'}">${i+1}</span>
                     <div>
-                        <div class="font-medium">${p.name}</div>
+                        <div class="font-medium flex items-center">${p.name}${moveBadge(p.name)}</div>
                         <div class="text-xs text-gray-500">${p.dex} • ${p.bucket}</div>
                     </div>
                 </div>
-                <span class="mono ${rankingState.valueColor} text-sm font-medium">${rankingState.valueFormatter(p.value)}</span>
+                <div class="flex flex-col items-end">
+                    <span class="mono ${rankingState.valueColor} text-sm font-medium">${rankingState.valueFormatter(p.value)}</span>
+                    ${moveDelta(p.value, prevValByName[p.name])}
+                </div>
             </div>
         `).join('');
         
