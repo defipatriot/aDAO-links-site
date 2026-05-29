@@ -304,7 +304,7 @@
                 <div class="space-y-3">
                     <div class="flex items-start gap-3 p-3 rounded-lg bg-gray-800/30">
                         <div id="market-icon" class="text-2xl">📉</div>
-                        <div>
+                        <div class="flex-1">
                             <p class="text-xs text-gray-400">Market Movement</p>
                             <p id="market-value" class="text-xl font-mono font-bold text-red-400">--</p>
                             <p id="market-explain" class="text-[10px] text-gray-500">Token prices changed</p>
@@ -313,17 +313,29 @@
                     
                     <div class="flex items-start gap-3 p-3 rounded-lg bg-gray-800/30">
                         <div id="growth-icon" class="text-2xl">🌱</div>
-                        <div>
-                            <p class="text-xs text-gray-400">Position Growth</p>
+                        <div class="flex-1">
+                            <p class="text-xs text-gray-400">Organic Growth <span class="text-gray-500 text-[10px]">(yield, rewards)</span></p>
                             <p id="growth-value" class="text-xl font-mono font-bold text-green-400">--</p>
-                            <p id="growth-explain" class="text-[10px] text-gray-500">Token amounts changed</p>
+                            <p id="growth-explain" class="text-[10px] text-gray-500">Amounts changed without DAO action</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Rev 3.1 — DAO Actions row: intentional treasury flows (props).
+                         Separates "DAO chose to do X" from organic position changes.
+                         Without this, a "Deposit into TLA" prop looks like a treasury loss. -->
+                    <div class="flex items-start gap-3 p-3 rounded-lg bg-gray-800/30">
+                        <div id="actions-icon" class="text-2xl">⚑</div>
+                        <div class="flex-1">
+                            <p class="text-xs text-gray-400">DAO Actions <span id="actions-count" class="text-purple-400 text-[10px]"></span></p>
+                            <p id="actions-value" class="text-xl font-mono font-bold text-purple-400">--</p>
+                            <p id="actions-explain" class="text-[10px] text-gray-500">Executed proposals in this period</p>
                         </div>
                     </div>
                     
                     <div class="border-t border-gray-700 pt-3">
                         <div class="flex items-start gap-3 p-3 rounded-lg bg-gray-800/50">
                             <div class="text-2xl">=</div>
-                            <div>
+                            <div class="flex-1">
                                 <p class="text-xs text-gray-400">Net Result</p>
                                 <p id="net-value" class="text-xl font-mono font-bold">--</p>
                                 <p id="net-explain" class="text-[10px] text-gray-500"></p>
@@ -332,11 +344,20 @@
                     </div>
                 </div>
                 
-                <!-- Right: Token Changes -->
-                <div class="bg-gray-800/20 rounded-lg p-3">
-                    <p class="text-xs font-medium text-white mb-2"><i class="fas fa-chart-bar text-yellow-400 mr-1"></i>Token Changes <span class="text-gray-500 text-[10px]">(price | amt | value)</span></p>
-                    <div id="price-changes-list" class="space-y-0.5 text-xs max-h-48 overflow-y-auto pr-3">
-                        <div class="text-gray-500">Loading...</div>
+                <!-- Right: Token Changes + Props that drove DAO Actions -->
+                <div class="space-y-3">
+                    <div class="bg-gray-800/20 rounded-lg p-3">
+                        <p class="text-xs font-medium text-white mb-2"><i class="fas fa-chart-bar text-yellow-400 mr-1"></i>Token Changes <span class="text-gray-500 text-[10px]">(price | amt | value)</span></p>
+                        <div id="price-changes-list" class="space-y-0.5 text-xs max-h-40 overflow-y-auto pr-3">
+                            <div class="text-gray-500">Loading...</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Rev 3.1 — Contributing props list. Shows what DAO Actions consisted of.
+                         Each prop is clickable, linking to its DAODAO page. -->
+                    <div id="contributing-props" class="bg-purple-900/10 border border-purple-900/30 rounded-lg p-3 hidden">
+                        <p class="text-xs font-medium text-white mb-2"><i class="fas fa-gavel text-purple-400 mr-1"></i>Contributing Proposals</p>
+                        <div id="contributing-props-list" class="space-y-1 text-xs max-h-40 overflow-y-auto pr-3"></div>
                     </div>
                 </div>
             </div>
@@ -1013,17 +1034,67 @@
             // Sort by absolute value change
             tokenChanges.sort((a, b) => Math.abs(b.valueChange) - Math.abs(a.valueChange));
             
+            // Rev 3.1 — Compute DAO Actions bucket: intentional treasury flows from
+            // executed proposals in the comparison window. Subtracts from Position Change
+            // so "Position Growth" reflects only organic changes (yield, rewards).
+            //
+            // Why this matters: a "Deposit into TLA" prop sends LUNA out of the treasury
+            // wallet — without separating it, that looks like a $1,997 loss. With this
+            // split, the user sees "DAO chose to move money to TLA" + "organic yield" +
+            // "market change" as three distinct stories.
+            const fromDate = new Date(startSnapshot.timestamp);
+            const toDate = selectedEndEpoch === 'live'
+                ? new Date()
+                : new Date(historicalSnapshots.find(s => s.epoch === selectedEndEpoch)?.timestamp || Date.now());
+            
+            let propActionsUsd = 0;
+            const contributingProps = [];
+            for (const prop of getExecutedPropsWithImpact()) {
+                if (!prop.executedAt) continue;
+                const propDate = new Date(prop.executedAt);
+                if (propDate <= fromDate || propDate > toDate) continue;
+                // Sum the USD impact of this prop on treasury holdings.
+                // Note: calcPropImpactUsd already filters out receipt tokens (zluna, amplp,
+                // LP shares) so deposit-into-TLA props correctly show only the LUNA outflow,
+                // not the (offsetting) amp-LP token inflow.
+                const impactUsd = calcPropImpactUsd(prop.netByToken || {});
+                if (impactUsd !== 0) {
+                    propActionsUsd += impactUsd;
+                    contributingProps.push({
+                        id: prop.id,
+                        title: prop.title || `Proposal ${prop.id}`,
+                        executedAt: prop.executedAt,
+                        impactUsd,
+                        netByToken: prop.netByToken,
+                    });
+                }
+            }
+            // Sort props by absolute impact (largest first)
+            contributingProps.sort((a, b) => Math.abs(b.impactUsd) - Math.abs(a.impactUsd));
+            
+            // Organic position growth = total position change MINUS DAO action impact
+            const organicPositionChange = positionChange - propActionsUsd;
+            
             // Calculate total percentages
             const netChange = priceImpact + positionChange;
             const totalPctChange = oldTotalUsd > 0 ? (netChange / oldTotalUsd) * 100 : 0;
             const pricePctImpact = oldTotalUsd > 0 ? (priceImpact / oldTotalUsd) * 100 : 0;
             const positionPctImpact = oldTotalUsd > 0 ? (positionChange / oldTotalUsd) * 100 : 0;
+            const organicPctImpact = oldTotalUsd > 0 ? (organicPositionChange / oldTotalUsd) * 100 : 0;
+            const actionsPctImpact = oldTotalUsd > 0 ? (propActionsUsd / oldTotalUsd) * 100 : 0;
             
             return {
                 priceImpact,
                 pricePctImpact,
                 positionChange,
                 positionPctImpact,
+                // Rev 3.1 — new buckets
+                organicPositionChange,
+                organicPctImpact,
+                propActionsUsd,
+                actionsPctImpact,
+                contributingProps,
+                // Existing fields
                 netChange,
                 totalPctChange,
                 oldTotalUsd,
@@ -1042,46 +1113,86 @@
             
             document.getElementById('value-breakdown').classList.remove('hidden');
             
-            // Market movement (price impact)
+            // Helper for consistent $ + % formatting
+            const fmtUsd = (n) => (n >= 0 ? '+' : '-') + '$' + Math.abs(n).toLocaleString(undefined, {maximumFractionDigits: 0});
+            const fmtPct = (p) => (p >= 0 ? '+' : '') + p.toFixed(1) + '%';
+            
+            // Market movement (price impact) — unchanged
             const marketEl = document.getElementById('market-value');
             const marketIcon = document.getElementById('market-icon');
-            const priceUsd = (breakdown.priceImpact >= 0 ? '+' : '-') + '$' + Math.abs(breakdown.priceImpact).toLocaleString(undefined, {maximumFractionDigits: 0});
-            const pricePct = (breakdown.pricePctImpact >= 0 ? '+' : '') + breakdown.pricePctImpact.toFixed(1) + '%';
-            marketEl.innerHTML = `${priceUsd} <span class="text-sm opacity-70">(${pricePct})</span>`;
+            marketEl.innerHTML = `${fmtUsd(breakdown.priceImpact)} <span class="text-sm opacity-70">(${fmtPct(breakdown.pricePctImpact)})</span>`;
             marketEl.className = `text-xl font-mono font-bold ${breakdown.priceImpact >= 0 ? 'text-green-400' : 'text-red-400'}`;
             marketIcon.textContent = breakdown.priceImpact >= 0 ? '📈' : '📉';
             document.getElementById('market-explain').textContent = breakdown.priceImpact >= 0 ? 'Token prices went up' : 'Token prices went down';
             
-            // Position growth (amount change)
+            // Rev 3.1 — Organic Position Growth (yield/rewards only, NOT DAO actions)
             const growthEl = document.getElementById('growth-value');
             const growthIcon = document.getElementById('growth-icon');
-            const posUsd = (breakdown.positionChange >= 0 ? '+' : '-') + '$' + Math.abs(breakdown.positionChange).toLocaleString(undefined, {maximumFractionDigits: 0});
-            const posPct = (breakdown.positionPctImpact >= 0 ? '+' : '') + breakdown.positionPctImpact.toFixed(1) + '%';
-            growthEl.innerHTML = `${posUsd} <span class="text-sm opacity-70">(${posPct})</span>`;
-            growthEl.className = `text-xl font-mono font-bold ${breakdown.positionChange >= 0 ? 'text-green-400' : 'text-red-400'}`;
-            growthIcon.textContent = breakdown.positionChange >= 0 ? '🌱' : '🍂';
-            document.getElementById('growth-explain').textContent = breakdown.positionChange >= 0 ? 'Token amounts increased' : 'Token amounts decreased';
-            
-            // Net result
-            const netEl = document.getElementById('net-value');
-            const netUsd = (breakdown.netChange >= 0 ? '+' : '-') + '$' + Math.abs(breakdown.netChange).toLocaleString(undefined, {maximumFractionDigits: 0});
-            const netPct = (breakdown.totalPctChange >= 0 ? '+' : '') + breakdown.totalPctChange.toFixed(1) + '%';
-            netEl.innerHTML = `${netUsd} <span class="text-sm opacity-70">(${netPct})</span>`;
-            netEl.className = `text-xl font-mono font-bold ${breakdown.netChange >= 0 ? 'text-green-400' : 'text-red-400'}`;
-            
-            // Explanation
-            const netExplain = document.getElementById('net-explain');
-            if (breakdown.positionChange >= 0 && breakdown.priceImpact < 0) {
-                netExplain.textContent = 'Positions grew but prices dropped';
-            } else if (breakdown.positionChange >= 0 && breakdown.priceImpact >= 0) {
-                netExplain.textContent = 'Both positions and prices up! 🎉';
-            } else if (breakdown.positionChange < 0 && breakdown.priceImpact >= 0) {
-                netExplain.textContent = 'Prices up but positions decreased';
+            growthEl.innerHTML = `${fmtUsd(breakdown.organicPositionChange)} <span class="text-sm opacity-70">(${fmtPct(breakdown.organicPctImpact)})</span>`;
+            growthEl.className = `text-xl font-mono font-bold ${breakdown.organicPositionChange >= 0 ? 'text-green-400' : 'text-red-400'}`;
+            growthIcon.textContent = breakdown.organicPositionChange >= 0 ? '🌱' : '🍂';
+            const orgExplain = document.getElementById('growth-explain');
+            if (Math.abs(breakdown.organicPositionChange) < 1) {
+                orgExplain.textContent = 'No organic change in this window';
+            } else if (breakdown.organicPositionChange >= 0) {
+                orgExplain.textContent = 'Yield/rewards grew positions';
             } else {
-                netExplain.textContent = 'Both positions and prices down';
+                orgExplain.textContent = 'Positions shrank (unstaking, slippage)';
             }
             
-            // Token changes list - now shows price %, amount change, and value change
+            // Rev 3.1 — DAO Actions (intentional treasury flows from props)
+            const actionsEl = document.getElementById('actions-value');
+            const actionsIcon = document.getElementById('actions-icon');
+            const actionsCount = document.getElementById('actions-count');
+            const actionsExplain = document.getElementById('actions-explain');
+            
+            if (breakdown.contributingProps.length === 0) {
+                actionsEl.textContent = '$0';
+                actionsEl.className = 'text-xl font-mono font-bold text-gray-500';
+                actionsIcon.textContent = '⚑';
+                actionsCount.textContent = '';
+                actionsExplain.textContent = 'No proposals executed in this window';
+            } else {
+                actionsEl.innerHTML = `${fmtUsd(breakdown.propActionsUsd)} <span class="text-sm opacity-70">(${fmtPct(breakdown.actionsPctImpact)})</span>`;
+                actionsEl.className = `text-xl font-mono font-bold ${breakdown.propActionsUsd >= 0 ? 'text-green-400' : 'text-purple-400'}`;
+                actionsIcon.textContent = breakdown.propActionsUsd >= 0 ? '⚑' : '⚑';
+                actionsCount.textContent = `(${breakdown.contributingProps.length} ${breakdown.contributingProps.length === 1 ? 'prop' : 'props'})`;
+                if (breakdown.propActionsUsd >= 0) {
+                    actionsExplain.textContent = 'Net treasury inflow from props';
+                } else {
+                    actionsExplain.textContent = 'Capital deployed (e.g. into TLA, staking)';
+                }
+            }
+            
+            // Net result — unchanged formula, but more nuanced explanation reflecting 3 buckets
+            const netEl = document.getElementById('net-value');
+            netEl.innerHTML = `${fmtUsd(breakdown.netChange)} <span class="text-sm opacity-70">(${fmtPct(breakdown.totalPctChange)})</span>`;
+            netEl.className = `text-xl font-mono font-bold ${breakdown.netChange >= 0 ? 'text-green-400' : 'text-red-400'}`;
+            
+            // Rev 3.1 — Explanation now considers the 3-bucket split.
+            // When DAO Actions dominate, surface that as the headline story.
+            const netExplain = document.getElementById('net-explain');
+            const actionMag = Math.abs(breakdown.propActionsUsd);
+            const orgMag = Math.abs(breakdown.organicPositionChange);
+            const mktMag = Math.abs(breakdown.priceImpact);
+            if (actionMag > orgMag && actionMag > mktMag) {
+                // DAO actions are the biggest driver
+                if (breakdown.propActionsUsd < 0) {
+                    netExplain.textContent = '📊 Mostly due to DAO deploying capital (not a loss)';
+                } else {
+                    netExplain.textContent = '📊 Mostly due to DAO inflows';
+                }
+            } else if (breakdown.organicPositionChange >= 0 && breakdown.priceImpact < 0) {
+                netExplain.textContent = 'Organic growth offset by price drop';
+            } else if (breakdown.organicPositionChange >= 0 && breakdown.priceImpact >= 0) {
+                netExplain.textContent = 'Both positions and prices up! 🎉';
+            } else if (breakdown.organicPositionChange < 0 && breakdown.priceImpact >= 0) {
+                netExplain.textContent = 'Prices up but organic positions shrank';
+            } else {
+                netExplain.textContent = 'Both organic positions and prices down';
+            }
+            
+            // Token changes list (unchanged)
             const priceListEl = document.getElementById('price-changes-list');
             if (breakdown.tokenChanges.length > 0) {
                 let html = '';
@@ -1135,7 +1246,6 @@
                 
                 priceListEl.innerHTML = html;
             } else if (breakdown.missingTokens && breakdown.missingTokens.length > 0) {
-                // No token changes but there are missing tokens
                 let html = `<div class="text-yellow-500 text-xs mb-2">
                     ⚠️ ${breakdown.missingTokens.length} tokens not found in end data (~$${breakdown.missingTokensValue.toLocaleString(undefined, {maximumFractionDigits: 0})}):
                 </div>`;
@@ -1146,6 +1256,53 @@
                 priceListEl.innerHTML = html;
             } else {
                 priceListEl.innerHTML = '<div class="text-gray-500">No significant changes</div>';
+            }
+            
+            // Rev 3.1 — Render contributing props list. Each is a clickable link
+            // to DAODAO. Hidden if no props executed in the window.
+            const contribContainer = document.getElementById('contributing-props');
+            const contribList     = document.getElementById('contributing-props-list');
+            if (breakdown.contributingProps.length === 0) {
+                contribContainer.classList.add('hidden');
+            } else {
+                contribContainer.classList.remove('hidden');
+                let html = '';
+                for (const prop of breakdown.contributingProps) {
+                    const idStr = String(prop.id);
+                    const finalId = (idStr.toUpperCase().startsWith('A')) ? idStr : 'A' + idStr;
+                    const propUrl = `https://daodao.zone/dao/terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm/proposals/${finalId}`;
+                    const rawTitle = prop.title || '';
+                    const title = rawTitle.length > 55 ? rawTitle.slice(0, 55) + '…' : rawTitle;
+                    const impactColor = prop.impactUsd >= 0 ? 'text-green-400' : 'text-purple-400';
+                    const impactStr = (prop.impactUsd >= 0 ? '+' : '-') + '$' + Math.abs(prop.impactUsd).toLocaleString(undefined, {maximumFractionDigits: 0});
+                    const dateStr = new Date(prop.executedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                    
+                    // Build top-3 token movement summary for context
+                    const movements = Object.entries(prop.netByToken || {})
+                        .filter(([t, _]) => !isReceiptToken(t))
+                        .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
+                        .slice(0, 3)
+                        .map(([t, amt]) => {
+                            const sign = amt >= 0 ? '+' : '';
+                            const v = Math.abs(amt) >= 1000 ? (amt/1000).toFixed(1) + 'K' : amt.toFixed(0);
+                            return `<span class="${amt >= 0 ? 'text-blue-300' : 'text-orange-300'}">${sign}${v} ${normalizeToken(t)}</span>`;
+                        }).join(' / ');
+                    
+                    html += `<a href="${propUrl}" target="_blank" rel="noopener noreferrer" class="block py-1.5 px-2 -mx-1 rounded hover:bg-purple-900/30 transition-colors border-b border-gray-800/30 last:border-0">
+                        <div class="flex items-center justify-between gap-2">
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-1.5">
+                                    <span class="text-purple-300 font-mono text-[10px]">${finalId}</span>
+                                    <span class="text-gray-500 text-[10px]">${dateStr}</span>
+                                </div>
+                                <p class="text-gray-200 text-xs truncate">${title}</p>
+                                ${movements ? `<p class="text-[10px] mt-0.5">${movements}</p>` : ''}
+                            </div>
+                            <span class="${impactColor} font-mono text-sm whitespace-nowrap">${impactStr}</span>
+                        </div>
+                    </a>`;
+                }
+                contribList.innerHTML = html;
             }
         }
         
@@ -2663,7 +2820,7 @@
             </div>
             <div class="mt-4 text-xs text-gray-500">
                 <button id="changelog-trigger" class="hover:text-cyan-400 transition-colors cursor-pointer">
-                    <span class="font-mono">Rev 3.0</span>
+                    <span class="font-mono">Rev 3.1</span>
                     <span class="opacity-60 mx-1">·</span>
                     <span>Changelog</span>
                 </button>
