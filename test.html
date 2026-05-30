@@ -1221,9 +1221,9 @@
                     <div>
                         <h3 class="font-semibold text-lg flex items-center gap-2">
                             <i class="fas fa-heart-pulse text-rose-400"></i>
-                            Pool Health &amp; Exit Risk
+                            <span id="exit-risk-title">Pool Health &amp; Exit Risk</span>
                         </h3>
-                        <p class="text-xs text-gray-500 mt-1">Pools draining faster than their bucket peers, or showing a combined exit signal (liquidity, base reserve, and token price falling together). Live data vs the previous epoch. Reflects TLA's view of each pool.</p>
+                        <p class="text-xs text-gray-500 mt-1" id="exit-risk-desc">TLA's largest exposures, ranked by staked capital. Each shows its 4-epoch trend and dollars in/out this epoch. Sustained bleeds and pools draining faster than peers are flagged; reserve skew is shown only when meaningful.</p>
                     </div>
                 </div>
                 <div id="exit-risk-summary" class="mb-4"></div>
@@ -3430,6 +3430,21 @@
                         timestamp: prevAdao.capturedAt || null,
                     };
                     store.previousEpochNumber = prevEpoch;
+                    // Capture prior per-member LP positions so member mode can show
+                    // each member's inflows/outflows + drops epoch-over-epoch.
+                    store.prevMemberPositions = {};
+                    for (const m of (prevAdao.members || [])) {
+                        const map = {};
+                        for (const lp of (m.lp_positions || [])) {
+                            const k = `${lp.pool_name}|${lp.bucket}`;
+                            if (!map[k]) map[k] = { usd: 0, status: lp.status, units: 0, hasUnits: false };
+                            map[k].usd += lp.estimated_position_usd || 0;
+                            if (lp.status === 'active') map[k].status = 'active';
+                            const u = memberUnits(lp);
+                            if (u != null) { map[k].units += u; map[k].hasUnits = true; }
+                        }
+                        store.prevMemberPositions[m.wallet] = map;
+                    }
                     console.log(`Previous weekly archive (epoch ${prevEpoch}) loaded for trend baseline`);
                 }
             } catch (e) {
@@ -4633,6 +4648,7 @@
             renderWaterfallChart(bucket);
         } catch (err) { console.warn('renderWaterfallChart after member change:', err); }
         try { renderThresholdWatch(); } catch (err) { console.warn('renderThresholdWatch after member change:', err); }
+        try { renderExitRisk(); } catch (err) { console.warn('renderExitRisk after member change:', err); }
         try { renderMemberStatsRow(); } catch (err) { console.warn('renderMemberStatsRow after member change:', err); }
     }
 
@@ -5213,121 +5229,393 @@
         `).join('');
     }
     
-    // Render Pool Health & Exit Risk panel (TLA-wide; not member-filtered).
-    // Detection tiers (validated against real daily archives):
-    //   - Relative outflow: a pool's depth draining materially faster than its
-    //     bucket's MEDIAN move — market-normalized so a broad price dip (every pool
-    //     down ~10%) does NOT false-alarm; only genuine outliers flag.
-    //   - Combined exit signal: pool depth + base-asset reserve + token price ALL
-    //     falling together (the actual rug pattern). Single signals are informational;
-    //     the combination is the alarm.
-    // Current depth/staked come from the LIVE snapshot (freshest); reserves come from
-    // the pool-status-history rollup (the live pool objects don't carry lp_health).
+    // Best available "real holding" unit for a member LP position — the deposit/
+    // withdraw signal. Auto-compounding only GROWS this; a genuine withdrawal is the
+    // only thing that shrinks it. Vault shares (ampLP) preferred, then LP, then
+    // summed underlying tokens. USD value is NOT used here (it also moves with price).
+    function memberUnits(lp) {
+        for (const k of ['user_amplp_human', 'user_shares_human', 'user_lp_human']) {
+            const v = lp[k];
+            if (v != null && v !== 0) return v;
+        }
+        const uta = lp.underlying_token_amounts || [];
+        if (uta.length) return uta.reduce((s, t) => s + (t.amount_human || 0), 0);
+        return null;
+    }
+
+    // Member mode for the Pool Health panel: the selected wallet's LP positions,
+    // ranked by their capital, with how much they added/pulled vs the prior epoch
+    // (from the weekly archive) and which positions are inactive or near the threshold.
+    function renderExitRiskMember(member, panel, summaryEl) {
+        const memberName = member.name || (member.wallet ? member.wallet.slice(0, 10) + '\u2026' : 'Member');
+        const titleEl = document.getElementById('exit-risk-title');
+        const descEl = document.getElementById('exit-risk-desc');
+        if (titleEl) titleEl.textContent = 'Your positions & flow';
+        if (descEl) descEl.textContent = `${memberName}'s positions vs last epoch. Stake = change in your real LP units (deposits/withdrawals + auto-compounding); Value = USD, which also moves with token price.`;
+
+        const prior = store.prevMemberPositions?.[member.wallet] || null;
+        // Aggregate by pool — a member can hold one pool under several stake configs.
+        const agg = new Map();
+        for (const lp of (member.lp_positions || [])) {
+            const key = `${lp.pool_name}|${lp.bucket}`;
+            if (!agg.has(key)) agg.set(key, { name: lp.pool_name, bucket: lp.bucket, usd: 0, units: 0, hasUnits: false, status: lp.status, dist: lp.distance_from_threshold_pp });
+            const a = agg.get(key);
+            a.usd += lp.estimated_position_usd || 0;
+            const u = memberUnits(lp);
+            if (u != null) { a.units += u; a.hasUnits = true; }
+            if (lp.status === 'active') a.status = 'active';
+            if (lp.distance_from_threshold_pp != null && (a.dist == null || lp.distance_from_threshold_pp < a.dist)) a.dist = lp.distance_from_threshold_pp;
+        }
+        const recs = [], seen = new Set();
+        for (const [key, a] of agg) {
+            seen.add(key);
+            const pv = prior ? prior[key] : undefined;
+            const valueDelta = (pv != null) ? a.usd - pv.usd : null;
+            // unit % change = the real deposit/withdraw signal (compounding only grows it)
+            let unitPct = null, valuedStake = null;
+            if (pv != null && pv.hasUnits && a.hasUnits && pv.units > 0) {
+                unitPct = (a.units - pv.units) / pv.units * 100;
+                valuedStake = (unitPct / 100) * pv.usd;   // ~$ of stake added/removed in real terms
+            }
+            recs.push({ name: a.name, bucket: a.bucket, usd: a.usd, valueDelta, unitPct, valuedStake, status: a.status, dist: a.dist, exited: false });
+        }
+        if (prior) {
+            for (const [key, pv] of Object.entries(prior)) {
+                if (seen.has(key) || !pv.usd) continue;
+                const i = key.lastIndexOf('|');
+                recs.push({ name: key.slice(0, i), bucket: key.slice(i + 1), usd: 0, valueDelta: -pv.usd, unitPct: -100, valuedStake: -pv.usd, status: 'exited', dist: null, exited: true });
+            }
+        }
+        if (!recs.length) {
+            if (summaryEl) summaryEl.innerHTML = '';
+            panel.innerHTML = `<div class="p-3 rounded-lg bg-white/[0.02] text-gray-500 text-sm">${memberName} has no LP positions in TLA pools.</div>`;
+            return;
+        }
+        recs.sort((a, b) => (a.exited - b.exited) || (b.usd - a.usd));
+        const maxUsd = Math.max(...recs.map(r => r.usd), 1);
+        let netValue = 0, stakeAdded = 0, stakeReduced = 0, haveBaseline = false;
+        recs.forEach(r => {
+            if (r.valueDelta != null) { haveBaseline = true; netValue += r.valueDelta; }
+            if (r.valuedStake != null) { if (r.valuedStake >= 0) stakeAdded += r.valuedStake; else stakeReduced += r.valuedStake; }
+        });
+        const totalStaked = recs.reduce((s, r) => s + r.usd, 0);
+
+        if (summaryEl) {
+            if (haveBaseline) {
+                const card = (l, v, cls, sub) => `<div class="rounded-lg bg-white/[0.03] px-3 py-2"><div class="text-[10px] text-gray-500">${l}</div><div class="mono text-sm font-bold ${cls}">${v}</div>${sub ? `<div class="text-[9px] text-gray-600">${sub}</div>` : ''}</div>`;
+                summaryEl.innerHTML = `
+                  <div class="flex items-center gap-2 mb-2 text-xs text-gray-500">vs E${store.previousEpochNumber} \u00b7 total staked ${fmt$(totalStaked)}</div>
+                  <div class="grid grid-cols-3 gap-2">
+                    ${card('Value change', (netValue >= 0 ? '+' : '\u2212') + fmt$(Math.abs(netValue)), netValue >= 0 ? 'text-emerald-400' : 'text-red-400', 'USD, incl. price')}
+                    ${card('Stake added', '+' + fmt$(stakeAdded), 'text-emerald-400', 'deposits + compounding')}
+                    ${card('Stake reduced', stakeReduced < 0 ? '\u2212' + fmt$(Math.abs(stakeReduced)) : '$0', stakeReduced < 0 ? 'text-red-400' : 'text-gray-500', 'actual withdrawals')}
+                  </div>`;
+            } else {
+                summaryEl.innerHTML = `<div class="p-2 text-xs text-gray-500">Total staked ${fmt$(totalStaked)} \u00b7 baseline (prior epoch) not yet available.</div>`;
+            }
+        }
+
+        const badge = (t, cls) => `<span class="text-[9px] px-1.5 py-0.5 rounded ${cls} font-semibold">${t}</span>`;
+        const statusBadge = (r) => {
+            if (r.exited) return badge('exited', 'bg-red-500/25 text-red-300');
+            if (r.status && r.status !== 'active') return badge('inactive', 'bg-red-500/20 text-red-400');
+            if (r.dist != null && r.dist < 1) return badge('near threshold', 'bg-amber-500/20 text-amber-400');
+            return '';
+        };
+        const pctStr = (v) => `${v >= 0 ? '+' : '\u2212'}${Math.abs(v).toFixed(1)}%`;
+        const dollarStr = (v) => `${v >= 0 ? '+' : '\u2212'}${fmt$(Math.abs(v))}`;
+        panel.innerHTML = recs.map(r => {
+            const reduced = r.exited || (r.unitPct != null && r.unitPct < -0.5);   // genuine withdrawal
+            const sev = (r.exited || (r.status && r.status !== 'active')) ? 'red' : (reduced || (r.dist != null && r.dist < 1) ? 'amber' : 'none');
+            const border = sev === 'red' ? 'border-l-red-500/60 bg-red-500/[0.04]' : (sev === 'amber' ? 'border-l-amber-500/50 bg-amber-500/[0.03]' : 'border-l-white/5 bg-white/[0.02]');
+            const barW = Math.max(2, Math.round(r.usd / maxUsd * 100));
+            const barColor = sev === 'red' ? '#E24B4A' : (sev === 'amber' ? '#EF9F27' : ((r.valuedStake || 0) > 1 ? '#1D9E75' : '#5F5E5A'));
+            let stakeChip;
+            if (r.exited) stakeChip = `<span class="text-red-400">Stake \u2212100% (withdrawn)</span>`;
+            else if (r.unitPct == null) stakeChip = `<span class="text-gray-600">Stake n/a</span>`;
+            else stakeChip = `Stake <span class="mono ${r.unitPct < -0.5 ? 'text-red-400' : (r.unitPct > 0.05 ? 'text-emerald-400' : 'text-gray-400')}">${pctStr(r.unitPct)}</span>`;
+            let valueChip = '';
+            if (r.valueDelta != null) {
+                const priceNote = (!r.exited && r.unitPct != null && Math.abs(r.unitPct) < 0.5 && Math.abs(r.valueDelta) > 1) ? ' <span class="text-gray-600">(price)</span>' : '';
+                valueChip = `Value <span class="mono ${r.valueDelta < -1 ? 'text-red-400' : (r.valueDelta > 1 ? 'text-emerald-400' : 'text-gray-400')}">${dollarStr(r.valueDelta)}</span>${priceNote}`;
+            }
+            const splitLine = (r.valueDelta != null) ? `<div class="text-[11px] text-gray-500 mt-1 flex items-center gap-2 flex-wrap">${stakeChip}<span class="text-gray-700">\u00b7</span>${valueChip}</div>` : '';
+            const distNote = (!r.exited && r.dist != null) ? `<div class="text-[10px] text-gray-600 mt-0.5">${r.dist.toFixed(1)}pp from threshold</div>` : '';
+            return `
+            <div class="flex items-center gap-3 p-3 rounded-lg border-l-2 ${border}">
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 flex-wrap"><span class="font-medium truncate">${r.name}</span><span class="text-[9px] px-1 py-0.5 rounded bg-gray-500/20 text-gray-400">${r.bucket}</span>${statusBadge(r)}</div>
+                <div class="h-[5px] rounded-full bg-white/5 mt-1.5 overflow-hidden"><div class="h-full rounded-full" style="width:${barW}%;background:${barColor}"></div></div>
+                ${splitLine}
+                ${distNote}
+              </div>
+              <div class="text-right shrink-0" style="width:84px">
+                <div class="mono text-[13px] font-bold text-cyan-400">${fmt$(r.usd)}</div>
+                <div class="text-[9px] text-gray-500">your stake</div>
+              </div>
+            </div>`;
+        }).join('');
+    }
+
+    // Render Pool Health & Capital Flow watchlist (TLA-wide; not member-filtered).
+    // Always shows TLA's largest exposures (ranked by TLA $ staked) with a 4-epoch
+    // sparkline of staked capital, the dollar flow this epoch, a magnitude bar, and a
+    // health dot — so the picture is informative even on a calm day. Alarms layer on:
+    //   - HIGH  : combined exit signal (depth + base reserve + token price all falling)
+    //   - WATCH : draining faster than bucket peers (market-normalized)
+    //   - bleed : staked declined every epoch across the window (slow sustained drain)
+    // A reserve-skew chip appears ONLY when a pool is genuinely off 50/50 (>5pts):
+    // a stable pair skew is flagged (possible depeg); an LST/other skew is by-design.
+    // Risk keys on TLA $ at stake (floor), compared within each pool's own
+    // pool_address series (never by name). The USD value split is NOT used as a health
+    // signal — constant-product pools sit ~50/50 even mid-exit; the real tell is the
+    // reserve token-amount drift + price, captured by the HIGH composite.
     function renderExitRisk() {
         const panel = document.getElementById('exit-risk-panel');
         const summaryEl = document.getElementById('exit-risk-summary');
         if (!panel) return;
 
-        // Derive the comparison epochs from the history file itself (robust to cron lag).
-        // We compare WITHIN each pool's own pool_address|bucket series — never by name —
-        // so the genuine old/new same-name pools (LUNA-WBTC, LUNA-SOLID, ...) can't
-        // cross-wire and produce phantom -99% drops.
+        // Member mode: when a wallet is selected, show THEIR positions + flow instead
+        // of the TLA-wide watchlist.
+        const selMember = getSelectedMember();
+        if (selMember) { renderExitRiskMember(selMember, panel, summaryEl); return; }
+
+        // TLA-wide mode: restore the global title/description.
+        const _t = document.getElementById('exit-risk-title'); if (_t) _t.textContent = 'Pool Health & Exit Risk';
+        const _d = document.getElementById('exit-risk-desc'); if (_d) _d.textContent = "TLA's largest exposures, ranked by staked capital. Each shows its 4-epoch trend and dollars in/out this epoch. Sustained bleeds and pools draining faster than peers are flagged; reserve skew is shown only when meaningful.";
+
         const heps = (store.poolStatusHistory?.epochs || []).slice().sort((a, b) => a - b);
         if (heps.length < 2) {
             if (summaryEl) summaryEl.innerHTML = '';
-            panel.innerHTML = `<div class="p-3 rounded-lg bg-white/[0.02] text-gray-500 text-sm">Exit-risk tracking needs at least two epochs of history. It will populate as the pool-status-history cron accumulates data.</div>`;
+            panel.innerHTML = `<div class="p-3 rounded-lg bg-white/[0.02] text-gray-500 text-sm">Pool health tracking needs at least two epochs of history. It will populate as the pool-status-history cron accumulates data.</div>`;
             return;
         }
         const curEpoch = heps[heps.length - 1], prevEpoch = heps[heps.length - 2];
         const curE = String(curEpoch), prevE = String(prevEpoch);
-
         const BASE = new Set(['LUNA','USDC','USDT','EURe','axlUSDC','USDC.axl','wBTC','WBTC','wstETH','WETH','PAXG','axlUSDT','bLUNA','ampLUNA','stLUNA','arbLUNA']);
         const chg = (a, b) => (a && a > 0) ? ((b - a) / a) * 100 : null;
+        const STAKE_FLOOR = 20000, SHOW_FLOOR = 5000, TOPN = 10, SKEW_PTS = 5;
 
-        // Per-pool deltas from each pool's OWN history series (curEpoch vs prevEpoch).
-        const recs = [];
-        let totalCurStaked = 0, totalPrevStaked = 0;
+        // Per-pool recs from each pool's own series; dedupe by physical pool (address).
+        const byPool = new Map();
         for (const p of store.poolStatusHistory.pools) {
-            const hp = p.epochs?.[prevE], hc = p.epochs?.[curE];
-            if (!hp || !hc) continue;
-            totalCurStaked += (hc.staked_usd || 0); totalPrevStaked += (hp.staked_usd || 0);
-            if ((hp.depth_usd || 0) < 5000) continue; // skip dust pools
-            const dDepth = chg(hp.depth_usd, hc.depth_usd);
-            const dStaked = chg(hp.staked_usd, hc.staked_usd);
+            const hc = p.epochs?.[curE]; if (!hc) continue;
+            const hp = p.epochs?.[prevE] || null;
+            const staked = hc.staked_usd || 0;
+            const depth = hc.depth_usd || 0;
+            const isSingle = !(depth > 0) || !hc.a0_sym || !hc.a1_sym;
+            const dStaked = (hp && hp.staked_usd > 0) ? chg(hp.staked_usd, staked) : null;
+            const dDepth  = (hp && hp.depth_usd  > 0) ? chg(hp.depth_usd,  depth)  : null;
+            const dollarFlow = hp ? (staked - (hp.staked_usd || 0)) : 0;
+            // 4-epoch staked series (for sparkline + sustained-bleed detection)
+            const series = heps.map(e => { const ee = p.epochs?.[String(e)]; return ee ? (ee.staked_usd || 0) : null; });
+            // reserve drift + value split
             let dBase = null, dTok = null, tokSym = null;
-            const a0b = BASE.has(hc.a0_sym), a1b = BASE.has(hc.a1_sym);
-            if (a0b && !a1b) { dBase = chg(hp.a0_amt, hc.a0_amt); dTok = chg(hp.a1_px, hc.a1_px); tokSym = hc.a1_sym; }
-            else if (a1b && !a0b) { dBase = chg(hp.a1_amt, hc.a1_amt); dTok = chg(hp.a0_px, hc.a0_px); tokSym = hc.a0_sym; }
-            recs.push({ name: p.name, bucket: p.bucket, dex: p.dex, dDepth, dStaked, dBase, dTok, tokSym });
+            if (hp && !isSingle) {
+                const a0b = BASE.has(hc.a0_sym), a1b = BASE.has(hc.a1_sym);
+                if (a0b && !a1b) { dBase = chg(hp.a0_amt, hc.a0_amt); dTok = chg(hp.a1_px, hc.a1_px); tokSym = hc.a1_sym; }
+                else if (a1b && !a0b) { dBase = chg(hp.a1_amt, hc.a1_amt); dTok = chg(hp.a0_px, hc.a0_px); tokSym = hc.a0_sym; }
+            }
+            let split0 = null; // % of USD value on side 0
+            if (!isSingle) { const v0 = (hc.a0_amt || 0) * (hc.a0_px || 0), v1 = (hc.a1_amt || 0) * (hc.a1_px || 0); if (v0 + v1 > 0) split0 = v0 / (v0 + v1) * 100; }
+            const rec = { name: p.name, bucket: p.bucket, staked, prevStaked: hp ? (hp.staked_usd || 0) : null, isSingle, dStaked, dDepth, dBase, dTok, tokSym, dollarFlow, series, split0, a0sym: hc.a0_sym, a1sym: hc.a1_sym };
+            const key = p.pool_address || `${p.name}|${p.bucket}`;
+            const ex = byPool.get(key);
+            if (!ex || staked > ex.staked) byPool.set(key, rec);
         }
+        const recs = [...byPool.values()];
 
-        // Market normalization: bucket median depth change.
-        const byBucket = {};
-        recs.forEach(r => { if (r.dDepth != null) (byBucket[r.bucket] ||= []).push(r.dDepth); });
-        const median = (arr) => { if (!arr.length) return 0; const s = [...arr].sort((a, b) => a - b); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
-        const bucketMed = {}; Object.keys(byBucket).forEach(b => bucketMed[b] = median(byBucket[b]));
+        // Net / inflow / outflow (TLA staked, over distinct pools).
+        let inflow = 0, outflow = 0;
+        recs.forEach(r => { if (r.prevStaked != null) { if (r.dollarFlow >= 0) inflow += r.dollarFlow; else outflow += r.dollarFlow; } });
+        const netFlow = inflow + outflow;
 
-        // Flagging.
-        const flagged = [];
-        for (const r of recs) {
-            const rel = (r.dDepth != null) ? r.dDepth - (bucketMed[r.bucket] ?? 0) : null;
-            r.rel = rel;
-            const flags = [];
-            if (r.dDepth != null && r.dDepth < -15 && r.dBase != null && r.dBase < -15 && r.dTok != null && r.dTok < -15)
-                flags.push({ label: 'Combined exit signal', sev: 'high' });
-            if (rel != null && rel < -15)
-                flags.push({ label: 'Draining faster than peers', sev: 'med' });
-            if (flags.length) { r.flags = flags; r.maxSev = flags.some(f => f.sev === 'high') ? 'high' : 'med'; flagged.push(r); }
-        }
-        flagged.sort((a, b) => ((b.maxSev === 'high') - (a.maxSev === 'high')) || ((a.dDepth ?? 0) - (b.dDepth ?? 0)));
+        // Bucket medians for peer-normalization (pools >= SHOW_FLOOR).
+        const med = (arr) => { if (!arr.length) return 0; const s = [...arr].sort((a, b) => a - b); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+        const gS = {}, gD = {};
+        recs.forEach(r => { if (r.staked >= SHOW_FLOOR) { if (r.dStaked != null) (gS[r.bucket] ||= []).push(r.dStaked); if (r.dDepth != null) (gD[r.bucket] ||= []).push(r.dDepth); } });
+        const bmS = {}, bmD = {};
+        Object.keys(gS).forEach(b => bmS[b] = med(gS[b])); Object.keys(gD).forEach(b => bmD[b] = med(gD[b]));
 
-        // Net-flow summary (TLA-wide).
-        const netStaked = totalCurStaked - totalPrevStaked;
-        const netPct = totalPrevStaked > 0 ? (netStaked / totalPrevStaked * 100) : 0;
+        // Trend classification + flags.
+        recs.forEach(r => {
+            const vals = r.series.filter(v => v != null);
+            // sustained bleed: declined every consecutive step across >=3 points
+            let bleed = vals.length >= 3, grew = vals.length >= 3;
+            for (let i = 1; i < vals.length; i++) { if (!(vals[i] < vals[i - 1])) bleed = false; if (!(vals[i] > vals[i - 1])) grew = false; }
+            // net trend over window (for sparkline color)
+            const netW = (vals.length >= 2 && vals[0] > 0) ? (vals[vals.length - 1] - vals[0]) / vals[0] : 0;
+            // Magnitude gate: a monotonic drift of a couple percent is NOT a bleed.
+            // Require a meaningful cumulative move over the window (>=15%) to badge it.
+            r.bleed = bleed && netW <= -0.15; r.grew = grew && netW >= 0.15; r.netW = netW;
+            r.flags = []; r.sev = null;
+            if (r.staked >= STAKE_FLOOR) {
+                const relS = (r.dStaked != null) ? r.dStaked - (bmS[r.bucket] ?? 0) : null;
+                const relD = (r.dDepth  != null) ? r.dDepth  - (bmD[r.bucket] ?? 0) : null;
+                if (r.dDepth != null && r.dDepth < -15 && r.dBase != null && r.dBase < -15 && r.dTok != null && r.dTok < -15)
+                    r.flags.push({ label: 'Combined exit signal', sev: 'high' });
+                if ((relS != null && relS < -15) || (relD != null && relD < -15))
+                    r.flags.push({ label: 'Draining faster than peers', sev: 'med' });
+                if (bleed && !r.flags.some(f => f.sev === 'high'))
+                    r.flags.push({ label: 'Sustained ' + vals.length + '-epoch bleed', sev: 'med' });
+            }
+            r.sev = r.flags.some(f => f.sev === 'high') ? 'high' : (r.flags.length ? 'med' : null);
+            // reserve skew (only meaningful)
+            r.skew = (r.split0 != null) ? Math.abs(r.split0 - 50) : null;
+        });
+
+        // Watchlist = top N by stake (>= SHOW_FLOOR) UNION any flagged pool.
+        const top = recs.filter(r => r.staked >= SHOW_FLOOR).sort((a, b) => b.staked - a.staked).slice(0, TOPN);
+        const inTop = new Set(top.map(r => r.name + '|' + r.bucket));
+        const extra = recs.filter(r => r.sev && !inTop.has(r.name + '|' + r.bucket));
+        const sevRank = (s) => s === 'high' ? 2 : (s === 'med' ? 1 : 0);
+        const list = [...top, ...extra].sort((a, b) => (sevRank(b.sev) - sevRank(a.sev)) || (b.staked - a.staked));
+        const maxStake = Math.max(...list.map(r => r.staked), 1);
+        const nFlagged = recs.filter(r => r.sev).length;
+
+        // ---- Summary cards: in / out / net ----
         if (summaryEl) {
-            const up = netStaked >= 0;
+            const card = (label, val, cls) => `<div class="rounded-lg bg-white/[0.03] px-3 py-2"><div class="text-[10px] text-gray-500">${label}</div><div class="mono text-sm font-bold ${cls}">${val}</div></div>`;
+            const chip = nFlagged
+                ? `<span class="text-[10px] px-2 py-0.5 rounded bg-amber-500/15 text-amber-400">${nFlagged} flagged</span>`
+                : `<span class="text-[10px] px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400">all clear</span>`;
             summaryEl.innerHTML = `
-              <div class="flex items-center justify-between p-3 rounded-lg bg-white/[0.02] border border-white/5">
-                <div class="text-sm text-gray-400">Net TLA staked flow: E${prevEpoch} → E${curEpoch}</div>
-                <div class="mono text-sm font-bold ${up ? 'text-emerald-400' : 'text-red-400'}">${up ? '+' : ''}${fmt$(netStaked)} <span class="text-[11px] text-gray-500">(${up ? '+' : ''}${netPct.toFixed(1)}%)</span></div>
+              <div class="flex items-center gap-2 mb-2 text-xs text-gray-500">Capital flow E${prevEpoch} \u2192 E${curEpoch} ${chip}</div>
+              <div class="grid grid-cols-3 gap-2">
+                ${card('Net flow', (netFlow >= 0 ? '+' : '') + fmt$(netFlow), netFlow >= 0 ? 'text-emerald-400' : 'text-red-400')}
+                ${card('Inflows', '+' + fmt$(inflow), 'text-emerald-400')}
+                ${card('Outflows', fmt$(outflow), 'text-red-400')}
               </div>`;
         }
 
-        const arrow = (v) => (v == null) ? '<span class="text-gray-500">\u00b7</span>'
-            : `<span class="${v < 0 ? 'text-red-400' : 'text-emerald-400'} mono">${v >= 0 ? '+' : ''}${v.toFixed(1)}%</span>`;
-        const sevBadge = (sev) => sev === 'high'
-            ? '<span class="text-[9px] px-1.5 py-0.5 rounded bg-red-500/30 text-red-300 font-semibold">HIGH RISK</span>'
-            : '<span class="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 font-semibold">WATCH</span>';
+        // ---- helpers ----
+        const sparkline = (vals, color) => {
+            const pts = vals.map((v, i) => [i, v]).filter(p => p[1] != null);
+            if (pts.length < 2) return '<svg width="72" height="22"></svg>';
+            const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+            const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+            const W = 72, H = 22, pad = 2;
+            const sx = (x) => (x1 === x0) ? W / 2 : pad + (x - x0) / (x1 - x0) * (W - 2 * pad);
+            const sy = (y) => (y1 === y0) ? H / 2 : (H - pad) - (y - y0) / (y1 - y0) * (H - 2 * pad);
+            const poly = pts.map(p => `${sx(p[0]).toFixed(1)},${sy(p[1]).toFixed(1)}`).join(' ');
+            const last = pts[pts.length - 1];
+            return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="flex-shrink:0"><polyline points="${poly}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round"/><circle cx="${sx(last[0]).toFixed(1)}" cy="${sy(last[1]).toFixed(1)}" r="1.8" fill="${color}"/></svg>`;
+        };
+        const dotColor = (r) => r.sev === 'high' ? '#E24B4A' : (r.sev === 'med' ? '#EF9F27' : (r.netW > 0.03 ? '#1D9E75' : '#888780'));
+        const flowColor = (v) => v < -50 ? 'text-red-400' : (v > 50 ? 'text-emerald-400' : 'text-gray-500');
+        const sparkColor = (r) => r.netW < -0.03 ? '#E24B4A' : (r.netW > 0.03 ? '#1D9E75' : '#888780');
+        const badge = (txt, cls) => `<span class="text-[9px] px-1.5 py-0.5 rounded ${cls} font-semibold">${txt}</span>`;
+        const statusBadge = (r) => {
+            if (r.sev === 'high') return badge('HIGH RISK', 'bg-red-500/30 text-red-300');
+            if (r.flags.some(f => /faster than peers/.test(f.label))) return badge('WATCH', 'bg-amber-500/20 text-amber-400');
+            if (r.bleed) return badge(r.series.filter(v => v != null).length + '-epoch bleed', 'bg-amber-500/15 text-amber-400');
+            if (r.grew) return badge('growing', 'bg-emerald-500/15 text-emerald-400');
+            return '';
+        };
+        const skewChip = (r) => {
+            if (r.isSingle || r.skew == null || r.skew <= SKEW_PTS) return '';
+            const heavy = r.split0 >= 50 ? r.a0sym : r.a1sym;
+            const hi = Math.round(Math.max(r.split0, 100 - r.split0));
+            const isStable = r.bucket === 'stable';
+            const cls = isStable ? 'text-amber-400' : 'text-gray-500';
+            const note = isStable ? 'possible depeg' : 'by design';
+            return `<span class="text-[10px] ${cls}" title="USD value split — ${note}"><i class="fas fa-balance-scale-left text-[9px] mr-0.5"></i>${hi}% ${heavy} \u00b7 ${note}</span>`;
+        };
 
-        if (!flagged.length) {
-            panel.innerHTML = `
-              <div class="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                <div class="flex items-center gap-2 text-emerald-400"><i class="fas fa-shield-alt"></i><span class="text-sm font-medium">All clear \u2014 no pools showing exit-risk signals vs last epoch</span></div>
-                <div class="text-xs text-gray-500 mt-1">Watching ${recs.length} pools for accelerated outflow and combined exit signals.</div>
-              </div>`;
-            return;
-        }
-
-        panel.innerHTML = flagged.map(r => {
-            const leftPool = (r.dDepth != null && r.dDepth < -15);
-            const unstakedOnly = (!leftPool && r.dStaked != null && r.dStaked < -15);
-            const typeNote = leftPool ? 'Liquidity leaving the pool' : (unstakedOnly ? 'Unstaked from TLA (stayed in pool)' : '');
-            const flagLabels = r.flags.map(f => `<span class="text-[10px] text-gray-400">${f.label}</span>`).join('<span class="text-gray-600 mx-1">\u00b7</span>');
+        // ---- rows ----
+        panel.innerHTML = list.map(r => {
+            const border = r.sev === 'high' ? 'border-l-red-500/60 bg-red-500/[0.04]'
+                : (r.sev === 'med' ? 'border-l-amber-500/50 bg-amber-500/[0.03]' : 'border-l-white/5 bg-white/[0.02]');
+            const barW = Math.max(2, Math.round(r.staked / maxStake * 100));
+            const barColor = r.sev === 'high' ? '#E24B4A' : (r.sev === 'med' ? '#EF9F27' : (r.grew ? '#1D9E75' : '#5F5E5A'));
+            const flow = r.prevStaked == null ? '' :
+                `<div class="mono text-[11px] ${flowColor(r.dollarFlow)}">${r.dollarFlow >= 0 ? '+' : '\u2212'}${fmt$(Math.abs(r.dollarFlow))}</div>`;
+            const sc = skewChip(r);
             return `
-            <div class="p-3 rounded-lg ${r.maxSev === 'high' ? 'bg-red-500/5 border-red-500/20' : 'bg-amber-500/5 border-amber-500/10'} border">
-              <div class="flex items-center justify-between">
-                <div class="flex items-center gap-2"><span class="font-medium">${r.name}</span>${sevBadge(r.maxSev)}<span class="text-[9px] px-1 py-0.5 rounded bg-gray-500/20 text-gray-400">${r.bucket}</span></div>
-                <div class="text-[10px] text-gray-500">${typeNote}</div>
+            <div class="flex items-center gap-3 p-3 rounded-lg border-l-2 ${border}">
+              <span class="w-2 h-2 rounded-full shrink-0" style="background:${dotColor(r)}"></span>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="font-medium truncate">${r.name}</span>
+                  <span class="text-[9px] px-1 py-0.5 rounded bg-gray-500/20 text-gray-400">${r.bucket}</span>
+                  ${statusBadge(r)}
+                  ${sc}
+                </div>
+                <div class="h-[5px] rounded-full bg-white/5 mt-1.5 overflow-hidden"><div class="h-full rounded-full" style="width:${barW}%;background:${barColor}"></div></div>
               </div>
-              <div class="flex items-center flex-wrap gap-x-4 gap-y-1 mt-2 text-[11px]">
-                <div title="Pool depth change vs last epoch">Depth ${arrow(r.dDepth)} <span class="text-gray-600">(peers ${(bucketMed[r.bucket] ?? 0).toFixed(1)}%)</span></div>
-                <div title="TLA staked change">TLA ${arrow(r.dStaked)}</div>
-                ${r.dBase != null ? `<div title="Base-asset reserve change">Base reserve ${arrow(r.dBase)}</div>` : ''}
-                ${r.dTok != null ? `<div title="${r.tokSym || 'Token'} price change">${r.tokSym || 'Token'} px ${arrow(r.dTok)}</div>` : ''}
+              ${sparkline(r.series, sparkColor(r))}
+              <div class="text-right shrink-0" style="width:78px">
+                <div class="mono text-[13px] font-bold text-cyan-400">${fmt$(r.staked)}</div>
+                <div class="text-[9px] text-gray-500 -mt-0.5">TLA staked</div>
+                ${flow}
               </div>
-              <div class="mt-1">${flagLabels}</div>
             </div>`;
         }).join('');
+    }
+
+    // Member mode for Threshold Watch: the selected wallet's own LP positions that
+    // are near the 1% threshold (may go inactive) or already inactive, from
+    // lp_positions (status + distance_from_threshold_pp). Pools they DROPPED this
+    // epoch are detected via the prior weekly archive's per-position status.
+    function renderThresholdWatchMember(member) {
+        const memberName = member.name || (member.wallet ? member.wallet.slice(0, 12) + '\u2026' : 'Member');
+        const badge = document.getElementById('threshold-member-badge');
+        const desc = document.getElementById('threshold-description');
+        if (badge) { badge.textContent = `Your pools: ${memberName}`; badge.classList.remove('hidden'); }
+        if (desc) desc.textContent = 'Your LP positions near the 1% threshold or already inactive. A pool needs >1% of its bucket to keep earning.';
+
+        const prior = store.prevMemberPositions?.[member.wallet] || null;
+        const aggT = new Map();
+        for (const lp of (member.lp_positions || [])) {
+            const key = `${lp.pool_name}|${lp.bucket}`;
+            if (!aggT.has(key)) aggT.set(key, { name: lp.pool_name, bucket: lp.bucket, status: lp.status, dist: lp.distance_from_threshold_pp, usd: 0, prevStatus: prior ? prior[key]?.status : undefined });
+            const a = aggT.get(key);
+            a.usd += lp.estimated_position_usd || 0;
+            if (lp.status === 'active') a.status = 'active';
+            if (lp.distance_from_threshold_pp != null && (a.dist == null || lp.distance_from_threshold_pp < a.dist)) a.dist = lp.distance_from_threshold_pp;
+        }
+        const pos = [...aggT.values()];
+        const active = pos.filter(p => p.status === 'active');
+        const atRisk = active.filter(p => p.dist != null && p.dist < 1).sort((a, b) => a.dist - b.dist);
+        const inactive = pos.filter(p => p.status && p.status !== 'active');
+        const dropped = inactive.filter(p => p.prevStatus === 'active');
+        const olderInactive = inactive.filter(p => p.prevStatus !== 'active');
+
+        const bb = (b) => `<span class="text-[9px] px-1 py-0.5 rounded bg-gray-500/20 text-gray-400">${b}</span>`;
+        const stakeCell = (usd, cls) => `<div class="text-right"><div class="mono ${cls} font-bold">${fmt$(usd)}</div><div class="text-[10px] text-gray-500">your stake</div></div>`;
+
+        const arC = document.getElementById('threshold-at-risk');
+        if (!atRisk.length) {
+            arC.innerHTML = `<div class="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20"><div class="flex items-center gap-2 text-emerald-400"><i class="fas fa-shield-alt"></i><span class="text-sm">None of your active pools are near the threshold</span></div></div>`;
+        } else {
+            arC.innerHTML = atRisk.map(p => `
+              <div class="flex items-center justify-between p-3 rounded-lg bg-amber-500/5 border border-amber-500/10">
+                <div class="flex flex-col gap-1"><div class="flex items-center gap-2"><span class="font-medium">${p.name}</span>${bb(p.bucket)}</div><div class="text-[10px] text-amber-400/80">${p.dist.toFixed(2)}pp above the 1% line</div></div>
+                ${stakeCell(p.usd, 'text-amber-400')}
+              </div>`).join('');
+        }
+
+        const rdC = document.getElementById('threshold-recently-dropped');
+        if (!dropped.length) {
+            rdC.innerHTML = `<div class="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20"><div class="flex items-center gap-2 text-emerald-400"><i class="fas fa-check-circle"></i><span class="text-sm">None of your pools dropped this epoch</span></div></div>`;
+        } else {
+            rdC.innerHTML = dropped.map(p => `
+              <div class="flex items-center justify-between p-3 rounded-lg bg-red-500/5 border border-red-500/10">
+                <div class="flex flex-col gap-1"><div class="flex items-center gap-2"><span class="font-medium text-red-300">${p.name}</span><span class="text-[9px] px-1.5 py-0.5 rounded bg-red-500/30 text-red-300 font-semibold">dropped</span>${bb(p.bucket)}</div></div>
+                ${stakeCell(p.usd, 'text-red-400')}
+              </div>`).join('');
+        }
+
+        const inC = document.getElementById('threshold-inactive');
+        if (!olderInactive.length) {
+            inC.innerHTML = `<div class="text-gray-500 text-sm p-3 bg-white/[0.02] rounded-lg">No other inactive positions</div>`;
+        } else {
+            inC.innerHTML = olderInactive.map(p => `
+              <div class="flex items-center justify-between p-3 rounded-lg bg-gray-500/5 border border-gray-500/10">
+                <div class="flex flex-col gap-1"><div class="flex items-center gap-2"><span class="font-medium text-gray-400">${p.name}</span><span class="text-[9px] px-1.5 py-0.5 rounded bg-gray-500/20 text-gray-400">inactive</span>${bb(p.bucket)}</div></div>
+                ${stakeCell(p.usd, 'text-gray-400')}
+              </div>`).join('');
+        }
     }
 
     // Render Threshold Watch section.
@@ -5341,6 +5629,11 @@
         const currentEpoch = store.epoch || 0;
         const histByKey = store.poolHistoryByKey || new Map();
         const histFor = (name, bucket) => histByKey.get(`${name}|${bucket}`)?.epochs || {};
+
+        // Member mode: show the selected wallet's OWN positions (near threshold +
+        // inactive) from lp_positions, rather than the vote-filtered global view.
+        const _selM = getSelectedMember();
+        if (_selM) { renderThresholdWatchMember(_selM); return; }
 
         // Member filter: when a member is selected, restrict to pools they voted for.
         const memberAlloc = getSelectedMemberAllocations();
@@ -5628,8 +5921,8 @@
                         <span class="text-xs text-gray-300 font-medium truncate leading-tight">
                             ${pool.name}${activeLabel}${changeIndicator}
                         </span>
-                        <span class="text-[9px] ${pool.dex?.includes('Astro') ? 'text-red-400' : 'text-emerald-400'} truncate leading-tight">
-                            ${pool.dex?.includes('Astro') ? 'Astro' : 'Skeleton'}
+                        <span class="text-[9px] ${(pool.dex === 'Single' || pool.is_single) ? 'text-amber-400' : (pool.dex?.includes('Astro') ? 'text-red-400' : 'text-emerald-400')} truncate leading-tight">
+                            ${(pool.dex === 'Single' || pool.is_single) ? 'Single' : (pool.dex?.includes('Astro') ? 'Astro' : 'Skeleton')}
                         </span>
                     </div>
                     
@@ -5648,8 +5941,8 @@
                         <span class="text-xs text-white font-medium drop-shadow-lg px-2 leading-tight">
                             ${pool.name}${activeLabel}${changeIndicator}
                         </span>
-                        <span class="text-[9px] ${pool.dex?.includes('Astro') ? 'text-red-300' : 'text-emerald-300'} drop-shadow-lg px-2 leading-tight">
-                            ${pool.dex?.includes('Astro') ? 'Astro' : 'Skeleton'}
+                        <span class="text-[9px] ${(pool.dex === 'Single' || pool.is_single) ? 'text-amber-300' : (pool.dex?.includes('Astro') ? 'text-red-300' : 'text-emerald-300')} drop-shadow-lg px-2 leading-tight">
+                            ${(pool.dex === 'Single' || pool.is_single) ? 'Single' : (pool.dex?.includes('Astro') ? 'Astro' : 'Skeleton')}
                         </span>
                     </div>
                     ` : ''}
