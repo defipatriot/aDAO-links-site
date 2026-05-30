@@ -2359,7 +2359,8 @@
                 <i class="fas fa-clock-rotate-left"></i>
                 Changelog
             </h3>
-            <p class="text-gray-500 text-xs mb-5">Page revisions, newest first</p>
+            <p class="text-gray-500 text-xs mb-3">Page revisions, newest first</p>
+            <div id="changelog-jump" class="flex flex-wrap gap-1.5 mb-4 pb-3 border-b border-white/10 hidden"></div>
             <div id="changelog-content" class="changelog-body text-sm">
                 <div class="text-gray-500 text-center py-8">
                     <i class="fas fa-spinner fa-spin mr-2"></i>Loading changelog...
@@ -11173,6 +11174,32 @@
                     .catch(function() { /* keep static default */ });
             })();
 
+            // Build the "jump to rev" pill row from the ## Rev headers, so a long changelog
+            // (Rev 3 alone has many sub-entries) lets you hop straight to Rev 2, Rev 1, etc.
+            function buildChangelogJump(md) {
+                var jump = document.getElementById('changelog-jump');
+                if (!jump) return;
+                var revs = [];
+                var re = /^##\s+Rev\s+([^\n—–-]+?)\s*[—–-]/gm, m;
+                while ((m = re.exec(md)) !== null) {
+                    var label = m[1].trim();
+                    var anchor = 'cl-' + ('Rev ' + label).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+                    revs.push({ label: label, anchor: anchor });
+                }
+                if (revs.length < 2) { jump.classList.add('hidden'); return; }
+                jump.innerHTML = '<span class="text-[11px] text-gray-500 self-center mr-1">Jump to:</span>' +
+                    revs.map(function (r) {
+                        return '<button type="button" class="cl-jump-pill text-[11px] px-2 py-0.5 rounded bg-white/5 hover:bg-cyan-500/20 text-gray-300 hover:text-cyan-300 transition-colors" data-anchor="' + r.anchor + '">Rev ' + r.label + '</button>';
+                    }).join('');
+                jump.classList.remove('hidden');
+                jump.querySelectorAll('.cl-jump-pill').forEach(function (btn) {
+                    btn.addEventListener('click', function () {
+                        var el = document.getElementById(btn.dataset.anchor);
+                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    });
+                });
+            }
+
             function parseMarkdown(md) {
                 var escapeHtml = function(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
                 var lines = md.split(/\r?\n/);
@@ -11198,7 +11225,9 @@
                         var ht = hm[2];
                         var rd = ht.match(/^(.+?)\s+[—–-]\s+(.+)$/);
                         if (rd && tag === 'h2') {
-                            out.push('<' + tag + '>' + escapeHtml(rd[1]) + '<span class="rev-date">' + escapeHtml(rd[2]) + '</span></' + tag + '>');
+                            // anchor id from the rev label (e.g. "Rev 3" -> "rev-3") for jump-nav
+                            var anchor = rd[1].trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+                            out.push('<' + tag + ' id="cl-' + anchor + '">' + escapeHtml(rd[1]) + '<span class="rev-date">' + escapeHtml(rd[2]) + '</span></' + tag + '>');
                         } else {
                             out.push('<' + tag + '>' + escapeHtml(ht) + '</' + tag + '>');
                         }
@@ -11229,7 +11258,7 @@
                         var url = 'https://raw.githubusercontent.com/defipatriot/website-adao-core/main/tla-log.md';
                         fetch(url, { cache: 'no-cache' })
                             .then(function(r) { if (!r.ok) throw new Error('Network response not ok: ' + r.status); return r.text(); })
-                            .then(function(md) { changelogContent.innerHTML = parseMarkdown(md); changelogLoaded = true; updateFooterRev(md); })
+                            .then(function(md) { changelogContent.innerHTML = parseMarkdown(md); changelogLoaded = true; updateFooterRev(md); buildChangelogJump(md); })
                             .catch(function(err) {
                                 console.error('Changelog fetch failed:', err);
                                 changelogContent.innerHTML = '<p class="text-gray-400">Could not load changelog. <a href="' + url + '" target="_blank" rel="noopener" class="text-cyan-400 hover:underline">View raw on GitHub</a></p>';
