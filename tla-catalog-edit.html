@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Catalog Edit - Alliance DAO Tools</title>
+    
+    <link rel="icon" type="image/x-icon" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/favicon-16x16.png">
+    
+    <link rel="canonical" href="https://www.thealliancedao.com/tla-catalog-edit.html">
+    <meta name="description" content="Add new entries to the Alliance DAO ecosystem catalog. Label wallets, identify contracts, write acquisition guides. Exports updated JSON for direct commit to the GitHub data repo.">
+    <meta name="keywords" content="Alliance DAO catalog editor, Terra address labeling, contract registry, ecosystem curation">
+    <meta name="robots" content="index, follow">
+    
+    <meta property="og:title" content="Catalog Edit | Alliance DAO Tools">
+    <meta property="og:description" content="Add labels for unknown addresses. Export updated catalog JSON for one-click GitHub commit.">
+    <meta property="og:image" content="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/android-chrome-512x512.png">
+    <meta property="og:url" content="https://www.thealliancedao.com/tla-catalog-edit.html">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Catalog Edit | Alliance DAO Tools">
+    <meta name="twitter:description" content="Add labels for unknown addresses. Export updated catalog JSON for one-click GitHub commit.">
+    <meta name="twitter:image" content="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/android-chrome-512x512.png">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #0D0D0D; color: #EAEAEA; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        
+        .file-tab {
+            padding: 10px 16px;
+            font-size: 13px; font-weight: 600;
+            color: #9ca3af;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-bottom: none;
+            border-radius: 8px 8px 0 0;
+            cursor: pointer;
+            transition: all 0.15s;
+            display: inline-flex; align-items: center; gap: 6px;
+        }
+        .file-tab:hover { background: rgba(34,211,238,0.1); color: #d1d5db; }
+        .file-tab.active {
+            background: rgba(34,211,238,0.15);
+            color: #67e8f9;
+            border-color: rgba(34,211,238,0.4);
+        }
+        
+        .form-input, .form-select, .form-textarea {
+            width: 100%;
+            background: rgba(15, 15, 25, 0.6);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-size: 14px;
+            color: white;
+        }
+        .form-input:focus, .form-select:focus, .form-textarea:focus {
+            outline: none; border-color: rgba(34,211,238,0.5);
+        }
+        .form-label {
+            display: block; font-size: 12px; font-weight: 600;
+            color: #9ca3af; margin-bottom: 4px;
+        }
+        .form-help { font-size: 11px; color: #6b7280; margin-top: 4px; }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, rgba(34,211,238,0.2), rgba(168,85,247,0.2));
+            border: 1px solid rgba(34,211,238,0.5);
+            color: #67e8f9;
+            font-weight: 600;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .btn-primary:hover { background: linear-gradient(135deg, rgba(34,211,238,0.3), rgba(168,85,247,0.3)); }
+        .btn-secondary {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: #d1d5db;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .btn-secondary:hover { background: rgba(255,255,255,0.1); }
+        
+        .json-preview {
+            background: #0a0a0f;
+            border: 1px solid rgba(34,211,238,0.2);
+            border-radius: 8px;
+            padding: 16px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: #e2e8f0;
+            white-space: pre;
+            overflow-x: auto;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        
+        .entry-row {
+            display: flex; align-items: center; gap: 8px;
+            padding: 8px; border-radius: 6px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.06);
+            margin-bottom: 4px;
+        }
+        .entry-row:hover { background: rgba(255,255,255,0.06); }
+        
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #1a1a1a; }
+        ::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+    </style>
+    
+    <!-- Shared chrome CSS -->
+    <style>
+        .top-nav-tab { min-width: 110px; }
+        @media (min-width: 768px) { .top-nav-tab { min-width: 140px; } }
+        .top-nav-tab.active { background: rgba(34, 211, 238, 0.15) !important; color: #67e8f9 !important; border-color: rgba(34, 211, 238, 0.6) !important; }
+        .top-nav-tab.active:hover { background: rgba(34, 211, 238, 0.2) !important; }
+        
+        .mobile-bottom-nav { display: none; }
+        @media (max-width: 767px) {
+            .mobile-bottom-nav {
+                display: grid; grid-template-columns: repeat(5, 1fr);
+                position: fixed; bottom: 0; left: 0; right: 0; z-index: 50;
+                background: rgba(10, 11, 15, 0.92);
+                backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+                border-top: 1px solid rgba(34, 211, 238, 0.2);
+                padding: 0.4rem 0.25rem calc(0.4rem + env(safe-area-inset-bottom)) 0.25rem;
+                gap: 0.15rem;
+            }
+            .mobile-bottom-nav-tab {
+                display: flex; flex-direction: column; align-items: center; justify-content: center;
+                gap: 0.15rem; padding: 0.4rem 0.2rem;
+                color: #9ca3af; text-decoration: none;
+                font-size: 0.65rem; font-weight: 600; line-height: 1;
+                border-radius: 0.5rem; min-height: 48px;
+            }
+            .mobile-bottom-nav-tab i { font-size: 1.1rem; color: #6b7280; }
+            .mobile-bottom-nav-tab.active { color: #67e8f9; }
+            .mobile-bottom-nav-tab.active i { color: #22d3ee; }
+            body { padding-bottom: calc(64px + env(safe-area-inset-bottom)) !important; }
+        }
+        
+        .tools-subnav-tab {
+            padding: 8px 16px; border-radius: 8px;
+            font-size: 13px; font-weight: 600; color: #9ca3af;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08);
+            display: inline-flex; align-items: center; gap: 6px;
+            text-decoration: none; transition: all 0.15s;
+        }
+        .tools-subnav-tab:hover { background: rgba(34,211,238,0.1); color: #d1d5db; border-color: rgba(34,211,238,0.25); }
+        .tools-subnav-tab.active { background: rgba(34,211,238,0.15); color: #67e8f9; border-color: rgba(34,211,238,0.5); }
+    </style>
+</head>
+<body class="min-h-screen">
+
+    <!-- Site header -->
+    <header class="py-4">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-wrap md:flex-nowrap justify-between items-center">
+            <div class="flex-shrink-0 w-1/2 md:w-32 order-1 flex items-center gap-3">
+                <a href="tools.html" class="text-gray-500 hover:text-cyan-400 transition-colors mr-1" title="Back to Tools">
+                    <i class="fas fa-arrow-left text-lg"></i>
+                </a>
+                <a href="index.html" title="Alliance DAO home"><img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Alliance%20DAO%20Logo.png" alt="Alliance DAO Logo" class="h-12 md:h-16 w-auto" onerror="this.src='https://placehold.co/128x64/0D0D0D/EAEAEA?text=Logo'; this.onerror=null;"></a>
+            </div>
+            <nav class="hidden md:flex flex-1 w-full md:w-auto justify-center items-center gap-2 sm:gap-3 order-3 md:order-2 mt-4 md:mt-0">
+                <a href="index.html" class="top-nav-tab bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-4 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center flex-1 md:flex-initial">Home</a>
+                <a href="nft-explorer-index.html" class="top-nav-tab bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-4 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center flex-1 md:flex-initial"><span class="md:hidden">Explorer</span><span class="hidden md:inline">NFT Explorer</span></a>
+                <a href="adao-lore.html" class="top-nav-tab bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-4 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center flex-1 md:flex-initial"><span class="md:hidden">Lore</span><span class="hidden md:inline">aDAO Lore</span></a>
+                <a href="tla-stats.html" class="top-nav-tab bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-4 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center flex-1 md:flex-initial"><span class="md:hidden">TLA</span><span class="hidden md:inline">TLA Stats</span></a>
+                <a href="dao.html" class="top-nav-tab bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-4 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center flex-1 md:flex-initial">DAO</a>
+            </nav>
+            <div class="w-1/2 md:w-32 flex-shrink-0 flex justify-end order-2 md:order-3">
+                <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Terra.PNG" alt="Terra Logo" class="h-12 md:h-16 w-auto" onerror="this.src='https://placehold.co/128x64/0D0D0D/EAEAEA?text=Logo'; this.onerror=null;">
+            </div>
+        </div>
+    </header>
+
+    <!-- Tools sub-nav -->
+    <div class="bg-gray-900/40 border-b border-gray-800">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+            <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-xs text-gray-500 mr-2 hidden sm:block"><i class="fas fa-wrench mr-1"></i>Tools:</span>
+                <a href="tla-chain-queries.html" class="tools-subnav-tab"><i class="fas fa-terminal"></i>Query Builder</a>
+                <a href="tla-catalog.html" class="tools-subnav-tab"><i class="fas fa-book"></i>Catalog View</a>
+                <a href="tla-catalog-edit.html" class="tools-subnav-tab active"><i class="fas fa-pen-to-square"></i>Catalog Edit</a>
+            </div>
+        </div>
+    </div>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div class="mb-5">
+            <h1 class="text-2xl md:text-3xl font-bold text-white mb-1">Catalog Edit</h1>
+            <p class="text-gray-400 text-sm">
+                Add or edit entries in the curated catalog. Pick which file to edit, fill in the form,
+                preview the merged JSON, then copy or download to commit to GitHub.
+            </p>
+        </div>
+
+        <!-- Workflow notice -->
+        <div class="bg-blue-950/30 border border-blue-700/30 rounded-lg p-4 mb-5 text-sm">
+            <p class="text-blue-300 font-semibold mb-2"><i class="fas fa-info-circle mr-2"></i>How this works</p>
+            <ol class="text-gray-300 list-decimal list-inside space-y-1">
+                <li>Pick a file tab below (wallets, contracts, etc.)</li>
+                <li>The current file's contents load automatically — you'll see existing entries</li>
+                <li>Fill in the form to add a new entry, OR click an existing entry to edit it</li>
+                <li>Preview the updated JSON, then <strong>Copy</strong> or <strong>Download</strong></li>
+                <li>Paste into GitHub at <span class="mono text-cyan-400">defipatriot/tla-chain-registry/curated/[file].json</span> and commit</li>
+                <li>Next cron run picks up the change</li>
+            </ol>
+        </div>
+
+        <!-- File tabs -->
+        <div class="border-b border-cyan-700/20 mb-0 flex flex-wrap gap-1">
+            <button class="file-tab" data-file="wallets"><i class="fas fa-user"></i>Wallets</button>
+            <button class="file-tab" data-file="known_contracts"><i class="fas fa-file-contract"></i>Contracts</button>
+            <button class="file-tab" data-file="token_overrides"><i class="fas fa-coins"></i>Token Overrides</button>
+            <button class="file-tab" data-file="acquisition_guides"><i class="fas fa-route"></i>Acquisition Guides</button>
+            <button class="file-tab" data-file="protocols"><i class="fas fa-building"></i>Protocols</button>
+        </div>
+
+        <div class="bg-gray-900/40 border border-gray-800 border-t-0 rounded-b-xl p-5">
+            <!-- File status -->
+            <div class="flex justify-between items-center mb-4">
+                <div>
+                    <p class="text-xs text-gray-500 mb-1">Editing</p>
+                    <p class="mono text-sm text-cyan-400" id="file-status">— select a tab —</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button id="reload-btn" class="btn-secondary text-sm" disabled>
+                        <i class="fas fa-rotate mr-1"></i>Reload from GitHub
+                    </button>
+                </div>
+            </div>
+
+            <!-- Two columns: form + existing entries -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Form column -->
+                <div>
+                    <h3 class="text-white font-semibold mb-3 flex items-center gap-2">
+                        <i class="fas fa-plus-circle text-cyan-400"></i>
+                        <span id="form-title">Add new entry</span>
+                    </h3>
+                    <div id="form-container" class="space-y-3">
+                        <p class="text-gray-500 text-sm">Pick a file tab above to start editing.</p>
+                    </div>
+                    <div class="flex gap-2 mt-4" id="form-actions" style="display:none;">
+                        <button id="add-btn" class="btn-primary">
+                            <i class="fas fa-plus mr-1"></i>Add to file
+                        </button>
+                        <button id="cancel-edit-btn" class="btn-secondary" style="display:none;">
+                            Cancel edit
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Existing entries column -->
+                <div>
+                    <h3 class="text-white font-semibold mb-3 flex items-center gap-2">
+                        <i class="fas fa-list text-cyan-400"></i>
+                        Existing entries
+                        <span id="entries-count" class="text-xs text-gray-500"></span>
+                    </h3>
+                    <div id="entries-list" class="max-h-[500px] overflow-y-auto"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- JSON Preview -->
+        <div class="mt-6 bg-gray-900/40 border border-gray-800 rounded-xl p-5">
+            <div class="flex justify-between items-center mb-3">
+                <h3 class="text-white font-semibold flex items-center gap-2">
+                    <i class="fas fa-code text-cyan-400"></i>JSON Preview
+                </h3>
+                <div class="flex gap-2">
+                    <button id="copy-json-btn" class="btn-secondary text-sm" disabled>
+                        <i class="fas fa-copy mr-1"></i>Copy
+                    </button>
+                    <button id="download-json-btn" class="btn-secondary text-sm" disabled>
+                        <i class="fas fa-download mr-1"></i>Download
+                    </button>
+                    <a id="github-edit-link" href="#" target="_blank" rel="noopener" class="btn-primary text-sm" style="display:none;">
+                        <i class="fab fa-github mr-1"></i>Open on GitHub
+                    </a>
+                </div>
+            </div>
+            <pre id="json-preview" class="json-preview">Pick a file tab to begin.</pre>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="py-6 mt-12 border-t border-gray-800">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-gray-400">
+            <div class="flex justify-center items-center space-x-6 mb-4">
+                <a href="https://t.me/The_AllianceDAO" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors"><i class="fab fa-telegram-plane text-3xl"></i></a>
+                <a href="https://x.com/The_AllianceDAO" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors"><i class="fab fa-twitter text-3xl"></i></a>
+            </div>
+            <div class="flex flex-wrap justify-center items-center space-x-6 text-sm">
+                <a href="tutorials.html" class="hover:text-white hover:underline transition-colors">Tutorials</a>
+                <a href="links.html" class="hover:text-white hover:underline transition-colors">Official Links</a>
+                <a href="tools.html" class="hover:text-white hover:underline transition-colors">All Tools</a>
+            </div>
+            <div class="mt-4 text-xs text-gray-500">
+                <span class="font-mono">Catalog Edit v1.0</span>
+                <span class="opacity-60 mx-1">·</span>
+                <span>Edit happens locally — only takes effect after GitHub commit</span>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Mobile nav -->
+    <nav class="mobile-bottom-nav" aria-label="Main navigation">
+        <a href="index.html" class="mobile-bottom-nav-tab"><i class="fas fa-house"></i><span>Home</span></a>
+        <a href="nft-explorer-index.html" class="mobile-bottom-nav-tab"><i class="fas fa-images"></i><span>NFTs</span></a>
+        <a href="adao-lore.html" class="mobile-bottom-nav-tab"><i class="fas fa-globe"></i><span>Lore</span></a>
+        <a href="tla-stats.html" class="mobile-bottom-nav-tab"><i class="fas fa-chart-line"></i><span>TLA</span></a>
+        <a href="dao.html" class="mobile-bottom-nav-tab"><i class="fas fa-landmark"></i><span>DAO</span></a>
+    </nav>
+
+    <!-- Vercel Analytics -->
+    <script defer src="/_vercel/insights/script.js"></script>
+
+    <script>
+    // ============================================================
+    // FILE SCHEMAS — defines the form fields per file
+    // ============================================================
+    const SCHEMAS = {
+        wallets: {
+            container_key: 'wallets',
+            entry_key: 'address',
+            github_path: 'curated/wallets.json',
+            fields: [
+                { key: 'address', label: 'Terra Address', type: 'text', required: true, placeholder: 'terra1...', help: 'The terra1... wallet address (use lowercase).' },
+                { key: 'label', label: 'Display Name', type: 'text', required: true, placeholder: 'e.g., aDAO Treasury', help: 'How this wallet should appear in the catalog.' },
+                { key: 'subtype', label: 'Type', type: 'select', options: ['member', 'briber', 'treasury', 'multisig', 'team', 'ally', 'bot', 'scam_flagged'], required: true },
+                { key: 'protocol', label: 'Associated Protocol', type: 'select_protocols', help: 'Optional. Which protocol does this wallet belong to.' },
+                { key: 'description', label: 'Description', type: 'textarea', help: 'Free text — what is this wallet, what does it do.' },
+                { key: 'associated_member', label: 'DAO Member Name', type: 'text', help: 'Optional. If this wallet belongs to a named DAO member.' },
+                { key: 'verified', label: 'Verified', type: 'checkbox', help: 'Tick if you\'ve personally confirmed this address.' },
+            ],
+        },
+        known_contracts: {
+            container_key: 'contracts',
+            entry_key: 'address',
+            github_path: 'curated/known_contracts.json',
+            fields: [
+                { key: 'address', label: 'Contract Address', type: 'text', required: true, placeholder: 'terra1...', help: 'The terra1... contract address.' },
+                { key: 'name', label: 'Display Name', type: 'text', required: true, placeholder: 'e.g., NFT Listing Contract' },
+                { key: 'type', label: 'Subtype', type: 'select', options: ['protocol_core', 'dao', 'dex_pair', 'staking', 'rewards', 'nft_marketplace', 'lending', 'oracle', 'bridge', 'proposal_module', 'proposal_safelist', 'proposal_target', 'governance', 'compounder', 'connector', 'fee_collector', 'scam_flagged'], required: true },
+                { key: 'protocol', label: 'Protocol', type: 'select_protocols', required: true },
+                { key: 'description', label: 'Description', type: 'textarea' },
+                { key: 'validActions', label: 'Valid Actions (comma-separated)', type: 'text', placeholder: 'execute, propose, vote', help: 'For audit tool: which actions are safe to expect in proposals targeting this contract.' },
+                { key: 'canReceiveFunds', label: 'Can Receive Funds', type: 'checkbox' },
+                { key: 'risk_level', label: 'Risk Level', type: 'select', options: ['', 'low', 'medium', 'high'] },
+            ],
+        },
+        token_overrides: {
+            container_key: 'tokens',
+            entry_key: 'address',
+            github_path: 'curated/token_overrides.json',
+            fields: [
+                { key: 'address', label: 'Token Address', type: 'text', required: true, placeholder: 'terra1... or ibc/... or factory/...', help: 'Use the Terra-side address exactly as it appears on chain.' },
+                { key: 'display_name', label: 'Preferred Display Name', type: 'text', placeholder: 'e.g., wBTC.atom', help: 'Overrides the name from Eris/Astroport/etc.' },
+                { key: 'subtype', label: 'Force Subtype', type: 'select', options: ['', 'native', 'cw20', 'ibc', 'factory', 'lst'] },
+                { key: 'notes', label: 'Notes', type: 'textarea', help: 'Free text — shown on the catalog view page.' },
+                { key: 'warning', label: 'Warning Text', type: 'textarea', help: 'Shown prominently if present. Use for tokens with real confusion risk.' },
+                { key: 'verified', label: 'Verified', type: 'checkbox' },
+            ],
+        },
+        acquisition_guides: {
+            container_key: 'tokens',
+            entry_key: 'address',
+            github_path: 'curated/acquisition_guides.json',
+            fields: [
+                { key: 'address', label: 'Token Address', type: 'text', required: true, placeholder: 'terra1... or ibc/...' },
+                { key: '_label', label: 'Internal Label', type: 'text', placeholder: 'e.g., USDC (Noble)', help: 'For your reference inside this JSON file.' },
+                { key: 'native_chain', label: 'Native Chain', type: 'text', placeholder: 'e.g., Noble, Ethereum, Cosmos Hub', help: 'The chain that originally issues this token.' },
+                { key: 'native_address', label: 'Native Address', type: 'text', placeholder: 'Address on the native chain.' },
+                { key: 'route_to_terra', label: 'Route to Terra (one step per line)', type: 'textarea', placeholder: '1. Acquire USDC on Noble\n2. IBC send to Terra' },
+                { key: 'warnings', label: 'Warnings (one per line)', type: 'textarea', placeholder: 'Keplr search returns multiple USDC variants...\nDo not use Polygon USDC...' },
+                { key: 'alternative_routes', label: 'Alternative Routes (one per line)', type: 'textarea' },
+                { key: 'verified', label: 'Verified', type: 'checkbox' },
+            ],
+        },
+        protocols: {
+            container_key: 'protocols',
+            entry_key: 'name',
+            github_path: 'curated/protocols.json',
+            fields: [
+                { key: 'name', label: 'Protocol Key', type: 'text', required: true, placeholder: 'e.g., Astroport', help: 'Used as the dictionary key. Match the spelling used in protocol tags.' },
+                { key: 'label', label: 'Display Label', type: 'text', required: true },
+                { key: 'description', label: 'Description', type: 'textarea' },
+                { key: 'website', label: 'Website', type: 'text', placeholder: 'https://...' },
+                { key: 'official', label: 'Official', type: 'checkbox' },
+            ],
+        },
+    };
+
+    const PROTOCOLS_STD = ['', 'TLA', 'Eris', 'Astroport', 'SkeletonSwap', 'BackBoneLabs', 'Boost', 'DAODAO', 'Solid', 'PhoenixDirective', 'Skip', 'Allied'];
+
+    // ============================================================
+    // STATE
+    // ============================================================
+    let currentFile = null;
+    let currentData = null;
+    let editingKey = null;  // if set, we're editing this existing entry
+
+    const CURATED_BASE = 'https://raw.githubusercontent.com/defipatriot/tla-chain-registry/main/curated/';
+    const GITHUB_EDIT_BASE = 'https://github.com/defipatriot/tla-chain-registry/edit/main/curated/';
+
+    // ============================================================
+    // LOAD FILE
+    // ============================================================
+    async function loadFile(filename) {
+        currentFile = filename;
+        editingKey = null;
+        const schema = SCHEMAS[filename];
+        document.getElementById('file-status').textContent = schema.github_path;
+        document.getElementById('reload-btn').disabled = false;
+        
+        try {
+            const r = await fetch(CURATED_BASE + filename + '.json', { cache: 'no-cache' });
+            if (r.ok) {
+                currentData = await r.json();
+            } else if (r.status === 404) {
+                // File doesn't exist yet — start fresh
+                currentData = {
+                    _meta: { description: 'New file', lastUpdated: new Date().toISOString().slice(0,10) },
+                    [schema.container_key]: {},
+                };
+            } else {
+                throw new Error('HTTP ' + r.status);
+            }
+        } catch (e) {
+            // Network or parse error — initialize empty
+            console.warn('Load failed:', e);
+            currentData = {
+                _meta: { description: 'Failed to load — starting fresh', lastUpdated: new Date().toISOString().slice(0,10) },
+                [schema.container_key]: {},
+            };
+        }
+        
+        // Make sure the container exists
+        if (!currentData[schema.container_key]) currentData[schema.container_key] = {};
+
+        renderForm();
+        renderEntries();
+        renderPreview();
+
+        // GitHub edit link
+        const editLink = document.getElementById('github-edit-link');
+        editLink.href = GITHUB_EDIT_BASE + filename + '.json';
+        editLink.style.display = '';
+        
+        // Enable preview buttons
+        document.getElementById('copy-json-btn').disabled = false;
+        document.getElementById('download-json-btn').disabled = false;
+    }
+
+    // ============================================================
+    // FORM
+    // ============================================================
+    function renderForm() {
+        const schema = SCHEMAS[currentFile];
+        const c = document.getElementById('form-container');
+        c.innerHTML = schema.fields.map(f => renderField(f)).join('');
+        document.getElementById('form-actions').style.display = '';
+        document.getElementById('form-title').textContent = editingKey ? 'Editing: ' + editingKey.slice(0, 30) + (editingKey.length > 30 ? '…' : '') : 'Add new entry';
+        document.getElementById('add-btn').innerHTML = editingKey ? '<i class="fas fa-save mr-1"></i>Save changes' : '<i class="fas fa-plus mr-1"></i>Add to file';
+        document.getElementById('cancel-edit-btn').style.display = editingKey ? '' : 'none';
+    }
+
+    function renderField(f) {
+        const required = f.required ? '<span class="text-red-400">*</span>' : '';
+        let input = '';
+        switch (f.type) {
+            case 'text':
+                input = `<input type="text" class="form-input" data-key="${f.key}" placeholder="${escapeAttr(f.placeholder || '')}">`;
+                break;
+            case 'textarea':
+                input = `<textarea class="form-textarea" data-key="${f.key}" rows="3" placeholder="${escapeAttr(f.placeholder || '')}"></textarea>`;
+                break;
+            case 'select':
+                input = `<select class="form-select" data-key="${f.key}">` +
+                    f.options.map(o => `<option value="${escapeAttr(o)}">${o || '— (none) —'}</option>`).join('') +
+                    `</select>`;
+                break;
+            case 'select_protocols':
+                input = `<select class="form-select" data-key="${f.key}">` +
+                    PROTOCOLS_STD.map(o => `<option value="${escapeAttr(o)}">${o || '— (none) —'}</option>`).join('') +
+                    `</select>`;
+                break;
+            case 'checkbox':
+                input = `<label class="inline-flex items-center gap-2"><input type="checkbox" class="form-checkbox" data-key="${f.key}"><span class="text-sm text-gray-300">${f.label}</span></label>`;
+                return `<div>${input}${f.help ? '<p class="form-help">' + escapeHtml(f.help) + '</p>' : ''}</div>`;
+        }
+        return `<div>
+            <label class="form-label">${escapeHtml(f.label)} ${required}</label>
+            ${input}
+            ${f.help ? '<p class="form-help">' + escapeHtml(f.help) + '</p>' : ''}
+        </div>`;
+    }
+
+    function readForm() {
+        const schema = SCHEMAS[currentFile];
+        const entry = {};
+        for (const f of schema.fields) {
+            const el = document.querySelector(`[data-key="${f.key}"]`);
+            if (!el) continue;
+            let val;
+            if (f.type === 'checkbox') val = el.checked;
+            else val = el.value.trim();
+            
+            // Special handling: lines → array
+            if (['route_to_terra','warnings','alternative_routes'].includes(f.key) && typeof val === 'string') {
+                val = val.split('\n').map(s => s.trim()).filter(Boolean);
+                if (val.length === 0) val = null;
+            }
+            // Comma-separated → array
+            if (f.key === 'validActions' && typeof val === 'string') {
+                val = val.split(',').map(s => s.trim()).filter(Boolean);
+                if (val.length === 0) val = null;
+            }
+            
+            if (val !== '' && val != null && val !== false) entry[f.key] = val;
+        }
+        return entry;
+    }
+
+    function populateForm(entry) {
+        const schema = SCHEMAS[currentFile];
+        for (const f of schema.fields) {
+            const el = document.querySelector(`[data-key="${f.key}"]`);
+            if (!el) continue;
+            let val = entry[f.key];
+            if (Array.isArray(val)) val = val.join('\n');
+            if (f.type === 'checkbox') el.checked = !!val;
+            else el.value = val == null ? '' : String(val);
+        }
+    }
+
+    // ============================================================
+    // ADD / EDIT
+    // ============================================================
+    function handleAdd() {
+        const schema = SCHEMAS[currentFile];
+        const entry = readForm();
+
+        // Validate
+        const keyVal = entry[schema.entry_key];
+        if (!keyVal) {
+            alert('Missing required field: ' + schema.entry_key);
+            return;
+        }
+        for (const f of schema.fields) {
+            if (f.required && !entry[f.key]) {
+                alert('Missing required field: ' + f.label);
+                return;
+            }
+        }
+        
+        // If editing and key changed, remove old key
+        if (editingKey && editingKey !== keyVal) {
+            delete currentData[schema.container_key][editingKey];
+        }
+        
+        // Remove key from entry body (it's the dict key, not part of the value)
+        const body = { ...entry };
+        delete body[schema.entry_key];
+
+        currentData[schema.container_key][keyVal] = body;
+        if (currentData._meta) currentData._meta.lastUpdated = new Date().toISOString().slice(0,10);
+
+        editingKey = null;
+        renderForm();
+        clearFormFields();
+        renderEntries();
+        renderPreview();
+    }
+
+    function clearFormFields() {
+        document.querySelectorAll('#form-container input, #form-container select, #form-container textarea').forEach(el => {
+            if (el.type === 'checkbox') el.checked = false;
+            else el.value = '';
+        });
+    }
+
+    function startEdit(key) {
+        const schema = SCHEMAS[currentFile];
+        editingKey = key;
+        const body = currentData[schema.container_key][key];
+        renderForm();
+        populateForm({ [schema.entry_key]: key, ...body });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function cancelEdit() {
+        editingKey = null;
+        renderForm();
+        clearFormFields();
+    }
+
+    function deleteEntry(key) {
+        if (!confirm('Delete entry: ' + key + '?')) return;
+        const schema = SCHEMAS[currentFile];
+        delete currentData[schema.container_key][key];
+        renderEntries();
+        renderPreview();
+    }
+
+    // ============================================================
+    // ENTRIES
+    // ============================================================
+    function renderEntries() {
+        const schema = SCHEMAS[currentFile];
+        const entries = currentData[schema.container_key] || {};
+        const keys = Object.keys(entries).filter(k => !k.startsWith('_'));
+        document.getElementById('entries-count').textContent = `(${keys.length})`;
+
+        const list = document.getElementById('entries-list');
+        if (keys.length === 0) {
+            list.innerHTML = '<p class="text-gray-500 text-sm">No entries yet. Add one using the form.</p>';
+            return;
+        }
+        list.innerHTML = keys.map(k => {
+            const e = entries[k];
+            const label = e.label || e.name || e.display_name || e._label || '(no name)';
+            return `<div class="entry-row">
+                <div class="flex-1 min-w-0">
+                    <p class="text-sm text-white truncate font-semibold">${escapeHtml(label)}</p>
+                    <p class="mono text-xs text-gray-500 truncate" title="${escapeHtml(k)}">${escapeHtml(k.slice(0, 50))}${k.length > 50 ? '…' : ''}</p>
+                </div>
+                <button class="text-cyan-400 hover:text-cyan-200 text-sm" onclick="startEdit('${escapeAttr(k)}')" title="Edit"><i class="fas fa-pen"></i></button>
+                <button class="text-red-400 hover:text-red-200 text-sm" onclick="deleteEntry('${escapeAttr(k)}')" title="Delete"><i class="fas fa-trash"></i></button>
+            </div>`;
+        }).join('');
+    }
+
+    // ============================================================
+    // PREVIEW + EXPORT
+    // ============================================================
+    function renderPreview() {
+        const pretty = JSON.stringify(currentData, null, 2);
+        document.getElementById('json-preview').textContent = pretty;
+    }
+
+    function copyJson() {
+        const text = JSON.stringify(currentData, null, 2);
+        navigator.clipboard.writeText(text).then(() => {
+            const btn = document.getElementById('copy-json-btn');
+            const orig = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-check mr-1"></i>Copied';
+            setTimeout(() => { btn.innerHTML = orig; }, 1500);
+        });
+    }
+
+    function downloadJson() {
+        const text = JSON.stringify(currentData, null, 2);
+        const blob = new Blob([text], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = currentFile + '.json';
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    // ============================================================
+    // UTIL
+    // ============================================================
+    function escapeHtml(s) { return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c])); }
+    function escapeAttr(s) { return escapeHtml(s); }
+
+    // ============================================================
+    // EVENTS
+    // ============================================================
+    document.querySelectorAll('.file-tab').forEach(b => b.addEventListener('click', () => {
+        document.querySelectorAll('.file-tab').forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+        loadFile(b.dataset.file);
+    }));
+    document.getElementById('add-btn').addEventListener('click', handleAdd);
+    document.getElementById('cancel-edit-btn').addEventListener('click', cancelEdit);
+    document.getElementById('copy-json-btn').addEventListener('click', copyJson);
+    document.getElementById('download-json-btn').addEventListener('click', downloadJson);
+    document.getElementById('reload-btn').addEventListener('click', () => loadFile(currentFile));
+
+    // Expose for inline onclick
+    window.startEdit = startEdit;
+    window.deleteEntry = deleteEntry;
+
+    // Start on wallets tab
+    document.querySelector('.file-tab[data-file="wallets"]').click();
+    </script>
+</body>
+</html>

@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Catalog View - Alliance DAO Tools</title>
+    
+    <link rel="icon" type="image/x-icon" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/favicon-16x16.png">
+    
+    <link rel="canonical" href="https://www.thealliancedao.com/tla-catalog.html">
+    <meta name="description" content="Browse the Alliance DAO ecosystem catalog — tokens, contracts, wallets, and LP positions on Terra. Search by name, address, protocol, or category. See bridge sources, CoinGecko mappings, and variant warnings.">
+    <meta name="keywords" content="Terra catalog, TLA tokens, address lookup, wBTC variants, USDC Terra, ampLUNA, ecosystem browser">
+    <meta name="robots" content="index, follow">
+    
+    <meta property="og:title" content="Catalog View | Alliance DAO Tools">
+    <meta property="og:description" content="Browse the catalog of every token, contract, and wallet in the TLA ecosystem.">
+    <meta property="og:image" content="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/android-chrome-512x512.png">
+    <meta property="og:url" content="https://www.thealliancedao.com/tla-catalog.html">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Catalog View | Alliance DAO Tools">
+    <meta name="twitter:description" content="Browse the catalog of every token, contract, and wallet in the TLA ecosystem.">
+    <meta name="twitter:image" content="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/android-chrome-512x512.png">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #0D0D0D; color: #EAEAEA; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        
+        .filter-pill {
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 4px 10px; border-radius: 14px;
+            font-size: 11px; font-weight: 600;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: #d1d5db; cursor: pointer;
+            transition: all 0.15s;
+            text-decoration: none;
+        }
+        .filter-pill:hover { background: rgba(34,211,238,0.1); color: #67e8f9; border-color: rgba(34,211,238,0.3); }
+        .filter-pill.active { background: rgba(34,211,238,0.18); color: #67e8f9; border-color: rgba(34,211,238,0.5); }
+        
+        .entry-card {
+            background: rgba(15, 15, 25, 0.6);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 10px;
+            padding: 14px;
+            transition: all 0.15s;
+        }
+        .entry-card:hover { border-color: rgba(34,211,238,0.4); background: rgba(15, 15, 25, 0.9); }
+        
+        .score-badge {
+            display: inline-flex; align-items: center; justify-content: center;
+            min-width: 36px; padding: 2px 8px;
+            border-radius: 6px; font-size: 11px; font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .score-90 { background: rgba(34,197,94,0.15); color: #4ade80; border: 1px solid rgba(34,197,94,0.3); }
+        .score-75 { background: rgba(132,204,22,0.15); color: #bef264; border: 1px solid rgba(132,204,22,0.3); }
+        .score-50 { background: rgba(234,179,8,0.15); color: #fcd34d; border: 1px solid rgba(234,179,8,0.3); }
+        .score-25 { background: rgba(249,115,22,0.15); color: #fdba74; border: 1px solid rgba(249,115,22,0.3); }
+        .score-0  { background: rgba(239,68,68,0.15); color: #fca5a5; border: 1px solid rgba(239,68,68,0.3); }
+        
+        .flag-chip {
+            display: inline-block;
+            padding: 2px 7px;
+            font-size: 10px;
+            border-radius: 4px;
+            margin: 2px;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .flag-warning  { background: rgba(234,179,8,0.12); color: #fcd34d; border: 1px solid rgba(234,179,8,0.25); }
+        .flag-danger   { background: rgba(239,68,68,0.12); color: #fca5a5; border: 1px solid rgba(239,68,68,0.25); }
+        .flag-info     { background: rgba(59,130,246,0.12); color: #93c5fd; border: 1px solid rgba(59,130,246,0.25); }
+        .flag-success  { background: rgba(34,197,94,0.12); color: #86efac; border: 1px solid rgba(34,197,94,0.25); }
+        
+        .copy-btn { color: #6b7280; cursor: pointer; transition: color 0.15s; }
+        .copy-btn:hover { color: #67e8f9; }
+        
+        .detail-modal {
+            background: rgba(0,0,0,0.85);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+        .detail-content {
+            background: #0f1117;
+            border: 1px solid rgba(34, 211, 238, 0.3);
+            box-shadow: 0 0 80px rgba(34, 211, 238, 0.1);
+        }
+        
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #1a1a1a; }
+        ::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #555; }
+    </style>
+    
+    <!-- Shared chrome CSS -->
+    <style>
+        .top-nav-tab { min-width: 110px; }
+        @media (min-width: 768px) { .top-nav-tab { min-width: 140px; } }
+        .top-nav-tab.active { background: rgba(34, 211, 238, 0.15) !important; color: #67e8f9 !important; border-color: rgba(34, 211, 238, 0.6) !important; }
+        .top-nav-tab.active:hover { background: rgba(34, 211, 238, 0.2) !important; }
+        
+        .mobile-bottom-nav { display: none; }
+        @media (max-width: 767px) {
+            .mobile-bottom-nav {
+                display: grid; grid-template-columns: repeat(5, 1fr);
+                position: fixed; bottom: 0; left: 0; right: 0; z-index: 50;
+                background: rgba(10, 11, 15, 0.92);
+                backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+                border-top: 1px solid rgba(34, 211, 238, 0.2);
+                padding: 0.4rem 0.25rem calc(0.4rem + env(safe-area-inset-bottom)) 0.25rem;
+                gap: 0.15rem;
+            }
+            .mobile-bottom-nav-tab {
+                display: flex; flex-direction: column; align-items: center; justify-content: center;
+                gap: 0.15rem; padding: 0.4rem 0.2rem;
+                color: #9ca3af; text-decoration: none;
+                font-size: 0.65rem; font-weight: 600; line-height: 1;
+                border-radius: 0.5rem; transition: all 0.15s ease; min-height: 48px;
+            }
+            .mobile-bottom-nav-tab i { font-size: 1.1rem; color: #6b7280; transition: color 0.15s; }
+            .mobile-bottom-nav-tab.active { color: #67e8f9; }
+            .mobile-bottom-nav-tab.active i { color: #22d3ee; }
+            body { padding-bottom: calc(64px + env(safe-area-inset-bottom)) !important; }
+        }
+        
+        .tools-subnav-tab {
+            padding: 8px 16px; border-radius: 8px;
+            font-size: 13px; font-weight: 600; color: #9ca3af;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08);
+            transition: all 0.15s;
+            display: inline-flex; align-items: center; gap: 6px;
+            text-decoration: none;
+        }
+        .tools-subnav-tab:hover { background: rgba(34,211,238,0.1); color: #d1d5db; border-color: rgba(34,211,238,0.25); }
+        .tools-subnav-tab.active { background: rgba(34,211,238,0.15); color: #67e8f9; border-color: rgba(34,211,238,0.5); }
+    </style>
+</head>
+<body class="min-h-screen">
+
+    <!-- Site header -->
+    <header class="py-4">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-wrap md:flex-nowrap justify-between items-center">
+            <div class="flex-shrink-0 w-1/2 md:w-32 order-1 flex items-center gap-3">
+                <a href="tools.html" class="text-gray-500 hover:text-cyan-400 transition-colors mr-1" title="Back to Tools">
+                    <i class="fas fa-arrow-left text-lg"></i>
+                </a>
+                <a href="index.html" title="Alliance DAO home"><img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Alliance%20DAO%20Logo.png" alt="Alliance DAO Logo" class="h-12 md:h-16 w-auto" onerror="this.src='https://placehold.co/128x64/0D0D0D/EAEAEA?text=Logo'; this.onerror=null;"></a>
+            </div>
+            <nav class="hidden md:flex flex-1 w-full md:w-auto justify-center items-center gap-2 sm:gap-3 order-3 md:order-2 mt-4 md:mt-0">
+                <a href="index.html" data-page="index" class="top-nav-tab bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-4 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center flex-1 md:flex-initial">Home</a>
+                <a href="nft-explorer-index.html" data-page="nft-explorer-index" class="top-nav-tab bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-4 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center flex-1 md:flex-initial"><span class="md:hidden">Explorer</span><span class="hidden md:inline">NFT Explorer</span></a>
+                <a href="adao-lore.html" data-page="adao-lore" class="top-nav-tab bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-4 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center flex-1 md:flex-initial"><span class="md:hidden">Lore</span><span class="hidden md:inline">aDAO Lore</span></a>
+                <a href="tla-stats.html" data-page="tla-stats" class="top-nav-tab bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-4 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center flex-1 md:flex-initial"><span class="md:hidden">TLA</span><span class="hidden md:inline">TLA Stats</span></a>
+                <a href="dao.html" data-page="dao" class="top-nav-tab bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-4 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center flex-1 md:flex-initial">DAO</a>
+            </nav>
+            <div class="w-1/2 md:w-32 flex-shrink-0 flex justify-end order-2 md:order-3">
+                <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Terra.PNG" alt="Terra Logo" class="h-12 md:h-16 w-auto" onerror="this.src='https://placehold.co/128x64/0D0D0D/EAEAEA?text=Logo'; this.onerror=null;">
+            </div>
+        </div>
+    </header>
+
+    <!-- Tools sub-nav -->
+    <div class="bg-gray-900/40 border-b border-gray-800">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+            <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-xs text-gray-500 mr-2 hidden sm:block"><i class="fas fa-wrench mr-1"></i>Tools:</span>
+                <a href="tla-chain-queries.html" class="tools-subnav-tab"><i class="fas fa-terminal"></i>Query Builder</a>
+                <a href="tla-catalog.html" class="tools-subnav-tab active"><i class="fas fa-book"></i>Catalog View</a>
+                <a href="tla-catalog-edit.html" class="tools-subnav-tab"><i class="fas fa-pen-to-square"></i>Catalog Edit</a>
+                <div class="flex-1"></div>
+                <span class="text-xs text-gray-500" id="catalog-meta">Loading…</span>
+            </div>
+        </div>
+    </div>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <!-- Page heading -->
+        <div class="mb-5">
+            <h1 class="text-2xl md:text-3xl font-bold text-white mb-1">Catalog View</h1>
+            <p class="text-gray-400 text-sm">Browse every token, contract, wallet, and LP in the ecosystem catalog. Click any entry for full details.</p>
+        </div>
+
+        <!-- Search + Filters -->
+        <div class="bg-gray-900/40 border border-gray-800 rounded-xl p-4 mb-5">
+            <div class="flex gap-3 mb-3">
+                <div class="relative flex-1">
+                    <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-500"></i>
+                    <input id="search-input" type="text" placeholder="Search by name, symbol, address, or CoinGecko ID..." class="w-full bg-gray-900 border border-gray-700 rounded-lg pl-10 pr-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500">
+                </div>
+                <button id="clear-filters" class="px-3 py-2 text-xs text-gray-400 hover:text-white border border-gray-700 rounded-lg hover:bg-gray-800">
+                    <i class="fas fa-rotate-left mr-1"></i>Reset
+                </button>
+            </div>
+
+            <!-- Category filters -->
+            <div class="mb-2">
+                <span class="text-xs text-gray-500 mr-2">Category:</span>
+                <div class="inline-flex flex-wrap gap-1.5" id="category-filters"></div>
+            </div>
+
+            <!-- Protocol filters -->
+            <div class="mb-2">
+                <span class="text-xs text-gray-500 mr-2">Protocol:</span>
+                <div class="inline-flex flex-wrap gap-1.5" id="protocol-filters"></div>
+            </div>
+
+            <!-- Quick filters (flags) -->
+            <div>
+                <span class="text-xs text-gray-500 mr-2">Quick:</span>
+                <div class="inline-flex flex-wrap gap-1.5">
+                    <button class="filter-pill" data-quick="in-tla">In TLA Pool</button>
+                    <button class="filter-pill" data-quick="multi-variant">Multi-variant (confusion risk)</button>
+                    <button class="filter-pill" data-quick="no-cg">No CoinGecko</button>
+                    <button class="filter-pill" data-quick="lst">LSTs</button>
+                    <button class="filter-pill" data-quick="amplp">amplp tokens</button>
+                    <button class="filter-pill" data-quick="ibc">IBC tokens</button>
+                    <button class="filter-pill" data-quick="needs-curation">Needs curation</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Result count + sort -->
+        <div class="flex justify-between items-center mb-3 text-sm">
+            <span class="text-gray-400" id="result-count">Loading...</span>
+            <div class="flex items-center gap-2">
+                <label class="text-xs text-gray-500">Sort:</label>
+                <select id="sort-select" class="bg-gray-900 border border-gray-700 rounded text-xs text-white px-2 py-1 focus:outline-none focus:border-cyan-500">
+                    <option value="score-desc">Score (high → low)</option>
+                    <option value="score-asc">Score (low → high)</option>
+                    <option value="name-asc">Name (A → Z)</option>
+                    <option value="name-desc">Name (Z → A)</option>
+                    <option value="tla-pools">Most TLA pools</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Results grid -->
+        <div id="results-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div class="col-span-full text-center py-12 text-gray-500">
+                <i class="fas fa-spinner fa-spin text-2xl mb-2"></i>
+                <p>Loading catalog…</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- Detail modal -->
+    <div id="detail-modal" class="detail-modal fixed inset-0 z-50 hidden items-center justify-center p-4">
+        <div class="detail-content rounded-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6 relative">
+            <button id="detail-close" class="absolute top-3 right-3 text-gray-400 hover:text-white text-2xl">&times;</button>
+            <div id="detail-body"></div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="py-6 mt-12 border-t border-gray-800">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-gray-400">
+            <div class="flex justify-center items-center space-x-6 mb-4">
+                <a href="https://t.me/The_AllianceDAO" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors"><i class="fab fa-telegram-plane text-3xl"></i></a>
+                <a href="https://x.com/The_AllianceDAO" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors"><i class="fab fa-twitter text-3xl"></i></a>
+            </div>
+            <div class="flex flex-wrap justify-center items-center space-x-6 text-sm">
+                <a href="tutorials.html" class="hover:text-white hover:underline transition-colors">Tutorials</a>
+                <a href="links.html" class="hover:text-white hover:underline transition-colors">Official Links</a>
+                <a href="tools.html" class="hover:text-white hover:underline transition-colors">All Tools</a>
+            </div>
+            <div class="mt-4 text-xs text-gray-500">
+                <span class="font-mono">Catalog View v1.0</span>
+                <span class="opacity-60 mx-1">·</span>
+                <span>Powered by tla-chain-registry</span>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Mobile nav -->
+    <nav class="mobile-bottom-nav" aria-label="Main navigation">
+        <a href="index.html" class="mobile-bottom-nav-tab"><i class="fas fa-house"></i><span>Home</span></a>
+        <a href="nft-explorer-index.html" class="mobile-bottom-nav-tab"><i class="fas fa-images"></i><span>NFTs</span></a>
+        <a href="adao-lore.html" class="mobile-bottom-nav-tab"><i class="fas fa-globe"></i><span>Lore</span></a>
+        <a href="tla-stats.html" class="mobile-bottom-nav-tab"><i class="fas fa-chart-line"></i><span>TLA</span></a>
+        <a href="dao.html" class="mobile-bottom-nav-tab"><i class="fas fa-landmark"></i><span>DAO</span></a>
+    </nav>
+
+    <!-- Vercel Analytics -->
+    <script defer src="/_vercel/insights/script.js"></script>
+
+    <script>
+    // ============================================================
+    // STATE
+    // ============================================================
+    let CATALOG = null;
+    let ALL_ENTRIES = [];       // unified list of all entries (tokens, contracts, wallets) flattened
+    let FILTERED = [];
+
+    const state = {
+        search: '',
+        category: 'all',
+        protocol: 'all',
+        quickFilters: new Set(),
+        sort: 'score-desc',
+    };
+
+    const CATALOG_URL = 'https://raw.githubusercontent.com/defipatriot/tla-chain-registry/main/2026/current.json';
+
+    // ============================================================
+    // FETCH
+    // ============================================================
+    async function loadCatalog() {
+        try {
+            const r = await fetch(CATALOG_URL, { cache: 'no-cache' });
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            CATALOG = await r.json();
+            buildEntries();
+            renderFilters();
+            applyFilters();
+            updateMeta();
+        } catch (e) {
+            console.error('Catalog load failed:', e);
+            document.getElementById('results-grid').innerHTML = '<div class="col-span-full text-center py-12 text-red-400"><i class="fas fa-triangle-exclamation text-2xl mb-2"></i><p>Failed to load catalog: ' + e.message + '</p></div>';
+        }
+    }
+
+    function buildEntries() {
+        ALL_ENTRIES = [];
+        // Tokens
+        for (const [addr, t] of Object.entries(CATALOG.tokens || {})) {
+            ALL_ENTRIES.push({
+                ...t,
+                _kind: 'token',
+                _searchKeys: [
+                    addr, t.symbol || '', t.display_name || '', t.coingecko_id || '',
+                    t.sources?.eris?.eris_name || '',
+                    t.sources?.astroport?.symbol || '',
+                    t.sources?.skeletonswap?.symbol || '',
+                    t.sources?.cosmos_chain_registry?.symbol || '',
+                ].join(' ').toLowerCase(),
+            });
+        }
+        // Contracts
+        for (const [addr, c] of Object.entries(CATALOG.contracts_catalog || {})) {
+            ALL_ENTRIES.push({
+                ...c,
+                _kind: 'contract',
+                _searchKeys: [addr, c.label || '', c.protocol || '', c.description || ''].join(' ').toLowerCase(),
+            });
+        }
+        // Wallets
+        for (const [addr, w] of Object.entries(CATALOG.wallets_catalog || {})) {
+            ALL_ENTRIES.push({
+                ...w,
+                _kind: 'wallet',
+                _searchKeys: [addr, w.label || '', w.protocol || '', w.description || ''].join(' ').toLowerCase(),
+            });
+        }
+    }
+
+    function updateMeta() {
+        const ts = CATALOG.capturedAt ? new Date(CATALOG.capturedAt).toLocaleString() : 'unknown';
+        document.getElementById('catalog-meta').textContent =
+            (CATALOG.tokens ? Object.keys(CATALOG.tokens).length : 0) + ' tokens · ' +
+            (CATALOG.contracts_catalog ? Object.keys(CATALOG.contracts_catalog).length : 0) + ' contracts · ' +
+            (CATALOG.wallets_catalog ? Object.keys(CATALOG.wallets_catalog).length : 0) + ' wallets · ' +
+            'captured ' + ts;
+    }
+
+    // ============================================================
+    // FILTERS
+    // ============================================================
+    function renderFilters() {
+        // Categories
+        const categories = ['all', 'tokens', 'contracts', 'wallets', 'lp_tokens'];
+        const catBox = document.getElementById('category-filters');
+        catBox.innerHTML = categories.map(c => `<button class="filter-pill" data-cat="${c}">${c === 'all' ? 'All' : c.replace('_',' ')}</button>`).join('');
+
+        // Protocols
+        const protocols = new Set(['all']);
+        for (const e of ALL_ENTRIES) if (e.protocol) protocols.add(e.protocol);
+        const proBox = document.getElementById('protocol-filters');
+        proBox.innerHTML = [...protocols].sort((a,b) => a === 'all' ? -1 : b === 'all' ? 1 : a.localeCompare(b))
+            .map(p => `<button class="filter-pill" data-pro="${p}">${p === 'all' ? 'All' : p}</button>`).join('');
+
+        // Wire clicks
+        catBox.querySelectorAll('.filter-pill').forEach(b => b.addEventListener('click', () => {
+            state.category = b.dataset.cat;
+            applyFilters();
+        }));
+        proBox.querySelectorAll('.filter-pill').forEach(b => b.addEventListener('click', () => {
+            state.protocol = b.dataset.pro;
+            applyFilters();
+        }));
+        document.querySelectorAll('[data-quick]').forEach(b => b.addEventListener('click', () => {
+            const k = b.dataset.quick;
+            if (state.quickFilters.has(k)) state.quickFilters.delete(k);
+            else state.quickFilters.add(k);
+            applyFilters();
+        }));
+
+        // Activate "all" buttons
+        catBox.querySelector('[data-cat="all"]').classList.add('active');
+        proBox.querySelector('[data-pro="all"]').classList.add('active');
+    }
+
+    function applyFilters() {
+        const s = state.search.trim().toLowerCase();
+        FILTERED = ALL_ENTRIES.filter(e => {
+            if (state.category !== 'all' && e.category !== state.category) return false;
+            if (state.protocol !== 'all' && e.protocol !== state.protocol) return false;
+            if (s && !e._searchKeys.includes(s)) return false;
+            
+            for (const qk of state.quickFilters) {
+                if (qk === 'in-tla' && !(e.appears_in?.tla_pools_count > 0)) return false;
+                if (qk === 'multi-variant' && !(e.related_variants?.length > 0)) return false;
+                if (qk === 'no-cg' && e.coingecko_id) return false;
+                if (qk === 'lst' && e.subtype !== 'lst') return false;
+                if (qk === 'amplp' && !e.appears_in?.is_amplp_underlying) return false;
+                if (qk === 'ibc' && e.subtype !== 'ibc') return false;
+                if (qk === 'needs-curation' && !(e.scoring?.flags?.includes('no_acquisition_guide') || !e.label && !e.display_name)) return false;
+            }
+            return true;
+        });
+
+        // Sort
+        FILTERED.sort((a, b) => {
+            switch (state.sort) {
+                case 'score-desc': return (b.scoring?.confusion_score || 0) - (a.scoring?.confusion_score || 0);
+                case 'score-asc':  return (a.scoring?.confusion_score || 0) - (b.scoring?.confusion_score || 0);
+                case 'name-asc':   return ((a.display_name||a.label||a.symbol||a.address||'').toLowerCase()).localeCompare(((b.display_name||b.label||b.symbol||b.address||'').toLowerCase()));
+                case 'name-desc':  return ((b.display_name||b.label||b.symbol||b.address||'').toLowerCase()).localeCompare(((a.display_name||a.label||a.symbol||a.address||'').toLowerCase()));
+                case 'tla-pools':  return (b.appears_in?.tla_pools_count || 0) - (a.appears_in?.tla_pools_count || 0);
+                default: return 0;
+            }
+        });
+
+        // Update active pills
+        document.querySelectorAll('[data-cat]').forEach(b => b.classList.toggle('active', b.dataset.cat === state.category));
+        document.querySelectorAll('[data-pro]').forEach(b => b.classList.toggle('active', b.dataset.pro === state.protocol));
+        document.querySelectorAll('[data-quick]').forEach(b => b.classList.toggle('active', state.quickFilters.has(b.dataset.quick)));
+
+        render();
+    }
+
+    // ============================================================
+    // RENDER
+    // ============================================================
+    function render() {
+        const grid = document.getElementById('results-grid');
+        document.getElementById('result-count').textContent = FILTERED.length + ' result' + (FILTERED.length === 1 ? '' : 's');
+        
+        if (FILTERED.length === 0) {
+            grid.innerHTML = '<div class="col-span-full text-center py-12 text-gray-500"><i class="fas fa-magnifying-glass text-2xl mb-2"></i><p>No matches. Try clearing filters.</p></div>';
+            return;
+        }
+
+        // Cap at 300 entries for perf
+        const cap = 300;
+        const slice = FILTERED.slice(0, cap);
+        const html = slice.map((e, idx) => renderCard(e, idx)).join('');
+        const truncated = FILTERED.length > cap
+            ? `<div class="col-span-full text-center py-4 text-xs text-gray-500">Showing first ${cap} of ${FILTERED.length}. Use search/filters to narrow.</div>` : '';
+        grid.innerHTML = html + truncated;
+
+        // Wire card clicks
+        grid.querySelectorAll('.entry-card[data-idx]').forEach(el => {
+            el.addEventListener('click', (ev) => {
+                if (ev.target.closest('.copy-btn, a')) return;
+                const i = parseInt(el.dataset.idx);
+                openDetail(slice[i]);
+            });
+        });
+        grid.querySelectorAll('.copy-btn').forEach(btn => {
+            btn.addEventListener('click', (ev) => {
+                ev.stopPropagation();
+                const text = btn.dataset.copy;
+                navigator.clipboard.writeText(text).then(() => {
+                    const orig = btn.innerHTML;
+                    btn.innerHTML = '<i class="fas fa-check"></i>';
+                    setTimeout(() => { btn.innerHTML = orig; }, 1000);
+                });
+            });
+        });
+    }
+
+    function renderCard(e, idx) {
+        const score = e.scoring?.confusion_score;
+        const scoreClass = scoreToClass(score);
+        const name = e.display_name || e.label || e.symbol || (e.address || '').slice(0,12) + '…';
+        const subline = e._kind === 'token'
+            ? [e.symbol, e.subtype, e.coingecko_id ? '✓ CG' : '✗ no CG'].filter(Boolean).join(' · ')
+            : (e._kind === 'wallet')
+            ? [e.subtype, e.protocol].filter(Boolean).join(' · ')
+            : [e.subtype, e.protocol].filter(Boolean).join(' · ');
+
+        const flags = (e.scoring?.flags || []).slice(0, 3);
+        const moreFlags = (e.scoring?.flags || []).length - flags.length;
+
+        const tlaBadge = e.appears_in?.tla_pools_count > 0
+            ? `<span class="flag-chip flag-success">in TLA pool</span>` : '';
+        const variantBadge = e.related_variants?.length > 0
+            ? `<span class="flag-chip flag-danger">${e.related_variants.length+1} variants</span>` : '';
+
+        const kindIcon = {
+            token:    'fa-coins',
+            contract: 'fa-file-contract',
+            wallet:   'fa-user',
+        }[e._kind] || 'fa-question';
+
+        return `
+            <div class="entry-card cursor-pointer" data-idx="${idx}">
+                <div class="flex items-start justify-between gap-2 mb-2">
+                    <div class="flex items-start gap-2 min-w-0">
+                        <i class="fas ${kindIcon} text-cyan-400 mt-1 flex-shrink-0"></i>
+                        <div class="min-w-0">
+                            <div class="font-bold text-white truncate" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
+                            <div class="text-xs text-gray-500 truncate">${escapeHtml(subline) || '—'}</div>
+                        </div>
+                    </div>
+                    ${score != null ? `<span class="score-badge ${scoreClass}" title="Confusion score">${score}</span>` : ''}
+                </div>
+                <div class="flex items-center gap-1 text-xs text-gray-500 mono truncate mb-2">
+                    <span class="truncate" title="${escapeHtml(e.address || '')}">${escapeHtml((e.address || '').slice(0,40))}${(e.address || '').length > 40 ? '…' : ''}</span>
+                    <button class="copy-btn ml-1" data-copy="${escapeHtml(e.address || '')}" title="Copy address">
+                        <i class="fas fa-copy text-xs"></i>
+                    </button>
+                </div>
+                <div class="flex flex-wrap gap-1">
+                    ${tlaBadge}${variantBadge}
+                    ${flags.map(f => `<span class="flag-chip ${flagClass(f)}">${escapeHtml(flagShort(f))}</span>`).join('')}
+                    ${moreFlags > 0 ? `<span class="flag-chip flag-info">+${moreFlags} more</span>` : ''}
+                </div>
+            </div>
+        `;
+    }
+
+    function scoreToClass(s) {
+        if (s == null) return '';
+        if (s >= 90) return 'score-90';
+        if (s >= 75) return 'score-75';
+        if (s >= 50) return 'score-50';
+        if (s >= 25) return 'score-25';
+        return 'score-0';
+    }
+
+    function flagShort(f) {
+        const colon = f.indexOf(':');
+        return colon > 0 ? f.slice(0, colon) : f;
+    }
+
+    function flagClass(f) {
+        if (f.startsWith('shared_base_symbol') || f.startsWith('scam') || f.startsWith('cross_source_name_mismatch')) return 'flag-danger';
+        if (f.startsWith('no_external_price') || f.startsWith('no_acquisition') || f.startsWith('needs_review')) return 'flag-warning';
+        if (f.startsWith('not_in_active_use') || f.startsWith('deprecated')) return 'flag-info';
+        if (f.startsWith('verified') || f.startsWith('official')) return 'flag-success';
+        return 'flag-info';
+    }
+
+    function escapeHtml(s) {
+        return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c]));
+    }
+
+    // ============================================================
+    // DETAIL MODAL
+    // ============================================================
+    function openDetail(e) {
+        const m = document.getElementById('detail-modal');
+        const b = document.getElementById('detail-body');
+
+        const name = e.display_name || e.label || e.symbol || 'Unnamed';
+        const score = e.scoring?.confusion_score;
+        const scoreClass = scoreToClass(score);
+
+        let html = `
+            <div class="flex items-start justify-between mb-4">
+                <div>
+                    <p class="text-xs uppercase text-gray-500 mb-1">${escapeHtml(e._kind)} · ${escapeHtml(e.category || '')} ${e.subtype ? '· ' + escapeHtml(e.subtype) : ''}</p>
+                    <h2 class="text-2xl font-bold text-white">${escapeHtml(name)}</h2>
+                </div>
+                ${score != null ? `<div class="text-center"><span class="score-badge ${scoreClass} text-base">${score}</span><p class="text-xs text-gray-500 mt-1">confusion score</p></div>` : ''}
+            </div>
+            <div class="mb-4 p-3 bg-gray-900 border border-gray-800 rounded-lg">
+                <p class="text-xs text-gray-500 mb-1">Terra address</p>
+                <p class="mono text-sm text-white break-all">${escapeHtml(e.address || '—')}
+                    ${e.address ? `<button class="copy-btn ml-2" data-copy="${escapeHtml(e.address)}" onclick="navigator.clipboard.writeText(this.dataset.copy); this.innerHTML='<i class=\\'fas fa-check\\'></i>';"><i class="fas fa-copy text-xs"></i></button>` : ''}
+                    ${e.address && e.address.startsWith('terra1') ? `<a href="https://chainsco.pe/terra2/address/${escapeHtml(e.address)}" target="_blank" class="ml-2 text-cyan-400 hover:underline text-xs"><i class="fas fa-external-link"></i> chainscope</a>` : ''}
+                </p>
+            </div>
+        `;
+
+        // Token-specific
+        if (e._kind === 'token') {
+            html += renderTokenDetail(e);
+        } else if (e._kind === 'contract') {
+            html += renderContractDetail(e);
+        } else if (e._kind === 'wallet') {
+            html += renderWalletDetail(e);
+        }
+
+        // Flags
+        if (e.scoring?.flags?.length) {
+            html += `<div class="mb-4"><p class="text-xs text-gray-500 uppercase mb-2">Flags</p><div class="flex flex-wrap gap-1">`;
+            for (const f of e.scoring.flags) {
+                html += `<span class="flag-chip ${flagClass(f)}">${escapeHtml(f)}</span>`;
+            }
+            html += `</div></div>`;
+        }
+
+        // Notes / description
+        if (e.notes || e.description) {
+            html += `<div class="mb-4 p-3 bg-gray-900 border border-gray-800 rounded-lg">
+                <p class="text-xs text-gray-500 uppercase mb-1">Notes</p>
+                <p class="text-sm text-gray-300">${escapeHtml(e.notes || e.description)}</p>
+            </div>`;
+        }
+
+        // Raw JSON expand
+        html += `<details class="mt-4">
+            <summary class="cursor-pointer text-xs text-gray-500 hover:text-cyan-400">Show raw catalog entry (JSON)</summary>
+            <pre class="mt-2 bg-black border border-gray-800 rounded p-3 text-xs text-gray-300 overflow-x-auto mono">${escapeHtml(JSON.stringify(e, (k,v) => k.startsWith('_search') ? undefined : v, 2))}</pre>
+        </details>`;
+
+        b.innerHTML = html;
+        m.classList.remove('hidden');
+        m.classList.add('flex');
+    }
+
+    function renderTokenDetail(e) {
+        let html = '<div class="grid grid-cols-2 gap-3 mb-4">';
+        const kv = (k,v) => v != null && v !== '' ? `<div><p class="text-xs text-gray-500">${k}</p><p class="text-sm text-white">${escapeHtml(v)}</p></div>` : '';
+        html += kv('Symbol', e.symbol);
+        html += kv('Decimals', e.decimals);
+        html += kv('Type', e.type);
+        html += kv('CoinGecko ID', e.coingecko_id);
+        html += kv('CoinGecko match', e.coingecko_match);
+        html += kv('Appears in TLA pools', (e.appears_in?.tla_pools_count > 0) ? `${e.appears_in.tla_pools_count} (${(e.appears_in.tla_pools || []).join(', ')})` : 'no');
+        html += kv('amplp underlying', e.appears_in?.is_amplp_underlying ? 'yes' : 'no');
+        html += '</div>';
+
+        // Bridge
+        if (e.bridge) {
+            html += `<div class="mb-4 p-3 bg-blue-950/30 border border-blue-700/30 rounded-lg">
+                <p class="text-xs text-blue-400 uppercase mb-2"><i class="fas fa-bridge mr-1"></i>Bridge / Origin</p>
+                <div class="grid grid-cols-2 gap-2 text-sm">
+                    ${kv('Source chain', e.bridge.source_chain)}
+                    ${kv('Via', e.bridge.via)}
+                    ${kv('Channel', e.bridge.channel_id)}
+                    ${kv('Provider', e.bridge.provider)}
+                    ${kv('Original denom', e.bridge.original_denom)}
+                </div>
+            </div>`;
+        }
+
+        // Sources breakdown
+        html += `<div class="mb-4"><p class="text-xs text-gray-500 uppercase mb-2">Cross-source naming</p><div class="space-y-1.5">`;
+        const sources = [
+            ['Eris', e.sources?.eris?.eris_name || e.sources?.eris?.symbol],
+            ['Astroport', e.sources?.astroport?.symbol],
+            ['Skeleton Swap', e.sources?.skeletonswap?.symbol],
+            ['Chain Registry', e.sources?.cosmos_chain_registry?.symbol],
+        ];
+        for (const [label, val] of sources) {
+            const status = val ? `<span class="text-white">${escapeHtml(val)}</span>` : `<span class="text-gray-600">— not listed</span>`;
+            html += `<div class="flex justify-between text-sm"><span class="text-gray-400">${label}</span>${status}</div>`;
+        }
+        html += '</div></div>';
+
+        // Acquisition guide
+        if (e.acquisition) {
+            html += `<div class="mb-4 p-3 bg-cyan-950/30 border border-cyan-700/30 rounded-lg">
+                <p class="text-xs text-cyan-400 uppercase mb-2"><i class="fas fa-route mr-1"></i>How to acquire</p>`;
+            if (e.acquisition.native_chain) html += `<p class="text-sm text-gray-300 mb-1"><span class="text-gray-500">Native chain:</span> <span class="text-white font-semibold">${escapeHtml(e.acquisition.native_chain)}</span></p>`;
+            if (e.acquisition.route_to_terra?.length) {
+                html += `<p class="text-xs text-gray-500 mt-2 mb-1">Route to Terra:</p><ol class="text-sm text-gray-300 list-decimal list-inside space-y-1">`;
+                for (const step of e.acquisition.route_to_terra) html += `<li>${escapeHtml(step.replace(/^\d+\.\s*/,''))}</li>`;
+                html += `</ol>`;
+            }
+            if (e.acquisition.warnings?.length) {
+                html += `<p class="text-xs text-yellow-500 mt-3 mb-1"><i class="fas fa-triangle-exclamation mr-1"></i>Warnings:</p><ul class="text-sm text-yellow-200 list-disc list-inside space-y-1">`;
+                for (const w of e.acquisition.warnings) html += `<li>${escapeHtml(w)}</li>`;
+                html += `</ul>`;
+            }
+            html += `</div>`;
+        }
+
+        // Wallet import block
+        if (e.wallet_import) {
+            html += `<div class="mb-4 p-3 bg-gray-900 border border-gray-800 rounded-lg">
+                <p class="text-xs text-gray-500 uppercase mb-2"><i class="fas fa-wallet mr-1"></i>Wallet import (for Keplr / Station / Leap)</p>
+                <div class="grid grid-cols-2 gap-2 text-sm">
+                    ${kv('Symbol', e.wallet_import.symbol)}
+                    ${kv('Name', e.wallet_import.name)}
+                    ${kv('Decimals', e.wallet_import.decimals)}
+                </div>
+            </div>`;
+        }
+
+        // Related variants
+        if (e.related_variants?.length) {
+            html += `<div class="mb-4 p-3 bg-red-950/30 border border-red-700/30 rounded-lg">
+                <p class="text-xs text-red-400 uppercase mb-2"><i class="fas fa-triangle-exclamation mr-1"></i>Related variants (confusion risk)</p>
+                <p class="text-xs text-gray-400 mb-2">Other Terra addresses share a base symbol with this one. They are <strong>different tokens</strong>.</p>
+                <div class="space-y-1">`;
+            for (const addr of e.related_variants) {
+                const v = CATALOG.tokens[addr];
+                const vname = v?.display_name || v?.symbol || addr.slice(0,30) + '…';
+                html += `<div class="text-sm flex justify-between"><span class="text-white">${escapeHtml(vname)}</span><span class="mono text-xs text-gray-500">${escapeHtml(addr.slice(0,40))}…</span></div>`;
+            }
+            html += `</div></div>`;
+        }
+
+        return html;
+    }
+
+    function renderContractDetail(e) {
+        let html = '<div class="grid grid-cols-2 gap-3 mb-4">';
+        const kv = (k,v) => v != null && v !== '' ? `<div><p class="text-xs text-gray-500">${k}</p><p class="text-sm text-white">${escapeHtml(v)}</p></div>` : '';
+        html += kv('Protocol', e.protocol);
+        html += kv('Subtype', e.subtype);
+        html += kv('Source', e.source);
+        html += kv('Can receive funds', e.can_receive_funds);
+        html += kv('Risk level', e.risk_level);
+        html += '</div>';
+        if (e.valid_actions?.length) {
+            html += `<div class="mb-4"><p class="text-xs text-gray-500 uppercase mb-2">Valid Actions</p><div class="flex flex-wrap gap-1">`;
+            for (const a of e.valid_actions) html += `<span class="flag-chip flag-info mono">${escapeHtml(a)}</span>`;
+            html += `</div></div>`;
+        }
+        if (e.seen_in_props?.length) {
+            html += `<div class="mb-4"><p class="text-xs text-gray-500 uppercase mb-2">Seen in proposals</p><p class="text-sm text-gray-300">${e.seen_in_props.join(', ')}</p></div>`;
+        }
+        return html;
+    }
+
+    function renderWalletDetail(e) {
+        let html = '<div class="grid grid-cols-2 gap-3 mb-4">';
+        const kv = (k,v) => v != null && v !== '' ? `<div><p class="text-xs text-gray-500">${k}</p><p class="text-sm text-white">${escapeHtml(v)}</p></div>` : '';
+        html += kv('Subtype', e.subtype);
+        html += kv('Protocol', e.protocol);
+        html += kv('Associated member', e.associated_member);
+        html += kv('Verified', e.verified);
+        html += '</div>';
+        return html;
+    }
+
+    // ============================================================
+    // EVENTS
+    // ============================================================
+    document.getElementById('search-input').addEventListener('input', (e) => {
+        state.search = e.target.value;
+        applyFilters();
+    });
+    document.getElementById('sort-select').addEventListener('change', (e) => {
+        state.sort = e.target.value;
+        applyFilters();
+    });
+    document.getElementById('clear-filters').addEventListener('click', () => {
+        state.search = '';
+        state.category = 'all';
+        state.protocol = 'all';
+        state.quickFilters.clear();
+        document.getElementById('search-input').value = '';
+        applyFilters();
+    });
+    document.getElementById('detail-close').addEventListener('click', () => {
+        document.getElementById('detail-modal').classList.add('hidden');
+        document.getElementById('detail-modal').classList.remove('flex');
+    });
+    document.getElementById('detail-modal').addEventListener('click', (e) => {
+        if (e.target.id === 'detail-modal') {
+            document.getElementById('detail-modal').classList.add('hidden');
+            document.getElementById('detail-modal').classList.remove('flex');
+        }
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            document.getElementById('detail-modal').classList.add('hidden');
+            document.getElementById('detail-modal').classList.remove('flex');
+        }
+    });
+
+    // Init
+    loadCatalog();
+
+    // Mark mobile nav active (none active on this page since it's under tools)
+    </script>
+</body>
+</html>
