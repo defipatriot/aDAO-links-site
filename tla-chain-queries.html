@@ -206,6 +206,41 @@
         .platform-tab.active { color: #67e8f9; background: rgba(34,211,238,0.12); border-color: rgba(34,211,238,0.4); }
         .platform-tab:disabled { opacity: 0.4; cursor: not-allowed; }
         
+        .search-dir-tab {
+            padding: 3px 8px;
+            font-size: 10px;
+            font-weight: 600;
+            color: #9ca3af;
+            background: transparent;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .search-dir-tab:hover { color: #d1d5db; background: rgba(255,255,255,0.05); }
+        .search-dir-tab.active { color: #67e8f9; background: rgba(34,211,238,0.12); border-color: rgba(34,211,238,0.4); }
+
+        .pool-hint-list { display: flex; flex-direction: column; gap: 2px; }
+        .pool-hint-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 8px;
+            font-size: 11px;
+            background: rgba(0,0,0,0.2);
+            border: 1px solid transparent;
+            border-radius: 4px;
+            cursor: pointer;
+            color: #d1d5db;
+            transition: all 0.15s;
+            text-align: left;
+            width: 100%;
+        }
+        .pool-hint-row:hover { background: rgba(34,211,238,0.08); border-color: rgba(34,211,238,0.3); }
+        .pool-hint-row .pool-kind { font-size: 10px; padding: 1px 5px; background: rgba(255,255,255,0.08); border-radius: 3px; color: #9ca3af; min-width: 38px; text-align: center; }
+        .pool-hint-row .pool-addr { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: #67e8f9; }
+        .pool-hint-row .pool-pct { font-size: 11px; color: #9ca3af; font-variant-numeric: tabular-nums; }
+        
         .picker-mode-panel { display: none; }
         .picker-mode-panel.active { display: block; }
         
@@ -355,7 +390,17 @@
 
             <!-- Mode: search by last 4 -->
             <div class="picker-mode-panel" data-mode="search">
-                <input id="picker-search-input" type="text" class="form-input" placeholder="Type the last chars of an address (e.g. w, lw, ulw, 7ulw) or a label…" autocomplete="off">
+                <div class="flex items-center gap-2 mb-2 flex-wrap">
+                    <span class="text-xs text-gray-500">Typing direction:</span>
+                    <button class="search-dir-tab active" data-dir="ltr">
+                        <i class="fas fa-arrow-right text-xs mr-1"></i>Left → Right
+                    </button>
+                    <button class="search-dir-tab" data-dir="rtl">
+                        <i class="fas fa-arrow-left text-xs mr-1"></i>Right → Left
+                    </button>
+                    <span class="text-xs text-gray-500" id="search-dir-hint">type the address from the end forwards</span>
+                </div>
+                <input id="picker-search-input" type="text" class="form-input" placeholder="Type the last chars of an address (e.g. m, zm, vzm, 5vzm) or a label…" autocomplete="off">
                 <div id="picker-search-results" class="mt-2 max-h-48 overflow-y-auto"></div>
             </div>
 
@@ -470,6 +515,26 @@
                     args: [],
                     msg: { owner: {} },
                 },
+                {
+                    name: 'ownership',
+                    description: 'Full ownership status — current owner, pending transfer if any, expiry.',
+                    response: '{owner, pending_owner, pending_expiry}',
+                    args: [],
+                    msg: { ownership: {} },
+                },
+                {
+                    name: 'addresses',
+                    description: 'Look up multiple roles at once. Pass an array of role names.',
+                    use_case: 'Get a handful of addresses in one call (instead of querying each).',
+                    args: [{ name: 'names', kind: 'text', placeholder: '["ASSET_GAUGE","VOTING_ESCROW"]', help: 'JSON array of role names.' }],
+                    msg: (a) => ({ addresses: { names: JSON.parse(a.names || '[]') } }),
+                },
+                {
+                    name: 'address_list',
+                    description: 'Paginated list of registered roles (alternative format to all_addresses).',
+                    args: [],
+                    msg: { address_list: {} },
+                },
             ],
         },
         {
@@ -526,6 +591,38 @@
                     description: 'A wallet\'s unclaimed rebase rewards (ampLUNA).',
                     args: [{ name: 'user', kind: 'wallet' }],
                     msg: (a) => ({ user_pending_rebase: { user: a.user } }),
+                },
+                {
+                    name: 'user_infos',
+                    description: 'Paginated list of all users with voting power.',
+                    use_case: 'Enumerate every TLA voter (start_after for pagination).',
+                    args: [{ name: 'start_after', kind: 'optional_id', placeholder: 'terra1… (optional)', help: 'Pagination cursor — last address from previous page.' }],
+                    msg: (a) => ({ user_infos: a.start_after ? { start_after: a.start_after, limit: 30 } : { limit: 30 } }),
+                },
+                {
+                    name: 'distribution',
+                    description: 'Distribution for a single gauge bucket.',
+                    use_case: 'Pull just one bucket\'s pool allocation (instead of all four).',
+                    args: [{ name: 'gauge', kind: 'text', placeholder: 'stable', help: 'Bucket name: stable, project, bluechip, or single.' }],
+                    msg: (a) => ({ distribution: { gauge: a.gauge } }),
+                },
+                {
+                    name: 'last_distributions',
+                    description: 'All gauges\' last distributions (plural — alternative to current distributions).',
+                    args: [],
+                    msg: { last_distributions: {} },
+                },
+                {
+                    name: 'gauge_info',
+                    description: 'Configuration for a single bucket (whitelisted_assets, weight, etc.).',
+                    args: [{ name: 'gauge', kind: 'text', placeholder: 'stable', help: 'Bucket name: stable, project, bluechip, or single.' }],
+                    msg: (a) => ({ gauge_info: { gauge: a.gauge } }),
+                },
+                {
+                    name: 'gauge_infos',
+                    description: 'Configuration for all gauge buckets at once.',
+                    args: [],
+                    msg: { gauge_infos: {} },
                 },
             ],
         },
@@ -589,6 +686,70 @@
                     description: 'Currently-blacklisted wallets (typically empty).',
                     args: [],
                     msg: { blacklisted_voters: {} },
+                },
+                {
+                    name: 'lock_vamp',
+                    description: 'Voting power of a single lock at a specific block time (defaults to now).',
+                    use_case: 'See a lock\'s VP at any point in time — useful for historical analysis.',
+                    args: [
+                        { name: 'token_id', kind: 'id', placeholder: '600', help: 'Lock NFT token ID.' },
+                        { name: 'time', kind: 'optional_id', placeholder: 'unix timestamp (optional)', help: 'Unix timestamp; omit for current.' }
+                    ],
+                    msg: (a) => ({ lock_vamp: { token_id: String(a.token_id), time: a.time ? parseInt(a.time) : null } }),
+                },
+                {
+                    name: 'all_tokens',
+                    description: 'Paginated list of every lock token ID currently in existence.',
+                    use_case: 'Enumerate all locks (start_after for pagination).',
+                    args: [{ name: 'start_after', kind: 'optional_id', placeholder: 'last token_id (optional)', help: 'Pagination cursor.' }],
+                    msg: (a) => ({ all_tokens: a.start_after ? { start_after: String(a.start_after), limit: 30 } : { limit: 30 } }),
+                },
+                {
+                    name: 'nft_info',
+                    description: 'cw721 standard — metadata for a single lock NFT.',
+                    args: [{ name: 'token_id', kind: 'id', placeholder: '1' }],
+                    msg: (a) => ({ nft_info: { token_id: String(a.token_id) } }),
+                    supports_load_locks: true,
+                },
+                {
+                    name: 'all_nft_info',
+                    description: 'cw721 standard — combined NftInfo + OwnerOf for a lock.',
+                    args: [{ name: 'token_id', kind: 'id', placeholder: '1' }],
+                    msg: (a) => ({ all_nft_info: { token_id: String(a.token_id) } }),
+                    supports_load_locks: true,
+                },
+                {
+                    name: 'approval',
+                    description: 'cw721 standard — check if a spender has approval for a token.',
+                    args: [
+                        { name: 'token_id', kind: 'id', placeholder: '1' },
+                        { name: 'spender', kind: 'text', placeholder: 'terra1…', help: 'Spender address to check approval for.' }
+                    ],
+                    msg: (a) => ({ approval: { token_id: String(a.token_id), spender: a.spender } }),
+                },
+                {
+                    name: 'approvals',
+                    description: 'cw721 standard — list approvals on a single lock NFT.',
+                    args: [{ name: 'token_id', kind: 'id', placeholder: '1' }],
+                    msg: (a) => ({ approvals: { token_id: String(a.token_id) } }),
+                },
+                {
+                    name: 'all_operators',
+                    description: 'cw721 standard — list every operator a wallet has authorized.',
+                    args: [{ name: 'owner', kind: 'wallet' }],
+                    msg: (a) => ({ all_operators: { owner: a.owner } }),
+                },
+                {
+                    name: 'contract_info',
+                    description: 'cw721 standard — collection name + symbol.',
+                    args: [],
+                    msg: { contract_info: {} },
+                },
+                {
+                    name: 'minter',
+                    description: 'cw721 standard — address authorized to mint new locks.',
+                    args: [],
+                    msg: { minter: {} },
                 },
             ],
         },
@@ -660,6 +821,139 @@
                     args: [],
                     msg: { config: {} },
                 },
+                {
+                    name: 'asset_config',
+                    description: 'Single asset\'s vault configuration.',
+                    use_case: 'Pull just one asset\'s vault details (instead of asset_configs which returns all 65).',
+                    args: [{ name: 'asset_info', kind: 'text', placeholder: '{"native":"uluna"}', help: 'AssetInfo JSON: {"native":"denom"} or {"cw20":"terra1…"}.' }],
+                    msg: (a) => ({ asset_config: { asset_info: JSON.parse(a.asset_info) } }),
+                },
+                {
+                    name: 'user_infos',
+                    description: 'Paginated list of all compounder users.',
+                    args: [{ name: 'start_after', kind: 'optional_id', placeholder: 'terra1… (optional)' }],
+                    msg: (a) => ({ user_infos: a.start_after ? { start_after: a.start_after, limit: 30 } : { limit: 30 } }),
+                },
+            ],
+        },
+        // ====================================================================
+        // ASSET-STAKING — 4 deployed instances (one per gauge bucket).
+        // Canonical role names confirmed via global-config.all_addresses.
+        // Instance labels will be re-built from the live catalog at page load
+        // (see loadCatalog) — these are the fallback values if catalog fetch fails.
+        // ====================================================================
+        {
+            id: 'asset_staking',
+            label: 'asset-staking',
+            icon: 'fa-warehouse',
+            address: 'terra1v399cx9drllm70wxfsgvfe694tdsd9x96p9ha36w7muffe4znlusqswspq',
+            description: 'LP token staking contracts — one deployed instance per gauge bucket. Same query schema across all four; switch via the instance picker.',
+            instances: [
+                { label: 'stable    ·  ASSET_STAKING__stable',    address: 'terra1v399cx9drllm70wxfsgvfe694tdsd9x96p9ha36w7muffe4znlusqswspq', bucket: 'stable',   role: 'ASSET_STAKING__stable' },
+                { label: 'project   ·  ASSET_STAKING__project',   address: 'terra1awq6t7jfakg9wfjn40fk3wzwmd57mvrqtt3a39z9rmet7wdjj3ysgw3lpa', bucket: 'project',  role: 'ASSET_STAKING__project' },
+                { label: 'bluechip  ·  ASSET_STAKING__bluechip',  address: 'terra14mmvqn0kthw6sre75vku263lafn5655mkjdejqjedjga4cw0qx2qlf4arv', bucket: 'bluechip', role: 'ASSET_STAKING__bluechip' },
+                { label: 'single    ·  ASSET_STAKING__single',    address: 'terra1qdz5qgafx88kp5mf6m2tah8742g4u5g2cek0m3jrgssexexk7g4qw6e23k', bucket: 'single',   role: 'ASSET_STAKING__single' },
+            ],
+            queries: [
+                {
+                    name: 'config',
+                    description: 'Staking config — global_config_addr, fee structure, etc.',
+                    args: [], msg: { config: {} },
+                },
+                {
+                    name: 'whitelisted_assets',
+                    description: 'List of LP tokens that can be staked here.',
+                    args: [], msg: { whitelisted_assets: {} },
+                },
+                {
+                    name: 'whitelisted_asset_details',
+                    description: 'Full details (weights, reward configs) per whitelisted asset.',
+                    args: [], msg: { whitelisted_asset_details: {} },
+                },
+                {
+                    name: 'reward_distribution',
+                    description: 'Current reward distribution schedule across staked assets.',
+                    args: [], msg: { reward_distribution: {} },
+                },
+                {
+                    name: 'staked_balance',
+                    description: 'A wallet\'s staked balance for a specific asset.',
+                    args: [
+                        { name: 'address', kind: 'wallet' },
+                        { name: 'asset_info', kind: 'text', placeholder: '{"native":"factory/terra1.../uLP"}', help: 'AssetInfo JSON of the staked LP.' }
+                    ],
+                    msg: (a) => ({ staked_balance: { address: a.address, asset_info: JSON.parse(a.asset_info) } }),
+                },
+                {
+                    name: 'pending_rewards',
+                    description: 'A wallet\'s pending (unclaimed) rewards.',
+                    args: [{ name: 'address', kind: 'wallet' }],
+                    msg: (a) => ({ pending_rewards: { address: a.address } }),
+                },
+                {
+                    name: 'all_staked_balances',
+                    description: 'All assets staked by a single wallet.',
+                    args: [{ name: 'address', kind: 'wallet' }],
+                    msg: (a) => ({ all_staked_balances: { address: a.address } }),
+                },
+                {
+                    name: 'all_pending_rewards',
+                    description: 'All pending rewards for a single wallet across staked assets.',
+                    args: [{ name: 'address', kind: 'wallet' }],
+                    msg: (a) => ({ all_pending_rewards: { address: a.address } }),
+                },
+                {
+                    name: 'all_pending_rewards_detail',
+                    description: 'Same as all_pending_rewards but with per-token breakdown.',
+                    args: [{ name: 'address', kind: 'wallet' }],
+                    msg: (a) => ({ all_pending_rewards_detail: { address: a.address } }),
+                },
+                {
+                    name: 'total_staked_balances',
+                    description: 'Total staked amount across all assets and all wallets.',
+                    args: [], msg: { total_staked_balances: {} },
+                },
+                {
+                    name: 'pool_stakers',
+                    description: 'List of all wallets staking a specific asset.',
+                    args: [{ name: 'asset_info', kind: 'text', placeholder: '{"native":"factory/terra1.../uLP"}', help: 'AssetInfo JSON.' }],
+                    msg: (a) => ({ pool_stakers: { asset_info: JSON.parse(a.asset_info) } }),
+                },
+            ],
+        },
+        // ====================================================================
+        // CONNECTOR-ALLIANCE — 4 deployed instances (one per gauge bucket).
+        // Same role naming convention: CONNECTOR__<bucket>. Live labels come
+        // from the catalog's directory at load time.
+        // ====================================================================
+        {
+            id: 'connector_alliance',
+            label: 'connector-alliance',
+            icon: 'fa-link',
+            address: 'terra1ym2495f63mdx63tu96085x2vf3xpy9z9k5urxwhvmf9jldm99q5qr4q6n8',
+            description: 'Alliance-module connector contracts — bridge between staked LPs and Terra Alliance rewards. One instance per gauge bucket.',
+            instances: [
+                { label: 'stable    ·  CONNECTOR__stable',    address: 'terra1ym2495f63mdx63tu96085x2vf3xpy9z9k5urxwhvmf9jldm99q5qr4q6n8', bucket: 'stable',   role: 'CONNECTOR__stable' },
+                { label: 'project   ·  CONNECTOR__project',   address: 'terra1x8v9fujf3c78q2we23x0vgzmxgtt0hgvuvfsxy4w3ar9kcua4c6qqcnhyh', bucket: 'project',  role: 'CONNECTOR__project' },
+                { label: 'bluechip  ·  CONNECTOR__bluechip',  address: 'terra16l43xt2uq09yvz4axg73n8rtm0qte9lremdwm6ph0e35r2jnm43qnl8h53', bucket: 'bluechip', role: 'CONNECTOR__bluechip' },
+                { label: 'single    ·  CONNECTOR__single',    address: 'terra1u72y7gppxrsncctvgfyqduv3md6pgq77pqhz9rxgwl3dqgye00cq7vmf8u', bucket: 'single',   role: 'CONNECTOR__single' },
+            ],
+            queries: [
+                {
+                    name: 'config',
+                    description: 'Connector config — paired asset-staking contract, fee splits, etc.',
+                    args: [], msg: { config: {} },
+                },
+                {
+                    name: 'state',
+                    description: 'Current state — accumulated alliance rewards, last update time.',
+                    args: [], msg: { state: {} },
+                },
+                {
+                    name: 'validators',
+                    description: 'Alliance validators this connector is currently delegating to.',
+                    args: [], msg: { validators: {} },
+                },
             ],
         },
     ];
@@ -675,6 +969,8 @@
     let WALLETS_FROM_CATALOG = [];      // labeled wallets — populate dropdown
     let WALLETS_ALL = [];                // every wallet including discovered stakers — search + paste lookup
     let pickerProtocol = 'all';          // 'all' | 'adao' | 'lion-dao' | 'tla' — filter for the dropdown
+    let searchDir = 'ltr';               // 'ltr' = typed string IS the suffix; 'rtl' = typed string is reversed first
+    let POOLS_BY_BUCKET = {};            // { stable: [...], project: [...], ... } from catalog.pools — available for asset_info dropdowns
     let activeContract = CONTRACT_GROUPS[0].id;
     let pickerMode = 'dropdown';
     let cachedLocks = new Map();  // wallet addr → [token_id, ...]
@@ -714,6 +1010,91 @@
             }
             for (const grp of CONTRACT_GROUPS) {
                 if (FALLBACK_CONTRACTS[grp.id]) grp.address = FALLBACK_CONTRACTS[grp.id];
+            }
+
+            // Build asset-staking and connector-alliance instance pickers DYNAMICALLY
+            // from the cron's directory (global-config.all_addresses).
+            //
+            // Eris's role naming convention puts the bucket prefix in the role name,
+            // e.g. STABLE_ASSET_STAKING, PROJECT_CONNECTOR, etc. We split on that to
+            // produce labels like "stable · STABLE_ASSET_STAKING".
+            //
+            // Each contract instance also tells us its bucket via the cron's `buckets`
+            // section — number of pools, total VP — so we can show pool counts inline.
+            
+            // Group pools by bucket — used for showing pool counts in instance labels
+            // AND available for future asset_info dropdown helpers in asset-staking queries.
+            POOLS_BY_BUCKET = {};
+            if (Array.isArray(c.pools)) {
+                for (const p of c.pools) {
+                    if (!p.bucket) continue;
+                    if (!POOLS_BY_BUCKET[p.bucket]) POOLS_BY_BUCKET[p.bucket] = [];
+                    POOLS_BY_BUCKET[p.bucket].push(p);
+                }
+                // Sort each bucket's pools by distribution_pct descending so the
+                // highest-VP pools appear first in any future dropdown.
+                for (const b of Object.keys(POOLS_BY_BUCKET)) {
+                    POOLS_BY_BUCKET[b].sort((a, b) => (b.distribution_pct || 0) - (a.distribution_pct || 0));
+                }
+            }
+            if (c.directory && typeof c.directory === 'object') {
+                const stakingByBucket = {};
+                const connectorByBucket = {};
+                const buckets = c.buckets || {};
+
+                for (const [role, addr] of Object.entries(c.directory)) {
+                    if (typeof addr !== 'string' || !addr.startsWith('terra1')) continue;
+                    const upper = role.toUpperCase();
+
+                    // Identify which bucket this role belongs to (if any)
+                    let bucket = null;
+                    for (const candidate of ['STABLE', 'PROJECT', 'BLUECHIP', 'SINGLE']) {
+                        if (upper.includes(candidate)) { bucket = candidate.toLowerCase(); break; }
+                    }
+                    if (!bucket) continue;
+
+                    if (upper.includes('STAKING')) {
+                        stakingByBucket[bucket] = { role, address: addr };
+                    } else if (upper.includes('CONNECTOR')) {
+                        connectorByBucket[bucket] = { role, address: addr };
+                    }
+                }
+
+                const stakingGrp = CONTRACT_GROUPS.find(g => g.id === 'asset_staking');
+                const connectorGrp = CONTRACT_GROUPS.find(g => g.id === 'connector_alliance');
+                const bucketOrder = ['stable', 'project', 'bluechip', 'single'];
+
+                if (stakingGrp && Object.keys(stakingByBucket).length > 0) {
+                    stakingGrp.instances = bucketOrder
+                        .filter(b => stakingByBucket[b])
+                        .map(b => {
+                            const info = stakingByBucket[b];
+                            const poolCount = buckets[b]?.pool_count;
+                            const poolHint = poolCount ? ` · ${poolCount} pools` : '';
+                            return {
+                                label: `${b}${poolHint}  ·  ${info.role}`,
+                                address: info.address,
+                                bucket: b,
+                                role: info.role,
+                            };
+                        });
+                    if (stakingGrp.instances.length > 0) stakingGrp.address = stakingGrp.instances[0].address;
+                }
+
+                if (connectorGrp && Object.keys(connectorByBucket).length > 0) {
+                    connectorGrp.instances = bucketOrder
+                        .filter(b => connectorByBucket[b])
+                        .map(b => {
+                            const info = connectorByBucket[b];
+                            return {
+                                label: `${b}  ·  ${info.role}`,
+                                address: info.address,
+                                bucket: b,
+                                role: info.role,
+                            };
+                        });
+                    if (connectorGrp.instances.length > 0) connectorGrp.address = connectorGrp.instances[0].address;
+                }
             }
 
             // Build wallets list. We include ONLY catalog wallets (curated public entities).
@@ -951,15 +1332,24 @@
 
     function renderSearchResults(query) {
         const box = document.getElementById('picker-search-results');
-        const q = (query || '').trim().toLowerCase();
+        const raw = (query || '').trim().toLowerCase();
+        // In RTL mode the user types the address from end towards start, so
+        // reverse what they typed to get the actual suffix we match against.
+        //   Example: user types "mzv5" in RTL mode → we look for addresses
+        //   ending in "5vzm" (matches aDAO Treasury).
+        const q = searchDir === 'rtl' ? raw.split('').reverse().join('') : raw;
+
         if (q.length < 1) {
-            box.innerHTML = '<p class="text-xs text-gray-500 p-2">Type any number of characters from the end of an address (e.g. <span class="mono">w</span>, <span class="mono">lw</span>, <span class="mono">ulw</span>, <span class="mono">7ulw</span>) or a label.</p>';
+            const hint = searchDir === 'rtl'
+                ? 'Type the LAST character of the address first, then the second-to-last, etc. (e.g. <span class="mono">m</span> → <span class="mono">mz</span> → <span class="mono">mzv</span> → <span class="mono">mzv5</span> finds <span class="mono">…5vzm</span>).'
+                : 'Type any number of characters from the END of the address, going forwards (e.g. <span class="mono">m</span>, <span class="mono">zm</span>, <span class="mono">vzm</span>, <span class="mono">5vzm</span>) or a label.';
+            box.innerHTML = `<p class="text-xs text-gray-500 p-2">${hint}</p>`;
             return;
         }
         // Score-based matching across ALL wallets (named + discovered).
-        //   3 = address ends with q  (best — typing "7ulw" finds terra1...7ulw)
+        //   3 = address ends with q  (best)
         //   2 = label substring match
-        //   1 = q appears in the last 8 chars (catches "u" in "7ulw" partials)
+        //   1 = q appears in the last 8 chars (fallback)
         const scored = [];
         for (const w of WALLETS_ALL) {
             const addrLower = w.addr.toLowerCase();
@@ -972,7 +1362,6 @@
         }
         scored.sort((a, b) => {
             if (b.score !== a.score) return b.score - a.score;
-            // Within same score, named entries before unnamed
             const aN = a.w.label ? 1 : 0;
             const bN = b.w.label ? 1 : 0;
             if (bN !== aN) return bN - aN;
@@ -1017,6 +1406,24 @@
                 x.classList.toggle('active', x.dataset.proto === pickerProtocol));
             renderPicker();
         }));
+        // Search direction toggle (LTR / RTL)
+        document.querySelectorAll('.search-dir-tab').forEach(b => b.addEventListener('click', () => {
+            searchDir = b.dataset.dir;
+            document.querySelectorAll('.search-dir-tab').forEach(x =>
+                x.classList.toggle('active', x.dataset.dir === searchDir));
+            const hintEl = document.getElementById('search-dir-hint');
+            const inputEl = document.getElementById('picker-search-input');
+            if (searchDir === 'rtl') {
+                hintEl.textContent = 'type the last char first, then prepend';
+                inputEl.placeholder = 'Type LAST char first (e.g. m → mz → mzv → mzv5 finds …5vzm)';
+            } else {
+                hintEl.textContent = 'type the address from the end forwards';
+                inputEl.placeholder = 'Type the last chars of an address (e.g. m, zm, vzm, 5vzm) or a label…';
+            }
+            // Re-run search with current input under new direction
+            renderSearchResults(inputEl.value);
+            inputEl.focus();
+        }));
         // Dropdown
         document.getElementById('picker-dropdown').addEventListener('change', (e) => {
             if (e.target.value) setSelectedAddress(e.target.value);
@@ -1053,7 +1460,25 @@
         renderTabs();
         const grp = CONTRACT_GROUPS.find(g => g.id === activeContract);
         if (!grp) return;
-        
+
+        // For multi-instance contracts (asset-staking, connector-alliance),
+        // ensure grp.address is one of the listed instances; default to instances[0].
+        if (grp.instances && grp.instances.length > 0) {
+            const known = grp.instances.map(i => i.address);
+            if (!known.includes(grp.address)) grp.address = grp.instances[0].address;
+        }
+
+        const instancePicker = (grp.instances && grp.instances.length > 1) ? `
+            <div class="mt-3 p-3 bg-cyan-900/10 border border-cyan-700/30 rounded-md">
+                <label class="text-xs text-cyan-300 mb-1 block"><i class="fas fa-layer-group mr-1"></i>This contract has ${grp.instances.length} deployed instances — pick which one to query:</label>
+                <select id="instance-selector" class="form-select">
+                    ${grp.instances.map(i => `<option value="${escapeAttr(i.address)}"${i.address === grp.address ? ' selected' : ''}>${escapeHtml(i.label)}</option>`).join('')}
+                </select>
+                <p class="text-xs text-gray-500 mt-1">All instances share the same query schema — switching the picker re-aims every query below at the selected address.</p>
+                ${renderPoolHint(grp)}
+            </div>
+        ` : '';
+
         document.getElementById('contract-info').innerHTML = `
             <div class="flex items-start justify-between gap-4 flex-wrap">
                 <div class="min-w-0 flex-1">
@@ -1066,10 +1491,64 @@
                 </div>
                 <span class="text-xs text-gray-500">${grp.queries.length} queries available</span>
             </div>
+            ${instancePicker}
         `;
+
+        // Wire instance picker if present
+        const instSel = document.getElementById('instance-selector');
+        if (instSel) {
+            instSel.addEventListener('change', (e) => {
+                grp.address = e.target.value;
+                renderContent();
+            });
+        }
+        // Wire pool-hint click → copy asset_info JSON to clipboard
+        document.querySelectorAll('.pool-hint-row').forEach(r => r.addEventListener('click', () => {
+            const ai = r.dataset.assetInfo;
+            navigator.clipboard.writeText(ai).then(() => {
+                const orig = r.style.background;
+                r.style.background = 'rgba(34,211,238,0.25)';
+                r.title = 'Copied!';
+                setTimeout(() => { r.style.background = orig; r.title = 'Click to copy asset_info JSON to clipboard'; }, 600);
+            });
+        }));
 
         const grid = document.getElementById('queries-grid');
         grid.innerHTML = grp.queries.map((q, idx) => renderQueryCard(grp, q, idx)).join('');
+    }
+
+    function renderPoolHint(grp) {
+        // For asset-staking and connector-alliance instances, show the pools in
+        // the active bucket as a quick reference. Helps the user know what
+        // `asset_info` values to use for pool-specific queries (staked_balance,
+        // pool_stakers).
+        const activeInstance = (grp.instances || []).find(i => i.address === grp.address);
+        if (!activeInstance || !activeInstance.bucket) return '';
+        const pools = POOLS_BY_BUCKET[activeInstance.bucket] || [];
+        if (pools.length === 0) return '';
+
+        const rows = pools.slice(0, 10).map(p => {
+            const a = p.asset_raw || {};
+            const kind = a.cw20 ? 'cw20' : (a.native ? 'native' : '?');
+            const addrShort = a.cw20 ? `${a.cw20.slice(0, 14)}…${a.cw20.slice(-6)}`
+                            : a.native ? a.native.replace(/^factory\//, 'factory/').slice(0, 40)
+                            : '?';
+            const pct = p.distribution_pct != null ? (p.distribution_pct * 100).toFixed(2) + '%' : '—';
+            const assetInfoJson = JSON.stringify(a);
+            return `<button type="button" class="pool-hint-row" data-asset-info="${escapeAttr(assetInfoJson)}" title="Click to copy asset_info JSON to clipboard">
+                <span class="pool-kind">${kind}</span>
+                <span class="mono pool-addr">${escapeHtml(addrShort)}</span>
+                <span class="pool-pct">${pct}</span>
+            </button>`;
+        }).join('');
+        const more = pools.length > 10 ? `<p class="text-xs text-gray-500 mt-1">…${pools.length - 10} more — query <span class="mono">whitelisted_assets</span> for the full list.</p>` : '';
+        return `
+            <div class="mt-3 pt-3 border-t border-cyan-700/20">
+                <p class="text-xs text-cyan-300 mb-2"><i class="fas fa-water mr-1"></i>${pools.length} pools in this bucket (click any row to copy its <span class="mono">asset_info</span> JSON for use in <span class="mono">staked_balance</span> / <span class="mono">pool_stakers</span>):</p>
+                <div class="pool-hint-list">${rows}</div>
+                ${more}
+            </div>
+        `;
     }
 
     function categorizeArgs(q) {
@@ -1106,18 +1585,33 @@
         for (const a of q.args) {
             if (a.kind === 'wallet') previewArgs[a.name] = selectedAddress ? selectedAddress.addr : '<no address selected>';
             else if (a.kind === 'id') previewArgs[a.name] = '<id>';
-            else if (a.kind === 'text') previewArgs[a.name] = '<text>';
+            // For 'text' args we pass through a safe shape that mimics what JSON.parse-using msg
+            // factories would expect. If the placeholder looks JSON-ish, use it raw; else use a stub.
+            else if (a.kind === 'text') {
+                const ph = a.placeholder || '';
+                previewArgs[a.name] = (ph.trim().startsWith('{') || ph.trim().startsWith('[')) ? ph : '<text>';
+            }
             else previewArgs[a.name] = '<optional>';
         }
-        const previewMsg = typeof q.msg === 'function' ? q.msg(previewArgs) : q.msg;
-        const previewJson = JSON.stringify(previewMsg);
+        let previewMsg, previewJson;
+        try {
+            previewMsg = typeof q.msg === 'function' ? q.msg(previewArgs) : q.msg;
+            previewJson = JSON.stringify(previewMsg);
+        } catch (e) {
+            // Likely an asset_info / JSON arg with a non-JSON placeholder. Show schema hint instead.
+            previewMsg = null;
+            previewJson = '{ ' + q.name + ': { /* fill inputs below */ } }';
+        }
 
         // Decide whether we can render a direct link
-        const canDirectLink = (noArgs || (onlyWalletArgs && selectedAddress));
-        const directMsg = canDirectLink
-            ? (typeof q.msg === 'function' ? q.msg(selectedAddress ? { user: selectedAddress.addr, owner: selectedAddress.addr } : {}) : q.msg)
-            : null;
-        const directUrl = canDirectLink ? chainscopeUrl(grp.address, directMsg) : null;
+        const canDirectLink = (noArgs || (onlyWalletArgs && selectedAddress)) && previewMsg !== null;
+        let directMsg = null;
+        if (canDirectLink) {
+            try {
+                directMsg = typeof q.msg === 'function' ? q.msg(selectedAddress ? { user: selectedAddress.addr, owner: selectedAddress.addr, address: selectedAddress.addr } : {}) : q.msg;
+            } catch (e) { directMsg = null; }
+        }
+        const directUrl = directMsg ? chainscopeUrl(grp.address, directMsg) : null;
 
         // Build inputs for ID args
         let idInputs = '';
@@ -1262,10 +1756,20 @@
         return { grp, q, argVals };
     }
 
+    function buildMsgOrError(r) {
+        try {
+            return { msg: typeof r.q.msg === 'function' ? r.q.msg(r.argVals) : r.q.msg };
+        } catch (e) {
+            return { error: e.message || String(e) };
+        }
+    }
+
     function generateForCard(qIdx) {
         const r = readArgsForCard(qIdx);
         if (!r) return;
-        const msg = typeof r.q.msg === 'function' ? r.q.msg(r.argVals) : r.q.msg;
+        const built = buildMsgOrError(r);
+        if (built.error) { alert('Could not build query JSON: ' + built.error + '\n(Tip: AssetInfo args expect JSON like {"native":"uluna"} or {"cw20":"terra1..."}.)'); return; }
+        const msg = built.msg;
         const url = chainscopeUrl(r.grp.address, msg);
         const card = document.querySelector(`[data-query-idx="${qIdx}"]`);
         card.querySelector('[data-role="json-preview"]').textContent = JSON.stringify(msg);
@@ -1284,8 +1788,9 @@
     function copyJsonForCard(qIdx) {
         const r = readArgsForCard(qIdx);
         if (!r) return;
-        const msg = typeof r.q.msg === 'function' ? r.q.msg(r.argVals) : r.q.msg;
-        copyJson(event.target, JSON.stringify(msg));
+        const built = buildMsgOrError(r);
+        if (built.error) { alert('Could not build query JSON: ' + built.error); return; }
+        copyJson(event.target, JSON.stringify(built.msg));
     }
     window.copyJsonForCard = copyJsonForCard;
 
