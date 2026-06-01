@@ -3,25 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Catalog View - Alliance DAO Tools</title>
+    <title>TLA Catalog - Alliance DAO Tools</title>
     
     <link rel="icon" type="image/x-icon" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/favicon.ico">
     <link rel="icon" type="image/png" sizes="32x32" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/favicon-32x32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/favicon-16x16.png">
     
     <link rel="canonical" href="https://www.thealliancedao.com/tla-catalog.html">
-    <meta name="description" content="Browse the Alliance DAO ecosystem catalog — tokens, contracts, wallets, and LP positions on Terra. Search by name, address, protocol, or category. See bridge sources, CoinGecko mappings, and variant warnings.">
-    <meta name="keywords" content="Terra catalog, TLA tokens, address lookup, wBTC variants, USDC Terra, ampLUNA, ecosystem browser">
+    <meta name="description" content="Browse and curate the Alliance DAO ecosystem catalog — tokens, contracts, wallets, and LP positions on Terra. Edit entries inline; drafts accumulate locally until you download and commit to GitHub.">
+    <meta name="keywords" content="Terra catalog, TLA tokens, address lookup, wBTC variants, USDC Terra, ampLUNA, ecosystem browser, curation">
     <meta name="robots" content="index, follow">
     
-    <meta property="og:title" content="Catalog View | Alliance DAO Tools">
-    <meta property="og:description" content="Browse the catalog of every token, contract, and wallet in the TLA ecosystem.">
+    <meta property="og:title" content="TLA Catalog | Alliance DAO Tools">
+    <meta property="og:description" content="Browse and curate the catalog of every token, contract, and wallet in the TLA ecosystem.">
     <meta property="og:image" content="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/android-chrome-512x512.png">
     <meta property="og:url" content="https://www.thealliancedao.com/tla-catalog.html">
     <meta property="og:type" content="website">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Catalog View | Alliance DAO Tools">
-    <meta name="twitter:description" content="Browse the catalog of every token, contract, and wallet in the TLA ecosystem.">
+    <meta name="twitter:title" content="TLA Catalog | Alliance DAO Tools">
+    <meta name="twitter:description" content="Browse and curate the catalog of every token, contract, and wallet in the TLA ecosystem.">
     <meta name="twitter:image" content="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/android-chrome-512x512.png">
     
     <script src="https://cdn.tailwindcss.com"></script>
@@ -44,6 +44,7 @@
         }
         .filter-pill:hover { background: rgba(34,211,238,0.1); color: #67e8f9; border-color: rgba(34,211,238,0.3); }
         .filter-pill.active { background: rgba(34,211,238,0.18); color: #67e8f9; border-color: rgba(34,211,238,0.5); }
+        .filter-pill.danger.active { background: rgba(245,158,11,0.18); color: #fcd34d; border-color: rgba(245,158,11,0.5); }
         
         .entry-card {
             background: rgba(15, 15, 25, 0.6);
@@ -51,8 +52,28 @@
             border-radius: 10px;
             padding: 14px;
             transition: all 0.15s;
+            position: relative;
         }
         .entry-card:hover { border-color: rgba(34,211,238,0.4); background: rgba(15, 15, 25, 0.9); }
+        .entry-card.has-draft {
+            border-color: rgba(245,158,11,0.4);
+            background: rgba(245,158,11,0.04);
+        }
+        .entry-card.has-draft:hover { border-color: rgba(245,158,11,0.7); }
+        
+        .modified-badge {
+            position: absolute;
+            top: 8px; right: 8px;
+            background: rgba(245,158,11,0.18);
+            color: #fcd34d;
+            border: 1px solid rgba(245,158,11,0.4);
+            font-size: 9px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
         
         .score-badge {
             display: inline-flex; align-items: center; justify-content: center;
@@ -65,6 +86,15 @@
         .score-50 { background: rgba(234,179,8,0.15); color: #fcd34d; border: 1px solid rgba(234,179,8,0.3); }
         .score-25 { background: rgba(249,115,22,0.15); color: #fdba74; border: 1px solid rgba(249,115,22,0.3); }
         .score-0  { background: rgba(239,68,68,0.15); color: #fca5a5; border: 1px solid rgba(239,68,68,0.3); }
+        
+        .tier-chip {
+            display: inline-block; font-size: 9px; padding: 1px 5px; border-radius: 3px;
+            font-family: 'JetBrains Mono', monospace; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.05em;
+        }
+        .tier-core    { background: rgba(34,197,94,0.12);  color: #86efac; border: 1px solid rgba(34,197,94,0.3); }
+        .tier-tracked { background: rgba(59,130,246,0.12); color: #93c5fd; border: 1px solid rgba(59,130,246,0.3); }
+        .tier-noise   { background: rgba(115,115,115,0.12); color: #9ca3af; border: 1px solid rgba(115,115,115,0.3); }
         
         .flag-chip {
             display: inline-block;
@@ -79,7 +109,7 @@
         .flag-info     { background: rgba(59,130,246,0.12); color: #93c5fd; border: 1px solid rgba(59,130,246,0.25); }
         .flag-success  { background: rgba(34,197,94,0.12); color: #86efac; border: 1px solid rgba(34,197,94,0.25); }
         
-        .copy-btn { color: #6b7280; cursor: pointer; transition: color 0.15s; }
+        .copy-btn { color: #6b7280; cursor: pointer; transition: color 0.15s; background: none; border: none; }
         .copy-btn:hover { color: #67e8f9; }
         
         .detail-modal {
@@ -92,11 +122,93 @@
             border: 1px solid rgba(34, 211, 238, 0.3);
             box-shadow: 0 0 80px rgba(34, 211, 238, 0.1);
         }
+        .detail-content.editing {
+            border-color: rgba(245,158,11,0.5);
+            box-shadow: 0 0 80px rgba(245,158,11,0.15);
+        }
+        
+        .form-input, .form-select, .form-textarea {
+            width: 100%;
+            background: rgba(15, 15, 25, 0.6);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 6px;
+            padding: 8px 12px;
+            font-size: 14px;
+            color: white;
+        }
+        .form-input:focus, .form-select:focus, .form-textarea:focus {
+            outline: none; border-color: rgba(34,211,238,0.6);
+            box-shadow: 0 0 0 3px rgba(34,211,238,0.1);
+        }
+        .form-input::placeholder { color: #6b7280; }
+        .form-label { display: block; font-size: 12px; font-weight: 600; color: #9ca3af; margin-bottom: 4px; }
+        .form-help  { font-size: 11px; color: #6b7280; margin-top: 4px; }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, rgba(34,211,238,0.2), rgba(168,85,247,0.2));
+            border: 1px solid rgba(34,211,238,0.5);
+            color: #67e8f9;
+            font-weight: 600;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.15s;
+            display: inline-flex; align-items: center; gap: 6px;
+        }
+        .btn-primary:hover { background: linear-gradient(135deg, rgba(34,211,238,0.3), rgba(168,85,247,0.3)); }
+        .btn-secondary {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.15);
+            color: #d1d5db;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .btn-secondary:hover { background: rgba(255,255,255,0.1); }
+        .btn-warning {
+            background: rgba(245,158,11,0.15);
+            border: 1px solid rgba(245,158,11,0.4);
+            color: #fcd34d;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .btn-warning:hover { background: rgba(245,158,11,0.22); }
+        
+        /* Drafts floating button */
+        .drafts-fab {
+            position: fixed;
+            bottom: 80px; right: 20px;
+            background: linear-gradient(135deg, rgba(245,158,11,0.3), rgba(244,114,182,0.3));
+            border: 1px solid rgba(245,158,11,0.6);
+            color: #fcd34d;
+            padding: 12px 18px;
+            border-radius: 30px;
+            box-shadow: 0 8px 24px rgba(245,158,11,0.15);
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+            z-index: 40;
+        }
+        .drafts-fab:hover { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(245,158,11,0.25); }
+        .drafts-fab.hidden { display: none; }
+        @media (max-width: 767px) { .drafts-fab { bottom: calc(72px + env(safe-area-inset-bottom)); right: 12px; padding: 10px 14px; font-size: 13px; } }
+        
+        .draft-row {
+            background: rgba(245,158,11,0.04);
+            border-left: 3px solid rgba(245,158,11,0.5);
+            padding: 8px 12px;
+            margin-bottom: 6px;
+            border-radius: 4px;
+        }
+        .draft-diff-old { color: #f87171; text-decoration: line-through; opacity: 0.7; }
+        .draft-diff-new { color: #4ade80; font-weight: 600; }
         
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: #1a1a1a; }
         ::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #555; }
     </style>
     
     <!-- Shared chrome CSS -->
@@ -122,9 +234,9 @@
                 gap: 0.15rem; padding: 0.4rem 0.2rem;
                 color: #9ca3af; text-decoration: none;
                 font-size: 0.65rem; font-weight: 600; line-height: 1;
-                border-radius: 0.5rem; transition: all 0.15s ease; min-height: 48px;
+                border-radius: 0.5rem; min-height: 48px;
             }
-            .mobile-bottom-nav-tab i { font-size: 1.1rem; color: #6b7280; transition: color 0.15s; }
+            .mobile-bottom-nav-tab i { font-size: 1.1rem; color: #6b7280; }
             .mobile-bottom-nav-tab.active { color: #67e8f9; }
             .mobile-bottom-nav-tab.active i { color: #22d3ee; }
             body { padding-bottom: calc(64px + env(safe-area-inset-bottom)) !important; }
@@ -135,9 +247,8 @@
             font-size: 13px; font-weight: 600; color: #9ca3af;
             background: rgba(255,255,255,0.04);
             border: 1px solid rgba(255,255,255,0.08);
-            transition: all 0.15s;
             display: inline-flex; align-items: center; gap: 6px;
-            text-decoration: none;
+            text-decoration: none; transition: all 0.15s;
         }
         .tools-subnav-tab:hover { background: rgba(34,211,238,0.1); color: #d1d5db; border-color: rgba(34,211,238,0.25); }
         .tools-subnav-tab.active { background: rgba(34,211,238,0.15); color: #67e8f9; border-color: rgba(34,211,238,0.5); }
@@ -155,11 +266,11 @@
                 <a href="index.html" title="Alliance DAO home"><img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Alliance%20DAO%20Logo.png" alt="Alliance DAO Logo" class="h-12 md:h-16 w-auto" onerror="this.src='https://placehold.co/128x64/0D0D0D/EAEAEA?text=Logo'; this.onerror=null;"></a>
             </div>
             <nav class="hidden md:flex flex-1 w-full md:w-auto justify-center items-center gap-2 sm:gap-3 order-3 md:order-2 mt-4 md:mt-0">
-                <a href="index.html" data-page="index" class="top-nav-tab bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-4 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center flex-1 md:flex-initial">Home</a>
-                <a href="nft-explorer-index.html" data-page="nft-explorer-index" class="top-nav-tab bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-4 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center flex-1 md:flex-initial"><span class="md:hidden">Explorer</span><span class="hidden md:inline">NFT Explorer</span></a>
-                <a href="adao-lore.html" data-page="adao-lore" class="top-nav-tab bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-4 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center flex-1 md:flex-initial"><span class="md:hidden">Lore</span><span class="hidden md:inline">aDAO Lore</span></a>
-                <a href="tla-stats.html" data-page="tla-stats" class="top-nav-tab bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-4 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center flex-1 md:flex-initial"><span class="md:hidden">TLA</span><span class="hidden md:inline">TLA Stats</span></a>
-                <a href="dao.html" data-page="dao" class="top-nav-tab bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-4 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center flex-1 md:flex-initial">DAO</a>
+                <a href="index.html" class="top-nav-tab bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-4 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center flex-1 md:flex-initial">Home</a>
+                <a href="nft-explorer-index.html" class="top-nav-tab bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-4 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center flex-1 md:flex-initial"><span class="md:hidden">Explorer</span><span class="hidden md:inline">NFT Explorer</span></a>
+                <a href="adao-lore.html" class="top-nav-tab bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-4 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center flex-1 md:flex-initial"><span class="md:hidden">Lore</span><span class="hidden md:inline">aDAO Lore</span></a>
+                <a href="tla-stats.html" class="top-nav-tab bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-4 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center flex-1 md:flex-initial"><span class="md:hidden">TLA</span><span class="hidden md:inline">TLA Stats</span></a>
+                <a href="dao.html" class="top-nav-tab bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-4 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center flex-1 md:flex-initial">DAO</a>
             </nav>
             <div class="w-1/2 md:w-32 flex-shrink-0 flex justify-end order-2 md:order-3">
                 <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Terra.PNG" alt="Terra Logo" class="h-12 md:h-16 w-auto" onerror="this.src='https://placehold.co/128x64/0D0D0D/EAEAEA?text=Logo'; this.onerror=null;">
@@ -182,10 +293,9 @@
     </div>
 
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <!-- Page heading -->
         <div class="mb-5">
-            <h1 class="text-2xl md:text-3xl font-bold text-white mb-1">Catalog View</h1>
-            <p class="text-gray-400 text-sm">Browse every token, contract, wallet, and LP in the ecosystem catalog. Click any entry for full details.</p>
+            <h1 class="text-2xl md:text-3xl font-bold text-white mb-1">TLA Catalog</h1>
+            <p class="text-gray-400 text-sm">Browse every token, contract, wallet, and LP in the ecosystem. Click any entry for full details. Click <i class="fas fa-pen text-yellow-400"></i> to edit inline — changes accumulate locally until you download &amp; commit.</p>
         </div>
 
         <!-- Search + Filters -->
@@ -200,19 +310,16 @@
                 </button>
             </div>
 
-            <!-- Category filters -->
             <div class="mb-2">
                 <span class="text-xs text-gray-500 mr-2">Category:</span>
                 <div class="inline-flex flex-wrap gap-1.5" id="category-filters"></div>
             </div>
 
-            <!-- Protocol filters -->
             <div class="mb-2">
                 <span class="text-xs text-gray-500 mr-2">Protocol:</span>
                 <div class="inline-flex flex-wrap gap-1.5" id="protocol-filters"></div>
             </div>
 
-            <!-- Quick filters (flags) -->
             <div>
                 <span class="text-xs text-gray-500 mr-2">Quick:</span>
                 <div class="inline-flex flex-wrap gap-1.5">
@@ -220,14 +327,16 @@
                     <button class="filter-pill" data-quick="multi-variant">Multi-variant (confusion risk)</button>
                     <button class="filter-pill" data-quick="no-cg">No CoinGecko</button>
                     <button class="filter-pill" data-quick="lst">LSTs</button>
-                    <button class="filter-pill" data-quick="amplp">amplp tokens</button>
+                    <button class="filter-pill" data-quick="amplp">amplp underlying</button>
                     <button class="filter-pill" data-quick="ibc">IBC tokens</button>
+                    <button class="filter-pill" data-quick="lp-tokens">LP tokens</button>
+                    <button class="filter-pill danger" data-quick="show-noise" title="Includes unnamed/un-mapped tokens hidden by default">Show noise</button>
                     <button class="filter-pill" data-quick="needs-curation">Needs curation</button>
+                    <button class="filter-pill" data-quick="has-draft">Modified (draft)</button>
                 </div>
             </div>
         </div>
 
-        <!-- Result count + sort -->
         <div class="flex justify-between items-center mb-3 text-sm">
             <span class="text-gray-400" id="result-count">Loading...</span>
             <div class="flex items-center gap-2">
@@ -242,7 +351,6 @@
             </div>
         </div>
 
-        <!-- Results grid -->
         <div id="results-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             <div class="col-span-full text-center py-12 text-gray-500">
                 <i class="fas fa-spinner fa-spin text-2xl mb-2"></i>
@@ -251,11 +359,29 @@
         </div>
     </main>
 
+    <!-- Drafts floating button -->
+    <button id="drafts-fab" class="drafts-fab hidden">
+        <i class="fas fa-pen mr-2"></i><span id="drafts-fab-count">0</span> draft<span id="drafts-fab-plural">s</span> pending
+    </button>
+
     <!-- Detail modal -->
     <div id="detail-modal" class="detail-modal fixed inset-0 z-50 hidden items-center justify-center p-4">
         <div class="detail-content rounded-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6 relative">
             <button id="detail-close" class="absolute top-3 right-3 text-gray-400 hover:text-white text-2xl">&times;</button>
             <div id="detail-body"></div>
+        </div>
+    </div>
+
+    <!-- Drafts panel modal -->
+    <div id="drafts-modal" class="detail-modal fixed inset-0 z-50 hidden items-center justify-center p-4">
+        <div class="detail-content rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 relative">
+            <button id="drafts-close" class="absolute top-3 right-3 text-gray-400 hover:text-white text-2xl">&times;</button>
+            <h2 class="text-xl font-bold text-white mb-1"><i class="fas fa-pen text-yellow-400 mr-2"></i>Pending changes</h2>
+            <p class="text-sm text-gray-400 mb-4">Review your edits, then download each affected file and commit to GitHub. After commit, the next cron run picks them up.</p>
+            <div id="drafts-body"></div>
+            <div class="flex justify-end gap-2 mt-6 pt-4 border-t border-gray-800">
+                <button id="drafts-discard-all" class="text-xs text-red-400 hover:text-red-300 px-3 py-2"><i class="fas fa-trash mr-1"></i>Discard all drafts</button>
+            </div>
         </div>
     </div>
 
@@ -272,14 +398,13 @@
                 <a href="tools.html" class="hover:text-white hover:underline transition-colors">All Tools</a>
             </div>
             <div class="mt-4 text-xs text-gray-500">
-                <span class="font-mono">Catalog View v1.0</span>
+                <span class="font-mono">TLA Catalog v1.1</span>
                 <span class="opacity-60 mx-1">·</span>
                 <span>Powered by tla-chain-registry</span>
             </div>
         </div>
     </footer>
 
-    <!-- Mobile nav -->
     <nav class="mobile-bottom-nav" aria-label="Main navigation">
         <a href="index.html" class="mobile-bottom-nav-tab"><i class="fas fa-house"></i><span>Home</span></a>
         <a href="nft-explorer-index.html" class="mobile-bottom-nav-tab"><i class="fas fa-images"></i><span>NFTs</span></a>
@@ -288,7 +413,6 @@
         <a href="dao.html" class="mobile-bottom-nav-tab"><i class="fas fa-landmark"></i><span>DAO</span></a>
     </nav>
 
-    <!-- Vercel Analytics -->
     <script defer src="/_vercel/insights/script.js"></script>
 
     <script>
@@ -296,8 +420,10 @@
     // STATE
     // ============================================================
     let CATALOG = null;
-    let ALL_ENTRIES = [];       // unified list of all entries (tokens, contracts, wallets) flattened
+    let ALL_ENTRIES = [];
     let FILTERED = [];
+    let openedEntry = null;     // entry currently shown in detail modal
+    let isEditing = false;      // is the detail modal in edit mode
 
     const state = {
         search: '',
@@ -305,12 +431,29 @@
         protocol: 'all',
         quickFilters: new Set(),
         sort: 'score-desc',
+        hideNoise: true,        // default: hide noise tier
     };
 
+    const DRAFTS_KEY = 'adao_catalog_drafts_v1';
+    let drafts = {};            // { 'filename.json': { 'address': { ...fields } } }
+
     const CATALOG_URL = 'https://raw.githubusercontent.com/defipatriot/tla-chain-registry/main/2026/current.json';
+    const CURATED_BASE = 'https://raw.githubusercontent.com/defipatriot/tla-chain-registry/main/curated/';
+
+    // Mapping: which entity type → which curated file → container key
+    const FILE_FOR_KIND = {
+        token:    { file: 'token_overrides.json',  container: 'tokens'    },
+        contract: { file: 'known_contracts.json',  container: 'contracts' },
+        wallet:   { file: 'wallets.json',          container: 'wallets'   },
+    };
+
+    const STD_PROTOCOLS = ['', 'TLA', 'Eris', 'Astroport', 'SkeletonSwap', 'BackBoneLabs', 'Boost', 'DAODAO', 'Solid', 'PhoenixDirective', 'Skip', 'Polytone', 'Allied'];
+    const CONTRACT_SUBTYPES = ['protocol_core', 'dao', 'dex_pair', 'staking', 'rewards', 'nft_marketplace', 'lending', 'oracle', 'bridge', 'proposal_module', 'proposal_safelist', 'proposal_target', 'governance', 'compounder', 'connector', 'fee_collector', 'scam_flagged'];
+    const TOKEN_SUBTYPES = ['', 'native', 'cw20', 'ibc', 'factory', 'lst'];
+    const WALLET_SUBTYPES = ['member', 'briber', 'treasury', 'multisig', 'team', 'ally', 'bot', 'scam_flagged'];
 
     // ============================================================
-    // FETCH
+    // FETCH CATALOG
     // ============================================================
     async function loadCatalog() {
         try {
@@ -329,11 +472,9 @@
 
     function buildEntries() {
         ALL_ENTRIES = [];
-        // Tokens
         for (const [addr, t] of Object.entries(CATALOG.tokens || {})) {
             ALL_ENTRIES.push({
-                ...t,
-                _kind: 'token',
+                ...t, _kind: 'token',
                 _searchKeys: [
                     addr, t.symbol || '', t.display_name || '', t.coingecko_id || '',
                     t.sources?.eris?.eris_name || '',
@@ -343,19 +484,15 @@
                 ].join(' ').toLowerCase(),
             });
         }
-        // Contracts
         for (const [addr, c] of Object.entries(CATALOG.contracts_catalog || {})) {
             ALL_ENTRIES.push({
-                ...c,
-                _kind: 'contract',
+                ...c, _kind: 'contract',
                 _searchKeys: [addr, c.label || '', c.protocol || '', c.description || ''].join(' ').toLowerCase(),
             });
         }
-        // Wallets
         for (const [addr, w] of Object.entries(CATALOG.wallets_catalog || {})) {
             ALL_ENTRIES.push({
-                ...w,
-                _kind: 'wallet',
+                ...w, _kind: 'wallet',
                 _searchKeys: [addr, w.label || '', w.protocol || '', w.description || ''].join(' ').toLowerCase(),
             });
         }
@@ -371,22 +508,80 @@
     }
 
     // ============================================================
+    // DRAFTS
+    // ============================================================
+    function loadDrafts() {
+        try {
+            const stored = localStorage.getItem(DRAFTS_KEY);
+            drafts = stored ? JSON.parse(stored) : {};
+        } catch (e) { drafts = {}; }
+    }
+    function saveDrafts() {
+        try { localStorage.setItem(DRAFTS_KEY, JSON.stringify(drafts)); } catch (e) {}
+        renderDraftsBadge();
+    }
+    function getDraft(kind, addr) {
+        const fileInfo = FILE_FOR_KIND[kind];
+        if (!fileInfo) return null;
+        return drafts[fileInfo.file]?.[addr] || null;
+    }
+    function setDraft(kind, addr, fields) {
+        const fileInfo = FILE_FOR_KIND[kind];
+        if (!fileInfo) return;
+        if (!drafts[fileInfo.file]) drafts[fileInfo.file] = {};
+        drafts[fileInfo.file][addr] = fields;
+        saveDrafts();
+    }
+    function removeDraft(file, addr) {
+        if (!drafts[file]) return;
+        delete drafts[file][addr];
+        if (Object.keys(drafts[file]).length === 0) delete drafts[file];
+        saveDrafts();
+    }
+    function discardAllDrafts() {
+        if (!confirm('Discard ALL pending drafts? This cannot be undone.')) return;
+        drafts = {};
+        saveDrafts();
+        applyFilters();
+    }
+    function totalDrafts() {
+        let n = 0;
+        for (const file of Object.values(drafts)) n += Object.keys(file).length;
+        return n;
+    }
+    function renderDraftsBadge() {
+        const total = totalDrafts();
+        const fab = document.getElementById('drafts-fab');
+        if (total === 0) {
+            fab.classList.add('hidden');
+        } else {
+            fab.classList.remove('hidden');
+            document.getElementById('drafts-fab-count').textContent = total;
+            document.getElementById('drafts-fab-plural').textContent = total === 1 ? '' : 's';
+        }
+    }
+
+    // Returns the "effective" value of a field for an entry — draft beats catalog
+    function effectiveField(entry, fieldName) {
+        const draft = getDraft(entry._kind, entry.address);
+        if (draft && draft[fieldName] != null && draft[fieldName] !== '') return draft[fieldName];
+        return entry[fieldName];
+    }
+
+    // ============================================================
     // FILTERS
     // ============================================================
     function renderFilters() {
-        // Categories
         const categories = ['all', 'tokens', 'contracts', 'wallets', 'lp_tokens'];
         const catBox = document.getElementById('category-filters');
         catBox.innerHTML = categories.map(c => `<button class="filter-pill" data-cat="${c}">${c === 'all' ? 'All' : c.replace('_',' ')}</button>`).join('');
 
-        // Protocols
         const protocols = new Set(['all']);
         for (const e of ALL_ENTRIES) if (e.protocol) protocols.add(e.protocol);
         const proBox = document.getElementById('protocol-filters');
         proBox.innerHTML = [...protocols].sort((a,b) => a === 'all' ? -1 : b === 'all' ? 1 : a.localeCompare(b))
             .map(p => `<button class="filter-pill" data-pro="${p}">${p === 'all' ? 'All' : p}</button>`).join('');
 
-        // Wire clicks
         catBox.querySelectorAll('.filter-pill').forEach(b => b.addEventListener('click', () => {
             state.category = b.dataset.cat;
             applyFilters();
@@ -397,12 +592,16 @@
         }));
         document.querySelectorAll('[data-quick]').forEach(b => b.addEventListener('click', () => {
             const k = b.dataset.quick;
+            if (k === 'show-noise') {
+                state.hideNoise = !state.hideNoise;
+                applyFilters();
+                return;
+            }
             if (state.quickFilters.has(k)) state.quickFilters.delete(k);
             else state.quickFilters.add(k);
             applyFilters();
         }));
 
-        // Activate "all" buttons
         catBox.querySelector('[data-cat="all"]').classList.add('active');
         proBox.querySelector('[data-pro="all"]').classList.add('active');
     }
@@ -410,6 +609,9 @@
     function applyFilters() {
         const s = state.search.trim().toLowerCase();
         FILTERED = ALL_ENTRIES.filter(e => {
+            // Hide noise by default (unless 'show-noise' active OR explicit category includes it)
+            if (state.hideNoise && e._kind === 'token' && e.tier === 'noise') return false;
+            
             if (state.category !== 'all' && e.category !== state.category) return false;
             if (state.protocol !== 'all' && e.protocol !== state.protocol) return false;
             if (s && !e._searchKeys.includes(s)) return false;
@@ -421,52 +623,72 @@
                 if (qk === 'lst' && e.subtype !== 'lst') return false;
                 if (qk === 'amplp' && !e.appears_in?.is_amplp_underlying) return false;
                 if (qk === 'ibc' && e.subtype !== 'ibc') return false;
-                if (qk === 'needs-curation' && !(e.scoring?.flags?.includes('no_acquisition_guide') || !e.label && !e.display_name)) return false;
+                if (qk === 'lp-tokens' && e.category !== 'lp_tokens') return false;
+                if (qk === 'needs-curation' && !needsCuration(e)) return false;
+                if (qk === 'has-draft' && !getDraft(e._kind, e.address)) return false;
             }
             return true;
         });
 
-        // Sort
         FILTERED.sort((a, b) => {
+            const aName = (effectiveField(a, 'display_name') || effectiveField(a, 'label') || a.symbol || a.address || '').toLowerCase();
+            const bName = (effectiveField(b, 'display_name') || effectiveField(b, 'label') || b.symbol || b.address || '').toLowerCase();
             switch (state.sort) {
                 case 'score-desc': return (b.scoring?.confusion_score || 0) - (a.scoring?.confusion_score || 0);
                 case 'score-asc':  return (a.scoring?.confusion_score || 0) - (b.scoring?.confusion_score || 0);
-                case 'name-asc':   return ((a.display_name||a.label||a.symbol||a.address||'').toLowerCase()).localeCompare(((b.display_name||b.label||b.symbol||b.address||'').toLowerCase()));
-                case 'name-desc':  return ((b.display_name||b.label||b.symbol||b.address||'').toLowerCase()).localeCompare(((a.display_name||a.label||a.symbol||a.address||'').toLowerCase()));
+                case 'name-asc':   return aName.localeCompare(bName);
+                case 'name-desc':  return bName.localeCompare(aName);
                 case 'tla-pools':  return (b.appears_in?.tla_pools_count || 0) - (a.appears_in?.tla_pools_count || 0);
                 default: return 0;
             }
         });
 
-        // Update active pills
         document.querySelectorAll('[data-cat]').forEach(b => b.classList.toggle('active', b.dataset.cat === state.category));
         document.querySelectorAll('[data-pro]').forEach(b => b.classList.toggle('active', b.dataset.pro === state.protocol));
-        document.querySelectorAll('[data-quick]').forEach(b => b.classList.toggle('active', state.quickFilters.has(b.dataset.quick)));
+        document.querySelectorAll('[data-quick]').forEach(b => {
+            if (b.dataset.quick === 'show-noise') b.classList.toggle('active', !state.hideNoise);
+            else b.classList.toggle('active', state.quickFilters.has(b.dataset.quick));
+        });
 
         render();
     }
 
+    function needsCuration(e) {
+        if (e._kind === 'token') {
+            return !effectiveField(e, 'display_name')
+                || !effectiveField(e, 'coingecko_id')
+                || !e.acquisition;
+        }
+        if (e._kind === 'contract') {
+            return !effectiveField(e, 'label')
+                || !effectiveField(e, 'protocol')
+                || !effectiveField(e, 'subtype');
+        }
+        return false;
+    }
+
     // ============================================================
-    // RENDER
+    // RENDER LIST
     // ============================================================
     function render() {
         const grid = document.getElementById('results-grid');
-        document.getElementById('result-count').textContent = FILTERED.length + ' result' + (FILTERED.length === 1 ? '' : 's');
+        const total = FILTERED.length;
+        const hiddenNoise = state.hideNoise ? ALL_ENTRIES.filter(e => e._kind === 'token' && e.tier === 'noise').length : 0;
+        const noiseHint = hiddenNoise > 0 ? ` <span class="text-gray-600 text-xs ml-2">· ${hiddenNoise} noise tokens hidden</span>` : '';
+        document.getElementById('result-count').innerHTML = total + ' result' + (total === 1 ? '' : 's') + noiseHint;
         
-        if (FILTERED.length === 0) {
-            grid.innerHTML = '<div class="col-span-full text-center py-12 text-gray-500"><i class="fas fa-magnifying-glass text-2xl mb-2"></i><p>No matches. Try clearing filters.</p></div>';
+        if (total === 0) {
+            grid.innerHTML = '<div class="col-span-full text-center py-12 text-gray-500"><i class="fas fa-magnifying-glass text-2xl mb-2"></i><p>No matches. Try clearing filters or toggling "Show noise".</p></div>';
             return;
         }
 
-        // Cap at 300 entries for perf
         const cap = 300;
         const slice = FILTERED.slice(0, cap);
         const html = slice.map((e, idx) => renderCard(e, idx)).join('');
-        const truncated = FILTERED.length > cap
-            ? `<div class="col-span-full text-center py-4 text-xs text-gray-500">Showing first ${cap} of ${FILTERED.length}. Use search/filters to narrow.</div>` : '';
+        const truncated = total > cap
+            ? `<div class="col-span-full text-center py-4 text-xs text-gray-500">Showing first ${cap} of ${total}. Use search/filters to narrow.</div>` : '';
         grid.innerHTML = html + truncated;
 
-        // Wire card clicks
         grid.querySelectorAll('.entry-card[data-idx]').forEach(el => {
             el.addEventListener('click', (ev) => {
                 if (ev.target.closest('.copy-btn, a')) return;
@@ -488,44 +710,42 @@
     }
 
     function renderCard(e, idx) {
+        const hasDraft = !!getDraft(e._kind, e.address);
         const score = e.scoring?.confusion_score;
         const scoreClass = scoreToClass(score);
-        const name = e.display_name || e.label || e.symbol || (e.address || '').slice(0,12) + '…';
+        const name = effectiveField(e, 'display_name') || effectiveField(e, 'label') || e.symbol || (e.address || '').slice(0,12) + '…';
         const subline = e._kind === 'token'
             ? [e.symbol, e.subtype, e.coingecko_id ? '✓ CG' : '✗ no CG'].filter(Boolean).join(' · ')
-            : (e._kind === 'wallet')
-            ? [e.subtype, e.protocol].filter(Boolean).join(' · ')
-            : [e.subtype, e.protocol].filter(Boolean).join(' · ');
+            : [effectiveField(e, 'subtype'), effectiveField(e, 'protocol')].filter(Boolean).join(' · ');
 
         const flags = (e.scoring?.flags || []).slice(0, 3);
         const moreFlags = (e.scoring?.flags || []).length - flags.length;
 
-        const tlaBadge = e.appears_in?.tla_pools_count > 0
-            ? `<span class="flag-chip flag-success">in TLA pool</span>` : '';
-        const variantBadge = e.related_variants?.length > 0
-            ? `<span class="flag-chip flag-danger">${e.related_variants.length+1} variants</span>` : '';
+        const tlaBadge = e.appears_in?.tla_pools_count > 0 ? `<span class="flag-chip flag-success">in TLA pool</span>` : '';
+        const variantBadge = e.related_variants?.length > 0 ? `<span class="flag-chip flag-danger">${e.related_variants.length+1} variants</span>` : '';
+        const tierBadge = e.tier ? `<span class="tier-chip tier-${e.tier}" title="Catalog tier">${e.tier}</span>` : '';
 
-        const kindIcon = {
-            token:    'fa-coins',
-            contract: 'fa-file-contract',
-            wallet:   'fa-user',
-        }[e._kind] || 'fa-question';
+        const kindIcon = { token: 'fa-coins', contract: 'fa-file-contract', wallet: 'fa-user' }[e._kind] || 'fa-question';
 
         return `
-            <div class="entry-card cursor-pointer" data-idx="${idx}">
+            <div class="entry-card cursor-pointer ${hasDraft ? 'has-draft' : ''}" data-idx="${idx}">
+                ${hasDraft ? `<span class="modified-badge">modified</span>` : ''}
                 <div class="flex items-start justify-between gap-2 mb-2">
                     <div class="flex items-start gap-2 min-w-0">
                         <i class="fas ${kindIcon} text-cyan-400 mt-1 flex-shrink-0"></i>
                         <div class="min-w-0">
-                            <div class="font-bold text-white truncate" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
+                            <div class="font-bold text-white truncate" title="${escapeAttr(name)}">${escapeHtml(name)}</div>
                             <div class="text-xs text-gray-500 truncate">${escapeHtml(subline) || '—'}</div>
                         </div>
                     </div>
-                    ${score != null ? `<span class="score-badge ${scoreClass}" title="Confusion score">${score}</span>` : ''}
+                    <div class="flex flex-col items-end gap-1 flex-shrink-0">
+                        ${score != null ? `<span class="score-badge ${scoreClass}" title="Confusion score">${score}</span>` : ''}
+                        ${tierBadge}
+                    </div>
                 </div>
                 <div class="flex items-center gap-1 text-xs text-gray-500 mono truncate mb-2">
-                    <span class="truncate" title="${escapeHtml(e.address || '')}">${escapeHtml((e.address || '').slice(0,40))}${(e.address || '').length > 40 ? '…' : ''}</span>
-                    <button class="copy-btn ml-1" data-copy="${escapeHtml(e.address || '')}" title="Copy address">
+                    <span class="truncate" title="${escapeAttr(e.address || '')}">${escapeHtml((e.address || '').slice(0,40))}${(e.address || '').length > 40 ? '…' : ''}</span>
+                    <button class="copy-btn ml-1" data-copy="${escapeAttr(e.address || '')}" title="Copy address">
                         <i class="fas fa-copy text-xs"></i>
                     </button>
                 </div>
@@ -546,12 +766,7 @@
         if (s >= 25) return 'score-25';
         return 'score-0';
     }
-
-    function flagShort(f) {
-        const colon = f.indexOf(':');
-        return colon > 0 ? f.slice(0, colon) : f;
-    }
-
+    function flagShort(f) { const c = f.indexOf(':'); return c > 0 ? f.slice(0, c) : f; }
     function flagClass(f) {
         if (f.startsWith('shared_base_symbol') || f.startsWith('scam') || f.startsWith('cross_source_name_mismatch')) return 'flag-danger';
         if (f.startsWith('no_external_price') || f.startsWith('no_acquisition') || f.startsWith('needs_review')) return 'flag-warning';
@@ -559,74 +774,216 @@
         if (f.startsWith('verified') || f.startsWith('official')) return 'flag-success';
         return 'flag-info';
     }
-
-    function escapeHtml(s) {
-        return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c]));
-    }
+    function escapeHtml(s) { return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c])); }
+    function escapeAttr(s) { return escapeHtml(s); }
 
     // ============================================================
     // DETAIL MODAL
     // ============================================================
     function openDetail(e) {
+        openedEntry = e;
+        isEditing = false;
+        renderDetail();
         const m = document.getElementById('detail-modal');
-        const b = document.getElementById('detail-body');
+        m.classList.remove('hidden');
+        m.classList.add('flex');
+    }
+    function closeDetail() {
+        document.getElementById('detail-modal').classList.add('hidden');
+        document.getElementById('detail-modal').classList.remove('flex');
+        document.querySelector('.detail-content').classList.remove('editing');
+        openedEntry = null;
+        isEditing = false;
+    }
 
-        const name = e.display_name || e.label || e.symbol || 'Unnamed';
+    function renderDetail() {
+        if (!openedEntry) return;
+        const body = document.getElementById('detail-body');
+        const content = document.querySelector('.detail-content');
+        content.classList.toggle('editing', isEditing);
+        body.innerHTML = isEditing ? renderEditForm(openedEntry) : renderReadView(openedEntry);
+        wireDetailEvents();
+    }
+
+    function renderReadView(e) {
+        const name = effectiveField(e, 'display_name') || effectiveField(e, 'label') || e.symbol || 'Unnamed';
         const score = e.scoring?.confusion_score;
         const scoreClass = scoreToClass(score);
+        const hasDraft = !!getDraft(e._kind, e.address);
 
         let html = `
             <div class="flex items-start justify-between mb-4">
-                <div>
-                    <p class="text-xs uppercase text-gray-500 mb-1">${escapeHtml(e._kind)} · ${escapeHtml(e.category || '')} ${e.subtype ? '· ' + escapeHtml(e.subtype) : ''}</p>
+                <div class="min-w-0 flex-1">
+                    <p class="text-xs uppercase text-gray-500 mb-1">${escapeHtml(e._kind)} · ${escapeHtml(e.category || '')} ${e.subtype ? '· ' + escapeHtml(e.subtype) : ''} ${e.tier ? '<span class="tier-chip tier-' + e.tier + ' ml-2">' + e.tier + '</span>' : ''}</p>
                     <h2 class="text-2xl font-bold text-white">${escapeHtml(name)}</h2>
+                    ${hasDraft ? '<p class="text-xs text-yellow-400 mt-1"><i class="fas fa-pen mr-1"></i>You have unsaved edits to this entry</p>' : ''}
                 </div>
-                ${score != null ? `<div class="text-center"><span class="score-badge ${scoreClass} text-base">${score}</span><p class="text-xs text-gray-500 mt-1">confusion score</p></div>` : ''}
+                <div class="flex items-center gap-2 flex-shrink-0 ml-3">
+                    <button id="edit-btn" class="btn-warning text-sm" title="Edit this entry"><i class="fas fa-pen mr-1"></i>Edit</button>
+                    ${score != null ? `<div class="text-center"><span class="score-badge ${scoreClass} text-base">${score}</span><p class="text-xs text-gray-500 mt-1">score</p></div>` : ''}
+                </div>
             </div>
             <div class="mb-4 p-3 bg-gray-900 border border-gray-800 rounded-lg">
                 <p class="text-xs text-gray-500 mb-1">Terra address</p>
                 <p class="mono text-sm text-white break-all">${escapeHtml(e.address || '—')}
-                    ${e.address ? `<button class="copy-btn ml-2" data-copy="${escapeHtml(e.address)}" onclick="navigator.clipboard.writeText(this.dataset.copy); this.innerHTML='<i class=\\'fas fa-check\\'></i>';"><i class="fas fa-copy text-xs"></i></button>` : ''}
-                    ${e.address && e.address.startsWith('terra1') ? `<a href="https://chainsco.pe/terra2/address/${escapeHtml(e.address)}" target="_blank" class="ml-2 text-cyan-400 hover:underline text-xs"><i class="fas fa-external-link"></i> chainscope</a>` : ''}
+                    ${e.address ? `<button class="copy-btn ml-2" data-copy-addr="${escapeAttr(e.address)}"><i class="fas fa-copy text-xs"></i></button>` : ''}
+                    ${e.address && e.address.startsWith('terra1') ? `<a href="https://chainsco.pe/terra2/address/${escapeAttr(e.address)}" target="_blank" class="ml-2 text-cyan-400 hover:underline text-xs"><i class="fas fa-external-link"></i> chainscope</a>` : ''}
                 </p>
             </div>
         `;
+        if (e._kind === 'token')    html += renderTokenDetail(e);
+        else if (e._kind === 'contract') html += renderContractDetail(e);
+        else if (e._kind === 'wallet')   html += renderWalletDetail(e);
 
-        // Token-specific
-        if (e._kind === 'token') {
-            html += renderTokenDetail(e);
-        } else if (e._kind === 'contract') {
-            html += renderContractDetail(e);
-        } else if (e._kind === 'wallet') {
-            html += renderWalletDetail(e);
-        }
-
-        // Flags
         if (e.scoring?.flags?.length) {
             html += `<div class="mb-4"><p class="text-xs text-gray-500 uppercase mb-2">Flags</p><div class="flex flex-wrap gap-1">`;
-            for (const f of e.scoring.flags) {
-                html += `<span class="flag-chip ${flagClass(f)}">${escapeHtml(f)}</span>`;
-            }
+            for (const f of e.scoring.flags) html += `<span class="flag-chip ${flagClass(f)}">${escapeHtml(f)}</span>`;
             html += `</div></div>`;
         }
-
-        // Notes / description
-        if (e.notes || e.description) {
+        const notes = effectiveField(e, 'notes') || effectiveField(e, 'description');
+        if (notes) {
             html += `<div class="mb-4 p-3 bg-gray-900 border border-gray-800 rounded-lg">
                 <p class="text-xs text-gray-500 uppercase mb-1">Notes</p>
-                <p class="text-sm text-gray-300">${escapeHtml(e.notes || e.description)}</p>
+                <p class="text-sm text-gray-300 whitespace-pre-wrap">${escapeHtml(notes)}</p>
             </div>`;
         }
 
-        // Raw JSON expand
         html += `<details class="mt-4">
             <summary class="cursor-pointer text-xs text-gray-500 hover:text-cyan-400">Show raw catalog entry (JSON)</summary>
             <pre class="mt-2 bg-black border border-gray-800 rounded p-3 text-xs text-gray-300 overflow-x-auto mono">${escapeHtml(JSON.stringify(e, (k,v) => k.startsWith('_search') ? undefined : v, 2))}</pre>
         </details>`;
+        return html;
+    }
 
-        b.innerHTML = html;
-        m.classList.remove('hidden');
-        m.classList.add('flex');
+    function renderEditForm(e) {
+        const draft = getDraft(e._kind, e.address) || {};
+        const eff = (field) => draft[field] != null ? draft[field] : e[field];
+        const fileInfo = FILE_FOR_KIND[e._kind];
+
+        let fields = '';
+        if (e._kind === 'token') {
+            // Token overrides
+            fields = `
+                <div class="mb-3">
+                    <label class="form-label">Display name (override)</label>
+                    <input id="edit-display_name" type="text" class="form-input" value="${escapeAttr(eff('display_name') || '')}" placeholder="e.g., wBTC.atom">
+                    <p class="form-help">Overrides the name from Eris/Astroport/Chain Registry.</p>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Subtype</label>
+                    <select id="edit-subtype" class="form-select">
+                        ${TOKEN_SUBTYPES.map(s => `<option value="${s}" ${eff('subtype') === s ? 'selected' : ''}>${s || '— (auto) —'}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Notes</label>
+                    <textarea id="edit-notes" rows="3" class="form-textarea" placeholder="Internal notes shown on this catalog page">${escapeHtml(eff('notes') || '')}</textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Warning text</label>
+                    <textarea id="edit-warning" rows="2" class="form-textarea" placeholder="Prominent warning shown when this token is referenced (for confusing variants, etc.)">${escapeHtml(eff('warning') || (draft.warning) || '')}</textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="inline-flex items-center gap-2">
+                        <input id="edit-verified" type="checkbox" ${eff('verified') ? 'checked' : ''}>
+                        <span class="text-sm text-gray-300">Verified — I've personally confirmed this entry</span>
+                    </label>
+                </div>
+            `;
+        } else if (e._kind === 'contract') {
+            fields = `
+                <div class="mb-3">
+                    <label class="form-label">Name</label>
+                    <input id="edit-name" type="text" class="form-input" value="${escapeAttr(eff('label') || eff('name') || '')}" placeholder="e.g., Lion DAO ROAR Staking">
+                    <p class="form-help">Display name shown in the catalog.</p>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Protocol</label>
+                    <select id="edit-protocol" class="form-select">
+                        ${STD_PROTOCOLS.map(p => `<option value="${p}" ${eff('protocol') === p ? 'selected' : ''}>${p || '— (none) —'}</option>`).join('')}
+                    </select>
+                    <p class="form-help">Which protocol operates this contract.</p>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Subtype</label>
+                    <select id="edit-type" class="form-select">
+                        ${CONTRACT_SUBTYPES.map(s => `<option value="${s}" ${eff('subtype') === s ? 'selected' : ''}>${s}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Description</label>
+                    <textarea id="edit-description" rows="3" class="form-textarea" placeholder="What this contract does">${escapeHtml(eff('description') || '')}</textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Valid actions (comma-separated)</label>
+                    <input id="edit-validActions" type="text" class="form-input" value="${escapeAttr((eff('valid_actions') || eff('validActions') || []).join(', '))}" placeholder="execute, propose, vote, stake, unstake, claim">
+                </div>
+                <div class="mb-3 grid grid-cols-2 gap-3">
+                    <label class="inline-flex items-center gap-2">
+                        <input id="edit-canReceiveFunds" type="checkbox" ${eff('can_receive_funds') ? 'checked' : ''}>
+                        <span class="text-sm text-gray-300">Can receive funds</span>
+                    </label>
+                    <div>
+                        <label class="form-label">Risk level</label>
+                        <select id="edit-risk_level" class="form-select">
+                            ${['', 'low', 'medium', 'high'].map(r => `<option value="${r}" ${eff('risk_level') === r ? 'selected' : ''}>${r || '— (none) —'}</option>`).join('')}
+                        </select>
+                    </div>
+                </div>
+            `;
+        } else if (e._kind === 'wallet') {
+            fields = `
+                <div class="mb-3">
+                    <label class="form-label">Label</label>
+                    <input id="edit-label" type="text" class="form-input" value="${escapeAttr(eff('label') || '')}" placeholder="e.g., aDAO Treasury">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Subtype</label>
+                    <select id="edit-subtype" class="form-select">
+                        ${WALLET_SUBTYPES.map(s => `<option value="${s}" ${eff('subtype') === s ? 'selected' : ''}>${s}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Protocol</label>
+                    <select id="edit-protocol" class="form-select">
+                        ${STD_PROTOCOLS.map(p => `<option value="${p}" ${eff('protocol') === p ? 'selected' : ''}>${p || '— (none) —'}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Description</label>
+                    <textarea id="edit-description" rows="3" class="form-textarea">${escapeHtml(eff('description') || '')}</textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Associated DAO member name (optional)</label>
+                    <input id="edit-associated_member" type="text" class="form-input" value="${escapeAttr(eff('associated_member') || '')}">
+                </div>
+                <div class="mb-3">
+                    <label class="inline-flex items-center gap-2">
+                        <input id="edit-verified" type="checkbox" ${eff('verified') ? 'checked' : ''}>
+                        <span class="text-sm text-gray-300">Verified</span>
+                    </label>
+                </div>
+            `;
+        }
+
+        return `
+            <div class="mb-4">
+                <p class="text-xs uppercase text-yellow-400 mb-1"><i class="fas fa-pen mr-1"></i>Editing · ${escapeHtml(e._kind)}</p>
+                <h2 class="text-2xl font-bold text-white">${escapeHtml(effectiveField(e, 'display_name') || effectiveField(e, 'label') || e.symbol || 'Unnamed')}</h2>
+                <p class="mono text-xs text-gray-500 mt-1 break-all">${escapeHtml(e.address)}</p>
+                <p class="text-xs text-gray-500 mt-2">Changes will be saved as a draft to <code class="text-cyan-400">${fileInfo.file}</code> and downloaded when you're done.</p>
+            </div>
+            <div class="border-t border-gray-800 pt-4">
+                ${fields}
+                <div class="flex justify-between items-center pt-4 border-t border-gray-800 mt-4">
+                    ${getDraft(e._kind, e.address) ? `<button id="edit-clear-draft" class="text-xs text-red-400 hover:text-red-300"><i class="fas fa-trash mr-1"></i>Discard draft for this entry</button>` : '<div></div>'}
+                    <div class="flex gap-2">
+                        <button id="edit-cancel" class="btn-secondary text-sm">Cancel</button>
+                        <button id="edit-save" class="btn-primary text-sm"><i class="fas fa-save mr-1"></i>Save draft</button>
+                    </div>
+                </div>
+            </div>
+        `;
     }
 
     function renderTokenDetail(e) {
@@ -637,11 +994,11 @@
         html += kv('Type', e.type);
         html += kv('CoinGecko ID', e.coingecko_id);
         html += kv('CoinGecko match', e.coingecko_match);
+        html += kv('Tier', e.tier);
         html += kv('Appears in TLA pools', (e.appears_in?.tla_pools_count > 0) ? `${e.appears_in.tla_pools_count} (${(e.appears_in.tla_pools || []).join(', ')})` : 'no');
         html += kv('amplp underlying', e.appears_in?.is_amplp_underlying ? 'yes' : 'no');
         html += '</div>';
 
-        // Bridge
         if (e.bridge) {
             html += `<div class="mb-4 p-3 bg-blue-950/30 border border-blue-700/30 rounded-lg">
                 <p class="text-xs text-blue-400 uppercase mb-2"><i class="fas fa-bridge mr-1"></i>Bridge / Origin</p>
@@ -649,13 +1006,11 @@
                     ${kv('Source chain', e.bridge.source_chain)}
                     ${kv('Via', e.bridge.via)}
                     ${kv('Channel', e.bridge.channel_id)}
-                    ${kv('Provider', e.bridge.provider)}
                     ${kv('Original denom', e.bridge.original_denom)}
                 </div>
             </div>`;
         }
 
-        // Sources breakdown
         html += `<div class="mb-4"><p class="text-xs text-gray-500 uppercase mb-2">Cross-source naming</p><div class="space-y-1.5">`;
         const sources = [
             ['Eris', e.sources?.eris?.eris_name || e.sources?.eris?.symbol],
@@ -669,7 +1024,6 @@
         }
         html += '</div></div>';
 
-        // Acquisition guide
         if (e.acquisition) {
             html += `<div class="mb-4 p-3 bg-cyan-950/30 border border-cyan-700/30 rounded-lg">
                 <p class="text-xs text-cyan-400 uppercase mb-2"><i class="fas fa-route mr-1"></i>How to acquire</p>`;
@@ -687,19 +1041,6 @@
             html += `</div>`;
         }
 
-        // Wallet import block
-        if (e.wallet_import) {
-            html += `<div class="mb-4 p-3 bg-gray-900 border border-gray-800 rounded-lg">
-                <p class="text-xs text-gray-500 uppercase mb-2"><i class="fas fa-wallet mr-1"></i>Wallet import (for Keplr / Station / Leap)</p>
-                <div class="grid grid-cols-2 gap-2 text-sm">
-                    ${kv('Symbol', e.wallet_import.symbol)}
-                    ${kv('Name', e.wallet_import.name)}
-                    ${kv('Decimals', e.wallet_import.decimals)}
-                </div>
-            </div>`;
-        }
-
-        // Related variants
         if (e.related_variants?.length) {
             html += `<div class="mb-4 p-3 bg-red-950/30 border border-red-700/30 rounded-lg">
                 <p class="text-xs text-red-400 uppercase mb-2"><i class="fas fa-triangle-exclamation mr-1"></i>Related variants (confusion risk)</p>
@@ -719,15 +1060,16 @@
     function renderContractDetail(e) {
         let html = '<div class="grid grid-cols-2 gap-3 mb-4">';
         const kv = (k,v) => v != null && v !== '' ? `<div><p class="text-xs text-gray-500">${k}</p><p class="text-sm text-white">${escapeHtml(v)}</p></div>` : '';
-        html += kv('Protocol', e.protocol);
-        html += kv('Subtype', e.subtype);
+        html += kv('Protocol', effectiveField(e, 'protocol'));
+        html += kv('Subtype', effectiveField(e, 'subtype'));
         html += kv('Source', e.source);
-        html += kv('Can receive funds', e.can_receive_funds);
-        html += kv('Risk level', e.risk_level);
+        html += kv('Can receive funds', effectiveField(e, 'can_receive_funds'));
+        html += kv('Risk level', effectiveField(e, 'risk_level'));
         html += '</div>';
-        if (e.valid_actions?.length) {
+        const va = effectiveField(e, 'valid_actions') || effectiveField(e, 'validActions');
+        if (va?.length) {
             html += `<div class="mb-4"><p class="text-xs text-gray-500 uppercase mb-2">Valid Actions</p><div class="flex flex-wrap gap-1">`;
-            for (const a of e.valid_actions) html += `<span class="flag-chip flag-info mono">${escapeHtml(a)}</span>`;
+            for (const a of va) html += `<span class="flag-chip flag-info mono">${escapeHtml(a)}</span>`;
             html += `</div></div>`;
         }
         if (e.seen_in_props?.length) {
@@ -739,13 +1081,211 @@
     function renderWalletDetail(e) {
         let html = '<div class="grid grid-cols-2 gap-3 mb-4">';
         const kv = (k,v) => v != null && v !== '' ? `<div><p class="text-xs text-gray-500">${k}</p><p class="text-sm text-white">${escapeHtml(v)}</p></div>` : '';
-        html += kv('Subtype', e.subtype);
-        html += kv('Protocol', e.protocol);
-        html += kv('Associated member', e.associated_member);
-        html += kv('Verified', e.verified);
+        html += kv('Subtype', effectiveField(e, 'subtype'));
+        html += kv('Protocol', effectiveField(e, 'protocol'));
+        html += kv('Associated member', effectiveField(e, 'associated_member'));
+        html += kv('Verified', effectiveField(e, 'verified'));
         html += '</div>';
         return html;
     }
+
+    function wireDetailEvents() {
+        const editBtn = document.getElementById('edit-btn');
+        if (editBtn) editBtn.addEventListener('click', () => { isEditing = true; renderDetail(); });
+
+        const cancelBtn = document.getElementById('edit-cancel');
+        if (cancelBtn) cancelBtn.addEventListener('click', () => { isEditing = false; renderDetail(); });
+
+        const saveBtn = document.getElementById('edit-save');
+        if (saveBtn) saveBtn.addEventListener('click', saveDraft);
+
+        const clearDraftBtn = document.getElementById('edit-clear-draft');
+        if (clearDraftBtn) clearDraftBtn.addEventListener('click', () => {
+            const fileInfo = FILE_FOR_KIND[openedEntry._kind];
+            removeDraft(fileInfo.file, openedEntry.address);
+            applyFilters();
+            isEditing = false;
+            renderDetail();
+        });
+
+        document.querySelectorAll('[data-copy-addr]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                navigator.clipboard.writeText(btn.dataset.copyAddr).then(() => {
+                    btn.innerHTML = '<i class="fas fa-check"></i>';
+                    setTimeout(() => btn.innerHTML = '<i class="fas fa-copy text-xs"></i>', 1000);
+                });
+            });
+        });
+    }
+
+    function saveDraft() {
+        if (!openedEntry) return;
+        const e = openedEntry;
+        const newFields = {};
+        const getV = (id) => document.getElementById(id)?.value?.trim() || '';
+        const getC = (id) => document.getElementById(id)?.checked || false;
+
+        if (e._kind === 'token') {
+            const dn = getV('edit-display_name'); if (dn) newFields.display_name = dn;
+            const st = getV('edit-subtype'); if (st) newFields.subtype = st;
+            const nt = getV('edit-notes'); if (nt) newFields.notes = nt;
+            const wn = getV('edit-warning'); if (wn) newFields.warning = wn;
+            if (getC('edit-verified')) newFields.verified = true;
+        } else if (e._kind === 'contract') {
+            const nm = getV('edit-name'); if (nm) newFields.name = nm;
+            const pr = getV('edit-protocol'); if (pr) newFields.protocol = pr;
+            const ty = getV('edit-type'); if (ty) newFields.type = ty;
+            const ds = getV('edit-description'); if (ds) newFields.description = ds;
+            const va = getV('edit-validActions');
+            if (va) newFields.validActions = va.split(',').map(s => s.trim()).filter(Boolean);
+            if (getC('edit-canReceiveFunds')) newFields.canReceiveFunds = true;
+            const rl = getV('edit-risk_level'); if (rl) newFields.risk_level = rl;
+        } else if (e._kind === 'wallet') {
+            const lb = getV('edit-label'); if (lb) newFields.label = lb;
+            const st = getV('edit-subtype'); if (st) newFields.subtype = st;
+            const pr = getV('edit-protocol'); if (pr) newFields.protocol = pr;
+            const ds = getV('edit-description'); if (ds) newFields.description = ds;
+            const am = getV('edit-associated_member'); if (am) newFields.associated_member = am;
+            if (getC('edit-verified')) newFields.verified = true;
+        }
+
+        if (Object.keys(newFields).length === 0) {
+            alert('No changes to save.');
+            return;
+        }
+
+        setDraft(e._kind, e.address, newFields);
+        // Toast
+        const saveBtn = document.getElementById('edit-save');
+        if (saveBtn) {
+            const orig = saveBtn.innerHTML;
+            saveBtn.innerHTML = '<i class="fas fa-check mr-1"></i>Saved as draft';
+            setTimeout(() => {
+                isEditing = false;
+                applyFilters();   // re-render cards (so card shows updated label)
+                renderDetail();   // re-render detail in read mode
+            }, 600);
+        }
+    }
+
+    // ============================================================
+    // DRAFTS PANEL
+    // ============================================================
+    function openDraftsPanel() {
+        const body = document.getElementById('drafts-body');
+        const total = totalDrafts();
+        if (total === 0) {
+            body.innerHTML = '<p class="text-gray-500 text-center py-8">No pending drafts.</p>';
+        } else {
+            let html = '';
+            for (const [file, fileDrafts] of Object.entries(drafts)) {
+                const n = Object.keys(fileDrafts).length;
+                html += `<div class="mb-5 pb-5 border-b border-gray-800 last:border-b-0">
+                    <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+                        <h3 class="text-white font-semibold flex items-center gap-2">
+                            <i class="fas fa-file-code text-cyan-400"></i>
+                            <span class="mono">${escapeHtml(file)}</span>
+                            <span class="text-xs text-gray-500">(${n} change${n === 1 ? '' : 's'})</span>
+                        </h3>
+                        <button class="btn-primary text-xs" onclick="downloadFile('${escapeAttr(file)}')"><i class="fas fa-download mr-1"></i>Download merged</button>
+                    </div>
+                    <div class="space-y-1">`;
+                for (const [addr, fields] of Object.entries(fileDrafts)) {
+                    const entry = ALL_ENTRIES.find(e => e.address === addr);
+                    const label = entry ? (entry.display_name || entry.label || entry.symbol || addr.slice(0,20)+'…') : addr.slice(0,20)+'…';
+                    html += `<div class="draft-row">
+                        <div class="flex items-start justify-between gap-2">
+                            <div class="min-w-0 flex-1">
+                                <p class="text-sm text-white font-semibold">${escapeHtml(label)}</p>
+                                <p class="mono text-xs text-gray-500 truncate">${escapeHtml(addr)}</p>
+                                <div class="mt-2 space-y-1 text-xs">`;
+                    for (const [k, v] of Object.entries(fields)) {
+                        const oldVal = entry?.[k];
+                        const oldDisp = oldVal != null && oldVal !== '' ? (Array.isArray(oldVal) ? oldVal.join(', ') : String(oldVal)) : '(none)';
+                        const newDisp = Array.isArray(v) ? v.join(', ') : String(v);
+                        html += `<div><span class="text-gray-500">${escapeHtml(k)}:</span> <span class="draft-diff-old">${escapeHtml(oldDisp.slice(0,80))}${oldDisp.length>80?'…':''}</span> → <span class="draft-diff-new">${escapeHtml(newDisp.slice(0,80))}${newDisp.length>80?'…':''}</span></div>`;
+                    }
+                    html += `</div></div>
+                            <button onclick="removeDraftAndRefresh('${escapeAttr(file)}', '${escapeAttr(addr)}')" class="text-red-400 hover:text-red-300 text-sm flex-shrink-0" title="Discard this change"><i class="fas fa-xmark"></i></button>
+                        </div>
+                    </div>`;
+                }
+                html += `</div></div>`;
+            }
+            body.innerHTML = html;
+        }
+        const m = document.getElementById('drafts-modal');
+        m.classList.remove('hidden');
+        m.classList.add('flex');
+    }
+    function closeDraftsPanel() {
+        document.getElementById('drafts-modal').classList.add('hidden');
+        document.getElementById('drafts-modal').classList.remove('flex');
+    }
+    function removeDraftAndRefresh(file, addr) {
+        removeDraft(file, addr);
+        openDraftsPanel();
+        applyFilters();
+    }
+    window.removeDraftAndRefresh = removeDraftAndRefresh;
+
+    // ============================================================
+    // DOWNLOAD MERGED FILE
+    // ============================================================
+    async function downloadFile(filename) {
+        const containerByFile = {
+            'token_overrides.json': 'tokens',
+            'known_contracts.json': 'contracts',
+            'wallets.json':         'wallets',
+        };
+        const container = containerByFile[filename];
+        if (!container) { alert('Unknown file: ' + filename); return; }
+
+        // Fetch the current GitHub state
+        let current;
+        try {
+            const r = await fetch(CURATED_BASE + filename, { cache: 'no-cache' });
+            if (r.ok) {
+                current = await r.json();
+            } else if (r.status === 404) {
+                current = { _meta: { description: 'Generated', lastUpdated: new Date().toISOString().slice(0,10) }, [container]: {} };
+            } else {
+                throw new Error('HTTP ' + r.status);
+            }
+        } catch (e) {
+            alert('Failed to fetch current state of ' + filename + ': ' + e.message);
+            return;
+        }
+
+        if (!current[container]) current[container] = {};
+
+        // Merge drafts on top
+        const fileDrafts = drafts[filename] || {};
+        for (const [addr, fields] of Object.entries(fileDrafts)) {
+            current[container][addr] = {
+                ...current[container][addr],
+                ...fields,
+            };
+        }
+
+        // Update lastUpdated
+        if (current._meta) {
+            current._meta.lastUpdated = new Date().toISOString().slice(0,10);
+        }
+
+        // Trigger download
+        const text = JSON.stringify(current, null, 2);
+        const blob = new Blob([text], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+    }
+    window.downloadFile = downloadFile;
 
     // ============================================================
     // EVENTS
@@ -763,30 +1303,34 @@
         state.category = 'all';
         state.protocol = 'all';
         state.quickFilters.clear();
+        state.hideNoise = true;
         document.getElementById('search-input').value = '';
         applyFilters();
     });
-    document.getElementById('detail-close').addEventListener('click', () => {
-        document.getElementById('detail-modal').classList.add('hidden');
-        document.getElementById('detail-modal').classList.remove('flex');
-    });
+    document.getElementById('detail-close').addEventListener('click', closeDetail);
     document.getElementById('detail-modal').addEventListener('click', (e) => {
-        if (e.target.id === 'detail-modal') {
-            document.getElementById('detail-modal').classList.add('hidden');
-            document.getElementById('detail-modal').classList.remove('flex');
-        }
+        if (e.target.id === 'detail-modal') closeDetail();
+    });
+    document.getElementById('drafts-close').addEventListener('click', closeDraftsPanel);
+    document.getElementById('drafts-modal').addEventListener('click', (e) => {
+        if (e.target.id === 'drafts-modal') closeDraftsPanel();
+    });
+    document.getElementById('drafts-fab').addEventListener('click', openDraftsPanel);
+    document.getElementById('drafts-discard-all').addEventListener('click', () => {
+        discardAllDrafts();
+        closeDraftsPanel();
     });
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
-            document.getElementById('detail-modal').classList.add('hidden');
-            document.getElementById('detail-modal').classList.remove('flex');
+            closeDetail();
+            closeDraftsPanel();
         }
     });
 
     // Init
+    loadDrafts();
+    renderDraftsBadge();
     loadCatalog();
-
-    // Mark mobile nav active (none active on this page since it's under tools)
     </script>
 </body>
 </html>
