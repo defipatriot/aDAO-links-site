@@ -3,24 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Query Builder - Alliance DAO Tools</title>
+    <title>TLA Chain Queries - Alliance DAO Tools</title>
     
     <link rel="icon" type="image/x-icon" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/favicon.ico">
     <link rel="icon" type="image/png" sizes="32x32" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/favicon-32x32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/favicon-16x16.png">
     
     <link rel="canonical" href="https://www.thealliancedao.com/tla-chain-queries.html">
-    <meta name="description" content="Build smart-contract queries against the Eris ve3 stack on Terra. Pick a query, fill in your address, get a one-click chainscope.io permalink or copy the JSON message.">
-    <meta name="keywords" content="Terra query builder, chainscope, Eris ve3, CosmWasm query, smart contract, voting power, lock info, gauge votes">
+    <meta name="description" content="Build smart-contract queries against the Eris ve3 stack on Terra. Pick an address once, then run any query against it — voting power, locks, claimable bribes, and more. Returns chainscope.io permalinks.">
+    <meta name="keywords" content="Terra query builder, chainscope, Eris ve3, CosmWasm query, voting power, lock info, gauge votes, bribes">
     <meta name="robots" content="index, follow">
     
-    <meta property="og:title" content="Query Builder | Alliance DAO Tools">
+    <meta property="og:title" content="TLA Chain Queries | Alliance DAO Tools">
     <meta property="og:description" content="One-click chain queries against the Eris ve3 stack on Terra.">
     <meta property="og:image" content="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/android-chrome-512x512.png">
     <meta property="og:url" content="https://www.thealliancedao.com/tla-chain-queries.html">
     <meta property="og:type" content="website">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Query Builder | Alliance DAO Tools">
+    <meta name="twitter:title" content="TLA Chain Queries | Alliance DAO Tools">
     <meta name="twitter:description" content="One-click chain queries against the Eris ve3 stack on Terra.">
     <meta name="twitter:image" content="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/android-chrome-512x512.png">
     
@@ -31,6 +31,30 @@
     <style>
         body { font-family: 'Inter', sans-serif; background-color: #0D0D0D; color: #EAEAEA; }
         .mono { font-family: 'JetBrains Mono', monospace; }
+        
+        /* Global address picker — sticky at top */
+        .global-picker {
+            background: linear-gradient(135deg, rgba(15,15,25,0.95), rgba(20,20,35,0.95));
+            border: 1px solid rgba(34, 211, 238, 0.25);
+            border-radius: 12px;
+            padding: 16px 20px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+        }
+        .global-picker.has-selection {
+            border-color: rgba(34, 211, 238, 0.5);
+            box-shadow: 0 8px 24px rgba(34, 211, 238, 0.1);
+        }
+        .picker-label-tag {
+            display: inline-block;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #67e8f9;
+            background: rgba(34, 211, 238, 0.1);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
         
         .contract-tab {
             padding: 10px 16px;
@@ -61,11 +85,17 @@
         .query-card:hover { border-color: rgba(34,211,238,0.4); }
         .query-card.no-args { background: rgba(34,197,94,0.04); border-color: rgba(34,197,94,0.2); }
         .query-card.no-args:hover { border-color: rgba(34,197,94,0.5); }
+        .query-card.needs-wallet:not(.has-wallet) { background: rgba(245,158,11,0.04); border-color: rgba(245,158,11,0.2); }
+        .query-card.ready {
+            background: rgba(34,197,94,0.04);
+            border-color: rgba(34,197,94,0.3);
+        }
+        .query-card.ready:hover { border-color: rgba(34,197,94,0.6); }
         
         .form-input, .form-select {
             width: 100%;
             background: rgba(15, 15, 25, 0.6);
-            border: 1px solid rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.15);
             border-radius: 6px;
             padding: 8px 12px;
             font-size: 14px;
@@ -73,8 +103,10 @@
             font-family: 'JetBrains Mono', monospace;
         }
         .form-input:focus, .form-select:focus {
-            outline: none; border-color: rgba(34,211,238,0.5);
+            outline: none; border-color: rgba(34,211,238,0.6);
+            box-shadow: 0 0 0 3px rgba(34,211,238,0.1);
         }
+        .form-input::placeholder { color: #6b7280; }
         
         .btn-primary {
             background: linear-gradient(135deg, rgba(34,211,238,0.2), rgba(168,85,247,0.2));
@@ -89,9 +121,10 @@
             text-decoration: none;
         }
         .btn-primary:hover { background: linear-gradient(135deg, rgba(34,211,238,0.3), rgba(168,85,247,0.3)); }
+        .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
         .btn-secondary {
             background: rgba(255,255,255,0.05);
-            border: 1px solid rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.15);
             color: #d1d5db;
             padding: 8px 16px;
             border-radius: 8px;
@@ -99,37 +132,65 @@
             transition: all 0.15s;
         }
         .btn-secondary:hover { background: rgba(255,255,255,0.1); }
+        .btn-clear {
+            color: #f87171;
+            background: rgba(239,68,68,0.08);
+            border: 1px solid rgba(239,68,68,0.25);
+            padding: 4px 10px;
+            font-size: 11px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        .btn-clear:hover { background: rgba(239,68,68,0.15); }
         
         .json-snippet {
             background: #0a0a0f;
             border: 1px solid rgba(255,255,255,0.08);
             border-radius: 6px;
-            padding: 12px;
+            padding: 10px 12px;
             font-family: 'JetBrains Mono', monospace;
-            font-size: 12px;
+            font-size: 11px;
             color: #67e8f9;
             white-space: pre-wrap;
             word-break: break-all;
+            line-height: 1.4;
         }
         
-        .arg-chip {
-            display: inline-block;
-            font-size: 10px;
-            background: rgba(168, 85, 247, 0.15);
-            color: #c4b5fd;
-            border: 1px solid rgba(168, 85, 247, 0.3);
-            padding: 2px 6px;
-            border-radius: 4px;
-            margin-right: 4px;
+        .arg-chip { display: inline-block; font-size: 10px; padding: 2px 6px; border-radius: 4px; margin-right: 4px; font-weight: 600; }
+        .no-args-chip { background: rgba(34,197,94,0.15); color: #86efac; border: 1px solid rgba(34,197,94,0.3); }
+        .wallet-arg-chip { background: rgba(168,85,247,0.15); color: #c4b5fd; border: 1px solid rgba(168,85,247,0.3); }
+        .other-arg-chip { background: rgba(245,158,11,0.15); color: #fcd34d; border: 1px solid rgba(245,158,11,0.3); }
+        .ready-chip { background: rgba(34,197,94,0.15); color: #86efac; border: 1px solid rgba(34,197,94,0.3); }
+        .blocked-chip { background: rgba(245,158,11,0.15); color: #fcd34d; border: 1px solid rgba(245,158,11,0.3); }
+        
+        .picker-mode-tab {
+            padding: 6px 12px;
+            font-size: 11px;
+            font-weight: 600;
+            color: #9ca3af;
+            background: transparent;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.15s;
         }
-        .no-args-chip {
-            display: inline-block;
-            font-size: 10px;
-            background: rgba(34,197,94,0.15);
-            color: #86efac;
-            border: 1px solid rgba(34,197,94,0.3);
-            padding: 2px 6px;
-            border-radius: 4px;
+        .picker-mode-tab:hover { color: #d1d5db; background: rgba(255,255,255,0.05); }
+        .picker-mode-tab.active { color: #67e8f9; background: rgba(34,211,238,0.12); border-color: rgba(34,211,238,0.4); }
+        
+        .picker-mode-panel { display: none; }
+        .picker-mode-panel.active { display: block; }
+        
+        .selection-display {
+            background: rgba(34,211,238,0.06);
+            border: 1px solid rgba(34,211,238,0.3);
+            border-radius: 8px;
+            padding: 12px 14px;
+        }
+        .selection-empty {
+            background: rgba(255,255,255,0.03);
+            border: 1px dashed rgba(255,255,255,0.12);
+            border-radius: 8px;
+            padding: 12px 14px;
         }
         
         ::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -192,11 +253,11 @@
                 <a href="index.html" title="Alliance DAO home"><img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Alliance%20DAO%20Logo.png" alt="Alliance DAO Logo" class="h-12 md:h-16 w-auto" onerror="this.src='https://placehold.co/128x64/0D0D0D/EAEAEA?text=Logo'; this.onerror=null;"></a>
             </div>
             <nav class="hidden md:flex flex-1 w-full md:w-auto justify-center items-center gap-2 sm:gap-3 order-3 md:order-2 mt-4 md:mt-0">
-                <a href="index.html" class="top-nav-tab bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-4 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center flex-1 md:flex-initial">Home</a>
-                <a href="nft-explorer-index.html" class="top-nav-tab bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-4 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center flex-1 md:flex-initial"><span class="md:hidden">Explorer</span><span class="hidden md:inline">NFT Explorer</span></a>
-                <a href="adao-lore.html" class="top-nav-tab bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-4 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center flex-1 md:flex-initial"><span class="md:hidden">Lore</span><span class="hidden md:inline">aDAO Lore</span></a>
-                <a href="tla-stats.html" class="top-nav-tab bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-4 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center flex-1 md:flex-initial"><span class="md:hidden">TLA</span><span class="hidden md:inline">TLA Stats</span></a>
-                <a href="dao.html" class="top-nav-tab bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-4 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center flex-1 md:flex-initial">DAO</a>
+                <a href="index.html" data-page="index" class="top-nav-tab bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-4 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center flex-1 md:flex-initial">Home</a>
+                <a href="nft-explorer-index.html" data-page="nft-explorer-index" class="top-nav-tab bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-4 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center flex-1 md:flex-initial"><span class="md:hidden">Explorer</span><span class="hidden md:inline">NFT Explorer</span></a>
+                <a href="adao-lore.html" data-page="adao-lore" class="top-nav-tab bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-4 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center flex-1 md:flex-initial"><span class="md:hidden">Lore</span><span class="hidden md:inline">aDAO Lore</span></a>
+                <a href="tla-stats.html" data-page="tla-stats" class="top-nav-tab bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-4 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center flex-1 md:flex-initial"><span class="md:hidden">TLA</span><span class="hidden md:inline">TLA Stats</span></a>
+                <a href="dao.html" data-page="dao" class="top-nav-tab bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-4 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center flex-1 md:flex-initial">DAO</a>
             </nav>
             <div class="w-1/2 md:w-32 flex-shrink-0 flex justify-end order-2 md:order-3">
                 <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Terra.PNG" alt="Terra Logo" class="h-12 md:h-16 w-auto" onerror="this.src='https://placehold.co/128x64/0D0D0D/EAEAEA?text=Logo'; this.onerror=null;">
@@ -218,23 +279,57 @@
 
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div class="mb-5">
-            <h1 class="text-2xl md:text-3xl font-bold text-white mb-1">Chain Query Builder</h1>
+            <h1 class="text-2xl md:text-3xl font-bold text-white mb-1">TLA Chain Queries</h1>
             <p class="text-gray-400 text-sm">
-                Pre-built smart-contract queries against the Eris ve3 stack on Terra. Pick a query,
-                fill in any required arguments, and get a one-click chainscope.io link or the raw JSON.
-                Contract addresses auto-resolve from the live catalog.
+                Pre-built smart-contract queries against the Eris ve3 stack on Terra. Pick a wallet once below, then every query auto-uses it. Read-only — no transactions.
             </p>
         </div>
 
-        <!-- Info banner -->
-        <div class="bg-blue-950/30 border border-blue-700/30 rounded-lg p-4 mb-5 text-sm">
-            <p class="text-blue-300 font-semibold mb-1"><i class="fas fa-info-circle mr-2"></i>How this works</p>
-            <p class="text-gray-300">
-                Every query is documented with what it does and what shape of response to expect.
-                <span class="no-args-chip mx-1">no args</span> queries are one click away — no setup needed.
-                <span class="arg-chip mx-1">needs args</span> queries let you pick from known wallets in the catalog or paste any address.
-                All queries open in <a href="https://chainsco.pe" target="_blank" rel="noopener" class="text-cyan-400 hover:underline">chainscope.io</a>.
-            </p>
+        <!-- Global address picker -->
+        <div id="global-picker" class="global-picker mb-6">
+            <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-bullseye text-cyan-400"></i>
+                    <h2 class="text-base font-semibold text-white">Selected Address</h2>
+                    <span class="picker-label-tag">used across all queries</span>
+                </div>
+                <span class="text-xs text-gray-500" id="picker-source-hint">Pick from the catalog, search, or paste</span>
+            </div>
+
+            <!-- Current selection display -->
+            <div id="selection-display" class="mb-4"></div>
+
+            <!-- Three input modes -->
+            <div class="flex items-center gap-2 mb-3 flex-wrap">
+                <span class="text-xs text-gray-500 mr-1">Pick:</span>
+                <button class="picker-mode-tab active" data-mode="dropdown"><i class="fas fa-chevron-down mr-1"></i>From catalog</button>
+                <button class="picker-mode-tab" data-mode="search"><i class="fas fa-magnifying-glass mr-1"></i>Search last 4+</button>
+                <button class="picker-mode-tab" data-mode="paste"><i class="fas fa-paste mr-1"></i>Paste address</button>
+            </div>
+
+            <!-- Mode: dropdown -->
+            <div class="picker-mode-panel active" data-mode="dropdown">
+                <select id="picker-dropdown" class="form-select">
+                    <option value="">— Loading catalog... —</option>
+                </select>
+            </div>
+
+            <!-- Mode: search by last 4 -->
+            <div class="picker-mode-panel" data-mode="search">
+                <input id="picker-search-input" type="text" class="form-input" placeholder="Type last 4+ chars of an address (e.g., m5vzm)..." autocomplete="off">
+                <div id="picker-search-results" class="mt-2 max-h-48 overflow-y-auto"></div>
+            </div>
+
+            <!-- Mode: paste -->
+            <div class="picker-mode-panel" data-mode="paste">
+                <div class="flex gap-2">
+                    <input id="picker-paste-input" type="text" class="form-input flex-1" placeholder="terra1..." autocomplete="off">
+                    <button id="picker-paste-btn" class="btn-primary text-sm">
+                        <i class="fas fa-check"></i> Use
+                    </button>
+                </div>
+                <p class="text-xs text-gray-500 mt-1">Any Terra address. Auto-recognized if it's in the catalog.</p>
+            </div>
         </div>
 
         <!-- Contract tabs -->
@@ -259,9 +354,9 @@
                 <a href="tools.html" class="hover:text-white hover:underline transition-colors">All Tools</a>
             </div>
             <div class="mt-4 text-xs text-gray-500">
-                <span class="font-mono">Query Builder v1.0</span>
+                <span class="font-mono">TLA Chain Queries v1.1</span>
                 <span class="opacity-60 mx-1">·</span>
-                <span>Queries open at chainscope.io · Read-only — no transactions</span>
+                <span>Queries open at chainscope.io · Read-only</span>
             </div>
         </div>
     </footer>
@@ -290,6 +385,10 @@
         asset_compounder: 'terra1zly98gvcec54m3caxlqexce7rus6rzgplz7eketsdz7nh750h2rqvu8uzx',
     };
 
+    // args[].kind reference:
+    //   'wallet'      → auto-filled from global selection
+    //   'id'          → manual integer/string input (e.g. token_id), supports "load my locks" if wallet selected
+    //   'optional_id' → optional integer input (e.g. epoch period for bribes)
     const CONTRACT_GROUPS = [
         {
             id: 'global_config',
@@ -301,7 +400,7 @@
                 {
                     name: 'all_addresses',
                     description: 'Returns the entire role → address map for the ve3 system.',
-                    use_case: 'Use this to discover every contract address in the Eris ve3 stack. The output is what powers everything else — never need to hardcode another address.',
+                    use_case: 'Discover every contract address in the Eris ve3 stack.',
                     response: 'Array of [role, address] pairs.',
                     args: [],
                     msg: { all_addresses: {} },
@@ -317,56 +416,50 @@
             queries: [
                 {
                     name: 'distributions',
-                    description: 'Returns the canonical pool registry — every pool with its bucket, VP, and reward share %.',
-                    use_case: 'Use this to see all 28 active TLA pools, their distribution percentages, and which bucket each belongs to.',
-                    response: 'Array of per-bucket: {gauge, period, total_gauge_vp, assets: [{asset, distribution, total_vp}]}',
+                    description: 'Canonical pool registry — every pool with its bucket, VP, reward share %.',
+                    use_case: 'See all 28 active TLA pools with their distribution percentages.',
+                    response: 'Array of per-bucket: {gauge, period, total_gauge_vp, assets:[...]}',
                     args: [],
                     msg: { distributions: {} },
                 },
                 {
                     name: 'last_distribution_period',
-                    description: 'The canonical current epoch number (settles off-by-one questions at the source).',
-                    use_case: 'Verify what epoch the system currently considers active. Use this over any dashboard\'s epoch number.',
-                    response: 'A number (e.g. 187).',
+                    description: 'Canonical current epoch number.',
+                    use_case: 'Verify what epoch the system currently considers active.',
                     args: [],
                     msg: { last_distribution_period: {} },
                 },
                 {
                     name: 'config',
                     description: 'Gauge configuration — bucket list, rebase asset (ampLUNA), global_config_addr.',
-                    use_case: 'Confirm the configured buckets and the rebase asset used for emissions.',
-                    response: '{gauges, rebase_asset, global_config, ...}',
                     args: [],
                     msg: { config: {} },
                 },
                 {
                     name: 'user_info',
                     description: 'A wallet\'s voting power and vote allocation across all buckets.',
-                    use_case: 'Look up your (or any address\'s) VP and where their votes are currently allocated per bucket.',
-                    response: '{voting_power, fixed_amount, slope, gauge_votes: [{gauge, period, votes:[[asset,weight_bps]]}]}',
-                    args: [{ name: 'user', label: 'Wallet Address', kind: 'wallet', placeholder: 'terra1...' }],
+                    use_case: 'Look up the VP + vote allocation for the selected address.',
+                    response: '{voting_power, fixed_amount, slope, gauge_votes:[...]}',
+                    args: [{ name: 'user', kind: 'wallet' }],
                     msg: (a) => ({ user_info: { user: a.user } }),
                 },
                 {
                     name: 'user_shares',
-                    description: 'A wallet\'s live % influence on each pool RIGHT NOW (preferred over user_info for current state).',
-                    use_case: 'See what % of each pool\'s votes the wallet is contributing in the current epoch.',
-                    response: 'Per gauge: {gauge, asset, period, user_vp, total_vp}',
-                    args: [{ name: 'user', label: 'Wallet Address', kind: 'wallet', placeholder: 'terra1...' }],
+                    description: 'Live % influence of a wallet on each pool RIGHT NOW.',
+                    use_case: 'See what % of each pool\'s votes this wallet contributes this epoch.',
+                    args: [{ name: 'user', kind: 'wallet' }],
                     msg: (a) => ({ user_shares: { user: a.user } }),
                 },
                 {
                     name: 'user_first_participation',
-                    description: 'The first epoch a wallet ever participated in TLA voting.',
-                    use_case: 'Identify early-user / tenure status of a wallet for recognition or rewards.',
-                    response: '{period}',
-                    args: [{ name: 'user', label: 'Wallet Address', kind: 'wallet', placeholder: 'terra1...' }],
+                    description: 'First epoch a wallet ever participated in TLA voting.',
+                    args: [{ name: 'user', kind: 'wallet' }],
                     msg: (a) => ({ user_first_participation: { user: a.user } }),
                 },
                 {
                     name: 'user_pending_rebase',
                     description: 'A wallet\'s unclaimed rebase rewards (ampLUNA).',
-                    args: [{ name: 'user', label: 'Wallet Address', kind: 'wallet', placeholder: 'terra1...' }],
+                    args: [{ name: 'user', kind: 'wallet' }],
                     msg: (a) => ({ user_pending_rebase: { user: a.user } }),
                 },
             ],
@@ -376,62 +469,59 @@
             label: 'voting-escrow',
             icon: 'fa-lock',
             address: FALLBACK_CONTRACTS.voting_escrow,
-            description: 'veLUNA NFT lock collection — every lock is a token_id. Powers VP forecasts and unlock schedules.',
+            description: 'veLUNA NFT lock collection — every lock is a token_id. Powers VP and unlock schedules.',
             queries: [
                 {
                     name: 'total_vamp',
                     description: 'System-wide total VP: decaying + permanent.',
-                    use_case: 'Get the authoritative total VP locked in the system. Returns voting_power (decaying) + fixed + vp (sum).',
                     response: '{voting_power, fixed, vp}',
                     args: [],
                     msg: { total_vamp: {} },
                 },
                 {
                     name: 'total_fixed',
-                    description: 'The permanent (non-decaying) portion of total VP.',
+                    description: 'Permanent (non-decaying) portion of total VP.',
                     args: [],
                     msg: { total_fixed: {} },
                 },
                 {
                     name: 'num_tokens',
-                    description: 'Total count of veLUNA lock NFTs (currently ~431).',
+                    description: 'Total count of veLUNA lock NFTs (~431).',
                     args: [],
                     msg: { num_tokens: {} },
                 },
                 {
                     name: 'config',
-                    description: 'Lockable asset list + exchange-rate oracle addresses per LST.',
-                    use_case: 'See which LSTs can be locked (LUNA, ampLUNA, arbLUNA, stLUNA, etc.) and the exchange-rate oracle for each.',
+                    description: 'Lockable asset list + exchange-rate oracles per LST.',
                     args: [],
                     msg: { config: {} },
                 },
                 {
                     name: 'lock_info',
-                    description: 'Full per-lock detail: owner, LST type, underlying LUNA, unlock period, VP, slope.',
-                    use_case: 'Inspect any specific lock. Find a token_id from tokens{owner} first, then query lock_info to see its full state.',
-                    response: '{owner, from_period, asset, underlying_amount, coefficient, start, end:{period}, slope, fixed_amount, voting_power}',
-                    args: [{ name: 'token_id', label: 'Lock Token ID', kind: 'id', placeholder: 'e.g., 1157', help: 'A veLUNA lock NFT ID. Find these via tokens{owner} or all_tokens.' }],
+                    description: 'Full per-lock detail: owner, LST, underlying LUNA, unlock period, VP.',
+                    use_case: 'Inspect a specific lock. If a wallet is selected, you can load that wallet\'s locks into the dropdown.',
+                    response: '{owner, from_period, asset, underlying_amount, end:{period}, slope, voting_power}',
+                    args: [{ name: 'token_id', kind: 'id', placeholder: 'e.g., 1157', help: 'A veLUNA lock NFT ID.' }],
                     msg: (a) => ({ lock_info: { token_id: String(a.token_id) } }),
+                    supports_load_locks: true,  // → show "Load locks owned by selected" button when wallet selected
                 },
                 {
                     name: 'tokens',
-                    description: 'List all veLUNA lock NFT IDs owned by a wallet.',
-                    use_case: 'Find which token_ids a wallet owns, then look up each via lock_info.',
-                    response: '{tokens: [token_id, ...]}',
-                    args: [
-                        { name: 'owner', label: 'Wallet Address', kind: 'wallet', placeholder: 'terra1...' },
-                    ],
+                    description: 'List veLUNA lock NFT IDs owned by a wallet.',
+                    use_case: 'Find which token_ids the selected wallet owns.',
+                    args: [{ name: 'owner', kind: 'wallet' }],
                     msg: (a) => ({ tokens: { owner: a.owner } }),
                 },
                 {
                     name: 'owner_of',
                     description: 'Look up the owner of a specific veLUNA lock NFT.',
-                    args: [{ name: 'token_id', label: 'Lock Token ID', kind: 'id', placeholder: 'e.g., 1157' }],
+                    args: [{ name: 'token_id', kind: 'id', placeholder: 'e.g., 1157' }],
                     msg: (a) => ({ owner_of: { token_id: String(a.token_id) } }),
+                    supports_load_locks: true,
                 },
                 {
                     name: 'blacklisted_voters',
-                    description: 'Currently-blacklisted wallets (empty under normal conditions).',
+                    description: 'Currently-blacklisted wallets (typically empty).',
                     args: [],
                     msg: { blacklisted_voters: {} },
                 },
@@ -442,33 +532,32 @@
             label: 'bribe-manager',
             icon: 'fa-coins',
             address: FALLBACK_CONTRACTS.bribe_manager,
-            description: 'Active bribes registry. Source of truth for what bribes are currently funded.',
+            description: 'Active bribes registry — source of truth for what bribes are funded.',
             queries: [
                 {
                     name: 'bribes',
-                    description: 'All currently active/pending bribes — pool, bucket, token, amount.',
-                    use_case: 'See what bribes are funded RIGHT NOW for the current epoch. This replaces any manual PD-file merge.',
-                    response: 'Array of {gauge, asset, assets:[{info,amount}]}',
-                    args: [{ name: 'period', label: 'Epoch Period (or leave empty for current)', kind: 'optional_id', placeholder: 'e.g., 187 or leave empty' }],
+                    description: 'All active/pending bribes — pool, bucket, token, amount.',
+                    use_case: 'See what bribes are funded RIGHT NOW for the current epoch.',
+                    args: [{ name: 'period', kind: 'optional_id', placeholder: 'Leave empty for current', help: 'Optional epoch period. Leave empty for current.' }],
                     msg: (a) => ({ bribes: { period: a.period ? parseInt(a.period) : null } }),
                 },
                 {
                     name: 'config',
-                    description: 'Bribe manager config — fee schedule (10 LUNA per add), allow_any, global_config.',
+                    description: 'Bribe manager config — fee schedule, allow_any, global_config.',
                     args: [],
                     msg: { config: {} },
                 },
                 {
                     name: 'next_claim_period',
-                    description: 'The next epoch where bribes become claimable.',
+                    description: 'Next epoch where bribes become claimable.',
                     args: [],
                     msg: { next_claim_period: {} },
                 },
                 {
                     name: 'user_claimable',
                     description: 'A wallet\'s currently-claimable bribes.',
-                    use_case: 'See what bribes a voter is eligible to claim from prior epochs\' votes.',
-                    args: [{ name: 'user', label: 'Wallet Address', kind: 'wallet', placeholder: 'terra1...' }],
+                    use_case: 'See what bribes the selected wallet can claim from prior votes.',
+                    args: [{ name: 'user', kind: 'wallet' }],
                     msg: (a) => ({ user_claimable: { user: a.user } }),
                 },
             ],
@@ -478,27 +567,25 @@
             label: 'asset-compounder',
             icon: 'fa-rotate',
             address: FALLBACK_CONTRACTS.asset_compounder,
-            description: 'Auto-compound vaults (amplp tokens). 8% compounder fee, 4h anti-gaming delay.',
+            description: 'Auto-compound vaults (amplp tokens). 8% fee, 4h anti-gaming delay.',
             queries: [
                 {
                     name: 'asset_configs',
-                    description: 'Registry of every amplp vault — amplp denom, underlying LP, bucket, reward asset.',
+                    description: 'Registry of every amplp vault — amplp denom, underlying LP, bucket.',
                     use_case: 'See all 65 amplp vaults and their underlying LP positions.',
-                    response: 'Array of {asset_info, gauge, staking, amp_denom, zasset_denom, reward_asset_info, fee, total_bond_share}',
                     args: [],
                     msg: { asset_configs: {} },
                 },
                 {
                     name: 'amplp_exchange_rates',
                     description: 'Current amplp → LP exchange rate per vault.',
-                    use_case: 'Convert between amplp and underlying LP (e.g. how many LP per amplp right now).',
                     args: [],
                     msg: { amplp_exchange_rates: {} },
                 },
                 {
                     name: 'exchange_rates',
-                    description: 'Rate history + per-period APR per vault (the REALIZED net-of-fee compounding APR).',
-                    use_case: 'Get the truest "what an amplp position actually earns per epoch" figure, straight from source.',
+                    description: 'Rate history + per-period realized APR per vault.',
+                    use_case: 'Get the truest "what an amplp position earns per epoch" figure.',
                     args: [],
                     msg: { exchange_rates: {} },
                 },
@@ -515,47 +602,248 @@
     // ============================================================
     // STATE
     // ============================================================
-    let WALLETS_FROM_CATALOG = [];  // [{ addr, label }]
-    let CONTRACTS_FROM_CATALOG = {}; // role → addr (overrides FALLBACK)
+    const STORAGE_KEY = 'adao_tools_selected_address';
+    const CATALOG_URL = 'https://raw.githubusercontent.com/defipatriot/tla-chain-registry/main/2026/current.json';
+    const TERRA_LCD = 'https://terra-lcd.publicnode.com';
+
+    let selectedAddress = null;  // { addr, label? }
+    let WALLETS_FROM_CATALOG = [];      // labeled wallets — populate dropdown
+    let WALLETS_ALL = [];                // every wallet including discovered stakers — search + paste lookup
     let activeContract = CONTRACT_GROUPS[0].id;
+    let pickerMode = 'dropdown';
+    let cachedLocks = new Map();  // wallet addr → [token_id, ...]
 
     // ============================================================
-    // LOAD CATALOG (for known wallets + verified contract addresses)
+    // INIT
+    // ============================================================
+    async function init() {
+        // Restore previous selection
+        try {
+            const stored = sessionStorage.getItem(STORAGE_KEY);
+            if (stored) selectedAddress = JSON.parse(stored);
+        } catch (e) { /* ignore */ }
+
+        await loadCatalog();
+        renderPicker();
+        renderTabs();
+        renderContent();
+        wireGlobalEvents();
+    }
+
+    // ============================================================
+    // CATALOG LOAD
     // ============================================================
     async function loadCatalog() {
         try {
-            const r = await fetch('https://raw.githubusercontent.com/defipatriot/tla-chain-registry/main/2026/current.json', { cache: 'no-cache' });
+            const r = await fetch(CATALOG_URL, { cache: 'no-cache' });
             if (!r.ok) return;
             const c = await r.json();
-            
-            // Override hardcoded addresses with live ones from chain
+
+            // Use live contract addresses if available
             if (c.contracts) {
-                if (c.contracts.global_config) FALLBACK_CONTRACTS.global_config = c.contracts.global_config;
-                if (c.contracts.asset_gauge) FALLBACK_CONTRACTS.asset_gauge = c.contracts.asset_gauge;
-                if (c.contracts.voting_escrow) FALLBACK_CONTRACTS.voting_escrow = c.contracts.voting_escrow;
+                if (c.contracts.global_config)    FALLBACK_CONTRACTS.global_config = c.contracts.global_config;
+                if (c.contracts.asset_gauge)      FALLBACK_CONTRACTS.asset_gauge = c.contracts.asset_gauge;
+                if (c.contracts.voting_escrow)    FALLBACK_CONTRACTS.voting_escrow = c.contracts.voting_escrow;
                 if (c.contracts.asset_compounder) FALLBACK_CONTRACTS.asset_compounder = c.contracts.asset_compounder;
             }
-            // Update the contract groups with verified live addresses
             for (const grp of CONTRACT_GROUPS) {
                 if (FALLBACK_CONTRACTS[grp.id]) grp.address = FALLBACK_CONTRACTS[grp.id];
             }
-            
-            // Pull wallets from catalog for dropdowns
-            const wallets = c.wallets_catalog || {};
-            WALLETS_FROM_CATALOG = Object.entries(wallets).map(([addr, w]) => ({
-                addr,
-                label: w.label || addr.slice(0, 12) + '…',
-            })).sort((a,b) => a.label.localeCompare(b.label));
 
-            renderContent();
+            // Build wallets list. We include ONLY catalog wallets (curated public entities).
+            // Personal addresses are added by the user via paste.
+            const wallets = c.wallets_catalog || {};
+            // ALL wallets — used for search and paste-recognition (includes discovered stakers)
+            WALLETS_ALL = Object.entries(wallets).map(([addr, w]) => {
+                const daoMemberships = w.dao_memberships || [];
+                const daoLabel = daoMemberships.length > 0
+                    ? `${daoMemberships[0].dao} staker` + (daoMemberships.length > 1 ? ` (+${daoMemberships.length - 1} more)` : '')
+                    : null;
+                return {
+                    addr,
+                    label: w.label || daoLabel || null,
+                    subtype: w.subtype || '',
+                    protocol: w.protocol || '',
+                    discovery_source: w.discovery_source || null,
+                    dao_memberships: daoMemberships,
+                };
+            });
+
+            // DROPDOWN — only entries with an explicit human label (no auto-staker labels)
+            WALLETS_FROM_CATALOG = WALLETS_ALL.filter(w => !!w.label && !w.discovery_source);
+            WALLETS_FROM_CATALOG.sort((a, b) => a.label.localeCompare(b.label));
+
+            // If we had a stored selection, refresh its label from current catalog
+            if (selectedAddress) {
+                const match = WALLETS_ALL.find(w => w.addr === selectedAddress.addr);
+                if (match && match.label) selectedAddress.label = match.label;
+            }
         } catch (e) {
             console.warn('Catalog load failed (using fallback addresses):', e);
-            renderContent();
         }
     }
 
     // ============================================================
-    // RENDER
+    // GLOBAL ADDRESS PICKER
+    // ============================================================
+    function setSelectedAddress(addr, label = null) {
+        if (!addr) {
+            selectedAddress = null;
+            sessionStorage.removeItem(STORAGE_KEY);
+        } else {
+            const cleaned = addr.trim();
+            if (!cleaned) return;
+            if (!cleaned.startsWith('terra1')) {
+                alert('Address must start with "terra1"');
+                return;
+            }
+            // Auto-detect label if not provided — check ALL wallets including discovered stakers
+            const known = WALLETS_ALL.find(w => w.addr === cleaned);
+            if (!label && known) label = known.label;
+
+            selectedAddress = {
+                addr: cleaned,
+                label: label || null,
+                dao_memberships: known?.dao_memberships || [],
+                discovery_source: known?.discovery_source || null,
+            };
+            try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(selectedAddress)); } catch (e) {}
+        }
+        renderPicker();
+        renderContent();
+    }
+
+    function renderPicker() {
+        const wrap = document.getElementById('global-picker');
+        const disp = document.getElementById('selection-display');
+
+        if (selectedAddress) {
+            wrap.classList.add('has-selection');
+            const memberships = selectedAddress.dao_memberships || [];
+            const labelHtml = selectedAddress.label
+                ? `<div class="text-base font-bold text-white">${escapeHtml(selectedAddress.label)} <span class="text-xs text-cyan-300 ml-2"><i class="fas fa-check-circle mr-1"></i>recognized</span></div>`
+                : `<div class="text-base font-bold text-gray-300"><i class="fas fa-question-circle text-yellow-500 mr-1"></i>Unrecognized address</div>`;
+            const daoChips = memberships.length > 0
+                ? `<div class="flex flex-wrap gap-1 mt-2">${memberships.map(m =>
+                    `<span class="inline-block px-2 py-0.5 rounded-full bg-yellow-900/30 border border-yellow-700/40 text-yellow-300 text-xs"><i class="fas fa-user-group mr-1"></i>${escapeHtml(m.dao)}</span>`
+                  ).join('')}</div>`
+                : '';
+            disp.innerHTML = `
+                <div class="selection-display flex items-center justify-between gap-3 flex-wrap">
+                    <div class="min-w-0 flex-1">
+                        ${labelHtml}
+                        <div class="mono text-xs text-cyan-200 mt-1 break-all">${escapeHtml(selectedAddress.addr)}</div>
+                        ${daoChips}
+                    </div>
+                    <div class="flex items-center gap-2 flex-shrink-0">
+                        <a href="https://chainsco.pe/terra2/address/${escapeAttr(selectedAddress.addr)}" target="_blank" rel="noopener" class="text-cyan-400 hover:underline text-xs"><i class="fas fa-external-link mr-1"></i>chainscope</a>
+                        <button onclick="clearSelectedAddress()" class="btn-clear"><i class="fas fa-xmark mr-1"></i>Clear</button>
+                    </div>
+                </div>
+            `;
+        } else {
+            wrap.classList.remove('has-selection');
+            disp.innerHTML = `
+                <div class="selection-empty">
+                    <div class="text-sm text-gray-400">
+                        <i class="fas fa-circle-dot mr-2 text-gray-500"></i>
+                        No address selected yet
+                    </div>
+                    <div class="text-xs text-gray-500 mt-1">
+                        Pick one below. Queries that don't need a wallet (config, distributions, totals) work without one.
+                    </div>
+                </div>
+            `;
+        }
+
+        // Populate dropdown
+        const dd = document.getElementById('picker-dropdown');
+        const named = WALLETS_FROM_CATALOG;
+        const stakerCount = WALLETS_ALL.filter(w => w.discovery_source === 'daodao_staker').length;
+        let opts = '<option value="">— Pick a known address —</option>';
+        if (named.length > 0) {
+            opts += '<optgroup label="Named (catalog)">';
+            for (const w of named) {
+                opts += `<option value="${escapeAttr(w.addr)}">${escapeHtml(w.label)} — ${escapeHtml(w.addr.slice(0, 18))}…</option>`;
+            }
+            opts += '</optgroup>';
+        } else {
+            opts += '<option value="" disabled>(catalog loading or empty)</option>';
+        }
+        if (stakerCount > 0) {
+            opts += `<option value="" disabled>— ${stakerCount} DAO staker${stakerCount === 1 ? '' : 's'} also in catalog (use Search or Paste) —</option>`;
+        }
+        dd.innerHTML = opts;
+        if (selectedAddress && WALLETS_ALL.some(w => w.addr === selectedAddress.addr)) {
+            dd.value = selectedAddress.addr;
+        }
+
+        // Set picker mode tab states
+        document.querySelectorAll('.picker-mode-tab').forEach(b => b.classList.toggle('active', b.dataset.mode === pickerMode));
+        document.querySelectorAll('.picker-mode-panel').forEach(p => p.classList.toggle('active', p.dataset.mode === pickerMode));
+    }
+
+    function renderSearchResults(query) {
+        const box = document.getElementById('picker-search-results');
+        const q = (query || '').trim().toLowerCase();
+        if (q.length < 2) {
+            box.innerHTML = '<p class="text-xs text-gray-500 p-2">Type at least 2 characters…</p>';
+            return;
+        }
+        // Match against last 8 chars of address OR label, across ALL wallets (named + stakers)
+        const results = WALLETS_ALL.filter(w => {
+            const labelMatch = w.label && w.label.toLowerCase().includes(q);
+            return w.addr.toLowerCase().slice(-8).includes(q) || labelMatch;
+        });
+        if (results.length === 0) {
+            box.innerHTML = `<p class="text-xs text-gray-500 p-2">No catalog matches for "${escapeHtml(query)}". You can still <button onclick="document.querySelector('[data-mode=paste]').click()" class="text-cyan-400 underline">paste the full address</button>.</p>`;
+            return;
+        }
+        box.innerHTML = results.slice(0, 12).map(w => {
+            const labelHtml = w.label
+                ? `<div class="text-sm text-white font-semibold">${escapeHtml(w.label)}</div>`
+                : `<div class="text-sm text-gray-400">${w.discovery_source === 'daodao_staker' ? '<i class="fas fa-user-group text-yellow-500 mr-1"></i>Discovered staker' : 'Unlabeled wallet'}</div>`;
+            return `
+                <button onclick="setSelectedAddress('${escapeAttr(w.addr)}', '${escapeAttr(w.label || '')}')" class="w-full text-left p-2 rounded hover:bg-cyan-900/20 border border-transparent hover:border-cyan-700/30 transition-colors mb-1">
+                    ${labelHtml}
+                    <div class="mono text-xs text-gray-500 truncate">${escapeHtml(w.addr)}</div>
+                </button>`;
+        }).join('');
+    }
+
+    function clearSelectedAddress() { setSelectedAddress(null); }
+    window.clearSelectedAddress = clearSelectedAddress;
+    window.setSelectedAddress = setSelectedAddress;
+
+    function wireGlobalEvents() {
+        // Picker mode tabs
+        document.querySelectorAll('.picker-mode-tab').forEach(b => b.addEventListener('click', () => {
+            pickerMode = b.dataset.mode;
+            renderPicker();
+            // Focus relevant input
+            setTimeout(() => {
+                if (pickerMode === 'search') document.getElementById('picker-search-input').focus();
+                if (pickerMode === 'paste') document.getElementById('picker-paste-input').focus();
+            }, 50);
+        }));
+        // Dropdown
+        document.getElementById('picker-dropdown').addEventListener('change', (e) => {
+            if (e.target.value) setSelectedAddress(e.target.value);
+        });
+        // Search
+        document.getElementById('picker-search-input').addEventListener('input', (e) => {
+            renderSearchResults(e.target.value);
+        });
+        // Paste
+        const pasteInput = document.getElementById('picker-paste-input');
+        const pasteBtn = document.getElementById('picker-paste-btn');
+        const onPaste = () => setSelectedAddress(pasteInput.value);
+        pasteBtn.addEventListener('click', onPaste);
+        pasteInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') onPaste(); });
+    }
+
+    // ============================================================
+    // QUERY TILE RENDERING
     // ============================================================
     function renderTabs() {
         const tabsEl = document.getElementById('contract-tabs');
@@ -579,10 +867,10 @@
             <div class="flex items-start justify-between gap-4 flex-wrap">
                 <div class="min-w-0 flex-1">
                     <p class="text-sm text-gray-300 mb-2">${escapeHtml(grp.description)}</p>
-                    <div class="flex items-center gap-2 text-xs">
+                    <div class="flex items-center gap-2 text-xs flex-wrap">
                         <span class="text-gray-500">Contract:</span>
                         <span class="mono text-cyan-400 break-all">${escapeHtml(grp.address)}</span>
-                        <a href="https://chainsco.pe/terra2/address/${escapeHtml(grp.address)}" target="_blank" rel="noopener" class="text-cyan-400 hover:underline text-xs"><i class="fas fa-external-link"></i> chainscope</a>
+                        <a href="https://chainsco.pe/terra2/address/${escapeAttr(grp.address)}" target="_blank" rel="noopener" class="text-cyan-400 hover:underline text-xs"><i class="fas fa-external-link"></i> chainscope</a>
                     </div>
                 </div>
                 <span class="text-xs text-gray-500">${grp.queries.length} queries available</span>
@@ -591,42 +879,117 @@
 
         const grid = document.getElementById('queries-grid');
         grid.innerHTML = grp.queries.map((q, idx) => renderQueryCard(grp, q, idx)).join('');
-        
-        // Wire up
-        grid.querySelectorAll('[data-action="generate"]').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const card = e.target.closest('.query-card');
-                generateForCard(card);
-            });
-        });
+    }
+
+    function categorizeArgs(q) {
+        const walletArgs = q.args.filter(a => a.kind === 'wallet');
+        const idArgs = q.args.filter(a => a.kind === 'id');
+        const optArgs = q.args.filter(a => a.kind === 'optional_id');
+        return { walletArgs, idArgs, optArgs };
     }
 
     function renderQueryCard(grp, q, idx) {
+        const { walletArgs, idArgs, optArgs } = categorizeArgs(q);
         const noArgs = q.args.length === 0;
-        const argInputs = q.args.map(arg => renderArgInput(arg, idx)).join('');
+        const onlyWalletArgs = q.args.length > 0 && walletArgs.length === q.args.length;
+        const walletReady = walletArgs.length === 0 || selectedAddress !== null;
+        const idReady = idArgs.length === 0;  // ID args require manual fill; track separately
+        const fullyReady = noArgs || (onlyWalletArgs && selectedAddress) || false;
+
+        let cardClass = 'query-card';
+        if (noArgs) cardClass += ' no-args';
+        else if (walletArgs.length > 0 && !selectedAddress) cardClass += ' needs-wallet';
+        else if (fullyReady) cardClass += ' ready';
+
+        let chip;
+        if (noArgs) chip = '<span class="arg-chip no-args-chip">no args</span>';
+        else if (onlyWalletArgs && selectedAddress) chip = '<span class="arg-chip ready-chip">ready · uses selected</span>';
+        else if (onlyWalletArgs && !selectedAddress) chip = '<span class="arg-chip blocked-chip">select address above</span>';
+        else if (walletArgs.length > 0 && idArgs.length > 0) chip = `<span class="arg-chip wallet-arg-chip">uses selected</span><span class="arg-chip other-arg-chip">needs id</span>`;
+        else if (idArgs.length > 0) chip = '<span class="arg-chip other-arg-chip">needs id</span>';
+        else if (optArgs.length > 0) chip = '<span class="arg-chip other-arg-chip">optional arg</span>';
+
+        // Build preview JSON
+        const previewArgs = {};
+        for (const a of q.args) {
+            if (a.kind === 'wallet') previewArgs[a.name] = selectedAddress ? selectedAddress.addr : '<no address selected>';
+            else if (a.kind === 'id') previewArgs[a.name] = '<id>';
+            else previewArgs[a.name] = '<optional>';
+        }
+        const previewMsg = typeof q.msg === 'function' ? q.msg(previewArgs) : q.msg;
+        const previewJson = JSON.stringify(previewMsg);
+
+        // Decide whether we can render a direct link
+        const canDirectLink = (noArgs || (onlyWalletArgs && selectedAddress));
+        const directMsg = canDirectLink
+            ? (typeof q.msg === 'function' ? q.msg(selectedAddress ? { user: selectedAddress.addr, owner: selectedAddress.addr } : {}) : q.msg)
+            : null;
+        const directUrl = canDirectLink ? chainscopeUrl(grp.address, directMsg) : null;
+
+        // Build inputs for ID args
+        let idInputs = '';
+        if (idArgs.length > 0) {
+            idInputs = idArgs.map(a => `
+                <div class="mt-2">
+                    <label class="text-xs text-gray-500 mb-1 block">${escapeHtml(a.help || a.name)}</label>
+                    <div class="flex gap-2">
+                        <input type="text" class="form-input flex-1" data-arg="${a.name}" data-q-idx="${idx}" placeholder="${escapeAttr(a.placeholder || '')}">
+                        ${q.supports_load_locks && selectedAddress ? `<button class="btn-secondary text-xs" onclick="loadLocksFor(${idx}, '${escapeAttr(selectedAddress.addr)}')" title="Fetch locks owned by the selected wallet"><i class="fas fa-download mr-1"></i>Load mine</button>` : ''}
+                    </div>
+                    ${q.supports_load_locks ? `<div data-locks-dropdown="${idx}" class="mt-2"></div>` : ''}
+                </div>
+            `).join('');
+        }
+        if (optArgs.length > 0) {
+            idInputs += optArgs.map(a => `
+                <div class="mt-2">
+                    <label class="text-xs text-gray-500 mb-1 block">${escapeHtml(a.help || a.name)}</label>
+                    <input type="text" class="form-input" data-arg="${a.name}" data-q-idx="${idx}" placeholder="${escapeAttr(a.placeholder || '')}">
+                </div>
+            `).join('');
+        }
+
+        // Buttons row
+        let buttonsHtml = '';
+        if (canDirectLink) {
+            buttonsHtml = `
+                <a class="btn-primary text-xs" target="_blank" rel="noopener" href="${escapeAttr(directUrl)}"><i class="fas fa-external-link mr-1"></i>Open in Chainscope</a>
+                <button class="btn-secondary text-xs" onclick="copyJson(this, '${escapeAttr(JSON.stringify(directMsg))}')"><i class="fas fa-copy mr-1"></i>Copy JSON</button>
+            `;
+        } else if (walletArgs.length > 0 && !selectedAddress) {
+            buttonsHtml = `<button class="btn-primary text-xs" disabled><i class="fas fa-lock mr-1"></i>Select an address above first</button>`;
+        } else {
+            // Has non-wallet args that need filling
+            buttonsHtml = `
+                <button class="btn-primary text-xs" onclick="generateForCard(${idx})"><i class="fas fa-wand-magic-sparkles mr-1"></i>Generate Link</button>
+                <button class="btn-secondary text-xs" onclick="copyJsonForCard(${idx})"><i class="fas fa-copy mr-1"></i>Copy JSON</button>
+            `;
+        }
 
         return `
-            <div class="query-card ${noArgs ? 'no-args' : ''}" data-contract="${grp.address}" data-query-idx="${idx}">
+            <div class="${cardClass}" data-query-idx="${idx}" data-contract="${escapeAttr(grp.address)}">
                 <div class="flex items-start justify-between gap-2 mb-2">
-                    <h3 class="text-white font-bold mono">${escapeHtml(q.name)}</h3>
-                    ${noArgs ? '<span class="no-args-chip">no args</span>' : '<span class="arg-chip">needs args</span>'}
+                    <h3 class="text-white font-bold mono text-sm">${escapeHtml(q.name)}</h3>
+                    <div class="flex-shrink-0">${chip}</div>
                 </div>
-                <p class="text-sm text-gray-400 mb-3">${escapeHtml(q.description)}</p>
-                ${q.use_case ? `<p class="text-xs text-gray-500 mb-3"><i class="fas fa-lightbulb text-yellow-500 mr-1"></i>${escapeHtml(q.use_case)}</p>` : ''}
+                <p class="text-sm text-gray-400 mb-2">${escapeHtml(q.description)}</p>
+                ${q.use_case ? `<p class="text-xs text-gray-500 mb-3"><i class="fas fa-lightbulb text-yellow-500/70 mr-1"></i>${escapeHtml(q.use_case)}</p>` : ''}
                 
-                ${argInputs ? `<div class="space-y-2 mb-3">${argInputs}</div>` : ''}
+                ${walletArgs.length > 0 && selectedAddress ? `
+                    <div class="mb-2 px-3 py-2 bg-cyan-950/30 border border-cyan-700/30 rounded text-xs">
+                        <i class="fas fa-bullseye text-cyan-400 mr-1"></i>
+                        Using: <span class="text-cyan-200 font-semibold">${escapeHtml(selectedAddress.label || 'selected address')}</span>
+                        <span class="mono text-gray-500 ml-1">${escapeHtml(selectedAddress.addr.slice(0, 18))}…</span>
+                    </div>
+                ` : ''}
                 
-                <div class="json-snippet mb-3" data-role="json-preview">${escapeHtml(JSON.stringify(typeof q.msg === 'function' ? q.msg(getArgPlaceholders(q.args)) : q.msg))}</div>
+                ${idInputs}
+                
+                <div class="json-snippet mt-3 mb-3" data-role="json-preview">${escapeHtml(previewJson)}</div>
                 
                 <div class="flex gap-2 items-center flex-wrap">
-                    ${noArgs
-                        ? `<a class="btn-primary text-xs" target="_blank" rel="noopener" href="${chainscopeUrl(grp.address, typeof q.msg === 'function' ? q.msg({}) : q.msg)}"><i class="fas fa-external-link mr-1"></i>Query on Chainscope</a>`
-                        : `<button class="btn-primary text-xs" data-action="generate"><i class="fas fa-wand-magic-sparkles mr-1"></i>Generate Link</button>`
-                    }
-                    <button class="btn-secondary text-xs copy-json-btn" data-action="copy" data-msg='${escapeAttr(JSON.stringify(typeof q.msg === 'function' ? q.msg(getArgPlaceholders(q.args)) : q.msg))}'>
-                        <i class="fas fa-copy mr-1"></i>Copy JSON
-                    </button>
-                    ${q.response ? `<details class="ml-auto"><summary class="text-xs text-gray-500 cursor-pointer hover:text-cyan-400">Response shape</summary><pre class="mono text-[10px] text-gray-400 mt-2 max-w-full overflow-x-auto">${escapeHtml(q.response)}</pre></details>` : ''}
+                    ${buttonsHtml}
+                    ${q.response ? `<details class="ml-auto"><summary class="text-xs text-gray-500 cursor-pointer hover:text-cyan-400">Response shape</summary><pre class="mono text-[10px] text-gray-400 mt-2 max-w-full overflow-x-auto whitespace-pre-wrap">${escapeHtml(q.response)}</pre></details>` : ''}
                 </div>
                 
                 <div data-role="result" class="mt-3"></div>
@@ -634,59 +997,84 @@
         `;
     }
 
-    function renderArgInput(arg, qIdx) {
-        if (arg.kind === 'wallet') {
-            const options = WALLETS_FROM_CATALOG.map(w =>
-                `<option value="${escapeAttr(w.addr)}">${escapeHtml(w.label + ' — ' + w.addr.slice(0, 20) + '…')}</option>`
-            ).join('');
-            return `<div>
-                <label class="text-xs text-gray-500 mb-1 block">${escapeHtml(arg.label)}</label>
-                <select class="form-select mb-1" data-arg="${arg.name}" data-mode="select">
-                    <option value="">— Pick from catalog or type below —</option>
-                    ${options}
-                </select>
-                <input type="text" class="form-input" data-arg="${arg.name}" placeholder="${escapeAttr(arg.placeholder || '')}">
-                ${arg.help ? `<p class="text-[11px] text-gray-500 mt-1">${escapeHtml(arg.help)}</p>` : ''}
-            </div>`;
+    // ============================================================
+    // LOAD LOCKS for selected wallet (for token_id dropdown)
+    // ============================================================
+    async function loadLocksFor(qIdx, walletAddr) {
+        const dropEl = document.querySelector(`[data-locks-dropdown="${qIdx}"]`);
+        if (!dropEl) return;
+
+        // Cache check
+        if (cachedLocks.has(walletAddr)) {
+            renderLocksDropdown(qIdx, walletAddr, cachedLocks.get(walletAddr));
+            return;
         }
-        return `<div>
-            <label class="text-xs text-gray-500 mb-1 block">${escapeHtml(arg.label)}</label>
-            <input type="text" class="form-input" data-arg="${arg.name}" placeholder="${escapeAttr(arg.placeholder || '')}">
-            ${arg.help ? `<p class="text-[11px] text-gray-500 mt-1">${escapeHtml(arg.help)}</p>` : ''}
-        </div>`;
+
+        dropEl.innerHTML = '<p class="text-xs text-gray-500 mt-1"><i class="fas fa-spinner fa-spin mr-1"></i>Fetching locks from chain…</p>';
+
+        try {
+            const ve = FALLBACK_CONTRACTS.voting_escrow;
+            const msg = btoa(JSON.stringify({ tokens: { owner: walletAddr } }));
+            const url = `${TERRA_LCD}/cosmwasm/wasm/v1/contract/${ve}/smart/${msg}`;
+            const r = await fetch(url);
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            const j = await r.json();
+            const tokens = (j.data && j.data.tokens) || j.data || [];
+            cachedLocks.set(walletAddr, tokens);
+            renderLocksDropdown(qIdx, walletAddr, tokens);
+        } catch (e) {
+            dropEl.innerHTML = `<p class="text-xs text-red-400 mt-1"><i class="fas fa-triangle-exclamation mr-1"></i>Failed to fetch: ${escapeHtml(e.message)}</p>`;
+        }
+    }
+    window.loadLocksFor = loadLocksFor;
+
+    function renderLocksDropdown(qIdx, walletAddr, tokens) {
+        const dropEl = document.querySelector(`[data-locks-dropdown="${qIdx}"]`);
+        if (!dropEl) return;
+        if (!tokens || tokens.length === 0) {
+            dropEl.innerHTML = '<p class="text-xs text-gray-500 mt-1">No locks owned by this wallet.</p>';
+            return;
+        }
+        const opts = tokens.map(t => `<option value="${escapeAttr(t)}">Lock #${escapeHtml(t)}</option>`).join('');
+        dropEl.innerHTML = `
+            <p class="text-xs text-gray-500 mb-1">${tokens.length} lock${tokens.length === 1 ? '' : 's'} owned — pick one:</p>
+            <select class="form-select" onchange="document.querySelector('[data-arg=token_id][data-q-idx=&quot;${qIdx}&quot;]').value = this.value">
+                <option value="">— Pick a lock —</option>
+                ${opts}
+            </select>
+        `;
     }
 
-    function getArgPlaceholders(args) {
-        const o = {};
-        for (const a of args) {
-            o[a.name] = a.kind === 'wallet' ? '<terra1...>' : a.kind === 'id' ? '<id>' : '<value>';
-        }
-        return o;
-    }
-
-    function generateForCard(card) {
-        const contract = card.dataset.contract;
-        const queryIdx = parseInt(card.dataset.queryIdx);
+    // ============================================================
+    // GENERATE / COPY for non-wallet-only queries
+    // ============================================================
+    function readArgsForCard(qIdx) {
         const grp = CONTRACT_GROUPS.find(g => g.id === activeContract);
-        const q = grp.queries[queryIdx];
-
-        // Collect arg values: prefer the dropdown if set, fallback to text input
-        const argValues = {};
+        const q = grp.queries[qIdx];
+        const argVals = {};
         for (const a of q.args) {
-            const select = card.querySelector(`select[data-arg="${a.name}"][data-mode="select"]`);
-            const text   = card.querySelector(`input[data-arg="${a.name}"]`);
-            const v = (select && select.value) || (text && text.value.trim()) || '';
-            if (!v && a.kind !== 'optional_id') {
-                alert('Missing: ' + a.label);
-                return;
+            if (a.kind === 'wallet') {
+                if (!selectedAddress) { alert('Select an address above first.'); return null; }
+                argVals[a.name] = selectedAddress.addr;
+            } else {
+                const el = document.querySelector(`[data-arg="${a.name}"][data-q-idx="${qIdx}"]`);
+                const v = el ? el.value.trim() : '';
+                if (!v && a.kind !== 'optional_id') {
+                    alert('Missing input for: ' + a.name);
+                    return null;
+                }
+                argVals[a.name] = v;
             }
-            argValues[a.name] = v;
         }
+        return { grp, q, argVals };
+    }
 
-        const msg = typeof q.msg === 'function' ? q.msg(argValues) : q.msg;
-        const url = chainscopeUrl(contract, msg);
-
-        // Update preview
+    function generateForCard(qIdx) {
+        const r = readArgsForCard(qIdx);
+        if (!r) return;
+        const msg = typeof r.q.msg === 'function' ? r.q.msg(r.argVals) : r.q.msg;
+        const url = chainscopeUrl(r.grp.address, msg);
+        const card = document.querySelector(`[data-query-idx="${qIdx}"]`);
         card.querySelector('[data-role="json-preview"]').textContent = JSON.stringify(msg);
         card.querySelector('[data-role="result"]').innerHTML = `
             <div class="mt-3 p-3 bg-cyan-950/30 border border-cyan-700/30 rounded-lg flex items-center gap-3 flex-wrap">
@@ -698,32 +1086,36 @@
             </div>
         `;
     }
+    window.generateForCard = generateForCard;
+
+    function copyJsonForCard(qIdx) {
+        const r = readArgsForCard(qIdx);
+        if (!r) return;
+        const msg = typeof r.q.msg === 'function' ? r.q.msg(r.argVals) : r.q.msg;
+        copyJson(event.target, JSON.stringify(msg));
+    }
+    window.copyJsonForCard = copyJsonForCard;
+
+    function copyJson(btn, text) {
+        navigator.clipboard.writeText(text).then(() => {
+            const orig = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-check mr-1"></i>Copied';
+            setTimeout(() => { btn.innerHTML = orig; }, 1500);
+        });
+    }
+    window.copyJson = copyJson;
 
     // ============================================================
-    // URL CONSTRUCTION
+    // UTIL
     // ============================================================
     function chainscopeUrl(contract, msg) {
         const b64 = btoa(JSON.stringify(msg));
         return `https://chainsco.pe/terra2/address/${contract}/smart/${b64}`;
     }
-
     function escapeHtml(s) { return String(s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c])); }
     function escapeAttr(s) { return escapeHtml(s); }
 
-    // Wire copy JSON buttons via event delegation
-    document.addEventListener('click', (e) => {
-        const btn = e.target.closest('.copy-json-btn');
-        if (btn) {
-            navigator.clipboard.writeText(btn.dataset.msg).then(() => {
-                const orig = btn.innerHTML;
-                btn.innerHTML = '<i class="fas fa-check mr-1"></i>Copied';
-                setTimeout(() => { btn.innerHTML = orig; }, 1500);
-            });
-        }
-    });
-
-    // Init
-    loadCatalog();
+    init();
     </script>
 </body>
 </html>
