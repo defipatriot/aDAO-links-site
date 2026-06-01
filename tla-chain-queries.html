@@ -241,6 +241,13 @@
         .pool-hint-row .pool-addr { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: #67e8f9; }
         .pool-hint-row .pool-pct { font-size: 11px; color: #9ca3af; font-variant-numeric: tabular-nums; }
         
+        mark.search-hit {
+            background: rgba(250,204,21,0.25);
+            color: #fde68a;
+            padding: 0 2px;
+            border-radius: 2px;
+        }
+        
         .picker-mode-panel { display: none; }
         .picker-mode-panel.active { display: block; }
         
@@ -504,7 +511,7 @@
                     description: 'Look up a single role to get its address.',
                     use_case: 'Get just one address (e.g. ASSET_GAUGE) without pulling the full directory.',
                     response: 'String — the address registered under that role name.',
-                    args: [{ name: 'name', kind: 'text', placeholder: 'ASSET_GAUGE', help: 'Role name as it appears in all_addresses (case-sensitive).' }],
+                    args: [{ name: 'name', kind: 'choice', source: 'directory_roles', placeholder: 'Pick a role…', help: 'Pick from the live directory — these are the only valid role names.' }],
                     msg: (a) => ({ address: { name: a.name } }),
                 },
                 {
@@ -524,10 +531,10 @@
                 },
                 {
                     name: 'addresses',
-                    description: 'Look up multiple roles at once. Pass an array of role names.',
+                    description: 'Look up multiple roles at once. Pick all the ones you want from the list.',
                     use_case: 'Get a handful of addresses in one call (instead of querying each).',
-                    args: [{ name: 'names', kind: 'text', placeholder: '["ASSET_GAUGE","VOTING_ESCROW"]', help: 'JSON array of role names.' }],
-                    msg: (a) => ({ addresses: { names: JSON.parse(a.names || '[]') } }),
+                    args: [{ name: 'names', kind: 'multi_choice', source: 'directory_roles', placeholder: 'Pick one or more roles…', help: 'Hold Ctrl (Win) / ⌘ (Mac) to pick multiple.' }],
+                    msg: (a) => ({ addresses: { names: Array.isArray(a.names) ? a.names : (a.names ? [a.names] : []) } }),
                 },
                 {
                     name: 'address_list',
@@ -594,16 +601,16 @@
                 },
                 {
                     name: 'user_infos',
-                    description: 'Paginated list of all users with voting power.',
-                    use_case: 'Enumerate every TLA voter (start_after for pagination).',
-                    args: [{ name: 'start_after', kind: 'optional_id', placeholder: 'terra1… (optional)', help: 'Pagination cursor — last address from previous page.' }],
+                    description: 'Paginated list of ALL voters and their VP. Most people don\'t need this — use user_info for one address instead.',
+                    use_case: 'Power-user enumeration: walk every TLA voter offline (e.g. for analytics).',
+                    args: [{ name: 'start_after', kind: 'optional_id', placeholder: 'leave empty for first page', help: 'For pagination only — paste the last address from the previous page to get the next page.' }],
                     msg: (a) => ({ user_infos: a.start_after ? { start_after: a.start_after, limit: 30 } : { limit: 30 } }),
                 },
                 {
                     name: 'distribution',
                     description: 'Distribution for a single gauge bucket.',
                     use_case: 'Pull just one bucket\'s pool allocation (instead of all four).',
-                    args: [{ name: 'gauge', kind: 'text', placeholder: 'stable', help: 'Bucket name: stable, project, bluechip, or single.' }],
+                    args: [{ name: 'gauge', kind: 'choice', source: 'bucket_names', placeholder: 'Pick a bucket…', help: 'One of: stable, project, bluechip, single.' }],
                     msg: (a) => ({ distribution: { gauge: a.gauge } }),
                 },
                 {
@@ -615,7 +622,8 @@
                 {
                     name: 'gauge_info',
                     description: 'Configuration for a single bucket (whitelisted_assets, weight, etc.).',
-                    args: [{ name: 'gauge', kind: 'text', placeholder: 'stable', help: 'Bucket name: stable, project, bluechip, or single.' }],
+                    note: 'If this returns HTTP 500, the contract may expect a different arg shape — paste the exact JSON from chainscope and I\'ll fix the schema.',
+                    args: [{ name: 'gauge', kind: 'choice', source: 'bucket_names', placeholder: 'Pick a bucket…' }],
                     msg: (a) => ({ gauge_info: { gauge: a.gauge } }),
                 },
                 {
@@ -1038,6 +1046,9 @@
                 }
             }
             if (c.directory && typeof c.directory === 'object') {
+                // Stash directory role names globally so the choice-arg renderer can read them
+                // (used by global-config's address and addresses queries to populate the dropdown).
+                window.__directoryRoles = Object.keys(c.directory);
                 const stakingByBucket = {};
                 const connectorByBucket = {};
                 const buckets = c.buckets || {};
@@ -1330,34 +1341,46 @@
         document.querySelectorAll('.picker-mode-panel').forEach(p => p.classList.toggle('active', p.dataset.mode === pickerMode));
     }
 
+    // Highlight the matched substring in the displayed address.
+    // Returns HTML with <mark> around the matched chars + a hint string
+    // describing WHERE the match landed ("at the end" vs "somewhere else").
+    function highlightMatchInAddr(addr, q) {
+        const addrLower = addr.toLowerCase();
+        if (!q || !addrLower.includes(q)) return { html: escapeHtml(addr), where: '' };
+        const idx = addrLower.lastIndexOf(q);  // prefer rightmost match
+        const before = escapeHtml(addr.slice(0, idx));
+        const hit    = `<mark class="search-hit">${escapeHtml(addr.slice(idx, idx + q.length))}</mark>`;
+        const after  = escapeHtml(addr.slice(idx + q.length));
+        // Describe position
+        const distFromEnd = addr.length - (idx + q.length);
+        let where;
+        if (distFromEnd === 0) where = 'at the end';
+        else if (distFromEnd <= 3) where = `${distFromEnd} char${distFromEnd === 1 ? '' : 's'} from the end`;
+        else if (distFromEnd <= 7) where = `near the end`;
+        else where = 'elsewhere in address';
+        return { html: before + hit + after, where };
+    }
+
     function renderSearchResults(query) {
         const box = document.getElementById('picker-search-results');
         const raw = (query || '').trim().toLowerCase();
-        // In RTL mode the user types the address from end towards start, so
-        // reverse what they typed to get the actual suffix we match against.
-        //   Example: user types "mzv5" in RTL mode → we look for addresses
-        //   ending in "5vzm" (matches aDAO Treasury).
         const q = searchDir === 'rtl' ? raw.split('').reverse().join('') : raw;
 
         if (q.length < 1) {
             const hint = searchDir === 'rtl'
-                ? 'Type the LAST character of the address first, then the second-to-last, etc. (e.g. <span class="mono">m</span> → <span class="mono">mz</span> → <span class="mono">mzv</span> → <span class="mono">mzv5</span> finds <span class="mono">…5vzm</span>).'
-                : 'Type any number of characters from the END of the address, going forwards (e.g. <span class="mono">m</span>, <span class="mono">zm</span>, <span class="mono">vzm</span>, <span class="mono">5vzm</span>) or a label.';
+                ? 'Type the LAST character first, then prepend earlier chars. <span class="mono">m</span> → <span class="mono">mz</span> → <span class="mono">mzv</span> → <span class="mono">mzv5</span> all find <span class="mono">…5vzm</span>.'
+                : 'Type any number of characters that appear NEAR the end of the address. <span class="mono">m</span> finds many; <span class="mono">5vzm</span> narrows to one. Matches will be highlighted.';
             box.innerHTML = `<p class="text-xs text-gray-500 p-2">${hint}</p>`;
             return;
         }
-        // Score-based matching across ALL wallets (named + discovered).
-        //   3 = address ends with q  (best)
-        //   2 = label substring match
-        //   1 = q appears in the last 8 chars (fallback)
         const scored = [];
         for (const w of WALLETS_ALL) {
             const addrLower = w.addr.toLowerCase();
             const labelLower = (w.label || '').toLowerCase();
             let score = 0;
-            if (addrLower.endsWith(q)) score = 3;
+            if (addrLower.endsWith(q)) score = 3;             // exact suffix → top
             else if (labelLower && labelLower.includes(q)) score = 2;
-            else if (addrLower.slice(-8).includes(q)) score = 1;
+            else if (addrLower.slice(-8).includes(q)) score = 1;  // fuzzy near end
             if (score > 0) scored.push({ w, score });
         }
         scored.sort((a, b) => {
@@ -1367,21 +1390,50 @@
             if (bN !== aN) return bN - aN;
             return (a.w.label || a.w.addr).localeCompare(b.w.label || b.w.addr);
         });
-        const results = scored.map(s => s.w);
+        const results = scored;
         if (results.length === 0) {
             box.innerHTML = `<p class="text-xs text-gray-500 p-2">No catalog matches for "${escapeHtml(query)}". You can still <button onclick="document.querySelector('[data-mode=paste]').click()" class="text-cyan-400 underline">paste the full address</button>.</p>`;
             return;
         }
-        box.innerHTML = results.slice(0, 12).map(w => {
+        // Group: score 3 (exact suffix) → score 2 (label) → score 1 (near-end substring)
+        const exactSuffix = results.filter(r => r.score === 3);
+        const labelHits   = results.filter(r => r.score === 2);
+        const fuzzyHits   = results.filter(r => r.score === 1);
+
+        function renderRow(r) {
+            const w = r.w;
+            const { html: addrHtml, where } = highlightMatchInAddr(w.addr, q);
             const labelHtml = w.label
                 ? `<div class="text-sm text-white font-semibold">${escapeHtml(w.label)}</div>`
                 : `<div class="text-sm text-gray-400">${w.discovery_source ? '<i class="fas fa-user-group text-yellow-500 mr-1"></i>Discovered ' + w.discovery_source.replace(/_/g, ' ') : 'Unlabeled wallet'}</div>`;
+            const whereChip = where ? `<span class="text-[10px] text-gray-500 ml-2">match ${where}</span>` : '';
             return `
                 <button onclick="setSelectedAddress('${escapeAttr(w.addr)}', '${escapeAttr(w.label || '')}')" class="w-full text-left p-2 rounded hover:bg-cyan-900/20 border border-transparent hover:border-cyan-700/30 transition-colors mb-1">
-                    ${labelHtml}
-                    <div class="mono text-xs text-gray-500 truncate">${escapeHtml(w.addr)}</div>
+                    <div class="flex items-center">${labelHtml}${whereChip}</div>
+                    <div class="mono text-xs text-gray-500 truncate">${addrHtml}</div>
                 </button>`;
-        }).join('');
+        }
+
+        let html = '';
+        const remaining = 12;  // cap total displayed
+        let count = 0;
+        if (exactSuffix.length > 0) {
+            html += `<p class="text-[10px] text-cyan-400 uppercase tracking-wider px-2 py-1">Exact end-of-address match (${exactSuffix.length})</p>`;
+            for (const r of exactSuffix.slice(0, remaining - count)) { html += renderRow(r); count++; }
+        }
+        if (labelHits.length > 0 && count < remaining) {
+            html += `<p class="text-[10px] text-yellow-400 uppercase tracking-wider px-2 py-1 mt-1">Label match (${labelHits.length})</p>`;
+            for (const r of labelHits.slice(0, remaining - count)) { html += renderRow(r); count++; }
+        }
+        if (fuzzyHits.length > 0 && count < remaining) {
+            html += `<p class="text-[10px] text-gray-500 uppercase tracking-wider px-2 py-1 mt-1">Loose match — your chars appear NEAR the end but not AT it (${fuzzyHits.length})</p>`;
+            for (const r of fuzzyHits.slice(0, remaining - count)) { html += renderRow(r); count++; }
+        }
+        const totalShown = exactSuffix.length + labelHits.length + fuzzyHits.length;
+        if (totalShown > remaining) {
+            html += `<p class="text-xs text-gray-500 p-2">… ${totalShown - remaining} more. Type more chars to narrow.</p>`;
+        }
+        box.innerHTML = html;
     }
 
     function clearSelectedAddress() { setSelectedAddress(null); }
@@ -1553,8 +1605,10 @@
 
     function categorizeArgs(q) {
         const walletArgs = q.args.filter(a => a.kind === 'wallet');
-        // 'id' and 'text' both require a manual input field
-        const idArgs = q.args.filter(a => a.kind === 'id' || a.kind === 'text');
+        // 'id', 'text', 'choice', 'multi_choice' all require a manual input field
+        const idArgs = q.args.filter(a =>
+            a.kind === 'id' || a.kind === 'text' || a.kind === 'choice' || a.kind === 'multi_choice'
+        );
         const optArgs = q.args.filter(a => a.kind === 'optional_id');
         return { walletArgs, idArgs, optArgs };
     }
@@ -1585,8 +1639,15 @@
         for (const a of q.args) {
             if (a.kind === 'wallet') previewArgs[a.name] = selectedAddress ? selectedAddress.addr : '<no address selected>';
             else if (a.kind === 'id') previewArgs[a.name] = '<id>';
-            // For 'text' args we pass through a safe shape that mimics what JSON.parse-using msg
-            // factories would expect. If the placeholder looks JSON-ish, use it raw; else use a stub.
+            else if (a.kind === 'choice') {
+                // Use the first available choice so the preview shows a real-looking message
+                const choices = (a.source === 'directory_roles' ? (window.__directoryRoles || []) : Object.keys(POOLS_BY_BUCKET));
+                previewArgs[a.name] = choices.length > 0 ? choices[0] : '<choice>';
+            }
+            else if (a.kind === 'multi_choice') {
+                const choices = (a.source === 'directory_roles' ? (window.__directoryRoles || []) : Object.keys(POOLS_BY_BUCKET));
+                previewArgs[a.name] = choices.length > 0 ? [choices[0]] : ['<choice>'];
+            }
             else if (a.kind === 'text') {
                 const ph = a.placeholder || '';
                 previewArgs[a.name] = (ph.trim().startsWith('{') || ph.trim().startsWith('[')) ? ph : '<text>';
@@ -1613,14 +1674,44 @@
         }
         const directUrl = directMsg ? chainscopeUrl(grp.address, directMsg) : null;
 
-        // Build inputs for ID args
+        // Build inputs for manual args (id, text, choice, multi_choice).
+        // 'choice' / 'multi_choice' render as <select> populated from catalog.
+        function getChoicesForSource(source) {
+            if (source === 'directory_roles') {
+                // Pull live role names from the catalog (loaded into FALLBACK_CONTRACTS-adjacent state).
+                // We stash the directory keys on window.__directoryRoles during loadCatalog.
+                return (window.__directoryRoles || ['ASSET_GAUGE','VOTING_ESCROW','BRIBE_MANAGER']).slice().sort();
+            }
+            if (source === 'bucket_names') {
+                return Object.keys(POOLS_BY_BUCKET).length > 0 ? Object.keys(POOLS_BY_BUCKET) : ['stable','project','bluechip','single'];
+            }
+            return [];
+        }
+        function renderInputFor(a) {
+            if (a.kind === 'choice') {
+                const choices = getChoicesForSource(a.source);
+                return `<select class="form-select" data-arg="${a.name}" data-q-idx="${idx}">
+                    <option value="">— ${escapeHtml(a.placeholder || 'pick one')} —</option>
+                    ${choices.map(c => `<option value="${escapeAttr(c)}">${escapeHtml(c)}</option>`).join('')}
+                </select>`;
+            }
+            if (a.kind === 'multi_choice') {
+                const choices = getChoicesForSource(a.source);
+                return `<select multiple size="6" class="form-select" data-arg="${a.name}" data-q-idx="${idx}" data-multi="1">
+                    ${choices.map(c => `<option value="${escapeAttr(c)}">${escapeHtml(c)}</option>`).join('')}
+                </select>`;
+            }
+            // id, text default to text input
+            return `<input type="text" class="form-input flex-1" data-arg="${a.name}" data-q-idx="${idx}" placeholder="${escapeAttr(a.placeholder || '')}">`;
+        }
+
         let idInputs = '';
         if (idArgs.length > 0) {
             idInputs = idArgs.map(a => `
                 <div class="mt-2">
                     <label class="text-xs text-gray-500 mb-1 block">${escapeHtml(a.help || a.name)}</label>
                     <div class="flex gap-2">
-                        <input type="text" class="form-input flex-1" data-arg="${a.name}" data-q-idx="${idx}" placeholder="${escapeAttr(a.placeholder || '')}">
+                        ${renderInputFor(a)}
                         ${q.supports_load_locks && selectedAddress ? `<button class="btn-secondary text-xs" onclick="loadLocksFor(${idx}, '${escapeAttr(selectedAddress.addr)}')" title="Fetch locks owned by the selected wallet"><i class="fas fa-download mr-1"></i>Load mine</button>` : ''}
                     </div>
                     ${q.supports_load_locks ? `<div data-locks-dropdown="${idx}" class="mt-2"></div>` : ''}
@@ -1634,6 +1725,10 @@
                     <input type="text" class="form-input" data-arg="${a.name}" data-q-idx="${idx}" placeholder="${escapeAttr(a.placeholder || '')}">
                 </div>
             `).join('');
+        }
+        // If the query author left a note (e.g. "may need different arg shape"), surface it.
+        if (q.note) {
+            idInputs += `<p class="text-[11px] text-yellow-300/70 mt-2"><i class="fas fa-info-circle mr-1"></i>${escapeHtml(q.note)}</p>`;
         }
 
         // Buttons row
@@ -1743,6 +1838,11 @@
             if (a.kind === 'wallet') {
                 if (!selectedAddress) { alert('Select an address above first.'); return null; }
                 argVals[a.name] = selectedAddress.addr;
+            } else if (a.kind === 'multi_choice') {
+                const el = document.querySelector(`[data-arg="${a.name}"][data-q-idx="${qIdx}"]`);
+                const vals = el ? Array.from(el.selectedOptions).map(o => o.value).filter(Boolean) : [];
+                if (vals.length === 0) { alert('Pick at least one ' + a.name); return null; }
+                argVals[a.name] = vals;
             } else {
                 const el = document.querySelector(`[data-arg="${a.name}"][data-q-idx="${qIdx}"]`);
                 const v = el ? el.value.trim() : '';
