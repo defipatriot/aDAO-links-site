@@ -507,12 +507,13 @@
                     msg: { all_addresses: {} },
                 },
                 {
-                    name: 'address',
+                    name: 'address_of',
                     description: 'Look up a single role to get its address.',
                     use_case: 'Get just one address (e.g. ASSET_GAUGE) without pulling the full directory.',
                     response: 'String — the address registered under that role name.',
+                    note: 'Variant name guessed (Eris ve3 source isn\'t public). If this returns "Invalid type", try the Catalog Lookup panel above instead — it uses the cron\'s cached directory and doesn\'t need a chain query.',
                     args: [{ name: 'name', kind: 'choice', source: 'directory_roles', placeholder: 'Pick a role…', help: 'Pick from the live directory — these are the only valid role names.' }],
-                    msg: (a) => ({ address: { name: a.name } }),
+                    msg: (a) => ({ address_of: { name: a.name } }),
                 },
                 {
                     name: 'owner',
@@ -530,19 +531,17 @@
                     msg: { ownership: {} },
                 },
                 {
-                    name: 'addresses',
-                    description: 'Look up multiple roles at once. Pick all the ones you want from the list.',
-                    use_case: 'Get a handful of addresses in one call (instead of querying each).',
-                    args: [{ name: 'names', kind: 'multi_choice', source: 'directory_roles', placeholder: 'Pick one or more roles…', help: 'Hold Ctrl (Win) / ⌘ (Mac) to pick multiple.' }],
-                    msg: (a) => ({ addresses: { names: Array.isArray(a.names) ? a.names : (a.names ? [a.names] : []) } }),
-                },
-                {
                     name: 'address_list',
                     description: 'Paginated list of registered roles (alternative format to all_addresses).',
+                    note: 'Variant name unverified. If it returns "Invalid type", use all_addresses instead.',
                     args: [],
                     msg: { address_list: {} },
                 },
             ],
+            // Hint banner — shown above the query grid for this group only.
+            hint: 'global-config queries returning <span class="mono">Invalid type</span> mean the variant name doesn\'t match what the contract exposes. The Eris ve3 source isn\'t public so some of these are best guesses. Use the <b>Catalog Lookup</b> panel below for verified, instant role→address lookups.',
+            // Catalog-backed lookup widget — shown for this group only.
+            catalog_lookup: 'role_to_address',
         },
         {
             id: 'asset_gauge',
@@ -1046,9 +1045,10 @@
                 }
             }
             if (c.directory && typeof c.directory === 'object') {
-                // Stash directory role names globally so the choice-arg renderer can read them
-                // (used by global-config's address and addresses queries to populate the dropdown).
+                // Stash directory globally so the choice-arg renderer can read role names
+                // AND the catalog-lookup widget can resolve them to addresses.
                 window.__directoryRoles = Object.keys(c.directory);
+                window.__directoryFull = c.directory;
                 const stakingByBucket = {};
                 const connectorByBucket = {};
                 const buckets = c.buckets || {};
@@ -1566,7 +1566,60 @@
         }));
 
         const grid = document.getElementById('queries-grid');
-        grid.innerHTML = grp.queries.map((q, idx) => renderQueryCard(grp, q, idx)).join('');
+        // Group-level hint banner (warnings, etc.)
+        let groupExtras = '';
+        if (grp.hint) {
+            groupExtras += `
+                <div class="md:col-span-2 p-3 mb-2 bg-yellow-900/15 border border-yellow-700/40 rounded-md">
+                    <p class="text-xs text-yellow-200/90"><i class="fas fa-triangle-exclamation mr-1"></i>${grp.hint}</p>
+                </div>
+            `;
+        }
+        if (grp.catalog_lookup === 'role_to_address') {
+            const roles = (window.__directoryRoles || []).slice().sort();
+            const roleOptions = roles.map(r => `<option value="${escapeAttr(r)}">${escapeHtml(r)}</option>`).join('');
+            groupExtras += `
+                <div class="md:col-span-2 p-4 mb-2 bg-cyan-900/15 border border-cyan-600/40 rounded-md">
+                    <div class="flex items-center gap-2 mb-2">
+                        <i class="fas fa-bolt text-cyan-300"></i>
+                        <p class="text-sm text-cyan-200 font-semibold">Catalog Lookup — instant role→address (no chain query)</p>
+                    </div>
+                    <p class="text-xs text-gray-400 mb-3">All 20 ve3 role mappings live in the cron's catalog. Pick a role to see its address right here — no chain round-trip needed. Works even when the contract queries above are misbehaving.</p>
+                    <div class="flex flex-col md:flex-row gap-2">
+                        <select id="catalog-role-lookup" class="form-select md:max-w-xs">
+                            <option value="">— Pick a role —</option>
+                            ${roleOptions}
+                        </select>
+                        <div id="catalog-role-result" class="flex-1 p-2 bg-black/30 rounded text-xs font-mono text-gray-500 min-h-[2.25rem] flex items-center">Pick a role to see its address.</div>
+                    </div>
+                </div>
+            `;
+        }
+        grid.innerHTML = groupExtras + grp.queries.map((q, idx) => renderQueryCard(grp, q, idx)).join('');
+
+        // Wire catalog lookup if present
+        const roleSel = document.getElementById('catalog-role-lookup');
+        if (roleSel) {
+            roleSel.addEventListener('change', (e) => {
+                const role = e.target.value;
+                const resultEl = document.getElementById('catalog-role-result');
+                if (!role) {
+                    resultEl.className = 'flex-1 p-2 bg-black/30 rounded text-xs font-mono text-gray-500 min-h-[2.25rem] flex items-center';
+                    resultEl.textContent = 'Pick a role to see its address.';
+                    return;
+                }
+                // Pull the cached directory we stashed during loadCatalog
+                const dir = window.__directoryFull || {};
+                const addr = dir[role];
+                if (addr) {
+                    resultEl.className = 'flex-1 p-2 bg-black/30 rounded text-xs font-mono text-cyan-300 min-h-[2.25rem] flex items-center justify-between gap-2 break-all';
+                    resultEl.innerHTML = `<span class="break-all">${escapeHtml(addr)}</span><button onclick="navigator.clipboard.writeText('${escapeAttr(addr)}'); this.textContent='copied'; setTimeout(()=>this.textContent='copy',1000);" class="text-[10px] px-2 py-1 bg-cyan-900/30 border border-cyan-700/40 rounded text-cyan-300 flex-shrink-0">copy</button>`;
+                } else {
+                    resultEl.className = 'flex-1 p-2 bg-black/30 rounded text-xs font-mono text-red-400 min-h-[2.25rem] flex items-center';
+                    resultEl.textContent = '(not in catalog)';
+                }
+            });
+        }
     }
 
     function renderPoolHint(grp) {
