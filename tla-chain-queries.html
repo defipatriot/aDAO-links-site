@@ -191,6 +191,21 @@
         .picker-proto-tab:hover { color: #d1d5db; background: rgba(255,255,255,0.05); }
         .picker-proto-tab.active { color: #67e8f9; background: rgba(34,211,238,0.15); border-color: rgba(34,211,238,0.5); }
         
+        .platform-tab {
+            padding: 8px 18px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #9ca3af;
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .platform-tab:hover:not(:disabled) { color: #d1d5db; background: rgba(255,255,255,0.05); }
+        .platform-tab.active { color: #67e8f9; background: rgba(34,211,238,0.12); border-color: rgba(34,211,238,0.4); }
+        .platform-tab:disabled { opacity: 0.4; cursor: not-allowed; }
+        
         .picker-mode-panel { display: none; }
         .picker-mode-panel.active { display: block; }
         
@@ -340,7 +355,7 @@
 
             <!-- Mode: search by last 4 -->
             <div class="picker-mode-panel" data-mode="search">
-                <input id="picker-search-input" type="text" class="form-input" placeholder="Type last 4+ chars of an address (e.g., m5vzm)..." autocomplete="off">
+                <input id="picker-search-input" type="text" class="form-input" placeholder="Type the last chars of an address (e.g. w, lw, ulw, 7ulw) or a label…" autocomplete="off">
                 <div id="picker-search-results" class="mt-2 max-h-48 overflow-y-auto"></div>
             </div>
 
@@ -354,6 +369,16 @@
                 </div>
                 <p class="text-xs text-gray-500 mt-1">Any Terra address. Auto-recognized if it's in the catalog.</p>
             </div>
+        </div>
+
+        <!-- Platform tabs (TLA today; placeholder for future platforms) -->
+        <div class="flex items-center gap-2 mb-3 flex-wrap" id="platform-tabs">
+            <button class="platform-tab active" data-platform="tla">
+                <i class="fas fa-lock mr-1"></i>TLA
+            </button>
+            <button class="platform-tab" data-platform="coming-soon" disabled title="More platforms coming as queries are added">
+                <i class="fas fa-plus mr-1"></i>More soon
+            </button>
         </div>
 
         <!-- Contract tabs -->
@@ -428,6 +453,22 @@
                     response: 'Array of [role, address] pairs.',
                     args: [],
                     msg: { all_addresses: {} },
+                },
+                {
+                    name: 'address',
+                    description: 'Look up a single role to get its address.',
+                    use_case: 'Get just one address (e.g. ASSET_GAUGE) without pulling the full directory.',
+                    response: 'String — the address registered under that role name.',
+                    args: [{ name: 'name', kind: 'text', placeholder: 'ASSET_GAUGE', help: 'Role name as it appears in all_addresses (case-sensitive).' }],
+                    msg: (a) => ({ address: { name: a.name } }),
+                },
+                {
+                    name: 'owner',
+                    description: 'Returns the owner address that controls the global-config contract itself.',
+                    use_case: 'Know who can register or update ve3 role addresses.',
+                    response: 'String — owner address.',
+                    args: [],
+                    msg: { owner: {} },
                 },
             ],
         },
@@ -560,10 +601,10 @@
             queries: [
                 {
                     name: 'bribes',
-                    description: 'All active/pending bribes — pool, bucket, token, amount.',
-                    use_case: 'See what bribes are funded RIGHT NOW for the current epoch.',
-                    args: [{ name: 'period', kind: 'optional_id', placeholder: 'Leave empty for current', help: 'Optional epoch period. Leave empty for current.' }],
-                    msg: (a) => ({ bribes: { period: a.period ? parseInt(a.period) : null } }),
+                    description: 'All active/pending bribes for the current epoch — pool, bucket, token, amount.',
+                    use_case: 'See what bribes are funded RIGHT NOW.',
+                    args: [],
+                    msg: { bribes: { period: null } },
                 },
                 {
                     name: 'config',
@@ -681,14 +722,13 @@
             // ALL wallets — used for search and paste-recognition (includes discovered stakers)
             WALLETS_ALL = Object.entries(wallets).map(([addr, w]) => {
                 const daoMemberships = w.dao_memberships || [];
-                const daoLabel = daoMemberships.length > 0
-                    ? `${daoMemberships[0].dao} staker` + (daoMemberships.length > 1 ? ` (+${daoMemberships.length - 1} more)` : '')
-                    : null;
-                // Label priority: curated label > DAODAO PFPK profile name > DAO membership > nothing
-                const resolvedLabel = w.label || w.daodao_name || daoLabel || null;
+                // "Real label" = curated label OR DAODAO PFPK name. DAO membership alone
+                // (e.g. "TLA staker") does NOT make a wallet count as named — that clutters
+                // the dropdown with hundreds of identical "TLA staker" entries.
+                const realLabel = w.label || w.daodao_name || null;
                 return {
                     addr,
-                    label: resolvedLabel,
+                    label: realLabel,
                     daodao_name: w.daodao_name || null,
                     daodao_avatar: w.daodao_avatar || null,
                     subtype: w.subtype || '',
@@ -698,12 +738,11 @@
                 };
             });
 
-            // DROPDOWN — labeled wallets only. Includes curated labels AND DAODAO PFPK names
-            // (so e.g. "DeFi_Patriot", "Crypto007" auto-appear in the dropdown without curation).
-            WALLETS_FROM_CATALOG = WALLETS_ALL.filter(w =>
-                !!w.label && (w.daodao_name || !w.discovery_source)
+            // DROPDOWN — curated wallets + PFPK-named only
+            WALLETS_FROM_CATALOG = WALLETS_ALL.filter(w => !!w.label);
+            WALLETS_FROM_CATALOG.sort((a, b) =>
+                a.label.localeCompare(b.label, undefined, { sensitivity: 'base' })
             );
-            WALLETS_FROM_CATALOG.sort((a, b) => a.label.localeCompare(b.label));
 
             // If we had a stored selection, refresh its label from current catalog
             if (selectedAddress) {
@@ -823,12 +862,18 @@
 
         const filtered = WALLETS_ALL.filter(w => isInProtocol(w, pickerProtocol));
 
-        // Sort: labeled first, then within each group by score descending.
-        // "Labeled" includes curated AND DAODAO PFPK-named wallets.
+        // Sort:
+        //   - Labeled wallets (curated or PFPK-named) come first, sorted A-Z by label.
+        //   - Unlabeled wallets come below, sorted by the active protocol's metric
+        //     (stake count for Lion DAO, NFT count for aDAO/Pixel Lions, VP for TLA).
         filtered.sort((a, b) => {
             const aLabeled = !!a.label ? 1 : 0;
             const bLabeled = !!b.label ? 1 : 0;
-            if (aLabeled !== bLabeled) return bLabeled - aLabeled;  // labeled first
+            if (aLabeled !== bLabeled) return bLabeled - aLabeled;
+            if (aLabeled && bLabeled) {
+                return a.label.localeCompare(b.label, undefined, { sensitivity: 'base' });
+            }
+            // Both unlabeled — sort by stake/VP descending
             return scoreFor(b, pickerProtocol) - scoreFor(a, pickerProtocol);
         });
 
@@ -907,15 +952,33 @@
     function renderSearchResults(query) {
         const box = document.getElementById('picker-search-results');
         const q = (query || '').trim().toLowerCase();
-        if (q.length < 2) {
-            box.innerHTML = '<p class="text-xs text-gray-500 p-2">Type at least 2 characters…</p>';
+        if (q.length < 1) {
+            box.innerHTML = '<p class="text-xs text-gray-500 p-2">Type any number of characters from the end of an address (e.g. <span class="mono">w</span>, <span class="mono">lw</span>, <span class="mono">ulw</span>, <span class="mono">7ulw</span>) or a label.</p>';
             return;
         }
-        // Match against last 8 chars of address OR label, across ALL wallets (named + stakers)
-        const results = WALLETS_ALL.filter(w => {
-            const labelMatch = w.label && w.label.toLowerCase().includes(q);
-            return w.addr.toLowerCase().slice(-8).includes(q) || labelMatch;
+        // Score-based matching across ALL wallets (named + discovered).
+        //   3 = address ends with q  (best — typing "7ulw" finds terra1...7ulw)
+        //   2 = label substring match
+        //   1 = q appears in the last 8 chars (catches "u" in "7ulw" partials)
+        const scored = [];
+        for (const w of WALLETS_ALL) {
+            const addrLower = w.addr.toLowerCase();
+            const labelLower = (w.label || '').toLowerCase();
+            let score = 0;
+            if (addrLower.endsWith(q)) score = 3;
+            else if (labelLower && labelLower.includes(q)) score = 2;
+            else if (addrLower.slice(-8).includes(q)) score = 1;
+            if (score > 0) scored.push({ w, score });
+        }
+        scored.sort((a, b) => {
+            if (b.score !== a.score) return b.score - a.score;
+            // Within same score, named entries before unnamed
+            const aN = a.w.label ? 1 : 0;
+            const bN = b.w.label ? 1 : 0;
+            if (bN !== aN) return bN - aN;
+            return (a.w.label || a.w.addr).localeCompare(b.w.label || b.w.addr);
         });
+        const results = scored.map(s => s.w);
         if (results.length === 0) {
             box.innerHTML = `<p class="text-xs text-gray-500 p-2">No catalog matches for "${escapeHtml(query)}". You can still <button onclick="document.querySelector('[data-mode=paste]').click()" class="text-cyan-400 underline">paste the full address</button>.</p>`;
             return;
@@ -923,7 +986,7 @@
         box.innerHTML = results.slice(0, 12).map(w => {
             const labelHtml = w.label
                 ? `<div class="text-sm text-white font-semibold">${escapeHtml(w.label)}</div>`
-                : `<div class="text-sm text-gray-400">${w.discovery_source === 'daodao_staker' ? '<i class="fas fa-user-group text-yellow-500 mr-1"></i>Discovered staker' : 'Unlabeled wallet'}</div>`;
+                : `<div class="text-sm text-gray-400">${w.discovery_source ? '<i class="fas fa-user-group text-yellow-500 mr-1"></i>Discovered ' + w.discovery_source.replace(/_/g, ' ') : 'Unlabeled wallet'}</div>`;
             return `
                 <button onclick="setSelectedAddress('${escapeAttr(w.addr)}', '${escapeAttr(w.label || '')}')" class="w-full text-left p-2 rounded hover:bg-cyan-900/20 border border-transparent hover:border-cyan-700/30 transition-colors mb-1">
                     ${labelHtml}
@@ -1011,7 +1074,8 @@
 
     function categorizeArgs(q) {
         const walletArgs = q.args.filter(a => a.kind === 'wallet');
-        const idArgs = q.args.filter(a => a.kind === 'id');
+        // 'id' and 'text' both require a manual input field
+        const idArgs = q.args.filter(a => a.kind === 'id' || a.kind === 'text');
         const optArgs = q.args.filter(a => a.kind === 'optional_id');
         return { walletArgs, idArgs, optArgs };
     }
@@ -1033,8 +1097,8 @@
         if (noArgs) chip = '<span class="arg-chip no-args-chip">no args</span>';
         else if (onlyWalletArgs && selectedAddress) chip = '<span class="arg-chip ready-chip">ready · uses selected</span>';
         else if (onlyWalletArgs && !selectedAddress) chip = '<span class="arg-chip blocked-chip">select address above</span>';
-        else if (walletArgs.length > 0 && idArgs.length > 0) chip = `<span class="arg-chip wallet-arg-chip">uses selected</span><span class="arg-chip other-arg-chip">needs id</span>`;
-        else if (idArgs.length > 0) chip = '<span class="arg-chip other-arg-chip">needs id</span>';
+        else if (walletArgs.length > 0 && idArgs.length > 0) chip = `<span class="arg-chip wallet-arg-chip">uses selected</span><span class="arg-chip other-arg-chip">needs input</span>`;
+        else if (idArgs.length > 0) chip = '<span class="arg-chip other-arg-chip">needs input</span>';
         else if (optArgs.length > 0) chip = '<span class="arg-chip other-arg-chip">optional arg</span>';
 
         // Build preview JSON
@@ -1042,6 +1106,7 @@
         for (const a of q.args) {
             if (a.kind === 'wallet') previewArgs[a.name] = selectedAddress ? selectedAddress.addr : '<no address selected>';
             else if (a.kind === 'id') previewArgs[a.name] = '<id>';
+            else if (a.kind === 'text') previewArgs[a.name] = '<text>';
             else previewArgs[a.name] = '<optional>';
         }
         const previewMsg = typeof q.msg === 'function' ? q.msg(previewArgs) : q.msg;
