@@ -177,6 +177,20 @@
         .picker-mode-tab:hover { color: #d1d5db; background: rgba(255,255,255,0.05); }
         .picker-mode-tab.active { color: #67e8f9; background: rgba(34,211,238,0.12); border-color: rgba(34,211,238,0.4); }
         
+        .picker-proto-tab {
+            padding: 4px 10px;
+            font-size: 11px;
+            font-weight: 600;
+            color: #9ca3af;
+            background: transparent;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 14px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .picker-proto-tab:hover { color: #d1d5db; background: rgba(255,255,255,0.05); }
+        .picker-proto-tab.active { color: #67e8f9; background: rgba(34,211,238,0.15); border-color: rgba(34,211,238,0.5); }
+        
         .picker-mode-panel { display: none; }
         .picker-mode-panel.active { display: block; }
         
@@ -309,9 +323,19 @@
 
             <!-- Mode: dropdown -->
             <div class="picker-mode-panel active" data-mode="dropdown">
+                <!-- Protocol filter -->
+                <div class="flex items-center gap-2 mb-2 flex-wrap">
+                    <span class="text-xs text-gray-500 mr-1">Group:</span>
+                    <button class="picker-proto-tab active" data-proto="all">All known</button>
+                    <button class="picker-proto-tab" data-proto="adao"><i class="fas fa-shield-alt mr-1"></i>aDAO</button>
+                    <button class="picker-proto-tab" data-proto="lion-dao"><i class="fas fa-paw mr-1"></i>Lion DAO</button>
+                    <button class="picker-proto-tab" data-proto="tla"><i class="fas fa-lock mr-1"></i>TLA locks</button>
+                    <span class="text-xs text-gray-500 ml-auto" id="picker-proto-count"></span>
+                </div>
                 <select id="picker-dropdown" class="form-select">
                     <option value="">— Loading catalog... —</option>
                 </select>
+                <p class="text-xs text-gray-500 mt-2" id="picker-proto-hint"></p>
             </div>
 
             <!-- Mode: search by last 4 -->
@@ -609,6 +633,7 @@
     let selectedAddress = null;  // { addr, label? }
     let WALLETS_FROM_CATALOG = [];      // labeled wallets — populate dropdown
     let WALLETS_ALL = [];                // every wallet including discovered stakers — search + paste lookup
+    let pickerProtocol = 'all';          // 'all' | 'adao' | 'lion-dao' | 'tla' — filter for the dropdown
     let activeContract = CONTRACT_GROUPS[0].id;
     let pickerMode = 'dropdown';
     let cachedLocks = new Map();  // wallet addr → [token_id, ...]
@@ -659,9 +684,13 @@
                 const daoLabel = daoMemberships.length > 0
                     ? `${daoMemberships[0].dao} staker` + (daoMemberships.length > 1 ? ` (+${daoMemberships.length - 1} more)` : '')
                     : null;
+                // Label priority: curated label > DAODAO PFPK profile name > DAO membership > nothing
+                const resolvedLabel = w.label || w.daodao_name || daoLabel || null;
                 return {
                     addr,
-                    label: w.label || daoLabel || null,
+                    label: resolvedLabel,
+                    daodao_name: w.daodao_name || null,
+                    daodao_avatar: w.daodao_avatar || null,
                     subtype: w.subtype || '',
                     protocol: w.protocol || '',
                     discovery_source: w.discovery_source || null,
@@ -669,8 +698,11 @@
                 };
             });
 
-            // DROPDOWN — only entries with an explicit human label (no auto-staker labels)
-            WALLETS_FROM_CATALOG = WALLETS_ALL.filter(w => !!w.label && !w.discovery_source);
+            // DROPDOWN — labeled wallets only. Includes curated labels AND DAODAO PFPK names
+            // (so e.g. "DeFi_Patriot", "Crypto007" auto-appear in the dropdown without curation).
+            WALLETS_FROM_CATALOG = WALLETS_ALL.filter(w =>
+                !!w.label && (w.daodao_name || !w.discovery_source)
+            );
             WALLETS_FROM_CATALOG.sort((a, b) => a.label.localeCompare(b.label));
 
             // If we had a stored selection, refresh its label from current catalog
@@ -756,26 +788,115 @@
             `;
         }
 
-        // Populate dropdown
+        // Build the dropdown options based on selected protocol filter.
+        // Sort: labeled wallets first (descending by stake/VP), then unlabeled (descending by stake/VP).
+        // Display addresses as "terra1xxxxx...xxxx" to keep entries short.
         const dd = document.getElementById('picker-dropdown');
-        const named = WALLETS_FROM_CATALOG;
-        const stakerCount = WALLETS_ALL.filter(w => w.discovery_source === 'daodao_staker').length;
-        let opts = '<option value="">— Pick a known address —</option>';
-        if (named.length > 0) {
-            opts += '<optgroup label="Named (catalog)">';
-            for (const w of named) {
-                opts += `<option value="${escapeAttr(w.addr)}">${escapeHtml(w.label)} — ${escapeHtml(w.addr.slice(0, 18))}…</option>`;
+        const protoCountEl = document.getElementById('picker-proto-count');
+        const protoHintEl = document.getElementById('picker-proto-hint');
+
+        const truncateAddr = (a) => a.length <= 18 ? a : `${a.slice(0, 10)}…${a.slice(-4)}`;
+
+        // Score each wallet for the active protocol (higher = better, used for sort)
+        function scoreFor(w, proto) {
+            const memberships = w.dao_memberships || [];
+            if (proto === 'lion-dao') {
+                const m = memberships.find(m => m.dao && (m.dao.includes('Lion DAO') || m.dao.includes('Pixel Lions')));
+                return m ? parseFloat(m.stake_balance || 0) : -1;
             }
-            opts += '</optgroup>';
-        } else {
-            opts += '<option value="" disabled>(catalog loading or empty)</option>';
+            if (proto === 'tla') {
+                const m = memberships.find(m => m.dao === 'TLA' || m.dao === 'TLA Lock');
+                return m ? parseFloat(m.total_vp || m.stake_balance || 0) : -1;
+            }
+            if (proto === 'adao') {
+                if (w.protocol === 'TLA' || memberships.some(m => m.dao && m.dao.includes('aDAO'))) return 1;
+                return -1;
+            }
+            // 'all' → labeled wins
+            return w.label ? 1 : 0;
         }
-        if (stakerCount > 0) {
-            opts += `<option value="" disabled>— ${stakerCount} DAO staker${stakerCount === 1 ? '' : 's'} also in catalog (use Search or Paste) —</option>`;
+
+        function isInProtocol(w, proto) {
+            if (proto === 'all') return !!w.label && !w.discovery_source;  // dropdown shows curated only for 'all'
+            return scoreFor(w, proto) >= 0;
+        }
+
+        const filtered = WALLETS_ALL.filter(w => isInProtocol(w, pickerProtocol));
+
+        // Sort: labeled first, then within each group by score descending.
+        // "Labeled" includes curated AND DAODAO PFPK-named wallets.
+        filtered.sort((a, b) => {
+            const aLabeled = !!a.label ? 1 : 0;
+            const bLabeled = !!b.label ? 1 : 0;
+            if (aLabeled !== bLabeled) return bLabeled - aLabeled;  // labeled first
+            return scoreFor(b, pickerProtocol) - scoreFor(a, pickerProtocol);
+        });
+
+        // Build the <option>s. For aDAO and TLA, if the filtered set is empty,
+        // surface a friendly hint instead of an empty dropdown.
+        let opts = '<option value="">— Pick an address —</option>';
+
+        if (filtered.length === 0) {
+            opts += `<option value="" disabled>(no addresses in this group yet)</option>`;
+        } else {
+            // Separate labeled and unlabeled. PFPK-named wallets count as labeled.
+            const labeled = filtered.filter(w => !!w.label);
+            const unlabeled = filtered.filter(w => !w.label);
+
+            if (labeled.length > 0) {
+                opts += `<optgroup label="Named (${labeled.length})">`;
+                for (const w of labeled) {
+                    const stake = scoreFor(w, pickerProtocol);
+                    const stakeHint = pickerProtocol === 'lion-dao' && stake > 0
+                        ? ` · ${(stake/1e6).toLocaleString(undefined, {maximumFractionDigits: 1})} ROAR`
+                        : (pickerProtocol === 'tla' && stake > 0
+                            ? ` · ${(stake/1e6).toLocaleString(undefined, {maximumFractionDigits: 1})} VP`
+                            : '');
+                    opts += `<option value="${escapeAttr(w.addr)}">${escapeHtml(w.label)} — ${escapeHtml(truncateAddr(w.addr))}${escapeHtml(stakeHint)}</option>`;
+                }
+                opts += `</optgroup>`;
+            }
+
+            if (unlabeled.length > 0) {
+                opts += `<optgroup label="${pickerProtocol === 'all' ? 'Other' : 'Unnamed'} (${unlabeled.length})">`;
+                const maxShow = 100;  // cap at 100 to keep dropdown manageable
+                for (const w of unlabeled.slice(0, maxShow)) {
+                    const stake = scoreFor(w, pickerProtocol);
+                    const stakeHint = pickerProtocol === 'lion-dao' && stake > 0
+                        ? ` · ${(stake/1e6).toLocaleString(undefined, {maximumFractionDigits: 1})} ROAR`
+                        : (pickerProtocol === 'tla' && stake > 0
+                            ? ` · ${(stake/1e6).toLocaleString(undefined, {maximumFractionDigits: 1})} VP`
+                            : '');
+                    opts += `<option value="${escapeAttr(w.addr)}">${escapeHtml(truncateAddr(w.addr))}${escapeHtml(stakeHint)}</option>`;
+                }
+                if (unlabeled.length > maxShow) {
+                    opts += `<option value="" disabled>… ${unlabeled.length - maxShow} more — use Search or Paste —</option>`;
+                }
+                opts += `</optgroup>`;
+            }
         }
         dd.innerHTML = opts;
-        if (selectedAddress && WALLETS_ALL.some(w => w.addr === selectedAddress.addr)) {
+
+        // Set selection if present
+        if (selectedAddress && filtered.some(w => w.addr === selectedAddress.addr)) {
             dd.value = selectedAddress.addr;
+        }
+
+        // Count + hint text
+        protoCountEl.textContent = filtered.length > 0
+            ? `${filtered.length} address${filtered.length === 1 ? '' : 'es'}`
+            : '';
+
+        if (pickerProtocol === 'adao' && filtered.length === 0) {
+            protoHintEl.innerHTML = '<i class="fas fa-info-circle text-yellow-500 mr-1"></i>aDAO NFT-staker enumeration is a follow-up cron task. For now, paste your address or pick a curated wallet from "All known".';
+        } else if (pickerProtocol === 'tla' && filtered.length === 0) {
+            protoHintEl.innerHTML = '<i class="fas fa-info-circle text-yellow-500 mr-1"></i>TLA lock-holder enumeration is a follow-up cron task. For now, paste a lock-holder address directly.';
+        } else if (pickerProtocol === 'lion-dao') {
+            protoHintEl.innerHTML = `<i class="fas fa-paw text-yellow-400 mr-1"></i>Stakers from Lion DAO ROAR Staking. Pixel Lions stakers (cw721) not yet enumerated.`;
+        } else if (pickerProtocol === 'tla' && filtered.length > 0) {
+            protoHintEl.innerHTML = `<i class="fas fa-lock text-cyan-400 mr-1"></i>veLUNA lock holders, sorted by total VP.`;
+        } else {
+            protoHintEl.innerHTML = '';
         }
 
         // Set picker mode tab states
@@ -825,6 +946,13 @@
                 if (pickerMode === 'search') document.getElementById('picker-search-input').focus();
                 if (pickerMode === 'paste') document.getElementById('picker-paste-input').focus();
             }, 50);
+        }));
+        // Protocol filter chips
+        document.querySelectorAll('.picker-proto-tab').forEach(b => b.addEventListener('click', () => {
+            pickerProtocol = b.dataset.proto;
+            document.querySelectorAll('.picker-proto-tab').forEach(x =>
+                x.classList.toggle('active', x.dataset.proto === pickerProtocol));
+            renderPicker();
         }));
         // Dropdown
         document.getElementById('picker-dropdown').addEventListener('change', (e) => {
