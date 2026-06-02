@@ -1053,29 +1053,39 @@
                 if (w.protocol === 'TLA' || memberships.some(m => m.dao && m.dao.includes('aDAO'))) return 1;
                 return -1;
             }
-            // 'all' → labeled wins
-            return w.label ? 1 : 0;
+            // 'all' → wallets with ANY name (curated label or PFPK profile name) win
+            return (w.label || w.daodao_name) ? 1 : 0;
         }
 
+        // Convenience: does this wallet have ANY displayable name?
+        // Curated label (from wallets.json) OR PFPK DAODAO profile name both count.
+        function hasName(w) { return !!w.label || !!w.daodao_name; }
+        function displayName(w) { return w.label || w.daodao_name || null; }
+
         function isInProtocol(w, proto) {
-            if (proto === 'all') return !!w.label && !w.discovery_source;  // dropdown shows curated only for 'all'
+            if (proto === 'all') return hasName(w) && !w.discovery_source;
             return scoreFor(w, proto) >= 0;
         }
 
         const filtered = WALLETS_ALL.filter(w => isInProtocol(w, pickerProtocol));
 
         // Sort:
-        //   - Labeled wallets (curated or PFPK-named) come first, sorted A-Z by label.
-        //   - Unlabeled wallets come below, sorted by the active protocol's metric
+        //   - Named wallets come first, sorted A-Z by display name.
+        //     Curated labels rank slightly above PFPK names (alphabetical within each).
+        //   - Unnamed wallets come below, sorted by the active protocol's metric
         //     (stake count for Lion DAO, NFT count for aDAO/Pixel Lions, VP for TLA).
         filtered.sort((a, b) => {
-            const aLabeled = !!a.label ? 1 : 0;
-            const bLabeled = !!b.label ? 1 : 0;
-            if (aLabeled !== bLabeled) return bLabeled - aLabeled;
-            if (aLabeled && bLabeled) {
-                return a.label.localeCompare(b.label, undefined, { sensitivity: 'base' });
+            const aN = hasName(a) ? 1 : 0;
+            const bN = hasName(b) ? 1 : 0;
+            if (aN !== bN) return bN - aN;
+            if (aN && bN) {
+                // Curated label slightly above PFPK
+                const aC = a.label ? 1 : 0;
+                const bC = b.label ? 1 : 0;
+                if (aC !== bC) return bC - aC;
+                return displayName(a).localeCompare(displayName(b), undefined, { sensitivity: 'base' });
             }
-            // Both unlabeled — sort by stake/VP descending
+            // Both unnamed — sort by stake/VP descending
             return scoreFor(b, pickerProtocol) - scoreFor(a, pickerProtocol);
         });
 
@@ -1086,20 +1096,24 @@
         if (filtered.length === 0) {
             opts += `<option value="" disabled>(no addresses in this group yet)</option>`;
         } else {
-            // Separate labeled and unlabeled. PFPK-named wallets count as labeled.
-            const labeled = filtered.filter(w => !!w.label);
-            const unlabeled = filtered.filter(w => !w.label);
+            // Separate named (curated or PFPK) and unnamed.
+            const named = filtered.filter(w => hasName(w));
+            const unlabeled = filtered.filter(w => !hasName(w));
 
-            if (labeled.length > 0) {
-                opts += `<optgroup label="Named (${labeled.length})">`;
-                for (const w of labeled) {
+            if (named.length > 0) {
+                opts += `<optgroup label="Named (${named.length})">`;
+                for (const w of named) {
                     const stake = scoreFor(w, pickerProtocol);
                     const stakeHint = pickerProtocol === 'lion-dao' && stake > 0
                         ? ` · ${(stake/1e6).toLocaleString(undefined, {maximumFractionDigits: 1})} ROAR`
                         : (pickerProtocol === 'tla' && stake > 0
                             ? ` · ${(stake/1e6).toLocaleString(undefined, {maximumFractionDigits: 1})} VP`
                             : '');
-                    opts += `<option value="${escapeAttr(w.addr)}">${escapeHtml(w.label)} — ${escapeHtml(truncateAddr(w.addr))}${escapeHtml(stakeHint)}</option>`;
+                    // Display: curated label wins, else PFPK profile name (marked with ~ prefix
+                    // so users can visually distinguish curated entries from DAODAO PFPK-derived ones).
+                    const name = w.label || w.daodao_name;
+                    const namePrefix = w.label ? '' : '~ ';   // ~ = PFPK-derived (DAODAO profile)
+                    opts += `<option value="${escapeAttr(w.addr)}">${escapeHtml(namePrefix + name)} — ${escapeHtml(truncateAddr(w.addr))}${escapeHtml(stakeHint)}</option>`;
                 }
                 opts += `</optgroup>`;
             }
