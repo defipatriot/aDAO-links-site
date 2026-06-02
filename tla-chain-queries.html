@@ -491,12 +491,18 @@
     //   'id'          → manual integer/string input (e.g. token_id), supports "load my locks" if wallet selected
     //   'optional_id' → optional integer input (e.g. epoch period for bribes)
     const CONTRACT_GROUPS = [
+        // ====================================================================
+        // GLOBAL-CONFIG — the master directory of every Eris ve3 contract.
+        // Only ONE confirmed query: all_addresses. Single-role lookups use the
+        // catalog-lookup widget below (cached, no chain round-trip).
+        // ====================================================================
         {
             id: 'global_config',
             label: 'global-config',
             icon: 'fa-folder-tree',
             address: FALLBACK_CONTRACTS.global_config,
             description: 'The master directory of every Eris ve3 contract. The bootstrap query.',
+            catalog_lookup: 'role_to_address',
             queries: [
                 {
                     name: 'all_addresses',
@@ -506,49 +512,17 @@
                     args: [],
                     msg: { all_addresses: {} },
                 },
-                {
-                    name: 'address_of',
-                    description: 'Look up a single role to get its address.',
-                    use_case: 'Get just one address (e.g. ASSET_GAUGE) without pulling the full directory.',
-                    response: 'String — the address registered under that role name.',
-                    note: 'Variant name guessed (Eris ve3 source isn\'t public). If this returns "Invalid type", try the Catalog Lookup panel above instead — it uses the cron\'s cached directory and doesn\'t need a chain query.',
-                    args: [{ name: 'name', kind: 'choice', source: 'directory_roles', placeholder: 'Pick a role…', help: 'Pick from the live directory — these are the only valid role names.' }],
-                    msg: (a) => ({ address_of: { name: a.name } }),
-                },
-                {
-                    name: 'owner',
-                    description: 'Returns the owner address that controls the global-config contract itself.',
-                    use_case: 'Know who can register or update ve3 role addresses.',
-                    response: 'String — owner address.',
-                    args: [],
-                    msg: { owner: {} },
-                },
-                {
-                    name: 'ownership',
-                    description: 'Full ownership status — current owner, pending transfer if any, expiry.',
-                    response: '{owner, pending_owner, pending_expiry}',
-                    args: [],
-                    msg: { ownership: {} },
-                },
-                {
-                    name: 'address_list',
-                    description: 'Paginated list of registered roles (alternative format to all_addresses).',
-                    note: 'Variant name unverified. If it returns "Invalid type", use all_addresses instead.',
-                    args: [],
-                    msg: { address_list: {} },
-                },
             ],
-            // Hint banner — shown above the query grid for this group only.
-            hint: 'global-config queries returning <span class="mono">Invalid type</span> mean the variant name doesn\'t match what the contract exposes. The Eris ve3 source isn\'t public so some of these are best guesses. Use the <b>Catalog Lookup</b> panel below for verified, instant role→address lookups.',
-            // Catalog-backed lookup widget — shown for this group only.
-            catalog_lookup: 'role_to_address',
         },
+        // ====================================================================
+        // ASSET-GAUGE — TLA voting gauge. Field name: `user`.
+        // ====================================================================
         {
             id: 'asset_gauge',
             label: 'asset-gauge',
             icon: 'fa-chart-bar',
             address: FALLBACK_CONTRACTS.asset_gauge,
-            description: 'TLA voting gauge — who voted, where, current pool registry, canonical epoch.',
+            description: 'TLA voting gauge — pool registry, current epoch, per-wallet votes. Per-wallet queries use field name "user".',
             queries: [
                 {
                     name: 'distributions',
@@ -566,295 +540,159 @@
                     msg: { last_distribution_period: {} },
                 },
                 {
-                    name: 'config',
-                    description: 'Gauge configuration — bucket list, rebase asset (ampLUNA), global_config_addr.',
-                    args: [],
-                    msg: { config: {} },
-                },
-                {
                     name: 'user_info',
-                    description: 'A wallet\'s voting power and vote allocation across all buckets.',
-                    use_case: 'Look up the VP + vote allocation for the selected address.',
-                    response: '{voting_power, fixed_amount, slope, gauge_votes:[...]}',
+                    description: "A wallet's voting power + exactly which pools it voted for, with weights.",
+                    use_case: 'See who voted where and with how much weight.',
+                    response: '{voting_power, fixed_amount, slope, gauge_votes:[{gauge,period,votes:[[asset,bps]]}]}',
                     args: [{ name: 'user', kind: 'wallet' }],
                     msg: (a) => ({ user_info: { user: a.user } }),
                 },
                 {
                     name: 'user_shares',
-                    description: 'Live % influence of a wallet on each pool RIGHT NOW.',
-                    use_case: 'See what % of each pool\'s votes this wallet contributes this epoch.',
+                    description: "A wallet's per-gauge share of each pool's voting power.",
+                    use_case: 'Live percentage influence in each pool (use THIS for member %).',
+                    response: 'Array per-gauge: {asset, period, user_vp, total_vp}',
                     args: [{ name: 'user', kind: 'wallet' }],
                     msg: (a) => ({ user_shares: { user: a.user } }),
                 },
                 {
                     name: 'user_first_participation',
-                    description: 'First epoch a wallet ever participated in TLA voting.',
+                    description: "First epoch this wallet ever voted in.",
+                    use_case: 'Tenure / early-user signal.',
+                    response: '{period}',
                     args: [{ name: 'user', kind: 'wallet' }],
                     msg: (a) => ({ user_first_participation: { user: a.user } }),
                 },
                 {
                     name: 'user_pending_rebase',
-                    description: 'A wallet\'s unclaimed rebase rewards (ampLUNA).',
+                    description: "Unclaimed rebase (ampLUNA) owed to this wallet.",
+                    response: '{rebase}',
                     args: [{ name: 'user', kind: 'wallet' }],
                     msg: (a) => ({ user_pending_rebase: { user: a.user } }),
                 },
-                {
-                    name: 'user_infos',
-                    description: 'Paginated list of ALL voters and their VP. Most people don\'t need this — use user_info for one address instead.',
-                    use_case: 'Power-user enumeration: walk every TLA voter offline (e.g. for analytics).',
-                    args: [{ name: 'start_after', kind: 'optional_id', placeholder: 'leave empty for first page', help: 'For pagination only — paste the last address from the previous page to get the next page.' }],
-                    msg: (a) => ({ user_infos: a.start_after ? { start_after: a.start_after, limit: 30 } : { limit: 30 } }),
-                },
-                {
-                    name: 'distribution',
-                    description: 'Distribution for a single gauge bucket.',
-                    use_case: 'Pull just one bucket\'s pool allocation (instead of all four).',
-                    args: [{ name: 'gauge', kind: 'choice', source: 'bucket_names', placeholder: 'Pick a bucket…', help: 'One of: stable, project, bluechip, single.' }],
-                    msg: (a) => ({ distribution: { gauge: a.gauge } }),
-                },
-                {
-                    name: 'last_distributions',
-                    description: 'All gauges\' last distributions (plural — alternative to current distributions).',
-                    args: [],
-                    msg: { last_distributions: {} },
-                },
-                {
-                    name: 'gauge_info',
-                    description: 'Configuration for a single bucket (whitelisted_assets, weight, etc.).',
-                    note: 'If this returns HTTP 500, the contract may expect a different arg shape — paste the exact JSON from chainscope and I\'ll fix the schema.',
-                    args: [{ name: 'gauge', kind: 'choice', source: 'bucket_names', placeholder: 'Pick a bucket…' }],
-                    msg: (a) => ({ gauge_info: { gauge: a.gauge } }),
-                },
-                {
-                    name: 'gauge_infos',
-                    description: 'Configuration for all gauge buckets at once.',
-                    args: [],
-                    msg: { gauge_infos: {} },
-                },
             ],
         },
+        // ====================================================================
+        // VOTING-ESCROW — veLUNA lock NFTs. Fields: `owner`, `token_id`.
+        // ====================================================================
         {
             id: 'voting_escrow',
             label: 'voting-escrow',
             icon: 'fa-lock',
             address: FALLBACK_CONTRACTS.voting_escrow,
-            description: 'veLUNA NFT lock collection — every lock is a token_id. Powers VP and unlock schedules.',
+            description: 'veLUNA lock NFTs — 431 total. Each lock is one NFT held by a wallet. Per-wallet field is "owner", per-lock field is "token_id".',
             queries: [
                 {
-                    name: 'total_vamp',
-                    description: 'System-wide total VP: decaying + permanent.',
-                    response: '{voting_power, fixed, vp}',
-                    args: [],
-                    msg: { total_vamp: {} },
-                },
-                {
-                    name: 'total_fixed',
-                    description: 'Permanent (non-decaying) portion of total VP.',
-                    args: [],
-                    msg: { total_fixed: {} },
-                },
-                {
                     name: 'num_tokens',
-                    description: 'Total count of veLUNA lock NFTs (~431).',
-                    args: [],
-                    msg: { num_tokens: {} },
+                    description: 'Total number of lock NFTs.',
+                    use_case: 'Count all TLA locks in existence.',
+                    response: '{count}',
+                    args: [], msg: { num_tokens: {} },
                 },
                 {
-                    name: 'config',
-                    description: 'Lockable asset list + exchange-rate oracles per LST.',
-                    args: [],
-                    msg: { config: {} },
+                    name: 'total_vamp',
+                    description: 'Total decaying + fixed voting power across all locks.',
+                    use_case: 'Aggregate VP of the entire TLA system.',
+                    args: [], msg: { total_vamp: {} },
                 },
                 {
-                    name: 'lock_info',
-                    description: 'Full per-lock detail: owner, LST, underlying LUNA, unlock period, VP.',
-                    use_case: 'Inspect a specific lock. If a wallet is selected, you can load that wallet\'s locks into the dropdown.',
-                    response: '{owner, from_period, asset, underlying_amount, end:{period}, slope, voting_power}',
-                    args: [{ name: 'token_id', kind: 'id', placeholder: 'e.g., 1157', help: 'A veLUNA lock NFT ID.' }],
-                    msg: (a) => ({ lock_info: { token_id: String(a.token_id) } }),
-                    supports_load_locks: true,  // → show "Load locks owned by selected" button when wallet selected
+                    name: 'all_tokens',
+                    description: 'Paginated list of every lock NFT id.',
+                    use_case: 'Walk all 431 locks to enumerate every position.',
+                    response: '{tokens:[id,id,...]}',
+                    args: [{ name: 'start_after', kind: 'optional_id', placeholder: 'leave empty for first page', help: 'Pagination cursor — last token_id from previous page.' }],
+                    msg: (a) => ({ all_tokens: a.start_after ? { start_after: a.start_after, limit: 30 } : { limit: 30 } }),
                 },
                 {
                     name: 'tokens',
-                    description: 'List veLUNA lock NFT IDs owned by a wallet.',
-                    use_case: 'Find which token_ids the selected wallet owns.',
+                    description: "Locks owned by a wallet.",
+                    use_case: 'See which lock NFTs the selected wallet holds.',
+                    response: '{tokens:[id,id,...]}',
                     args: [{ name: 'owner', kind: 'wallet' }],
                     msg: (a) => ({ tokens: { owner: a.owner } }),
                 },
                 {
-                    name: 'owner_of',
-                    description: 'Look up the owner of a specific veLUNA lock NFT.',
-                    args: [{ name: 'token_id', kind: 'id', placeholder: 'e.g., 1157' }],
-                    msg: (a) => ({ owner_of: { token_id: String(a.token_id) } }),
+                    name: 'lock_info',
+                    description: 'Full detail of one lock NFT — VP, end epoch, underlying, decay slope.',
+                    use_case: 'THE per-lock source-of-truth: unlock epoch, VP, underlying, decay.',
+                    response: '{owner, from_period, asset, underlying_amount, coefficient, start, end:{period}, slope, fixed_amount, voting_power}',
+                    args: [{ name: 'token_id', kind: 'id', placeholder: '711', help: 'Lock NFT id (integer). Use the "tokens" query first to find IDs you own.' }],
+                    msg: (a) => ({ lock_info: { token_id: a.token_id } }),
                     supports_load_locks: true,
-                },
-                {
-                    name: 'blacklisted_voters',
-                    description: 'Currently-blacklisted wallets (typically empty).',
-                    args: [],
-                    msg: { blacklisted_voters: {} },
-                },
-                {
-                    name: 'lock_vamp',
-                    description: 'Voting power of a single lock at a specific block time (defaults to now).',
-                    use_case: 'See a lock\'s VP at any point in time — useful for historical analysis.',
-                    args: [
-                        { name: 'token_id', kind: 'id', placeholder: '600', help: 'Lock NFT token ID.' },
-                        { name: 'time', kind: 'optional_id', placeholder: 'unix timestamp (optional)', help: 'Unix timestamp; omit for current.' }
-                    ],
-                    msg: (a) => ({ lock_vamp: { token_id: String(a.token_id), time: a.time ? parseInt(a.time) : null } }),
-                },
-                {
-                    name: 'all_tokens',
-                    description: 'Paginated list of every lock token ID currently in existence.',
-                    use_case: 'Enumerate all locks (start_after for pagination).',
-                    args: [{ name: 'start_after', kind: 'optional_id', placeholder: 'last token_id (optional)', help: 'Pagination cursor.' }],
-                    msg: (a) => ({ all_tokens: a.start_after ? { start_after: String(a.start_after), limit: 30 } : { limit: 30 } }),
-                },
-                {
-                    name: 'nft_info',
-                    description: 'cw721 standard — metadata for a single lock NFT.',
-                    args: [{ name: 'token_id', kind: 'id', placeholder: '1' }],
-                    msg: (a) => ({ nft_info: { token_id: String(a.token_id) } }),
-                    supports_load_locks: true,
-                },
-                {
-                    name: 'all_nft_info',
-                    description: 'cw721 standard — combined NftInfo + OwnerOf for a lock.',
-                    args: [{ name: 'token_id', kind: 'id', placeholder: '1' }],
-                    msg: (a) => ({ all_nft_info: { token_id: String(a.token_id) } }),
-                    supports_load_locks: true,
-                },
-                {
-                    name: 'approval',
-                    description: 'cw721 standard — check if a spender has approval for a token.',
-                    args: [
-                        { name: 'token_id', kind: 'id', placeholder: '1' },
-                        { name: 'spender', kind: 'text', placeholder: 'terra1…', help: 'Spender address to check approval for.' }
-                    ],
-                    msg: (a) => ({ approval: { token_id: String(a.token_id), spender: a.spender } }),
-                },
-                {
-                    name: 'approvals',
-                    description: 'cw721 standard — list approvals on a single lock NFT.',
-                    args: [{ name: 'token_id', kind: 'id', placeholder: '1' }],
-                    msg: (a) => ({ approvals: { token_id: String(a.token_id) } }),
-                },
-                {
-                    name: 'all_operators',
-                    description: 'cw721 standard — list every operator a wallet has authorized.',
-                    args: [{ name: 'owner', kind: 'wallet' }],
-                    msg: (a) => ({ all_operators: { owner: a.owner } }),
-                },
-                {
-                    name: 'contract_info',
-                    description: 'cw721 standard — collection name + symbol.',
-                    args: [],
-                    msg: { contract_info: {} },
-                },
-                {
-                    name: 'minter',
-                    description: 'cw721 standard — address authorized to mint new locks.',
-                    args: [],
-                    msg: { minter: {} },
                 },
             ],
         },
+        // ====================================================================
+        // BRIBE-MANAGER — per-wallet bribe claims. Field: `user`.
+        // ====================================================================
         {
             id: 'bribe_manager',
             label: 'bribe-manager',
             icon: 'fa-coins',
             address: FALLBACK_CONTRACTS.bribe_manager,
-            description: 'Active bribes registry — source of truth for what bribes are funded.',
+            description: 'Per-wallet bribe claims across all gauges. Per-wallet field is "user".',
             queries: [
                 {
-                    name: 'bribes',
-                    description: 'All active/pending bribes for the current epoch — pool, bucket, token, amount.',
-                    use_case: 'See what bribes are funded RIGHT NOW.',
-                    args: [],
-                    msg: { bribes: { period: null } },
-                },
-                {
-                    name: 'config',
-                    description: 'Bribe manager config — fee schedule, allow_any, global_config.',
-                    args: [],
-                    msg: { config: {} },
-                },
-                {
                     name: 'next_claim_period',
-                    description: 'Next epoch where bribes become claimable.',
-                    args: [],
-                    msg: { next_claim_period: {} },
+                    description: 'Next epoch a user can claim bribes for.',
+                    args: [], msg: { next_claim_period: {} },
                 },
                 {
                     name: 'user_claimable',
-                    description: 'A wallet\'s currently-claimable bribes.',
-                    use_case: 'See what bribes the selected wallet can claim from prior votes.',
+                    description: 'Per-pool claimable bribe tokens for a wallet.',
+                    use_case: 'See which pools have unclaimed bribes for this wallet and in which tokens.',
+                    response: '{start, end, buckets:[{gauge, asset, assets:[{info, amount}]}]} — empty = {start:0,end:0,buckets:[]}',
                     args: [{ name: 'user', kind: 'wallet' }],
                     msg: (a) => ({ user_claimable: { user: a.user } }),
                 },
             ],
         },
+        // ====================================================================
+        // ASSET-COMPOUNDER — auto-compounding vaults. Field: `addr` (NOT user).
+        // ====================================================================
         {
             id: 'asset_compounder',
             label: 'asset-compounder',
-            icon: 'fa-rotate',
+            icon: 'fa-recycle',
             address: FALLBACK_CONTRACTS.asset_compounder,
-            description: 'Auto-compound vaults (amplp tokens). 8% fee, 4h anti-gaming delay.',
+            description: 'Auto-compounding vaults — LP↔amplp exchange rates, fees, asset configs. Per-wallet queries use field name "addr".',
             queries: [
                 {
+                    name: 'config',
+                    description: 'Vault configuration — 8% compounder fee, fee collector, deposit profit delay.',
+                    response: '{fee, fee_collector, deposit_profit_delay_s, denom_creation_fee, ...}',
+                    args: [], msg: { config: {} },
+                },
+                {
                     name: 'asset_configs',
-                    description: 'Registry of every amplp vault — amplp denom, underlying LP, bucket.',
-                    use_case: 'See all 65 amplp vaults and their underlying LP positions.',
-                    args: [],
-                    msg: { asset_configs: {} },
+                    description: 'Authoritative LP↔amplp map. Each entry: {asset_info, gauge, staking, amp_denom, zasset_denom, reward_asset_info, fee, total_bond_share}.',
+                    use_case: 'LP token registry + token-type map (cw20 vs native/factory).',
+                    args: [], msg: { asset_configs: {} },
                 },
                 {
                     name: 'amplp_exchange_rates',
-                    description: 'Current amplp → LP exchange rate per vault.',
-                    args: [],
-                    msg: { amplp_exchange_rates: {} },
+                    description: 'Current amplp→LP exchange rate per vault.',
+                    use_case: 'Compute amplp_usd = LP_usd × amplp_exchange_rate.',
+                    args: [], msg: { amplp_exchange_rates: {} },
                 },
                 {
                     name: 'exchange_rates',
-                    description: 'Rate history + per-period realized APR per vault.',
-                    use_case: 'Get the truest "what an amplp position earns per epoch" figure.',
-                    args: [],
-                    msg: { exchange_rates: {} },
-                },
-                {
-                    name: 'config',
-                    description: 'Compounder config — fee (8%), 4h delay, fee_collector.',
-                    args: [],
-                    msg: { config: {} },
-                },
-                {
-                    name: 'asset_config',
-                    description: 'Single asset\'s vault configuration.',
-                    use_case: 'Pull just one asset\'s vault details (instead of asset_configs which returns all 65).',
-                    args: [{ name: 'asset_info', kind: 'text', placeholder: '{"native":"uluna"}', help: 'AssetInfo JSON: {"native":"denom"} or {"cw20":"terra1…"}.' }],
-                    msg: (a) => ({ asset_config: { asset_info: JSON.parse(a.asset_info) } }),
-                },
-                {
-                    name: 'user_infos',
-                    description: 'Paginated list of all compounder users.',
-                    args: [{ name: 'start_after', kind: 'optional_id', placeholder: 'terra1… (optional)' }],
-                    msg: (a) => ({ user_infos: a.start_after ? { start_after: a.start_after, limit: 30 } : { limit: 30 } }),
+                    description: 'Exchange rate history + realized per-period APR (net of fee).',
+                    use_case: 'Realized auto-compounded yield per vault.',
+                    args: [], msg: { exchange_rates: {} },
                 },
             ],
         },
         // ====================================================================
         // ASSET-STAKING — 4 deployed instances (one per gauge bucket).
-        // Canonical role names confirmed via global-config.all_addresses.
-        // Instance labels will be re-built from the live catalog at page load
-        // (see loadCatalog) — these are the fallback values if catalog fetch fails.
+        // Field name: `address`. Live labels come from catalog.directory.
         // ====================================================================
         {
             id: 'asset_staking',
             label: 'asset-staking',
             icon: 'fa-warehouse',
             address: 'terra1v399cx9drllm70wxfsgvfe694tdsd9x96p9ha36w7muffe4znlusqswspq',
-            description: 'LP token staking contracts — one deployed instance per gauge bucket. Same query schema across all four; switch via the instance picker.',
+            description: 'LP staking — 1 instance per gauge bucket. Same schema across all four. Per-wallet field is "address". Pool-specific queries take an "asset" (an asset_info JSON) — click any pool in the panel above to copy its asset_info.',
             instances: [
                 { label: 'stable    ·  ASSET_STAKING__stable',    address: 'terra1v399cx9drllm70wxfsgvfe694tdsd9x96p9ha36w7muffe4znlusqswspq', bucket: 'stable',   role: 'ASSET_STAKING__stable' },
                 { label: 'project   ·  ASSET_STAKING__project',   address: 'terra1awq6t7jfakg9wfjn40fk3wzwmd57mvrqtt3a39z9rmet7wdjj3ysgw3lpa', bucket: 'project',  role: 'ASSET_STAKING__project' },
@@ -863,82 +701,51 @@
             ],
             queries: [
                 {
-                    name: 'config',
-                    description: 'Staking config — global_config_addr, fee structure, etc.',
-                    args: [], msg: { config: {} },
-                },
-                {
-                    name: 'whitelisted_assets',
-                    description: 'List of LP tokens that can be staked here.',
-                    args: [], msg: { whitelisted_assets: {} },
-                },
-                {
-                    name: 'whitelisted_asset_details',
-                    description: 'Full details (weights, reward configs) per whitelisted asset.',
-                    args: [], msg: { whitelisted_asset_details: {} },
-                },
-                {
-                    name: 'reward_distribution',
-                    description: 'Current reward distribution schedule across staked assets.',
-                    args: [], msg: { reward_distribution: {} },
-                },
-                {
                     name: 'staked_balance',
-                    description: 'A wallet\'s staked balance for a specific asset.',
+                    description: "A wallet's staked LP balance in a specific pool.",
+                    use_case: 'How much of pool X has this wallet staked?',
+                    response: 'balance — "not found" error when no position = treat as zero, not a failure.',
                     args: [
+                        { name: 'asset', kind: 'text', placeholder: '{"cw20":"terra1..."} or {"native":"factory/.../uLP"}', help: 'asset_info JSON. Click any pool row above to copy its asset_info.' },
                         { name: 'address', kind: 'wallet' },
-                        { name: 'asset_info', kind: 'text', placeholder: '{"native":"factory/terra1.../uLP"}', help: 'AssetInfo JSON of the staked LP.' }
                     ],
-                    msg: (a) => ({ staked_balance: { address: a.address, asset_info: JSON.parse(a.asset_info) } }),
-                },
-                {
-                    name: 'pending_rewards',
-                    description: 'A wallet\'s pending (unclaimed) rewards.',
-                    args: [{ name: 'address', kind: 'wallet' }],
-                    msg: (a) => ({ pending_rewards: { address: a.address } }),
-                },
-                {
-                    name: 'all_staked_balances',
-                    description: 'All assets staked by a single wallet.',
-                    args: [{ name: 'address', kind: 'wallet' }],
-                    msg: (a) => ({ all_staked_balances: { address: a.address } }),
+                    msg: (a) => ({ staked_balance: { asset: JSON.parse(a.asset), address: a.address } }),
                 },
                 {
                     name: 'all_pending_rewards',
-                    description: 'All pending rewards for a single wallet across staked assets.',
+                    description: 'All pending staking rewards for a wallet (across pools in this bucket).',
+                    use_case: 'How much can this wallet currently claim from staking?',
+                    response: '{data:[]} — clean-empty when none.',
                     args: [{ name: 'address', kind: 'wallet' }],
                     msg: (a) => ({ all_pending_rewards: { address: a.address } }),
                 },
                 {
-                    name: 'all_pending_rewards_detail',
-                    description: 'Same as all_pending_rewards but with per-token breakdown.',
-                    args: [{ name: 'address', kind: 'wallet' }],
-                    msg: (a) => ({ all_pending_rewards_detail: { address: a.address } }),
-                },
-                {
-                    name: 'total_staked_balances',
-                    description: 'Total staked amount across all assets and all wallets.',
-                    args: [], msg: { total_staked_balances: {} },
-                },
-                {
                     name: 'pool_stakers',
-                    description: 'List of all wallets staking a specific asset.',
-                    args: [{ name: 'asset_info', kind: 'text', placeholder: '{"native":"factory/terra1.../uLP"}', help: 'AssetInfo JSON.' }],
-                    msg: (a) => ({ pool_stakers: { asset_info: JSON.parse(a.asset_info) } }),
+                    description: 'Paginated list of all stakers in a specific pool.',
+                    use_case: 'Staker enumeration + concentration analysis. Filter balance>0 (shares:1/balance:0 = dust).',
+                    response: '[{user, shares, balance}]',
+                    args: [
+                        { name: 'asset', kind: 'text', placeholder: '{"cw20":"terra1..."} or {"native":"factory/.../uLP"}', help: 'asset_info JSON. Click any pool row above to copy its asset_info.' },
+                        { name: 'start_after', kind: 'optional_id', placeholder: 'leave empty for first page', help: 'Pagination cursor — last user from previous page.' },
+                    ],
+                    msg: (a) => {
+                        const m = { pool_stakers: { asset: JSON.parse(a.asset), limit: 30 } };
+                        if (a.start_after) m.pool_stakers.start_after = a.start_after;
+                        return m;
+                    },
                 },
             ],
         },
         // ====================================================================
         // CONNECTOR-ALLIANCE — 4 deployed instances (one per gauge bucket).
-        // Same role naming convention: CONNECTOR__<bucket>. Live labels come
-        // from the catalog's directory at load time.
+        // No per-wallet queries.
         // ====================================================================
         {
             id: 'connector_alliance',
             label: 'connector-alliance',
             icon: 'fa-link',
             address: 'terra1ym2495f63mdx63tu96085x2vf3xpy9z9k5urxwhvmf9jldm99q5qr4q6n8',
-            description: 'Alliance-module connector contracts — bridge between staked LPs and Terra Alliance rewards. One instance per gauge bucket.',
+            description: 'Alliance-module connectors — bridge between staked LPs and Terra Alliance rewards. One instance per gauge bucket.',
             instances: [
                 { label: 'stable    ·  CONNECTOR__stable',    address: 'terra1ym2495f63mdx63tu96085x2vf3xpy9z9k5urxwhvmf9jldm99q5qr4q6n8', bucket: 'stable',   role: 'CONNECTOR__stable' },
                 { label: 'project   ·  CONNECTOR__project',   address: 'terra1x8v9fujf3c78q2we23x0vgzmxgtt0hgvuvfsxy4w3ar9kcua4c6qqcnhyh', bucket: 'project',  role: 'CONNECTOR__project' },
@@ -948,17 +755,17 @@
             queries: [
                 {
                     name: 'config',
-                    description: 'Connector config — paired asset-staking contract, fee splits, etc.',
+                    description: 'Connector config — global_config_addr, reward_denom (uluna), zasset_denom, alliance_token_denom (vt), alliance_token_supply, gauge, lst_hub_addr, lst_asset_info (ampLUNA).',
                     args: [], msg: { config: {} },
                 },
                 {
                     name: 'state',
-                    description: 'Current state — accumulated alliance rewards, last update time.',
+                    description: 'Per-bucket Alliance-stake economics — last_exchange_rate, share_exchange_rate, total_shares, stake_available, stake_in_contract, taken, harvested.',
                     args: [], msg: { state: {} },
                 },
                 {
                     name: 'validators',
-                    description: 'Alliance validators this connector is currently delegating to.',
+                    description: 'List of validators this connector delegates to (~52 terravaloper... addresses).',
                     args: [], msg: { validators: {} },
                 },
             ],
@@ -1111,17 +918,18 @@
             // Build wallets list. We include ONLY catalog wallets (curated public entities).
             // Personal addresses are added by the user via paste.
             const wallets = c.wallets_catalog || {};
-            // ALL wallets — used for search and paste-recognition (includes discovered stakers)
+            // ALL wallets — used for search and paste-recognition (includes discovered stakers).
+            // We track CURATED label and PFPK daodao_name SEPARATELY:
+            //   - label         = curated label from wallets.json (e.g. "aDAO Treasury")
+            //   - daodao_name   = PFPK profile name (e.g. "DeFi_Patriot")
+            //   - dropdown      = curated label ONLY (PFPK alone is not enough to be "known")
+            //   - search/paste  = both, for recognition
             WALLETS_ALL = Object.entries(wallets).map(([addr, w]) => {
                 const daoMemberships = w.dao_memberships || [];
-                // "Real label" = curated label OR DAODAO PFPK name. DAO membership alone
-                // (e.g. "TLA staker") does NOT make a wallet count as named — that clutters
-                // the dropdown with hundreds of identical "TLA staker" entries.
-                const realLabel = w.label || w.daodao_name || null;
                 return {
                     addr,
-                    label: realLabel,
-                    daodao_name: w.daodao_name || null,
+                    label: w.label || null,                          // curated label ONLY
+                    daodao_name: w.daodao_name || null,              // PFPK enrichment, separate field
                     daodao_avatar: w.daodao_avatar || null,
                     subtype: w.subtype || '',
                     protocol: w.protocol || '',
@@ -1130,16 +938,17 @@
                 };
             });
 
-            // DROPDOWN — curated wallets + PFPK-named only
+            // DROPDOWN — curated wallets ONLY (no PFPK-named, no discovered)
             WALLETS_FROM_CATALOG = WALLETS_ALL.filter(w => !!w.label);
             WALLETS_FROM_CATALOG.sort((a, b) =>
                 a.label.localeCompare(b.label, undefined, { sensitivity: 'base' })
             );
 
-            // If we had a stored selection, refresh its label from current catalog
+            // If we had a stored selection, refresh its label from current catalog.
+            // Prefer curated label; fall back to PFPK name for display purposes.
             if (selectedAddress) {
                 const match = WALLETS_ALL.find(w => w.addr === selectedAddress.addr);
-                if (match && match.label) selectedAddress.label = match.label;
+                if (match) selectedAddress.label = match.label || match.daodao_name || selectedAddress.label;
             }
         } catch (e) {
             console.warn('Catalog load failed (using fallback addresses):', e);
@@ -1160,9 +969,10 @@
                 alert('Address must start with "terra1"');
                 return;
             }
-            // Auto-detect label if not provided — check ALL wallets including discovered stakers
+            // Auto-detect label if not provided — check ALL wallets including discovered stakers.
+            // Prefer curated label; fall back to PFPK daodao_name for display.
             const known = WALLETS_ALL.find(w => w.addr === cleaned);
-            if (!label && known) label = known.label;
+            if (!label && known) label = known.label || known.daodao_name;
 
             selectedAddress = {
                 addr: cleaned,
@@ -1377,25 +1187,27 @@
         for (const w of WALLETS_ALL) {
             const addrLower = w.addr.toLowerCase();
             const labelLower = (w.label || '').toLowerCase();
+            const pfpkLower = (w.daodao_name || '').toLowerCase();
             let score = 0;
-            if (addrLower.endsWith(q)) score = 3;             // exact suffix → top
-            else if (labelLower && labelLower.includes(q)) score = 2;
-            else if (addrLower.slice(-8).includes(q)) score = 1;  // fuzzy near end
+            if (addrLower.endsWith(q)) score = 3;                                   // exact suffix → top
+            else if (labelLower && labelLower.includes(q)) score = 2;               // curated label match
+            else if (pfpkLower && pfpkLower.includes(q)) score = 2;                 // PFPK name match (same tier)
+            else if (addrLower.slice(-8).includes(q)) score = 1;                    // fuzzy near end
             if (score > 0) scored.push({ w, score });
         }
         scored.sort((a, b) => {
             if (b.score !== a.score) return b.score - a.score;
-            const aN = a.w.label ? 1 : 0;
-            const bN = b.w.label ? 1 : 0;
+            const aN = (a.w.label || a.w.daodao_name) ? 1 : 0;
+            const bN = (b.w.label || b.w.daodao_name) ? 1 : 0;
             if (bN !== aN) return bN - aN;
-            return (a.w.label || a.w.addr).localeCompare(b.w.label || b.w.addr);
+            return (a.w.label || a.w.daodao_name || a.w.addr).localeCompare(b.w.label || b.w.daodao_name || b.w.addr);
         });
         const results = scored;
         if (results.length === 0) {
             box.innerHTML = `<p class="text-xs text-gray-500 p-2">No catalog matches for "${escapeHtml(query)}". You can still <button onclick="document.querySelector('[data-mode=paste]').click()" class="text-cyan-400 underline">paste the full address</button>.</p>`;
             return;
         }
-        // Group: score 3 (exact suffix) → score 2 (label) → score 1 (near-end substring)
+        // Group: score 3 (exact suffix) → score 2 (label/PFPK) → score 1 (near-end substring)
         const exactSuffix = results.filter(r => r.score === 3);
         const labelHits   = results.filter(r => r.score === 2);
         const fuzzyHits   = results.filter(r => r.score === 1);
@@ -1403,12 +1215,19 @@
         function renderRow(r) {
             const w = r.w;
             const { html: addrHtml, where } = highlightMatchInAddr(w.addr, q);
-            const labelHtml = w.label
-                ? `<div class="text-sm text-white font-semibold">${escapeHtml(w.label)}</div>`
-                : `<div class="text-sm text-gray-400">${w.discovery_source ? '<i class="fas fa-user-group text-yellow-500 mr-1"></i>Discovered ' + w.discovery_source.replace(/_/g, ' ') : 'Unlabeled wallet'}</div>`;
+            // Display name: curated label first, then PFPK (italicized to indicate "discovered via DAODAO")
+            let labelHtml;
+            if (w.label) {
+                labelHtml = `<div class="text-sm text-white font-semibold">${escapeHtml(w.label)}</div>`;
+            } else if (w.daodao_name) {
+                labelHtml = `<div class="text-sm text-gray-300 italic"><i class="fas fa-user text-cyan-500/60 mr-1"></i>${escapeHtml(w.daodao_name)} <span class="text-[10px] text-gray-500 normal">(DAODAO profile)</span></div>`;
+            } else {
+                labelHtml = `<div class="text-sm text-gray-400">${w.discovery_source ? '<i class="fas fa-user-group text-yellow-500 mr-1"></i>Discovered ' + w.discovery_source.replace(/_/g, ' ') : 'Unlabeled wallet'}</div>`;
+            }
             const whereChip = where ? `<span class="text-[10px] text-gray-500 ml-2">match ${where}</span>` : '';
+            const displayLabel = w.label || w.daodao_name || '';
             return `
-                <button onclick="setSelectedAddress('${escapeAttr(w.addr)}', '${escapeAttr(w.label || '')}')" class="w-full text-left p-2 rounded hover:bg-cyan-900/20 border border-transparent hover:border-cyan-700/30 transition-colors mb-1">
+                <button onclick="setSelectedAddress('${escapeAttr(w.addr)}', '${escapeAttr(displayLabel)}')" class="w-full text-left p-2 rounded hover:bg-cyan-900/20 border border-transparent hover:border-cyan-700/30 transition-colors mb-1">
                     <div class="flex items-center">${labelHtml}${whereChip}</div>
                     <div class="mono text-xs text-gray-500 truncate">${addrHtml}</div>
                 </button>`;
