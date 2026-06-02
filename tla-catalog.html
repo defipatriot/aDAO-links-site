@@ -330,6 +330,9 @@
                     <button class="filter-pill" data-quick="amplp">amplp underlying</button>
                     <button class="filter-pill" data-quick="ibc">IBC tokens</button>
                     <button class="filter-pill" data-quick="lp-tokens">LP tokens</button>
+                    <button class="filter-pill danger" data-quick="needs-guide" title="Wrapped tokens with no verified acquisition route">Needs guide</button>
+                    <button class="filter-pill" data-quick="inactive-lp" title="LPs below the 1% bucket-vote threshold">Inactive LPs</button>
+                    <button class="filter-pill danger" data-quick="variant-trap" title="Buy-the-wrong-variant risk">Variant trap</button>
                     <button class="filter-pill danger" data-quick="show-noise" title="Includes unnamed/un-mapped tokens hidden by default">Show noise</button>
                     <button class="filter-pill" data-quick="needs-curation">Needs curation</button>
                     <button class="filter-pill" data-quick="has-draft">Modified (draft)</button>
@@ -624,6 +627,9 @@
                 if (qk === 'amplp' && !e.appears_in?.is_amplp_underlying) return false;
                 if (qk === 'ibc' && e.subtype !== 'ibc') return false;
                 if (qk === 'lp-tokens' && e.category !== 'lp_tokens') return false;
+                if (qk === 'needs-guide' && !(e.acquisition_class === 'wrapped_looks_native' && !e.acquisition)) return false;
+                if (qk === 'inactive-lp' && e.gauge_status !== 'inactive_below_threshold') return false;
+                if (qk === 'variant-trap' && !e.variant_warning) return false;
                 if (qk === 'needs-curation' && !needsCuration(e)) return false;
                 if (qk === 'has-draft' && !getDraft(e._kind, e.address)) return false;
             }
@@ -723,6 +729,10 @@
 
         const tlaBadge = e.appears_in?.tla_pools_count > 0 ? `<span class="flag-chip flag-success">in TLA pool</span>` : '';
         const variantBadge = e.related_variants?.length > 0 ? `<span class="flag-chip flag-danger">${e.related_variants.length+1} variants</span>` : '';
+        const variantTrapBadge = e.variant_warning ? `<span class="flag-chip flag-danger" title="Buy-the-wrong-variant trap">⚠ variant trap</span>` : '';
+        const inactiveBadge = e.gauge_status === 'inactive_below_threshold' ? `<span class="flag-chip" style="background:rgba(115,115,115,0.15);color:#9ca3af;border:1px solid rgba(115,115,115,0.3)" title="Below 1% bucket vote — inactive">inactive</span>` : '';
+        const acqBadge = e.acquisition_class === 'wrapped_looks_native' && !e.acquisition
+            ? `<span class="flag-chip flag-danger" title="Wrapped token, no guide — verify before depositing">⚠ needs guide</span>` : '';
         const tierBadge = e.tier ? `<span class="tier-chip tier-${e.tier}" title="Catalog tier">${e.tier}</span>` : '';
 
         const kindIcon = { token: 'fa-coins', contract: 'fa-file-contract', wallet: 'fa-user' }[e._kind] || 'fa-question';
@@ -750,7 +760,7 @@
                     </button>
                 </div>
                 <div class="flex flex-wrap gap-1">
-                    ${tlaBadge}${variantBadge}
+                    ${tlaBadge}${inactiveBadge}${variantBadge}${variantTrapBadge}${acqBadge}
                     ${flags.map(f => `<span class="flag-chip ${flagClass(f)}">${escapeHtml(flagShort(f))}</span>`).join('')}
                     ${moreFlags > 0 ? `<span class="flag-chip flag-info">+${moreFlags} more</span>` : ''}
                 </div>
@@ -987,7 +997,41 @@
     }
 
     function renderTokenDetail(e) {
-        let html = '<div class="grid grid-cols-2 gap-3 mb-4">';
+        let html = '';
+
+        // --- Acquisition class banner (batch 17-19 field) ---
+        const ac = e.acquisition_class;
+        if (ac) {
+            const ACQ = {
+                native_terra:      { c:'gray',  i:'fa-circle-check', t:'Native Terra asset', d:'Lives natively on Terra — no bridging needed.' },
+                ibc_cosmos_native: { c:'gray',  i:'fa-circle-check', t:'IBC / Cosmos-native', d:'Arrives over IBC from a Cosmos chain — standard transfer.' },
+                wrapped_disclosed: { c:'blue',  i:'fa-circle-info',  t:'Wrapped (disclosed)', d:'A wrapped/bridged asset whose origin is clear from its symbol.' },
+                wrapped_looks_native:{ c:'red', i:'fa-triangle-exclamation', t:'Wrapped — looks native (care needed)', d:'Symbol looks like a familiar asset but it is bridged from a specific source chain. Acquiring the wrong variant can mean you cannot deposit it.' },
+                lp_token:          { c:'gray',  i:'fa-layer-group',  t:'LP token', d:'A liquidity-pool token, not a spot asset.' },
+            };
+            const m = ACQ[ac] || { c:'gray', i:'fa-circle', t:ac, d:'' };
+            const palette = { gray:'gray-700/40,gray-900/30,gray-300', blue:'blue-700/40,blue-950/30,blue-300', red:'red-700/50,red-950/40,red-200' }[m.c].split(',');
+            html += `<div class="mb-4 p-3 bg-${palette[1]} border border-${palette[0]} rounded-lg">
+                <p class="text-sm text-${palette[2]} font-semibold"><i class="fas ${m.i} mr-2"></i>${escapeHtml(m.t)}</p>
+                <p class="text-xs text-gray-400 mt-1">${escapeHtml(m.d)}</p>
+                <p class="text-xs text-gray-600 mt-1">acquisition_class: <span class="mono">${escapeHtml(ac)}</span></p>
+            </div>`;
+            // Missing-guide warning, severity by class
+            const hasGuide = !!e.acquisition;
+            if (!hasGuide && ac === 'wrapped_looks_native') {
+                html += `<div class="mb-4 p-3 bg-red-950/40 border border-red-600/50 rounded-lg">
+                    <p class="text-sm text-red-200 font-semibold"><i class="fas fa-triangle-exclamation mr-2"></i>No acquisition guide yet — verify before depositing</p>
+                    <p class="text-xs text-red-300/80 mt-1">This token must be bridged from a specific source chain, and no verified route is on file. Do not acquire/deposit until the correct source is confirmed.</p>
+                </div>`;
+            } else if (!hasGuide && ac === 'wrapped_disclosed') {
+                html += `<div class="mb-4 p-3 bg-yellow-950/30 border border-yellow-700/40 rounded-lg">
+                    <p class="text-sm text-yellow-200"><i class="fas fa-circle-info mr-2"></i>Bridge route not yet documented</p>
+                    <p class="text-xs text-yellow-300/70 mt-1">The symbol suggests its origin, but a verified route isn't on file yet.</p>
+                </div>`;
+            }
+        }
+
+        html += '<div class="grid grid-cols-2 gap-3 mb-4">';
         const kv = (k,v) => v != null && v !== '' ? `<div><p class="text-xs text-gray-500">${k}</p><p class="text-sm text-white">${escapeHtml(v)}</p></div>` : '';
         html += kv('Symbol', e.symbol);
         html += kv('Decimals', e.decimals);
@@ -1009,6 +1053,29 @@
                     ${kv('Original denom', e.bridge.original_denom)}
                 </div>
             </div>`;
+        }
+
+        // --- Variant trap (batch 2.21: buy-the-wrong-variant) ---
+        if (e.variant_warning) {
+            const vw = e.variant_warning;
+            html += `<div class="mb-4 p-3 bg-red-950/50 border border-red-600/60 rounded-lg">
+                <p class="text-sm text-red-200 font-semibold mb-1"><i class="fas fa-triangle-exclamation mr-2"></i>Variant trap — wrong token won't deposit</p>
+                <p class="text-xs text-red-300/80 mb-2">"${escapeHtml(vw.display_name || e.symbol || 'This LP')}" appears at more than one address with <strong>different underlying tokens</strong>. Acquire the wrong variant and you won't be able to deposit into the active pool.</p>`;
+            if (vw.this_lp_underlyings?.length) {
+                html += `<p class="text-xs text-gray-400 mt-2 mb-1">This entry's underlyings:</p><div class="space-y-0.5">`;
+                for (const u of vw.this_lp_underlyings) html += `<p class="mono text-xs text-green-300 break-all">${escapeHtml(u)}</p>`;
+                html += `</div>`;
+            }
+            if (vw.conflicting_lps?.length) {
+                html += `<p class="text-xs text-gray-400 mt-2 mb-1">Conflicting variant(s) — different tokens:</p>`;
+                for (const c of vw.conflicting_lps) {
+                    html += `<div class="mt-1 p-2 bg-black/30 rounded border border-red-800/40">
+                        <p class="mono text-xs text-gray-500 break-all">LP: ${escapeHtml(c.lp_address || '?')}</p>`;
+                    for (const u of (c.underlyings || [])) html += `<p class="mono text-xs text-red-300 break-all">${escapeHtml(u)}</p>`;
+                    html += `</div>`;
+                }
+            }
+            html += `</div>`;
         }
 
         html += `<div class="mb-4"><p class="text-xs text-gray-500 uppercase mb-2">Cross-source naming</p><div class="space-y-1.5">`;
