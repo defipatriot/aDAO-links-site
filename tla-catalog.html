@@ -727,7 +727,7 @@
                 if (qk === 'multi-variant' && !(e.related_variants?.length > 0)) return false;
                 if (qk === 'no-cg' && e.coingecko_id) return false;
                 if (qk === 'lst' && e.subtype !== 'lst') return false;
-                if (qk === 'amplp' && !e.appears_in?.is_amplp_underlying) return false;
+                if (qk === 'amplp' && !(e.appears_in?.is_amplp_underlying || e.appears_in?.is_wrapped_by_amplp)) return false;
                 if (qk === 'ibc' && e.subtype !== 'ibc') return false;
                 if (qk === 'lp-tokens' && e.category !== 'lp_tokens') return false;
                 if (qk === 'needs-guide' && !(e.acquisition_class === 'wrapped_looks_native' && !e.acquisition)) return false;
@@ -1171,7 +1171,21 @@
         html += kv('CoinGecko match', e.coingecko_match);
         html += kv('Tier', e.tier);
         html += kv('Appears in TLA pools', (e.appears_in?.tla_pools_count > 0) ? `${e.appears_in.tla_pools_count} (${(e.appears_in.tla_pools || []).join(', ')})` : 'no');
-        html += kv('amplp underlying', e.appears_in?.is_amplp_underlying ? 'yes' : 'no');
+        // "amplp underlying" is meaningfully YES when EITHER:
+        //   - the token is an underlying asset of an LP that gets wrapped by amplp
+        //     (LUNA, FUEL, ATOM in any amplp-wrapped LP)
+        //   - the token itself is directly wrapped by an amplp
+        //     (single-asset stakes like wBTC.creda.a, ampCAPA)
+        // Users care about either case — both mean "this token has an amplp version
+        // in the Eris ecosystem." Showing them separately confuses more than it clarifies.
+        const isUnderlying = e.appears_in?.is_amplp_underlying;
+        const isWrapped = e.appears_in?.is_wrapped_by_amplp;
+        let amplpStatus;
+        if (isUnderlying && isWrapped) amplpStatus = 'yes (both underlying & wrapped)';
+        else if (isWrapped) amplpStatus = 'yes (wrapped by amplp)';
+        else if (isUnderlying) amplpStatus = 'yes (underlying of amplp-wrapped LP)';
+        else amplpStatus = 'no';
+        html += kv('amplp underlying', amplpStatus);
         html += '</div>';
 
         // --- TLA gauge status + take-rate exposure ---
@@ -1258,7 +1272,16 @@
         //   • Skeleton Swap:  what SS's pool data calls it
         //   • Chain Registry: the human-readable name in the IBC chain registry
         const sources = [];
-        sources.push(['Eris UI', e.sources?.eris?.display || e.sources?.eris?.eris_name]);
+        // Eris UI row — show the (possibly overridden) display value with a
+        // transparency marker if it was hardcoded.
+        const erisDisplay = e.sources?.eris?.display || e.sources?.eris?.eris_name;
+        const erisOverridden = e.sources?.eris?._display_overridden;
+        const erisOriginal = e.sources?.eris?._display_original;
+        if (erisOverridden && erisOriginal) {
+            sources.push(['Eris UI', `${escapeHtml(erisDisplay)} <span class="text-xs px-1 py-0.5 rounded ml-1" style="background:rgba(168,85,247,0.15);color:#c084fc;border:1px solid rgba(168,85,247,0.3)" title="Hardcoded override — Eris's /prices API returns '${escapeAttr(erisOriginal)}' but Eris's UI displays '${escapeAttr(erisDisplay)}'">override</span>`, true]);
+        } else {
+            sources.push(['Eris UI', erisDisplay]);
+        }
         const cgId = e.coingecko_id || e.sources?.eris?.coingecko_id;
         if (cgId) {
             sources.push(['Eris price API (CG ID)', e.sources?.eris?.coingecko_id || cgId]);
@@ -1271,12 +1294,16 @@
             const cgMatch = e.coingecko_match;
             if (cgMatch === 'verified') {
                 cgBadge = ` <span class="text-xs px-1.5 py-0.5 rounded" style="background:rgba(34,197,94,0.15);color:#4ade80;border:1px solid rgba(34,197,94,0.3)" title="CG's own platform index confirms this address maps to this CG ID">✓ verified</span>`;
+            } else if (cgMatch === 'verified_via_bridge') {
+                // Show the source chain in the tooltip — this is how we know it's the same asset
+                const srcHint = e.coingecko_match_source ? ` (via ${escapeAttr(e.coingecko_match_source)})` : '';
+                cgBadge = ` <span class="text-xs px-1.5 py-0.5 rounded" style="background:rgba(20,184,166,0.15);color:#5eead4;border:1px solid rgba(20,184,166,0.3)" title="Verified via bridge provenance — CG indexes the source asset on its origin chain, and our token's bridge data points to that exact contract${escapeAttr(srcHint)}">✓ via bridge</span>`;
             } else if (cgMatch === 'mismatch') {
                 cgBadge = ` <span class="text-xs px-1.5 py-0.5 rounded" style="background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3)" title="Source claimed ${escapeAttr(e.coingecko_id_claimed||'?')}, CG actually has ${escapeAttr(e.coingecko_id_actual||'?')}">⚠ mismatch</span>`;
             } else if (cgMatch === 'discovered') {
                 cgBadge = ` <span class="text-xs px-1.5 py-0.5 rounded" style="background:rgba(59,130,246,0.15);color:#60a5fa;border:1px solid rgba(59,130,246,0.3)" title="Filled in by CG verification — source didn't claim this">+ discovered</span>`;
             } else if (cgMatch === 'unverified_no_terra_addr') {
-                cgBadge = ` <span class="text-xs px-1.5 py-0.5 rounded" style="background:rgba(234,179,8,0.15);color:#facc15;border:1px solid rgba(234,179,8,0.3)" title="Claimed CG ID exists, but CG doesn't list this Terra address — could be valid (IBC) or wrong">? unverified</span>`;
+                cgBadge = ` <span class="text-xs px-1.5 py-0.5 rounded" style="background:rgba(234,179,8,0.15);color:#facc15;border:1px solid rgba(234,179,8,0.3)" title="Claimed CG ID exists, but CG doesn't list this Terra address or any bridge-trace source — could be valid or wrong">? unverified</span>`;
             } else if (cgMatch === 'hardcoded_override') {
                 cgBadge = ` <span class="text-xs px-1.5 py-0.5 rounded" style="background:rgba(168,85,247,0.15);color:#c084fc;border:1px solid rgba(168,85,247,0.3)" title="Manually corrected mapping">override</span>`;
             }
@@ -1288,11 +1315,45 @@
         sources.push(['Astroport', e.sources?.astroport?.symbol]);
         sources.push(['Skeleton Swap', e.sources?.skeletonswap?.symbol]);
         sources.push(['Chain Registry', e.sources?.cosmos_chain_registry?.symbol]);
+
+        // Single-asset stakes (xASTRO, ampCAPA, wBTC.creda.a) won't appear on
+        // DEX pool listings because they're not trading pairs. Show "n/a" rather
+        // than "not listed" to explain that absence isn't a data gap.
+        const isSingleStake = e.appears_in?.is_single_asset_stake === true;
+
+        // Build source coverage info — DATA.source_coverage is global per-load
+        // so the same tooltip math doesn't need to recompute per token. Falls
+        // back gracefully if older catalog data without coverage info.
+        const cov = (DATA && DATA.source_coverage) || {};
+        const coverageHint = {
+            'Astroport':       cov.astroport_pools?.fetched_ok
+                ? `Astroport API returned ${cov.astroport_pools.pool_count || '?'} pools; this address not among assets in any pool.`
+                : 'Astroport API was not reachable during last cron run.',
+            'Skeleton Swap':   cov.skeletonswap_pools?.fetched_ok
+                ? `SkeletonSwap API returned ${cov.skeletonswap_pools.pool_count || '?'} pools; this address not among assets in any pool.`
+                : 'SkeletonSwap API was not reachable during last cron run.',
+            'Chain Registry':  cov.cosmos_chain_registry?.fetched_ok
+                ? `Cosmos chain-registry lists ${cov.cosmos_chain_registry.asset_count || '?'} assets for terra-2; this address not among them. (Common gap — even ATOM is missing.)`
+                : 'Cosmos chain-registry was not reachable during last cron run.',
+            'Eris UI':         cov.eris_prices?.fetched_ok
+                ? `Eris /prices endpoint returned ${cov.eris_prices.asset_count || '?'} assets; this address not among them.`
+                : 'Eris /prices was not reachable during last cron run.',
+            'CoinGecko':       cov.coingecko_list?.fetched_ok
+                ? `CoinGecko /coins/list returned ${cov.coingecko_list.coin_count || '?'} coins; this address not in CG\'s terra-2 platform index and no bridge-trace match.`
+                : 'CoinGecko was not reachable during last cron run.',
+        };
+
         for (const row of sources) {
             const [label, val, isHtml] = row;
-            const status = val
-                ? (isHtml ? `<span>${val}</span>` : `<span class="text-white">${escapeHtml(val)}</span>`)
-                : `<span class="text-gray-600">— not listed</span>`;
+            let status;
+            if (val) {
+                status = isHtml ? `<span>${val}</span>` : `<span class="text-white">${escapeHtml(val)}</span>`;
+            } else if (isSingleStake && (label === 'Astroport' || label === 'Skeleton Swap')) {
+                status = `<span class="text-gray-600" title="Single-asset stake — not a tradeable pair, won't appear on DEX pool listings">— n/a (single-asset stake)</span>`;
+            } else {
+                const hint = coverageHint[label] || `Source was queried; this address not found.`;
+                status = `<span class="text-gray-600" title="${escapeAttr(hint)}">— not listed</span>`;
+            }
             html += `<div class="flex justify-between text-sm"><span class="text-gray-400">${label}</span>${status}</div>`;
         }
         html += '</div></div>';
