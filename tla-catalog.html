@@ -332,6 +332,7 @@
                     <button class="filter-pill" data-quick="lp-tokens">LP tokens</button>
                     <button class="filter-pill danger" data-quick="needs-guide" title="Wrapped tokens with no verified acquisition route">Needs guide</button>
                     <button class="filter-pill" data-quick="inactive-lp" title="LPs below the 1% bucket-vote threshold">Inactive LPs</button>
+                    <button class="filter-pill danger" data-quick="dewhitelisted" title="LPs removed from active whitelist — stakes still subject to take rate">Dewhitelisted (take-rate)</button>
                     <button class="filter-pill danger" data-quick="variant-trap" title="Buy-the-wrong-variant risk">Variant trap</button>
                     <button class="filter-pill danger" data-quick="show-noise" title="Includes unnamed/un-mapped tokens hidden by default">Show noise</button>
                     <button class="filter-pill" data-quick="needs-curation">Needs curation</button>
@@ -730,7 +731,14 @@
                 if (qk === 'ibc' && e.subtype !== 'ibc') return false;
                 if (qk === 'lp-tokens' && e.category !== 'lp_tokens') return false;
                 if (qk === 'needs-guide' && !(e.acquisition_class === 'wrapped_looks_native' && !e.acquisition)) return false;
-                if (qk === 'inactive-lp' && e.gauge_status !== 'inactive_below_threshold') return false;
+                if (qk === 'inactive-lp') {
+                    const gs = e.appears_in?.gauge_status || e.gauge_status;
+                    if (gs !== 'inactive_below_threshold') return false;
+                }
+                if (qk === 'dewhitelisted') {
+                    const gs = e.appears_in?.gauge_status || e.gauge_status;
+                    if (gs !== 'dewhitelisted') return false;
+                }
                 if (qk === 'variant-trap' && !e.variant_warning) return false;
                 if (qk === 'needs-curation' && !needsCuration(e)) return false;
                 if (qk === 'has-draft' && !getDraft(e._kind, e.address)) return false;
@@ -839,7 +847,15 @@
         const tlaBadge = e.appears_in?.tla_pools_count > 0 ? `<span class="flag-chip flag-success">in TLA pool</span>` : '';
         const variantBadge = e.related_variants?.length > 0 ? `<span class="flag-chip flag-danger">${e.related_variants.length+1} variants</span>` : '';
         const variantTrapBadge = e.variant_warning ? `<span class="flag-chip flag-danger" title="Buy-the-wrong-variant trap">⚠ variant trap</span>` : '';
-        const inactiveBadge = e.gauge_status === 'inactive_below_threshold' ? `<span class="flag-chip" style="background:rgba(115,115,115,0.15);color:#9ca3af;border:1px solid rgba(115,115,115,0.3)" title="Below 1% bucket vote — inactive">inactive</span>` : '';
+        // Read gauge status from new location (appears_in) with fallback to old
+        const gaugeStatus = e.appears_in?.gauge_status || e.gauge_status;
+        const inactiveBadge = gaugeStatus === 'inactive_below_threshold'
+            ? `<span class="flag-chip" style="background:rgba(115,115,115,0.15);color:#9ca3af;border:1px solid rgba(115,115,115,0.3)" title="Below 1% bucket vote — inactive">inactive</span>`
+            : '';
+        // Dewhitelisted: orange/yellow badge. Stakes still exposed to take rate.
+        const dewhitelistedBadge = gaugeStatus === 'dewhitelisted'
+            ? `<span class="flag-chip" style="background:rgba(234,88,12,0.15);color:#fb923c;border:1px solid rgba(234,88,12,0.4)" title="Removed from active whitelist — stakes still subject to take rate">⚠ dewhitelisted</span>`
+            : '';
         const acqBadge = e.acquisition_class === 'wrapped_looks_native' && !e.acquisition
             ? `<span class="flag-chip flag-danger" title="Wrapped token, no guide — verify before depositing">⚠ needs guide</span>` : '';
         const tierBadge = e.tier ? `<span class="tier-chip tier-${e.tier}" title="Catalog tier">${e.tier}</span>` : '';
@@ -869,7 +885,7 @@
                     </button>
                 </div>
                 <div class="flex flex-wrap gap-1">
-                    ${tlaBadge}${inactiveBadge}${variantBadge}${variantTrapBadge}${acqBadge}
+                    ${tlaBadge}${inactiveBadge}${dewhitelistedBadge}${variantBadge}${variantTrapBadge}${acqBadge}
                     ${flags.map(f => `<span class="flag-chip ${flagClass(f)}">${escapeHtml(flagShort(f))}</span>`).join('')}
                     ${moreFlags > 0 ? `<span class="flag-chip flag-info">+${moreFlags} more</span>` : ''}
                 </div>
@@ -1157,6 +1173,45 @@
         html += kv('Appears in TLA pools', (e.appears_in?.tla_pools_count > 0) ? `${e.appears_in.tla_pools_count} (${(e.appears_in.tla_pools || []).join(', ')})` : 'no');
         html += kv('amplp underlying', e.appears_in?.is_amplp_underlying ? 'yes' : 'no');
         html += '</div>';
+
+        // --- TLA gauge status + take-rate exposure ---
+        // Three states: active (normal), inactive_below_threshold (whitelisted but
+        // no votes), dewhitelisted (removed but stakes still bleed to take rate).
+        // The take-rate panel is the user-protection feature — surface clearly.
+        const gaugeStatus = e.appears_in?.gauge_status;
+        const takeRate = e.appears_in?.take_rate;
+        if (gaugeStatus === 'dewhitelisted') {
+            html += `<div class="mb-4 p-3 bg-orange-950/40 border border-orange-700/50 rounded-lg">
+                <p class="text-sm text-orange-200 font-semibold mb-1"><i class="fas fa-triangle-exclamation mr-1"></i>Dewhitelisted — stakes still exposed to take rate</p>
+                <p class="text-xs text-orange-300/80 mb-2">This LP was removed from TLA's active whitelist but existing stakes are still subject to the yearly take rate. If you hold a position, consider withdrawing.</p>`;
+            if (takeRate) {
+                html += `<div class="grid grid-cols-2 gap-2 text-sm mt-2">`;
+                if (takeRate.yearly_rate) {
+                    const pct = (parseFloat(takeRate.yearly_rate) * 100).toFixed(1);
+                    html += kv('Yearly take rate', `${pct}%`);
+                }
+                if (takeRate.taken_raw) html += kv('Cumulative taken (raw)', takeRate.taken_raw);
+                if (takeRate.harvested_raw) html += kv('Cumulative harvested (raw)', takeRate.harvested_raw);
+                if (takeRate.last_taken_s) {
+                    const d = new Date(takeRate.last_taken_s * 1000);
+                    html += kv('Last take', d.toLocaleString());
+                }
+                if (takeRate.stake_mechanism) html += kv('Stake mechanism', takeRate.stake_mechanism);
+                html += `</div>`;
+            }
+            html += `</div>`;
+        } else if (gaugeStatus === 'inactive_below_threshold' && takeRate) {
+            // Whitelisted but inactive — milder warning since still officially listed
+            html += `<div class="mb-4 p-3 bg-gray-900/50 border border-gray-700 rounded-lg">
+                <p class="text-xs text-gray-400 uppercase mb-2"><i class="fas fa-pause-circle mr-1"></i>Inactive — below 1% vote threshold</p>
+                <div class="grid grid-cols-2 gap-2 text-sm">`;
+            if (takeRate.yearly_rate) {
+                const pct = (parseFloat(takeRate.yearly_rate) * 100).toFixed(1);
+                html += kv('Yearly take rate', `${pct}%`);
+            }
+            if (takeRate.stake_mechanism) html += kv('Stake mechanism', takeRate.stake_mechanism);
+            html += `</div></div>`;
+        }
 
         if (e.bridge) {
             html += `<div class="mb-4 p-3 bg-blue-950/30 border border-blue-700/30 rounded-lg">
