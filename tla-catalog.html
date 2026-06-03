@@ -475,12 +475,100 @@
 
     function buildEntries() {
         ALL_ENTRIES = [];
+
+        // Defensive: skip any token whose address isn't a real chain address.
+        // This protects against curated stubs / template entries like
+        // "_example_wBTCatom_disabled" appearing as user-visible token tiles
+        // alongside the real token (a trust issue if two "wBTC.atom" tiles
+        // appear with completely different details). Real Terra addresses:
+        // terra1..., ibc/..., factory/..., or a raw native denom (uluna).
+        const isRealAddress = (a) => a && (
+            a.startsWith('terra1') || a.startsWith('ibc/') ||
+            a.startsWith('factory/') || /^u[a-z]+$/.test(a)
+        );
+
+        // The catalog has a single `tokens` category for both regular tokens
+        // (LUNA, USDC, ROAR, ...) and amplp factory denoms (LUNA-USDC-ampLP,
+        // ATOM-dATOM AMPLP, ...). They're conceptually different — amplps are
+        // auto-compounded wrappers around LPs, not standalone tradeable
+        // tokens. Split them into their own `amplp_tokens` category so the
+        // filter shows them separately.
+        //
+        // Source of truth for amplp identity: keys of CATALOG.amplp_mappings
+        // (the cron's canonical amplp denom set).
+        //
+        // Also: LP-shaped names ("X-Y LP", "X-Y LP (S)") should be in
+        // `lp_tokens` regardless of whether they're in TLA's gauge whitelist.
+        // The cron only marks gauge-whitelisted LPs as lp_tokens; broader
+        // Eris-managed LPs (the inactive Liquidity-tab list, ATOM-dATOM,
+        // LUNA-wBTC.osmo, etc.) come through as `tokens` because they're not
+        // gauge-active. From the user's perspective they're still LPs —
+        // reclassify here.
+        const amplpDenoms = new Set(Object.keys(CATALOG.amplp_mappings || {}));
+        const looksLikeAmplpName = (s) => {
+            if (!s) return false;
+            const u = s.toUpperCase();
+            return u.includes('AMPLP') || u.endsWith('-AMPLP');
+        };
+        const looksLikeLpName = (s) => {
+            if (!s) return false;
+            // "X-Y LP", "X-Y LP (S)", contains hyphen + "LP" suffix but not AMPLP
+            if (looksLikeAmplpName(s)) return false;
+            return s.includes('-') && (/\bLP\b/.test(s) || /\sLP(\s|\()/.test(s));
+        };
+
         for (const [addr, t] of Object.entries(CATALOG.tokens || {})) {
+            if (!isRealAddress(addr)) continue;   // skip template/stub entries
+
+            // Derive the set of protocols a token belongs to. Tokens don't have
+            // a top-level `protocol` field — they have `sources.{astroport,
+            // skeletonswap,eris}`. We compute a list so the protocol filter
+            // can match all tokens that trade on (e.g.) Astroport, not just
+            // contracts whose name contains "Astroport".
+            //
+            // Note also: a token can belong to MULTIPLE protocols
+            // (USDC is on both Astroport and SkeletonSwap). We keep them all.
+            const protocols = [];
+            if (t.sources?.astroport) protocols.push('Astroport');
+            if (t.sources?.skeletonswap) protocols.push('SkeletonSwap');
+            if (t.sources?.eris) protocols.push('Eris');
+            // TLA: any token that appears in a TLA gauge pool (as LP or
+            // underlying) is in the TLA universe.
+            if (t.appears_in?.tla_pools_count > 0 || t.category === 'lp_tokens') {
+                protocols.push('TLA');
+            }
+
+            // Reclassify based on signals:
+            //   1. amplp denom set (cron-canonical) OR amplp-shaped name → amplp_tokens
+            //   2. LP-shaped name → lp_tokens (even if cron said 'tokens' because
+            //      it's not in TLA's gauge whitelist)
+            //   3. Else: respect cron's category
+            const erisDisplay = t.sources?.eris?.display || t.headline_name || t.display_name || '';
+            let effectiveCategory;
+            if (amplpDenoms.has(addr) || looksLikeAmplpName(erisDisplay)) {
+                effectiveCategory = 'amplp_tokens';
+            } else if (looksLikeLpName(erisDisplay)) {
+                effectiveCategory = 'lp_tokens';
+            } else {
+                effectiveCategory = t.category;
+            }
+
             ALL_ENTRIES.push({
                 ...t, _kind: 'token',
+                category: effectiveCategory,
+                // protocol kept as the primary protocol for backwards compat
+                // with code that checks e.protocol directly. protocols is the
+                // full list for accurate filtering.
+                protocol: protocols[0] || null,
+                protocols: protocols,
                 _searchKeys: [
-                    addr, t.symbol || '', t.display_name || '', t.coingecko_id || '',
-                    t.sources?.eris?.eris_name || '',
+                    addr,
+                    t.symbol || '',
+                    t.headline_name || '',                    // NEW: Eris UI label
+                    t.display_name || '',
+                    t.coingecko_id || '',
+                    t.sources?.eris?.display || '',           // NEW: replaces eris_name
+                    t.sources?.eris?.eris_name || '',         // kept for backwards compat
                     t.sources?.astroport?.symbol || '',
                     t.sources?.skeletonswap?.symbol || '',
                     t.sources?.cosmos_chain_registry?.symbol || '',
@@ -490,12 +578,14 @@
         for (const [addr, c] of Object.entries(CATALOG.contracts_catalog || {})) {
             ALL_ENTRIES.push({
                 ...c, _kind: 'contract',
+                protocols: c.protocol ? [c.protocol] : [],
                 _searchKeys: [addr, c.label || '', c.protocol || '', c.description || ''].join(' ').toLowerCase(),
             });
         }
         for (const [addr, w] of Object.entries(CATALOG.wallets_catalog || {})) {
             ALL_ENTRIES.push({
                 ...w, _kind: 'wallet',
+                protocols: w.protocol ? [w.protocol] : [],
                 _searchKeys: [addr, w.label || '', w.protocol || '', w.description || ''].join(' ').toLowerCase(),
             });
         }
@@ -575,12 +665,20 @@
     // FILTERS
     // ============================================================
     function renderFilters() {
-        const categories = ['all', 'tokens', 'contracts', 'wallets', 'lp_tokens'];
+        const categories = ['all', 'tokens', 'amplp_tokens', 'lp_tokens', 'contracts', 'wallets'];
         const catBox = document.getElementById('category-filters');
         catBox.innerHTML = categories.map(c => `<button class="filter-pill" data-cat="${c}">${c === 'all' ? 'All' : c.replace('_',' ')}</button>`).join('');
 
         const protocols = new Set(['all']);
-        for (const e of ALL_ENTRIES) if (e.protocol) protocols.add(e.protocol);
+        for (const e of ALL_ENTRIES) {
+            // protocols is the full list (added for tokens in buildEntries);
+            // fall back to legacy single-value e.protocol if entry has neither.
+            if (e.protocols && e.protocols.length) {
+                for (const p of e.protocols) protocols.add(p);
+            } else if (e.protocol) {
+                protocols.add(e.protocol);
+            }
+        }
         const proBox = document.getElementById('protocol-filters');
         proBox.innerHTML = [...protocols].sort((a,b) => a === 'all' ? -1 : b === 'all' ? 1 : a.localeCompare(b))
             .map(p => `<button class="filter-pill" data-pro="${p}">${p === 'all' ? 'All' : p}</button>`).join('');
@@ -616,7 +714,11 @@
             if (state.hideNoise && e._kind === 'token' && e.tier === 'noise') return false;
             
             if (state.category !== 'all' && e.category !== state.category) return false;
-            if (state.protocol !== 'all' && e.protocol !== state.protocol) return false;
+            if (state.protocol !== 'all') {
+                // Match against protocols array (preferred) or legacy single value
+                const protoList = (e.protocols && e.protocols.length) ? e.protocols : (e.protocol ? [e.protocol] : []);
+                if (!protoList.includes(state.protocol)) return false;
+            }
             if (s && !e._searchKeys.includes(s)) return false;
             
             for (const qk of state.quickFilters) {
@@ -637,8 +739,8 @@
         });
 
         FILTERED.sort((a, b) => {
-            const aName = (effectiveField(a, 'display_name') || effectiveField(a, 'label') || a.symbol || a.address || '').toLowerCase();
-            const bName = (effectiveField(b, 'display_name') || effectiveField(b, 'label') || b.symbol || b.address || '').toLowerCase();
+            const aName = (effectiveField(a, 'headline_name') || effectiveField(a, 'display_name') || effectiveField(a, 'label') || a.symbol || a.address || '').toLowerCase();
+            const bName = (effectiveField(b, 'headline_name') || effectiveField(b, 'display_name') || effectiveField(b, 'label') || b.symbol || b.address || '').toLowerCase();
             switch (state.sort) {
                 case 'score-desc': return (b.scoring?.confusion_score || 0) - (a.scoring?.confusion_score || 0);
                 case 'score-asc':  return (a.scoring?.confusion_score || 0) - (b.scoring?.confusion_score || 0);
@@ -719,7 +821,14 @@
         const hasDraft = !!getDraft(e._kind, e.address);
         const score = e.scoring?.confusion_score;
         const scoreClass = scoreToClass(score);
-        const name = effectiveField(e, 'display_name') || effectiveField(e, 'label') || e.symbol || (e.address || '').slice(0,12) + '…';
+        // Card header priority: headline_name (Eris UI label) > display_name >
+        // label (for contracts/wallets) > symbol > truncated address.
+        // headline_name is the cron-computed authoritative user-facing label.
+        const name = effectiveField(e, 'headline_name')
+                  || effectiveField(e, 'display_name')
+                  || effectiveField(e, 'label')
+                  || e.symbol
+                  || (e.address || '').slice(0,12) + '…';
         const subline = e._kind === 'token'
             ? [e.symbol, e.subtype, e.coingecko_id ? '✓ CG' : '✗ no CG'].filter(Boolean).join(' · ')
             : [effectiveField(e, 'subtype'), effectiveField(e, 'protocol')].filter(Boolean).join(' · ');
@@ -816,7 +925,13 @@
     }
 
     function renderReadView(e) {
-        const name = effectiveField(e, 'display_name') || effectiveField(e, 'label') || e.symbol || 'Unnamed';
+        // Same name priority as the card list: headline_name (Eris UI label)
+        // wins, falling back to display_name/label/symbol.
+        const name = effectiveField(e, 'headline_name')
+                  || effectiveField(e, 'display_name')
+                  || effectiveField(e, 'label')
+                  || e.symbol
+                  || 'Unnamed';
         const score = e.scoring?.confusion_score;
         const scoreClass = scoreToClass(score);
         const hasDraft = !!getDraft(e._kind, e.address);
@@ -1079,14 +1194,31 @@
         }
 
         html += `<div class="mb-4"><p class="text-xs text-gray-500 uppercase mb-2">Cross-source naming</p><div class="space-y-1.5">`;
-        const sources = [
-            ['Eris', e.sources?.eris?.eris_name || e.sources?.eris?.symbol],
-            ['Astroport', e.sources?.astroport?.symbol],
-            ['Skeleton Swap', e.sources?.skeletonswap?.symbol],
-            ['Chain Registry', e.sources?.cosmos_chain_registry?.symbol],
-        ];
-        for (const [label, val] of sources) {
-            const status = val ? `<span class="text-white">${escapeHtml(val)}</span>` : `<span class="text-gray-600">— not listed</span>`;
+        // Each source labels the same token differently. The catalog now
+        // preserves all of them separately so users can compare.
+        //   • Eris UI:        what eris's website shows users
+        //   • Eris price API: what Eris's price endpoint keys it by (CoinGecko ID)
+        //   • CoinGecko:      the CG slug (clickable to CG page)
+        //   • Astroport:      what Astroport's pool data calls it
+        //   • Skeleton Swap:  what SS's pool data calls it
+        //   • Chain Registry: the human-readable name in the IBC chain registry
+        const sources = [];
+        sources.push(['Eris UI', e.sources?.eris?.display || e.sources?.eris?.eris_name]);
+        const cgId = e.coingecko_id || e.sources?.eris?.coingecko_id;
+        if (cgId) {
+            sources.push(['Eris price API (CG ID)', cgId]);
+            sources.push(['CoinGecko', `<a href="https://www.coingecko.com/en/coins/${escapeAttr(cgId)}" target="_blank" rel="noopener" class="text-cyan-400 hover:text-cyan-300 underline">${escapeHtml(cgId)} <i class="fas fa-external-link-alt text-xs"></i></a>`, true]);
+        } else {
+            sources.push(['CoinGecko', null]);
+        }
+        sources.push(['Astroport', e.sources?.astroport?.symbol]);
+        sources.push(['Skeleton Swap', e.sources?.skeletonswap?.symbol]);
+        sources.push(['Chain Registry', e.sources?.cosmos_chain_registry?.symbol]);
+        for (const row of sources) {
+            const [label, val, isHtml] = row;
+            const status = val
+                ? (isHtml ? `<span>${val}</span>` : `<span class="text-white">${escapeHtml(val)}</span>`)
+                : `<span class="text-gray-600">— not listed</span>`;
             html += `<div class="flex justify-between text-sm"><span class="text-gray-400">${label}</span>${status}</div>`;
         }
         html += '</div></div>';
@@ -1146,13 +1278,64 @@
     }
 
     function renderWalletDetail(e) {
-        let html = '<div class="grid grid-cols-2 gap-3 mb-4">';
         const kv = (k,v) => v != null && v !== '' ? `<div><p class="text-xs text-gray-500">${k}</p><p class="text-sm text-white">${escapeHtml(v)}</p></div>` : '';
+
+        let html = '<div class="grid grid-cols-2 gap-3 mb-4">';
         html += kv('Subtype', effectiveField(e, 'subtype'));
         html += kv('Protocol', effectiveField(e, 'protocol'));
+        html += kv('Source', e.source);
+        html += kv('Discovery source', e.discovery_source);
         html += kv('Associated member', effectiveField(e, 'associated_member'));
         html += kv('Verified', effectiveField(e, 'verified'));
         html += '</div>';
+
+        // Flags (official, verified, etc) — small badges
+        const flags = effectiveField(e, 'flags');
+        if (Array.isArray(flags) && flags.length) {
+            html += `<div class="mb-4"><p class="text-xs text-gray-500 uppercase mb-2">Tags</p><div class="flex flex-wrap gap-1">`;
+            for (const f of flags) html += `<span class="flag-chip flag-info">${escapeHtml(f)}</span>`;
+            html += `</div></div>`;
+        }
+
+        // DAO memberships — the rich data the previous version didn't show.
+        // Each membership can have: dao name, kind (cw20/cw721 staker, velluna_locker, etc.),
+        // staking_contract, stake_balance, nft_count, voting_power_percent, total_vp, lock_count, token_ids.
+        const memberships = effectiveField(e, 'dao_memberships');
+        if (Array.isArray(memberships) && memberships.length) {
+            html += `<div class="mb-4"><p class="text-xs text-gray-500 uppercase mb-2"><i class="fas fa-users mr-1"></i>DAO memberships (${memberships.length})</p>
+                     <div class="space-y-2">`;
+            for (const m of memberships) {
+                const lines = [];
+                if (m.kind) lines.push(`<span class="text-gray-500">kind:</span> <span class="mono text-cyan-300">${escapeHtml(m.kind)}</span>`);
+                if (m.stake_balance) {
+                    // Stake balance is in raw chain units — format it readably
+                    const n = Number(m.stake_balance);
+                    const formatted = isNaN(n) ? m.stake_balance : n.toLocaleString();
+                    lines.push(`<span class="text-gray-500">stake:</span> <span class="text-white">${escapeHtml(formatted)}</span>`);
+                }
+                if (m.nft_count != null) lines.push(`<span class="text-gray-500">NFTs:</span> <span class="text-white">${m.nft_count}</span>`);
+                if (m.voting_power_percent != null) lines.push(`<span class="text-gray-500">VP:</span> <span class="text-white">${(+m.voting_power_percent).toFixed(3)}%</span>`);
+                if (m.total_vp != null) {
+                    const n = Number(m.total_vp);
+                    const formatted = isNaN(n) ? m.total_vp : n.toLocaleString();
+                    lines.push(`<span class="text-gray-500">total VP:</span> <span class="text-white">${escapeHtml(formatted)}</span>`);
+                }
+                if (m.lock_count != null) lines.push(`<span class="text-gray-500">locks:</span> <span class="text-white">${m.lock_count}</span>`);
+                if (Array.isArray(m.token_ids) && m.token_ids.length) lines.push(`<span class="text-gray-500">tokens:</span> <span class="mono text-xs text-gray-400">#${m.token_ids.join(', #')}</span>`);
+                html += `<div class="p-2 bg-gray-900/40 border border-gray-800 rounded text-xs">
+                           <div class="text-sm text-white font-semibold mb-1">${escapeHtml(m.dao || 'Unknown DAO')}</div>
+                           <div class="flex flex-wrap gap-x-3 gap-y-1">${lines.join('')}</div>
+                         </div>`;
+            }
+            html += `</div></div>`;
+        }
+
+        // Description
+        const desc = effectiveField(e, 'description');
+        if (desc) {
+            html += `<div class="mb-4"><p class="text-xs text-gray-500 uppercase mb-2">Description</p><p class="text-sm text-gray-300">${escapeHtml(desc)}</p></div>`;
+        }
+
         return html;
     }
 
