@@ -770,8 +770,8 @@
         });
 
         FILTERED.sort((a, b) => {
-            const aName = (effectiveField(a, 'headline_name') || effectiveField(a, 'display_name') || effectiveField(a, 'label') || a.symbol || a.address || '').toLowerCase();
-            const bName = (effectiveField(b, 'headline_name') || effectiveField(b, 'display_name') || effectiveField(b, 'label') || b.symbol || b.address || '').toLowerCase();
+            const aName = (effectiveField(a, 'headline_name') || effectiveField(a, 'display_name') || effectiveField(a, 'label') || effectiveField(a, 'daodao_name') || a.symbol || a.address || '').toLowerCase();
+            const bName = (effectiveField(b, 'headline_name') || effectiveField(b, 'display_name') || effectiveField(b, 'label') || effectiveField(b, 'daodao_name') || b.symbol || b.address || '').toLowerCase();
             switch (state.sort) {
                 case 'score-desc': return (b.scoring?.confusion_score || 0) - (a.scoring?.confusion_score || 0);
                 case 'score-asc':  return (a.scoring?.confusion_score || 0) - (b.scoring?.confusion_score || 0);
@@ -981,9 +981,25 @@
     // One entry point for any token. Auto-picks single vs composite.
     function entryLogoHtml(entry, sizePx = 28) {
         if (!entry) return tokenLogoHtml(null, sizePx);
-        // Contracts and wallets keep the FontAwesome icon path — not assets
+        // Contracts: keep FontAwesome icon (no asset analog)
         if (entry._kind === 'contract') return `<i class="fas fa-file-contract" style="color:#22d3ee;font-size:${sizePx - 4}px;width:${sizePx}px;text-align:center;"></i>`;
-        if (entry._kind === 'wallet') return `<i class="fas fa-user" style="color:#22d3ee;font-size:${sizePx - 4}px;width:${sizePx}px;text-align:center;"></i>`;
+        // Wallets: render the DAODAO PFPK NFT avatar if registered, otherwise
+        // fall back to the generic user icon. ipfs:// URLs are rewritten to
+        // an HTTPS gateway since browsers can't fetch ipfs:// directly.
+        if (entry._kind === 'wallet') {
+            const rawAvatar = effectiveField(entry, 'daodao_avatar');
+            if (rawAvatar) {
+                let url = rawAvatar;
+                if (url.startsWith('ipfs://')) {
+                    // Use ipfs.io public gateway; many DAODAO avatars are stored there.
+                    // If a particular file 404s, the <img onerror> falls back to fa-user.
+                    url = 'https://ipfs.io/ipfs/' + url.slice(7);
+                }
+                const fallback = `<i class=\\'fas fa-user\\' style=\\'color:#22d3ee;font-size:${sizePx - 4}px;width:${sizePx}px;text-align:center;\\'></i>`;
+                return `<img src="${escapeAttr(url)}" alt="${escapeAttr(effectiveField(entry, 'daodao_name') || 'wallet')}" onerror="this.outerHTML='${fallback}'" style="width:${sizePx}px;height:${sizePx}px;border-radius:50%;object-fit:cover;background:#1f2937;flex-shrink:0;" />`;
+            }
+            return `<i class="fas fa-user" style="color:#22d3ee;font-size:${sizePx - 4}px;width:${sizePx}px;text-align:center;"></i>`;
+        }
         // Tokens: LPs and amplps get composite; everything else single
         const isLpOrAmplp = entry.category === 'lp_tokens' || entry.category === 'amplp_tokens' || entry.subtype === 'amplp';
         if (isLpOrAmplp) return lpLogoHtml(entry, sizePx);
@@ -995,16 +1011,50 @@
         const score = e.scoring?.confusion_score;
         const scoreClass = scoreToClass(score);
         // Card header priority: headline_name (Eris UI label) > display_name >
-        // label (for contracts/wallets) > symbol > truncated address.
-        // headline_name is the cron-computed authoritative user-facing label.
+        // Card header priority: headline_name (Eris UI label) > display_name >
+        // label (for contracts/wallets) > daodao_name (PFPK profile) > symbol >
+        // truncated address. headline_name is the cron-computed authoritative
+        // user-facing label. daodao_name comes from DAODAO's PFPK profile
+        // service — about 160 of 668 wallets have one. Without including it
+        // here, those auto-discovered wallets show as truncated addresses
+        // even though we know who they are.
         const name = effectiveField(e, 'headline_name')
                   || effectiveField(e, 'display_name')
                   || effectiveField(e, 'label')
+                  || effectiveField(e, 'daodao_name')
                   || e.symbol
                   || (e.address || '').slice(0,12) + '…';
-        const subline = e._kind === 'token'
-            ? [e.symbol, e.subtype, e.coingecko_id ? '✓ CG' : '✗ no CG'].filter(Boolean).join(' · ')
-            : [effectiveField(e, 'subtype'), effectiveField(e, 'protocol')].filter(Boolean).join(' · ');
+        // Subline:
+        //   - Tokens: symbol · subtype · CG status
+        //   - Wallets: show primary DAO membership name if we have one,
+        //              else fall back to "member · DAODAO" generic
+        //   - Contracts: subtype · protocol
+        let subline;
+        if (e._kind === 'token') {
+            subline = [e.symbol, e.subtype, e.coingecko_id ? '✓ CG' : '✗ no CG'].filter(Boolean).join(' · ');
+        } else if (e._kind === 'wallet') {
+            const memberships = effectiveField(e, 'dao_memberships') || [];
+            if (Array.isArray(memberships) && memberships.length > 0) {
+                // Pick the most prominent DAO membership. "TLA" wins over generic
+                // staker memberships since it's the most relevant context for this site.
+                // Sort: TLA first, then by total_vp desc, then by stake_balance.
+                const sorted = [...memberships].sort((a, b) => {
+                    if (a.dao === 'TLA' && b.dao !== 'TLA') return -1;
+                    if (b.dao === 'TLA' && a.dao !== 'TLA') return 1;
+                    const aVp = Number(a.total_vp || a.stake_balance || 0);
+                    const bVp = Number(b.total_vp || b.stake_balance || 0);
+                    return bVp - aVp;
+                });
+                const primary = sorted[0];
+                const extraCount = memberships.length - 1;
+                const daoLabel = primary.dao + (extraCount > 0 ? ` (+${extraCount} more)` : '');
+                subline = daoLabel;
+            } else {
+                subline = [effectiveField(e, 'subtype'), effectiveField(e, 'protocol')].filter(Boolean).join(' · ');
+            }
+        } else {
+            subline = [effectiveField(e, 'subtype'), effectiveField(e, 'protocol')].filter(Boolean).join(' · ');
+        }
 
         const flags = (e.scoring?.flags || []).slice(0, 3);
         const moreFlags = (e.scoring?.flags || []).length - flags.length;
@@ -1663,7 +1713,28 @@
     function renderWalletDetail(e) {
         const kv = (k,v) => v != null && v !== '' ? `<div><p class="text-xs text-gray-500">${k}</p><p class="text-sm text-white">${escapeHtml(v)}</p></div>` : '';
 
-        let html = '<div class="grid grid-cols-2 gap-3 mb-4">';
+        let html = '';
+
+        // DAODAO profile panel — surface the PFPK profile (name + avatar) at the
+        // top when present. Without this, the 160 wallets with PFPK profiles
+        // looked the same as the ~500 with no name in the details view.
+        // The cards now show the name; this makes it explicit in the detail.
+        const ddName = effectiveField(e, 'daodao_name');
+        const ddAvatarRaw = effectiveField(e, 'daodao_avatar');
+        if (ddName || ddAvatarRaw) {
+            let avatarUrl = ddAvatarRaw || '';
+            if (avatarUrl.startsWith('ipfs://')) avatarUrl = 'https://ipfs.io/ipfs/' + avatarUrl.slice(7);
+            html += `<div class="mb-4 p-3 bg-cyan-950/20 border border-cyan-900/40 rounded-lg flex items-center gap-3">
+                ${avatarUrl ? `<img src="${escapeAttr(avatarUrl)}" alt="" style="width:48px;height:48px;border-radius:50%;object-fit:cover;background:#1f2937;flex-shrink:0;" onerror="this.style.display='none'" />` : '<i class="fas fa-user-circle text-cyan-400 text-4xl flex-shrink-0"></i>'}
+                <div class="min-w-0 flex-1">
+                    <p class="text-xs text-cyan-300 uppercase mb-1"><i class="fas fa-id-card mr-1"></i>DAODAO PFPK profile</p>
+                    <p class="text-lg font-bold text-white">${escapeHtml(ddName || '(name not set)')}</p>
+                    <p class="text-xs text-gray-500">Resolved from DAODAO's public profile service (pfpk.daodao.zone). Users opt-in by registering a name + NFT avatar.</p>
+                </div>
+            </div>`;
+        }
+
+        html += '<div class="grid grid-cols-2 gap-3 mb-4">';
         html += kv('Subtype', effectiveField(e, 'subtype'));
         html += kv('Protocol', effectiveField(e, 'protocol'));
         html += kv('Source', e.source);
