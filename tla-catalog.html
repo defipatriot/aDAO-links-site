@@ -355,6 +355,8 @@
             </div>
         </div>
 
+        <div id="category-subtitle" class="hidden"></div>
+
         <div id="results-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             <div class="col-span-full text-center py-12 text-gray-500">
                 <i class="fas fa-spinner fa-spin text-2xl mb-2"></i>
@@ -786,12 +788,36 @@
     // ============================================================
     // RENDER LIST
     // ============================================================
+    // Category subtitles — one-liner explaining what each tab is. Especially
+    // important for amplp_tokens since the difference between "LP" and "amplp"
+    // isn't obvious from the name alone (e.g. "FUEL-LUNA LP" vs "FUEL-LUNA AMPLP").
+    const CATEGORY_HELP = {
+        'amplp_tokens': 'Amplified LP tokens — auto-compounding wrappers around regular LPs. Stake the underlying LP to receive these; rewards auto-compound back into more LP. The non-amplified LP version lives in the "lp tokens" tab.',
+        'lp_tokens': 'LP tokens — receipts you get from providing liquidity on Astroport or Skeleton Swap pools whitelisted by TLA. These are the non-amplified versions; the amplified (auto-compounding) counterparts live in "amplp tokens".',
+        'tokens': 'Tokens — individual fungible assets (LUNA, USDC, ATOM, project tokens). The building blocks of LP pairs.',
+        'contracts': 'Smart contracts — protocols, DAOs, staking modules, the things doing the work. Not assets you hold.',
+        'wallets': 'Labeled wallets — council members, treasuries, bribers, allied DAOs. Helpful for identifying who is acting in a transaction.',
+    };
+
     function render() {
         const grid = document.getElementById('results-grid');
         const total = FILTERED.length;
         const hiddenNoise = state.hideNoise ? ALL_ENTRIES.filter(e => e._kind === 'token' && e.tier === 'noise').length : 0;
         const noiseHint = hiddenNoise > 0 ? ` <span class="text-gray-600 text-xs ml-2">· ${hiddenNoise} noise tokens hidden</span>` : '';
         document.getElementById('result-count').innerHTML = total + ' result' + (total === 1 ? '' : 's') + noiseHint;
+
+        // Inject contextual subtitle above the grid based on active category
+        const subtitle = CATEGORY_HELP[state.category];
+        const subtitleEl = document.getElementById('category-subtitle');
+        if (subtitleEl) {
+            if (subtitle && state.category !== 'all') {
+                subtitleEl.innerHTML = `<div class="mb-3 p-2.5 bg-cyan-950/20 border border-cyan-900/40 rounded text-xs text-cyan-200/80"><i class="fas fa-circle-info mr-1.5 text-cyan-400"></i>${escapeHtml(subtitle)}</div>`;
+                subtitleEl.classList.remove('hidden');
+            } else {
+                subtitleEl.innerHTML = '';
+                subtitleEl.classList.add('hidden');
+            }
+        }
         
         if (total === 0) {
             grid.innerHTML = '<div class="col-span-full text-center py-12 text-gray-500"><i class="fas fa-magnifying-glass text-2xl mb-2"></i><p>No matches. Try clearing filters or toggling "Show noise".</p></div>';
@@ -860,6 +886,38 @@
             ? `<span class="flag-chip flag-danger" title="Wrapped token, no guide — verify before depositing">⚠ needs guide</span>` : '';
         const tierBadge = e.tier ? `<span class="tier-chip tier-${e.tier}" title="Catalog tier">${e.tier}</span>` : '';
 
+        // DEX badge — shown for amplp_tokens and lp_tokens. Derive from the
+        // underlying LP's name (for amplps) or the entry's own name (for LPs).
+        //   - Name ends in "(S)" → Skeleton Swap (white_whale-pool, run by BBL)
+        //   - Name contains "LP"/"AMPLP" with no (S) → Astroport
+        //   - Name is single-token (no hyphen, no "LP") → single-asset
+        //     compounder vault (Eris's vault, not a DEX pool)
+        // For amplps the appears_in.wraps_lp_address lets us look up the
+        // underlying LP's display name to read the (S) suffix from the source.
+        const dexBadge = (() => {
+            if (e._kind !== 'token') return '';
+            if (e.category !== 'amplp_tokens' && e.category !== 'lp_tokens') return '';
+            let nameForDex = e.headline_name || e.display_name || e.symbol || '';
+            if (e.category === 'amplp_tokens') {
+                const wrappedAddr = e.appears_in?.wraps_lp_address;
+                const wrappedTok = wrappedAddr && CATALOG?.tokens?.[wrappedAddr];
+                if (wrappedTok) {
+                    nameForDex = wrappedTok.headline_name || wrappedTok.display_name || nameForDex;
+                }
+            }
+            // Single-asset vault: no hyphen and no "LP" suffix means the amplp
+            // wraps a single token (ampCAPA, wBTC.creda.a, xASTRO etc.) — not
+            // a DEX pool. Eris's compounder vault is the relevant venue.
+            const looksLikePair = nameForDex.includes('-') && /\bLP\b/.test(nameForDex);
+            if (e.category === 'amplp_tokens' && !looksLikePair) {
+                return `<span class="flag-chip" style="background:rgba(139,92,246,0.15);color:#c4b5fd;border:1px solid rgba(139,92,246,0.3)" title="Eris single-asset compounder vault — not a DEX pool">single-asset vault</span>`;
+            }
+            if (/\(S\)/.test(nameForDex)) {
+                return `<span class="flag-chip" style="background:rgba(245,158,11,0.15);color:#fbbf24;border:1px solid rgba(245,158,11,0.3)" title="Skeleton Swap (white_whale-pool, operated by Backbone Labs)">Skeleton Swap</span>`;
+            }
+            return `<span class="flag-chip" style="background:rgba(59,130,246,0.15);color:#60a5fa;border:1px solid rgba(59,130,246,0.3)" title="Astroport pair contract">Astroport</span>`;
+        })();
+
         const kindIcon = { token: 'fa-coins', contract: 'fa-file-contract', wallet: 'fa-user' }[e._kind] || 'fa-question';
 
         return `
@@ -885,7 +943,7 @@
                     </button>
                 </div>
                 <div class="flex flex-wrap gap-1">
-                    ${tlaBadge}${inactiveBadge}${dewhitelistedBadge}${variantBadge}${variantTrapBadge}${acqBadge}
+                    ${tlaBadge}${dexBadge}${inactiveBadge}${dewhitelistedBadge}${variantBadge}${variantTrapBadge}${acqBadge}
                     ${flags.map(f => `<span class="flag-chip ${flagClass(f)}">${escapeHtml(flagShort(f))}</span>`).join('')}
                     ${moreFlags > 0 ? `<span class="flag-chip flag-info">+${moreFlags} more</span>` : ''}
                 </div>
@@ -1160,6 +1218,42 @@
                     <p class="text-xs text-yellow-300/70 mt-1">The symbol suggests its origin, but a verified route isn't on file yet.</p>
                 </div>`;
             }
+        }
+
+        // --- amplp "Wraps" relationship panel ---
+        // Amplps are wrappers around an LP (or single-asset). Surface that
+        // relationship clearly: which LP, which DEX it lives on, which bucket
+        // the staked position counts toward. Without this panel, an entry
+        // like "ATOM-dATOM AMPLP" gives no indication WHERE the actual liquidity
+        // sits (Astroport? SS?) and what the user is really depositing into.
+        if (e.subtype === 'amplp' || e.category === 'amplp_tokens') {
+            const wrappedAddr = e.appears_in?.wraps_lp_address;
+            const wrappedTok = wrappedAddr && CATALOG?.tokens?.[wrappedAddr];
+            const wrappedName = wrappedTok?.headline_name || wrappedTok?.display_name || wrappedTok?.symbol || (wrappedAddr ? (wrappedAddr.slice(0,30) + '…') : '(unknown)');
+            const nameForDex = wrappedName;
+            const looksLikePair = nameForDex.includes('-') && /\bLP\b/.test(nameForDex);
+            let dexLabel, dexExplainer;
+            if (!looksLikePair) {
+                dexLabel = 'Single-asset compounder vault';
+                dexExplainer = 'This amplp wraps a single token directly (not a DEX pool). Eris\'s asset compounder handles the auto-compounding.';
+            } else if (/\(S\)/.test(nameForDex)) {
+                dexLabel = 'Skeleton Swap';
+                dexExplainer = 'Underlying pool is on Skeleton Swap (white_whale-pool contract architecture, operated by Backbone Labs).';
+            } else {
+                dexLabel = 'Astroport';
+                dexExplainer = 'Underlying pool is an Astroport pair contract.';
+            }
+            const bucket = (e.appears_in?.tla_pools || []).join(', ') || (e._amplp_bucket || '');
+            html += `<div class="mb-4 p-3 bg-purple-950/30 border border-purple-700/40 rounded-lg">
+                <p class="text-xs text-purple-300 uppercase mb-2"><i class="fas fa-layer-group mr-1"></i>Amplified LP — auto-compounding wrapper</p>
+                <p class="text-xs text-gray-400 mb-2">This is the <strong>amplified version</strong> of an LP. Deposit the underlying LP to get this token back; it auto-compounds rewards into more LP behind the scenes. The non-amplified LP is shown below.</p>
+                <div class="space-y-1.5 text-sm">
+                    <div class="flex justify-between"><span class="text-gray-500">Wraps</span><span class="text-white font-semibold">${escapeHtml(wrappedName)}</span></div>
+                    ${wrappedAddr ? `<div class="flex justify-between"><span class="text-gray-500">Wrapped LP address</span><span class="mono text-xs text-gray-400 truncate" title="${escapeAttr(wrappedAddr)}">${escapeHtml(wrappedAddr.slice(0,32))}…</span></div>` : ''}
+                    <div class="flex justify-between"><span class="text-gray-500">Underlying DEX</span><span class="text-white" title="${escapeAttr(dexExplainer)}">${escapeHtml(dexLabel)}</span></div>
+                    ${bucket ? `<div class="flex justify-between"><span class="text-gray-500">TLA bucket</span><span class="text-white">${escapeHtml(bucket)}</span></div>` : ''}
+                </div>
+            </div>`;
         }
 
         html += '<div class="grid grid-cols-2 gap-3 mb-4">';
