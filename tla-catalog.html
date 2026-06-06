@@ -1086,6 +1086,27 @@
         const dexBadge = (() => {
             if (e._kind !== 'token') return '';
             if (e.category !== 'amplp_tokens' && e.category !== 'lp_tokens') return '';
+
+            // Prefer real on-chain architecture data when available. Cron now
+            // queries contract_version{} on every pair contract; the result
+            // lives at CATALOG.scope.lp_to_architecture[lp_addr].dex.
+            // For amplps, look through to the underlying LP's architecture.
+            const archAddr = e.category === 'lp_tokens' ? e.address : e.appears_in?.wraps_lp_address;
+            const arch = archAddr && CATALOG?.scope?.lp_to_architecture?.[archAddr];
+            if (arch && arch.dex) {
+                const versionSuffix = arch.version ? ` v${arch.version}` : '';
+                const ttl = `${arch.contract || arch.dex}${versionSuffix}${arch.pair_type ? ' (' + arch.pair_type + ')' : ''}`;
+                if (arch.dex === 'Skeleton Swap') {
+                    return `<span class="flag-chip" style="background:rgba(245,158,11,0.15);color:#fbbf24;border:1px solid rgba(245,158,11,0.3)" title="${escapeAttr(ttl)} — operated by Backbone Labs">Skeleton Swap</span>`;
+                }
+                if (arch.dex === 'Astroport') {
+                    return `<span class="flag-chip" style="background:rgba(59,130,246,0.15);color:#60a5fa;border:1px solid rgba(59,130,246,0.3)" title="${escapeAttr(ttl)}">Astroport</span>`;
+                }
+                // Unknown DEX from on-chain contract_version
+                return `<span class="flag-chip" style="background:rgba(156,163,175,0.15);color:#d1d5db;border:1px solid rgba(156,163,175,0.3)" title="${escapeAttr(ttl)}">${escapeHtml(arch.dex)}</span>`;
+            }
+
+            // Fall back to name-based inference (pre-Rev 0.14 behavior).
             let nameForDex = e.headline_name || e.display_name || e.symbol || '';
             if (e.category === 'amplp_tokens') {
                 const wrappedAddr = e.appears_in?.wraps_lp_address;
@@ -1094,17 +1115,14 @@
                     nameForDex = wrappedTok.headline_name || wrappedTok.display_name || nameForDex;
                 }
             }
-            // Single-asset vault: no hyphen and no "LP" suffix means the amplp
-            // wraps a single token (ampCAPA, wBTC.creda.a, xASTRO etc.) — not
-            // a DEX pool. Eris's compounder vault is the relevant venue.
             const looksLikePair = nameForDex.includes('-') && /\bLP\b/.test(nameForDex);
             if (e.category === 'amplp_tokens' && !looksLikePair) {
                 return `<span class="flag-chip" style="background:rgba(139,92,246,0.15);color:#c4b5fd;border:1px solid rgba(139,92,246,0.3)" title="Eris single-asset compounder vault — not a DEX pool">single-asset vault</span>`;
             }
             if (/\(S\)/.test(nameForDex)) {
-                return `<span class="flag-chip" style="background:rgba(245,158,11,0.15);color:#fbbf24;border:1px solid rgba(245,158,11,0.3)" title="Skeleton Swap (white_whale-pool, operated by Backbone Labs)">Skeleton Swap</span>`;
+                return `<span class="flag-chip" style="background:rgba(245,158,11,0.15);color:#fbbf24;border:1px solid rgba(245,158,11,0.3)" title="Skeleton Swap (white_whale-pool, operated by Backbone Labs) — inferred from name">Skeleton Swap</span>`;
             }
-            return `<span class="flag-chip" style="background:rgba(59,130,246,0.15);color:#60a5fa;border:1px solid rgba(59,130,246,0.3)" title="Astroport pair contract">Astroport</span>`;
+            return `<span class="flag-chip" style="background:rgba(59,130,246,0.15);color:#60a5fa;border:1px solid rgba(59,130,246,0.3)" title="Astroport pair contract — inferred from name">Astroport</span>`;
         })();
 
         const kindIcon = { token: 'fa-coins', contract: 'fa-file-contract', wallet: 'fa-user' }[e._kind] || 'fa-question';
@@ -1424,16 +1442,30 @@
             const wrappedName = wrappedTok?.headline_name || wrappedTok?.display_name || wrappedTok?.symbol || (wrappedAddr ? (wrappedAddr.slice(0,30) + '…') : '(unknown)');
             const nameForDex = wrappedName;
             const looksLikePair = nameForDex.includes('-') && /\bLP\b/.test(nameForDex);
-            let dexLabel, dexExplainer;
-            if (!looksLikePair) {
+            // Try the on-chain architecture data first — it's authoritative.
+            // Falls back to name-based inference (the (S) suffix etc.) only
+            // when the cron couldn't resolve contract_version{} on the pair.
+            const arch = wrappedAddr && CATALOG?.scope?.lp_to_architecture?.[wrappedAddr];
+            let dexLabel, dexExplainer, archDetail = '';
+            if (arch && arch.dex) {
+                // Authoritative: use on-chain data
+                dexLabel = arch.dex;
+                if (arch.contract && arch.version) {
+                    archDetail = `${arch.contract} v${arch.version}`;
+                    if (arch.pair_type) archDetail += ` · ${arch.pair_type}`;
+                } else if (arch.contract) {
+                    archDetail = arch.contract;
+                }
+                dexExplainer = `On-chain contract_version reports "${arch.contract || '?'}"${arch.version ? ' v' + arch.version : ''}. ${arch.dex === 'Skeleton Swap' ? 'Operated by Backbone Labs after White Whale shutdown.' : ''}`;
+            } else if (!looksLikePair) {
                 dexLabel = 'Single-asset compounder vault';
                 dexExplainer = 'This amplp wraps a single token directly (not a DEX pool). Eris\'s asset compounder handles the auto-compounding.';
             } else if (/\(S\)/.test(nameForDex)) {
                 dexLabel = 'Skeleton Swap';
-                dexExplainer = 'Underlying pool is on Skeleton Swap (white_whale-pool contract architecture, operated by Backbone Labs).';
+                dexExplainer = 'Inferred from "(S)" suffix in LP name. Underlying pool is on Skeleton Swap (white_whale-pool contract architecture, operated by Backbone Labs).';
             } else {
                 dexLabel = 'Astroport';
-                dexExplainer = 'Underlying pool is an Astroport pair contract.';
+                dexExplainer = 'Inferred from LP name (no "(S)" suffix). Underlying pool is an Astroport pair contract.';
             }
             const bucket = (e.appears_in?.tla_pools || []).join(', ') || (e._amplp_bucket || '');
             // Build a synthetic entry-like object for the wrapped LP so entryLogoHtml
@@ -1455,6 +1487,7 @@
                 <div class="space-y-1.5 text-sm">
                     ${wrappedAddr ? `<div class="flex justify-between"><span class="text-gray-500">Wrapped LP address</span><span class="mono text-xs text-gray-400 truncate" title="${escapeAttr(wrappedAddr)}">${escapeHtml(wrappedAddr.slice(0,32))}…</span></div>` : ''}
                     <div class="flex justify-between"><span class="text-gray-500">Underlying DEX</span><span class="text-white" title="${escapeAttr(dexExplainer)}">${escapeHtml(dexLabel)}</span></div>
+                    ${archDetail ? `<div class="flex justify-between"><span class="text-gray-500">Pool architecture</span><span class="text-white text-xs mono">${escapeHtml(archDetail)}</span></div>` : ''}
                     ${bucket ? `<div class="flex justify-between"><span class="text-gray-500">TLA bucket</span><span class="text-white">${escapeHtml(bucket)}</span></div>` : ''}
                 </div>
             </div>`;
@@ -1468,6 +1501,31 @@
         html += kv('CoinGecko ID', e.coingecko_id);
         html += kv('CoinGecko match', e.coingecko_match);
         html += kv('Tier', e.tier);
+        // Pool architecture row — shown for LPs and amplps. Surfaces what the
+        // catalog learned by querying contract_version{} on each pair contract:
+        //   contract: white_whale-pool | astroport-pair | astroport-pair-stable | ...
+        //   pair_type: xyk | stable | concentrated
+        //   version: 1.3.8 | 1.5.0 | ...
+        // For amplps we look through to the underlying LP's architecture.
+        // Helps users distinguish "this is an Astroport CL pool" vs "this is a
+        // Skeleton Swap legacy WW xyk pool" — they behave very differently re:
+        // slippage, capital efficiency, fees.
+        const isLp = e.category === 'lp_tokens';
+        const isAmplp = e.subtype === 'amplp' || e.category === 'amplp_tokens';
+        if (isLp || isAmplp) {
+            let archAddr = isLp ? e.address : e.appears_in?.wraps_lp_address;
+            const arch = archAddr && CATALOG?.scope?.lp_to_architecture?.[archAddr];
+            if (arch) {
+                // Format: "Skeleton Swap • white_whale-pool v1.3.8 • xyk"
+                const parts = [];
+                if (arch.dex) parts.push(arch.dex);
+                if (arch.contract) parts.push(arch.contract + (arch.version ? ` v${arch.version}` : ''));
+                if (arch.pair_type) parts.push(arch.pair_type);
+                html += kv('Pool architecture', parts.join(' • '));
+            } else if (isLp || isAmplp) {
+                html += kv('Pool architecture', '(not resolved — pair contract did not respond to contract_version query)');
+            }
+        }
         html += kv('Appears in TLA pools', (e.appears_in?.tla_pools_count > 0) ? `${e.appears_in.tla_pools_count} (${(e.appears_in.tla_pools || []).join(', ')})` : 'no');
         // "amplp underlying" is meaningfully YES when EITHER:
         //   - the token is an underlying asset of an LP that gets wrapped by amplp
