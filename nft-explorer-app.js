@@ -1181,81 +1181,109 @@ function switchView(viewName) {
 }
 
 // ============================================================================
-// ANALYTICS VIEW  — collection-wide trading analytics
-// Data sources (new pipeline only, no old snapshots):
-//   data/v2/nft-analytics.json  (pre-aggregated: volume, leaderboards, monthly, flips)
-//   data/v2/summary.json        (backing + marketplace listing state)
+// ANALYTICS VIEW — collection-wide trading analytics (new pipeline only)
+//   data/v2/nft-analytics.json   (aggregates: volume, leaderboards, monthly, flips)
+//   data/v2/summary.json         (backing + marketplace listing state)
+//   data/v2/sales-enriched.json  (per-sale, for highest/biggest sales)
 // ============================================================================
 const ANALYTICS_URL = "https://raw.githubusercontent.com/defipatriot/nft-inventory-data_2026/main/data/v2/nft-analytics.json";
 const ANALYTICS_SUMMARY_URL = "https://raw.githubusercontent.com/defipatriot/nft-inventory-data_2026/main/data/v2/summary.json";
+const ANALYTICS_ENRICHED_URL = "https://raw.githubusercontent.com/defipatriot/nft-inventory-data_2026/main/data/v2/sales-enriched.json";
 
 let analyticsLoaded = false;
+let _avMonths = [];          // monthly data, for chart scale toggle
+let _avScale = "log";        // default log so recent months are visible
 
 // ---- formatters ----
 const fmtUsd = (n) => {
     if (n == null || isNaN(n)) return "—";
-    const neg = n < 0 ? "-" : "";
-    const a = Math.abs(n);
+    const neg = n < 0 ? "-" : ""; const a = Math.abs(n);
     if (a >= 1e6) return `${neg}$${(a / 1e6).toFixed(2)}M`;
     if (a >= 1e3) return `${neg}$${(a / 1e3).toFixed(1)}K`;
     return `${neg}$${a.toFixed(a < 10 ? 2 : 0)}`;
 };
 const fmtUsdFull = (n) => (n == null || isNaN(n)) ? "—" : `$${Math.round(n).toLocaleString()}`;
 const fmtNum = (n) => (n == null || isNaN(n)) ? "—" : Math.round(n).toLocaleString();
-const fmtTok = (n, sym) => `${(+n).toLocaleString(undefined, { maximumFractionDigits: 2 })} ${sym}`;
 const aShort = (a) => a ? `${a.slice(0, 6)}…${a.slice(-4)}` : "—";
-// owner display for leaderboards: member name if known, else short addr (system addrs are pre-filtered)
 const aLabel = (a) => {
     const sys = (typeof getSystemWalletLabel === "function") ? getSystemWalletLabel(a) : null;
     if (sys) return sys;
     const m = (typeof getMemberName === "function") ? getMemberName(a) : null;
-    return m ? `${m}` : aShort(a);
+    return m ? m : aShort(a);
 };
 
-// ---- tiny SVG charts (no external lib) ----
-// Vertical bars with native <title> tooltips. values: [{label, value, sub}]
-function svgBars(values, { h = 170, accent = "#22d3ee", fmt = fmtUsd } = {}) {
+// ---- SVG bar chart with linear/log scale + native tooltips ----
+function svgBars(values, { h = 170, accent = "#22d3ee", fmt = fmtUsd, scale = "linear" } = {}) {
     if (!values.length) return "";
-    const max = Math.max(...values.map(v => v.value), 1);
-    const n = values.length;
-    const gap = 2, bw = Math.max(2, (100 - gap * n) / n);
+    const raw = values.map(v => Math.max(0, v.value));
+    const tf = (x) => scale === "log" ? Math.log10(x + 1) : x;
+    const max = Math.max(...raw.map(tf), 0.0001);
+    const n = values.length, gap = 1.5, bw = Math.max(1.5, (100 - gap * n) / n);
     let bars = "", x = 0;
-    values.forEach((v, i) => {
-        const bh = max ? (v.value / max) * 88 : 0;
-        const y = 92 - bh;
-        bars += `<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${bw.toFixed(2)}" height="${bh.toFixed(2)}" rx="0.6" fill="url(#agrad)" opacity="0.92"><title>${v.label}: ${fmt(v.value)}${v.sub ? ` · ${v.sub}` : ""}</title></rect>`;
+    values.forEach((v) => {
+        const bh = (tf(Math.max(0, v.value)) / max) * 88;
+        bars += `<rect x="${x.toFixed(2)}" y="${(92 - bh).toFixed(2)}" width="${bw.toFixed(2)}" height="${Math.max(0, bh).toFixed(2)}" rx="0.5" fill="url(#agrad)" opacity="0.92"><title>${v.label}: ${fmt(v.value)}${v.sub ? ` · ${v.sub}` : ""}</title></rect>`;
         x += bw + gap;
     });
     return `<svg viewBox="0 0 100 100" preserveAspectRatio="none" style="width:100%;height:${h}px;display:block">
       <defs><linearGradient id="agrad" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="${accent}" stop-opacity="0.95"/>
-        <stop offset="100%" stop-color="${accent}" stop-opacity="0.25"/>
+        <stop offset="0%" stop-color="${accent}" stop-opacity="0.95"/><stop offset="100%" stop-color="${accent}" stop-opacity="0.25"/>
       </linearGradient></defs>${bars}</svg>`;
 }
-// horizontal proportion bar
 function hBar(value, max, accent = "#22d3ee") {
     const pct = max ? Math.min(100, (value / max) * 100) : 0;
-    return `<div style="background:rgba(255,255,255,.06);border-radius:4px;height:8px;overflow:hidden">
-      <div style="width:${pct.toFixed(1)}%;height:100%;background:${accent};border-radius:4px"></div></div>`;
+    return `<div style="background:rgba(255,255,255,.06);border-radius:4px;height:8px;overflow:hidden"><div style="width:${pct.toFixed(1)}%;height:100%;background:${accent};border-radius:4px"></div></div>`;
+}
+// re-render just the volume chart when the scale toggle is clicked
+function renderVolChart() {
+    const el = document.getElementById("av-vol-chart");
+    if (!el) return;
+    el.innerHTML = svgBars(_avMonths.map(m => ({ label: m.month, value: m.notional_usd, sub: `${m.count} sales` })), { h: 180, scale: _avScale });
+    const lin = document.getElementById("av-scale-lin"), log = document.getElementById("av-scale-log");
+    if (lin && log) {
+        lin.className = `av-scale-btn ${_avScale === "linear" ? "active" : ""}`;
+        log.className = `av-scale-btn ${_avScale === "log" ? "active" : ""}`;
+    }
 }
 
-// ---- main render ----
+// current-holdings map (who holds what NOW) for buyer/seller behaviour context
+function buildHoldingsMap() {
+    const m = {};
+    if (typeof allNfts === "undefined" || !Array.isArray(allNfts)) return m;
+    allNfts.forEach(n => {
+        if (!n.owner) return;
+        const h = m[n.owner] || (m[n.owner] = { held: 0, staked: 0, liquid: 0, listed: 0 });
+        h.held++;
+        if (n.staked_daodao || n.staked_enterprise_legacy) h.staked++;
+        if (n.liquid) h.liquid++;
+        if (n.bbl_market || n.atrium_market || n.boost_market) h.listed++;
+    });
+    return m;
+}
+function holdingsBlurb(h) {
+    if (!h || h.held === 0) return `<span class="text-gray-500">now holds 0 · exited</span>`;
+    const bits = [`${h.held} held`];
+    if (h.staked) bits.push(`${h.staked} staked`);
+    if (h.listed) bits.push(`${h.listed} listed`);
+    let tag = "holding", tc = "text-gray-400";
+    if (h.staked >= h.held * 0.6) { tag = "accumulating"; tc = "text-cyan-400"; }
+    else if (h.listed > 0) { tag = "selling"; tc = "text-amber-400"; }
+    return `<span class="text-gray-500">now: ${bits.join(" · ")}</span> <span class="${tc}">· ${tag}</span>`;
+}
+
 async function renderAnalytics() {
     const root = document.getElementById("analytics-view");
-    if (!root) return;
-    if (analyticsLoaded) return; // build once
+    if (!root || analyticsLoaded) return;
     root.innerHTML = `<div class="text-center text-gray-400 py-16"><i class="fas fa-circle-notch fa-spin text-cyan-400 text-2xl"></i><p class="mt-3 text-sm">Loading collection analytics…</p></div>`;
 
-    let A, S;
+    let A, S, E = null;
     try {
-        const [ar, sr] = await Promise.all([
-            fetch(ANALYTICS_URL),
-            fetch(ANALYTICS_SUMMARY_URL)
-        ]);
+        const [ar, sr, er] = await Promise.all([fetch(ANALYTICS_URL), fetch(ANALYTICS_SUMMARY_URL), fetch(ANALYTICS_ENRICHED_URL)]);
         if (!ar.ok) throw new Error(`analytics feed ${ar.status}`);
         A = await ar.json();
-        S = sr.ok ? await sr.json() : null; // summary is enhancement, not core
         if (!A || !A.volume || !A.leaderboards) throw new Error("analytics feed malformed");
+        S = sr.ok ? await sr.json() : null;     // backing/listings — enhancement
+        E = er.ok ? await er.json() : null;     // per-sale — enhancement
     } catch (e) {
         root.innerHTML = `<div class="text-center py-16"><i class="fas fa-triangle-exclamation text-amber-400 text-2xl"></i>
           <p class="mt-3 text-gray-300">Analytics data is unavailable right now.</p>
@@ -1264,120 +1292,118 @@ async function renderAnalytics() {
     }
 
     analyticsLoaded = true;
-    root.innerHTML = buildAnalyticsHtml(A, S);
+    _avMonths = A.monthly || [];
+    root.innerHTML = buildAnalyticsHtml(A, S, E);
+    renderVolChart();
+    const lin = document.getElementById("av-scale-lin"), log = document.getElementById("av-scale-log");
+    if (lin) lin.onclick = () => { _avScale = "linear"; renderVolChart(); };
+    if (log) log.onclick = () => { _avScale = "log"; renderVolChart(); };
 }
 
-function buildAnalyticsHtml(A, S) {
+function buildAnalyticsHtml(A, S, E) {
     const card = "bg-gray-800/50 border border-gray-700 rounded-xl p-4";
     const h = (t, sub) => `<div class="flex items-baseline justify-between mb-3"><h3 class="text-cyan-400 font-bold">${t}</h3>${sub ? `<span class="text-xs text-gray-500">${sub}</span>` : ""}</div>`;
-
-    // ----- HERO: total volume + monthly sparkline -----
     const vol = A.volume || {};
-    const months = (A.monthly || []);
-    const heroSpark = svgBars(months.map(m => ({ label: m.month, value: m.notional_usd, sub: `${m.count} sales` })), { h: 90 });
-    const hero = `
-      <div class="${card} mb-4" style="background:linear-gradient(135deg,rgba(34,211,238,.08),rgba(17,24,39,.4))">
-        <div class="flex flex-wrap items-end gap-x-10 gap-y-3 mb-3">
-          <div>
-            <div class="text-xs uppercase tracking-wider text-gray-400">All-time volume</div>
-            <div class="text-4xl font-extrabold text-white leading-none mt-1">${fmtUsdFull(vol.usd_at_sale)}</div>
-            <div class="text-xs text-gray-500 mt-1">USD at time of each sale</div>
-          </div>
-          <div><div class="text-xs uppercase tracking-wider text-gray-400">Sales</div><div class="text-2xl font-bold text-cyan-300 mt-1">${fmtNum(vol.sales_count)}</div></div>
-          <div><div class="text-xs uppercase tracking-wider text-gray-400">Value today</div><div class="text-2xl font-bold text-gray-200 mt-1">${fmtUsd(vol.value_today_usd)}</div></div>
-          <div><div class="text-xs uppercase tracking-wider text-gray-400">LUNA traded</div><div class="text-2xl font-bold text-gray-200 mt-1">${fmtNum(vol.luna_equiv_total)}</div></div>
-        </div>
-        ${heroSpark}
-        <div class="text-[11px] text-gray-500 mt-1 text-right">monthly volume · ${months.length ? months[0].month : ""} → ${months.length ? months[months.length - 1].month : ""}</div>
-      </div>`;
 
-    // ----- VALUE TILES: backing + royalties + liquidity -----
-    const bk = (S && S.backing) || {};
-    const roy = A.royalties || {};
-    let askUsd = 0, listed = 0;
-    if (S && S.marketplaces) {
-        for (const mk of Object.values(S.marketplaces)) {
-            listed += mk.count || 0;
-            for (const t of Object.values(mk.by_token || {})) askUsd += t.total_usd || 0;
-        }
+    // ----- highest sale (from enriched per-sale) -----
+    let hi = null, biggest = [];
+    if (E && Array.isArray(E.sales) && E.sales.length) {
+        const sorted = [...E.sales].sort((a, b) => (b.notional_usd || 0) - (a.notional_usd || 0));
+        hi = sorted[0];
+        biggest = sorted.slice(0, 5);
     }
+    const hiStat = hi ? `<div>
+        <div class="text-xs uppercase tracking-wider text-gray-400">Highest sale</div>
+        <div class="text-2xl font-bold text-amber-300 mt-1">${fmtUsdFull(hi.notional_usd)}</div>
+        <div class="text-xs text-gray-500 mt-0.5">#${hi.token_id} · ${fmtNum(hi.amount)} ${hi.denom_symbol} · ${(hi.timestamp || "").slice(0, 10)}</div>
+      </div>` : "";
+
+    // ----- HERO -----
+    const hero = `<div class="${card} mb-4" style="background:linear-gradient(135deg,rgba(34,211,238,.08),rgba(17,24,39,.4))">
+        <div class="flex flex-wrap items-end gap-x-10 gap-y-3 mb-3">
+          <div><div class="text-xs uppercase tracking-wider text-gray-400">All-time volume</div>
+            <div class="text-4xl font-extrabold text-white leading-none mt-1">${fmtUsdFull(vol.usd_at_sale)}</div>
+            <div class="text-xs text-gray-500 mt-1">USD at time of each sale</div></div>
+          <div><div class="text-xs uppercase tracking-wider text-gray-400">Sales</div><div class="text-2xl font-bold text-cyan-300 mt-1">${fmtNum(vol.sales_count)}</div></div>
+          ${hiStat}
+          <div><div class="text-xs uppercase tracking-wider text-gray-400">Value today</div><div class="text-2xl font-bold text-gray-200 mt-1">${fmtUsd(vol.value_today_usd)}</div></div>
+        </div></div>`;
+
+    // ----- VALUE TILES (royalties: now primary) -----
+    const bk = (S && S.backing) || {}; const roy = A.royalties || {};
+    let askUsd = 0, listed = 0;
+    if (S && S.marketplaces) for (const mk of Object.values(S.marketplaces)) { listed += mk.count || 0; for (const t of Object.values(mk.by_token || {})) askUsd += t.total_usd || 0; }
     const tile = (label, big, sub) => `<div class="${card}"><div class="text-xs uppercase tracking-wider text-gray-400">${label}</div><div class="text-2xl font-bold text-white mt-1">${big}</div><div class="text-xs text-gray-500 mt-0.5">${sub}</div></div>`;
     const tiles = `<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
       ${tile("Backing / NFT", `${(+bk.per_nft_ampluna || 0).toFixed(2)} <span class='text-base text-cyan-300'>ampLUNA</span>`, `${fmtUsd(bk.per_nft_value_usd)} · ${fmtNum(bk.unbroken_count)} unbroken`)}
       ${tile("Total backing", fmtUsd(bk.treasury_value_usd), `${fmtNum(bk.ampluna_balance)} ampLUNA in vault`)}
-      ${tile("Royalties → DAO", fmtUsd(roy.to_dao_usd_when_earned), `${fmtUsd(roy.to_dao_usd_today)} at today's prices`)}
+      ${tile("Royalties → DAO", fmtUsd(roy.to_dao_usd_today), `${fmtUsd(roy.to_dao_usd_when_earned)} if sold when received`)}
       ${tile("Listed now", fmtNum(listed), `${fmtUsd(askUsd)} ask-side liquidity`)}
     </div>`;
 
-    // ----- MONTHLY VOLUME (signature) -----
-    const monthChart = `<div class="${card} mb-4">${h("Volume over time", `${months.length} months`)}
-      ${svgBars(months.map(m => ({ label: m.month, value: m.notional_usd, sub: `${m.count} sales` })), { h: 180 })}
-      <div class="flex justify-between text-[11px] text-gray-500 mt-1"><span>${months.length ? months[0].month : ""}</span><span>${months.length ? months[months.length - 1].month : ""}</span></div></div>`;
+    // ----- VOLUME OVER TIME (scale toggle; chart injected by renderVolChart) -----
+    const monthChart = `<div class="${card} mb-4">
+      <div class="flex items-baseline justify-between mb-3">
+        <h3 class="text-cyan-400 font-bold">Volume over time</h3>
+        <div class="flex items-center gap-2 text-xs">
+          <span class="text-gray-500">${_avMonths.length} months</span>
+          <span class="inline-flex rounded-md overflow-hidden border border-gray-600">
+            <button id="av-scale-lin" class="av-scale-btn">Linear</button><button id="av-scale-log" class="av-scale-btn active">Log</button>
+          </span>
+        </div>
+      </div>
+      <div id="av-vol-chart"></div>
+      <div class="flex justify-between text-[11px] text-gray-500 mt-1"><span>${_avMonths.length ? _avMonths[0].month : ""}</span><span>Log scale keeps recent months readable next to the 2024 peak</span><span>${_avMonths.length ? _avMonths[_avMonths.length - 1].month : ""}</span></div></div>`;
 
-    // ----- LEADERBOARDS (system addrs filtered defensively) -----
-    const lb = A.leaderboards || {};
+    // ----- LEADERBOARDS with behaviour context -----
+    const lb = A.leaderboards || {}; const hold = buildHoldingsMap();
     const clean = (arr) => (arr || []).filter(x => !(typeof isSystemAddress === "function" && isSystemAddress(x.address))).slice(0, 10);
-    const lbRow = (x, i, valKey) => `<div class="flex items-center gap-3 py-1.5 ${i ? "border-t border-gray-700/50" : ""}">
-        <span class="text-gray-500 text-xs w-5 text-right">${i + 1}</span>
-        <span class="flex-1 truncate text-sm text-gray-200">${aLabel(x.address)}</span>
-        <span class="text-xs text-gray-400">${fmtNum(x.count)}×</span>
-        <span class="text-sm font-semibold text-cyan-300 w-16 text-right">${fmtUsd(x[valKey])}</span></div>`;
-    const buyers = clean(lb.top_buyers), sellers = clean(lb.top_sellers);
+    const lbRow = (x, i) => `<div class="py-2 ${i ? "border-t border-gray-700/50" : ""}">
+        <div class="flex items-center gap-3"><span class="text-gray-500 text-xs w-5 text-right">${i + 1}</span>
+          <span class="flex-1 truncate text-sm text-gray-200">${aLabel(x.address)}</span>
+          <span class="text-xs text-gray-400">${fmtNum(x.count)}×</span>
+          <span class="text-sm font-semibold text-cyan-300 w-16 text-right">${fmtUsd(x.notional_usd)}</span></div>
+        <div class="text-[11px] pl-8 mt-0.5">${holdingsBlurb(hold[x.address])}</div></div>`;
     const leaderboards = `<div class="grid md:grid-cols-2 gap-3 mb-4">
-      <div class="${card}">${h("Top buyers", "by USD spent")}${buyers.map((x, i) => lbRow(x, i, "notional_usd")).join("")}</div>
-      <div class="${card}">${h("Top sellers", "by USD received")}${sellers.map((x, i) => lbRow(x, i, "notional_usd")).join("")}</div>
-    </div>`;
+      <div class="${card}">${h("Top buyers", "spend · what they did with them")}${clean(lb.top_buyers).map(lbRow).join("")}</div>
+      <div class="${card}">${h("Top sellers", "received · what they kept")}${clean(lb.top_sellers).map(lbRow).join("")}</div></div>`;
 
-    // ----- MOST-TRADED NFTS (join to allNfts for image/rank) -----
-    const byId = {};
-    if (typeof allNfts !== "undefined" && Array.isArray(allNfts)) allNfts.forEach(n => { byId[String(n.id)] = n; });
+    // ----- MOST-TRADED NFTS -----
+    const byId = {}; if (typeof allNfts !== "undefined" && Array.isArray(allNfts)) allNfts.forEach(n => { byId[String(n.id)] = n; });
     const ipfs = (u) => u ? u.replace("ipfs://", "https://ipfs.io/ipfs/") : "";
     const traded = (lb.most_traded_tokens || []).slice(0, 12).map(t => {
         const n = byId[String(t.token_id)] || {};
         return `<div class="flex flex-col items-center text-center">
           <div class="w-full aspect-square rounded-lg overflow-hidden bg-gray-900 border border-gray-700">${n.image ? `<img src="${ipfs(n.image)}" loading="lazy" class="w-full h-full object-cover">` : ""}</div>
-          <div class="text-xs text-gray-200 mt-1">#${t.token_id}</div>
-          <div class="text-[11px] text-cyan-300">${t.sales}× · ${fmtUsd(t.notional_usd)}</div>
+          <div class="text-xs text-gray-200 mt-1">#${t.token_id}</div><div class="text-[11px] text-cyan-300">${t.sales}× · ${fmtUsd(t.notional_usd)}</div>
           ${n.rank ? `<div class="text-[10px] text-gray-500">rank ${n.rank}</div>` : ""}</div>`;
     }).join("");
-    const mostTraded = `<div class="${card} mb-4">${h("Most-traded NFTs", "by sale count")}
-      <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">${traded}</div></div>`;
+    const mostTraded = `<div class="${card} mb-4">${h("Most-traded NFTs", "by sale count")}<div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">${traded}</div></div>`;
 
-    // ----- FLIPS -----
-    const fl = A.flips || {};
-    const pnlColor = (fl.realized_pnl_usd >= 0) ? "text-green-400" : "text-red-400";
-    const topFlips = (fl.top_flips || []).slice(0, 6).map((f, i) => `<div class="flex items-center gap-2 py-1.5 ${i ? "border-t border-gray-700/50" : ""}">
-        <span class="text-sm text-gray-200 w-14">#${f.token_id}</span>
-        <span class="text-xs text-gray-500 flex-1 truncate">${fmtUsd(f.buy_usd)} → ${fmtUsd(f.sell_usd)} · ${(+f.hold_days).toFixed(1)}d</span>
-        <span class="text-sm font-semibold ${f.pnl_usd >= 0 ? "text-green-400" : "text-red-400"}">${f.pnl_usd >= 0 ? "+" : ""}${fmtUsd(f.pnl_usd)}</span></div>`).join("");
-    const ht = A.hold_time_days || {};
-    const flips = `<div class="grid md:grid-cols-2 gap-3 mb-4">
-      <div class="${card}">${h("Flip P&L", "buy→sell within the dataset")}
-        <div class="flex gap-6 mb-2"><div><div class="text-xs text-gray-400">Realized P&L</div><div class="text-2xl font-bold ${pnlColor}">${fl.realized_pnl_usd >= 0 ? "+" : ""}${fmtUsd(fl.realized_pnl_usd)}</div></div>
-          <div><div class="text-xs text-gray-400">Flips</div><div class="text-2xl font-bold text-gray-200">${fmtNum(fl.flip_count)}</div></div>
-          <div><div class="text-xs text-gray-400">Median hold</div><div class="text-2xl font-bold text-gray-200">${(+ht.median || 0).toFixed(1)}d</div></div></div></div>
-      <div class="${card}">${h("Best flips", "by profit")}${topFlips}</div>
-    </div>`;
+    // ----- BIGGEST SALES + SALE FREQUENCY + DENOM -----
+    const bigRows = biggest.map((s, i) => `<div class="flex items-center gap-3 py-1.5 ${i ? "border-t border-gray-700/50" : ""}">
+        <span class="text-sm text-gray-200 w-14">#${s.token_id}</span>
+        <span class="text-xs text-gray-500 flex-1">${fmtNum(s.amount)} ${s.denom_symbol} · ${(s.timestamp || "").slice(0, 10)}</span>
+        <span class="text-sm font-semibold text-amber-300">${fmtUsd(s.notional_usd)}</span></div>`).join("");
+    const dist = A.sale_number_distribution || {}; const distMax = Math.max(...Object.values(dist).map(Number), 1);
+    const distRows = Object.entries(dist).map(([k, v]) => `<div class="flex items-center gap-3 py-1 text-sm"><span class="w-20 text-gray-400">${k}× sold</span><div class="flex-1">${hBar(v, distMax)}</div><span class="w-14 text-right text-gray-300">${fmtNum(v)}</span></div>`).join("");
+    const denom = A.denom_split || {}; const denomTot = Object.values(denom).reduce((s, d) => s + (d.count || 0), 0) || 1;
+    const denomRows = Object.entries(denom).sort((a, b) => b[1].count - a[1].count).map(([sym, d]) => `<div class="flex items-center gap-3 py-1 text-sm"><span class="w-16 text-gray-300">${sym}</span><div class="flex-1">${hBar(d.count, denomTot)}</div><span class="w-24 text-right text-gray-400">${fmtNum(d.count)} sales</span></div>`).join("");
+    const row3 = `<div class="grid md:grid-cols-3 gap-3 mb-4">
+      <div class="${card}">${h("Biggest sales", "all-time, USD at sale")}${bigRows || '<div class="text-xs text-gray-500">—</div>'}</div>
+      <div class="${card}">${h("Sale frequency", "times changed hands")}${distRows}</div>
+      <div class="${card}">${h("Paid in", "by sale count")}${denomRows}</div></div>`;
 
-    // ----- SALE FREQUENCY + DENOM SPLIT -----
-    const dist = A.sale_number_distribution || {};
-    const distMax = Math.max(...Object.values(dist).map(Number), 1);
-    const distRows = Object.entries(dist).map(([k, v]) => `<div class="flex items-center gap-3 py-1 text-sm">
-        <span class="w-20 text-gray-400">${k}× sold</span><div class="flex-1">${hBar(v, distMax)}</div><span class="w-14 text-right text-gray-300">${fmtNum(v)}</span></div>`).join("");
-    const denom = A.denom_split || {};
-    const denomTot = Object.values(denom).reduce((s, d) => s + (d.count || 0), 0) || 1;
-    const denomRows = Object.entries(denom).sort((a, b) => b[1].count - a[1].count).map(([sym, d]) => `<div class="flex items-center gap-3 py-1 text-sm">
-        <span class="w-16 text-gray-300">${sym}</span><div class="flex-1">${hBar(d.count, denomTot)}</div><span class="w-24 text-right text-gray-400">${fmtNum(d.count)} sales</span></div>`).join("");
-    const splits = `<div class="grid md:grid-cols-2 gap-3 mb-4">
-      <div class="${card}">${h("Sale frequency", "how many times NFTs change hands")}${distRows}</div>
-      <div class="${card}">${h("Paid in", "by sale count")}${denomRows}</div>
-    </div>`;
+    // ----- compact trading-character line (replaces the confusing flip card) -----
+    const fl = A.flips || {}; const ht = A.hold_time_days || {};
+    const flipLine = `<div class="${card} mb-4 text-sm text-gray-400">
+      <span class="text-gray-500 uppercase text-xs tracking-wider mr-2">Trading character</span>
+      ${fmtNum(fl.flip_count)} flips · realized P&L <span class="${fl.realized_pnl_usd >= 0 ? "text-green-400" : "text-red-400"} font-semibold">${fl.realized_pnl_usd >= 0 ? "+" : ""}${fmtUsd(fl.realized_pnl_usd)}</span> · median hold ${(+ht.median || 0).toFixed(1)}d
+      <span class="text-gray-600">— a per-wallet cost-basis view is coming to the Wallet tab</span></div>`;
 
     const footer = `<div class="text-center text-[11px] text-gray-600 pb-6">Chain-of-truth analytics · built ${A.builtAt ? new Date(A.builtAt).toLocaleString() : ""}</div>`;
-
-    return hero + tiles + monthChart + leaderboards + mostTraded + flips + splits + footer;
+    return hero + tiles + monthChart + leaderboards + mostTraded + row3 + flipLine + footer;
 }
-
 
 const updateAddressDropdown = (nftList) => {
     const ownerCounts = {};
@@ -2773,7 +2799,7 @@ const calculateAndDisplayLeaderboard = () => {
     allNfts.forEach(nft => {
         if (nft.owner && !isSystemAddress(nft.owner)) {
             if (!ownerStats[nft.owner]) {
-                 ownerStats[nft.owner] = { address: nft.owner, total: 0, liquid: 0, daodaoStaked: 0, enterpriseStaked: 0, broken: 0, unbroken: 0, bblListed: 0, boostListed: 0 };
+                 ownerStats[nft.owner] = { address: nft.owner, total: 0, liquid: 0, daodaoStaked: 0, enterpriseStaked: 0, broken: 0, unbroken: 0, bblListed: 0, boostListed: 0, atriumListed: 0 };
             }
             const stats = ownerStats[nft.owner];
             stats.total++;
@@ -2782,6 +2808,7 @@ const calculateAndDisplayLeaderboard = () => {
             if (nft.staked_enterprise_legacy) stats.enterpriseStaked++;
             if (nft.bbl_market) stats.bblListed++;
             if (nft.boost_market) stats.boostListed++;
+            if (nft.atrium_market) stats.atriumListed++;
             if (nft.broken) stats.broken++;
             else stats.unbroken++; // Count unbroken
         }
@@ -2816,7 +2843,7 @@ const displayHolderPage = (page) => {
     const header = document.createElement('div');
     header.className = 'leaderboard-header';
     // Updated grid columns for new fields
-    header.style.gridTemplateColumns = 'minmax(60px, 1fr) 2.5fr repeat(8, 1fr)'; 
+    header.style.gridTemplateColumns = 'minmax(60px, 1fr) 2.5fr repeat(9, 1fr)'; 
     
     const createHeaderCell = (label, columnKey, isCentered = true) => {
         const isSortCol = holderSort.column === columnKey;
@@ -2835,6 +2862,7 @@ const displayHolderPage = (page) => {
                          createHeaderCell('Unbroken', 'unbroken') +
                          createHeaderCell('BBL', 'bblListed') + // Shorter name
                          createHeaderCell('Boost', 'boostListed') + // Shorter name
+                         createHeaderCell('Atrium', 'atriumListed') +
                          createHeaderCell('Total', 'total');
 
     leaderboardTable.appendChild(header);
@@ -2845,7 +2873,7 @@ const displayHolderPage = (page) => {
         const rank = (page - 1) * holdersPerPage + index + 1;
         const item = document.createElement('div');
         item.className = 'leaderboard-row';
-        item.style.gridTemplateColumns = 'minmax(60px, 1fr) 2.5fr repeat(8, 1fr)';
+        item.style.gridTemplateColumns = 'minmax(60px, 1fr) 2.5fr repeat(9, 1fr)';
         item.dataset.address = address;
         const shortAddress = address ? `terra...${address.substring(address.length - 4)}` : 'N/A';
         const memberName = getMemberName(address);
@@ -2863,6 +2891,7 @@ const displayHolderPage = (page) => {
         item.dataset.unbroken = stats.unbroken || 0;
         item.dataset.bbl = stats.bblListed || 0;
         item.dataset.boost = stats.boostListed || 0;
+        item.dataset.atrium = stats.atriumListed || 0;
         item.dataset.total = stats.total || 0;
 
         item.innerHTML = `
@@ -2875,6 +2904,7 @@ const displayHolderPage = (page) => {
             <span class="text-center ${stats.unbroken > 0 ? 'text-green-400' : ''}">${stats.unbroken || 0}</span>
             <span class="text-center ${stats.bblListed > 0 ? 'text-green-400' : ''}">${stats.bblListed || 0}</span>
             <span class="text-center ${stats.boostListed > 0 ? 'text-purple-400' : ''}">${stats.boostListed || 0}</span>
+            <span class="text-center ${stats.atriumListed > 0 ? 'text-pink-400' : ''}">${stats.atriumListed || 0}</span>
             <span class="font-bold text-center leaderboard-total">${stats.total || 0}</span>
         `;
         item.addEventListener('click', (e) => {
@@ -2970,6 +3000,7 @@ const showSelectedWalletDetails = (address, datasetOrStats) => {
     const unbroken = datasetOrStats.unbroken || '0';
     const bbl = datasetOrStats.bbl || '0';
     const boost = datasetOrStats.boost || '0';
+    const atrium = datasetOrStats.atrium || '0';
     
     // Build stats grid - Total prominently at top
     statsEl.innerHTML = `
@@ -3004,6 +3035,10 @@ const showSelectedWalletDetails = (address, datasetOrStats) => {
         <div class="bg-gray-700/50 rounded p-2">
             <div class="text-purple-400 text-xs">Boost</div>
             <div class="text-white font-bold">${boost}</div>
+        </div>
+        <div class="bg-gray-700/50 rounded p-2">
+            <div class="text-pink-400 text-xs">Atrium</div>
+            <div class="text-white font-bold">${atrium}</div>
         </div>
     `;
     
