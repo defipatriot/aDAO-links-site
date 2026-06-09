@@ -30,9 +30,11 @@ const matchingTraitsSlider = document.getElementById('matching-traits-slider');
 const matchingTraitsCount = document.getElementById('matching-traits-count');
 const collectionViewBtn = document.getElementById('collection-view-btn');
 const walletViewBtn = document.getElementById('wallet-view-btn');
+const analyticsViewBtn = document.getElementById('analytics-view-btn');
 const mapViewBtn = document.getElementById('map-view-btn');
 const collectionView = document.getElementById('collection-view');
 const walletView = document.getElementById('wallet-view');
+const analyticsView = document.getElementById('analytics-view');
 const mapView = document.getElementById('map-view');
 const walletSearchAddressInput = document.getElementById('wallet-search-address');
 const walletCopyAddressBtn = document.getElementById('wallet-copy-address-btn');
@@ -127,6 +129,20 @@ const SYSTEM_WALLET_LABELS = {
 };
 
 const getSystemWalletLabel = (address) => SYSTEM_WALLET_LABELS[address] || null;
+
+// All DAO/system/custody addresses — excluded from leaderboards so only real users rank.
+// (DAO wallets + staking + marketplace escrow contracts; none of these are "holders" or "traders".)
+const SYSTEM_ADDRESSES = new Set([
+    "terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm", // DAO main wallet (unminted)
+    "terra1h8psjgcsg9fef7w2yv0j6262sfcaszj8vs4tsy3uwla6zwtaspvqrp4l7v", // DAO treasury (broken)
+    "terra1yqv0af22675wlcmgflxk4ve07vt8qlm999gk0cuw5l64r5xxgadsyg8ywv", // small DAO wallet
+    "terra1e54tcdyulrtslvf79htx4zntqntd4r550cg22sj24r6gfm0anrvq0y8tdv", // enterprise staking
+    "terra1c57ur376szdv8rtes6sa9nst4k536dynunksu8tx5zu4z5u3am6qmvqx47", // DAODAO staking
+    "terra1ej4cv98e9g2zjefr5auf2nwtq4xl3dm7x0qml58yna2ml2hk595s7gccs9", // BBL marketplace
+    "terra15du229lqcxkn939pmjgklqunftf604q4wz87kt5awj6reghec5jqs0w0kj", // Atrium marketplace
+    "terra1kj7pasyahtugajx9qud02r5jqaf60mtm7g5v9utr94rmdfftx0vqspf4at"  // Boost marketplace
+]);
+const isSystemAddress = (address) => SYSTEM_ADDRESSES.has(address);
 const DAO_LOCKED_WALLET_SUFFIXES = ["8ywv", "417v", "6ugw"]; // Added from previous logic
 const itemsPerPage = 20;
 const traitOrder = ["Rarity", "Planet", "Inhabitant", "Object", "Weather", "Light"];
@@ -928,6 +944,7 @@ const addAllEventListeners = () => {
     if (resetButton) resetButton.addEventListener('click', resetAll);
     
     if (collectionViewBtn) collectionViewBtn.addEventListener('click', () => switchView('collection'));
+    if (analyticsViewBtn) analyticsViewBtn.addEventListener('click', () => switchView('analytics'));
     if (walletViewBtn) walletViewBtn.addEventListener('click', () => switchView('wallet'));
     if (mapViewBtn) mapViewBtn.addEventListener('click', () => switchView('map'));
 
@@ -1139,14 +1156,20 @@ function switchView(viewName) {
     }
     if (collectionView) collectionView.classList.add('hidden');
     if (walletView) walletView.classList.add('hidden');
+    if (analyticsView) analyticsView.classList.add('hidden');
     if (mapView) mapView.classList.add('hidden');
     if (collectionViewBtn) collectionViewBtn.classList.remove('active');
     if (walletViewBtn) walletViewBtn.classList.remove('active');
+    if (analyticsViewBtn) analyticsViewBtn.classList.remove('active');
     if (mapViewBtn) mapViewBtn.classList.remove('active');
 
     if (viewName === 'collection') {
         if (collectionView) collectionView.classList.remove('hidden');
         if (collectionViewBtn) collectionViewBtn.classList.add('active');
+    } else if (viewName === 'analytics') {
+        if (analyticsView) analyticsView.classList.remove('hidden');
+        if (analyticsViewBtn) analyticsViewBtn.classList.add('active');
+        renderAnalytics(); // lazy — builds once
     } else if (viewName === 'wallet') {
         if (walletView) walletView.classList.remove('hidden');
         if (walletViewBtn) walletViewBtn.classList.add('active');
@@ -1156,6 +1179,205 @@ function switchView(viewName) {
         requestAnimationFrame(initializeStarfield); // Use requestAnimationFrame
     }
 }
+
+// ============================================================================
+// ANALYTICS VIEW  — collection-wide trading analytics
+// Data sources (new pipeline only, no old snapshots):
+//   data/v2/nft-analytics.json  (pre-aggregated: volume, leaderboards, monthly, flips)
+//   data/v2/summary.json        (backing + marketplace listing state)
+// ============================================================================
+const ANALYTICS_URL = "https://raw.githubusercontent.com/defipatriot/nft-inventory-data_2026/main/data/v2/nft-analytics.json";
+const ANALYTICS_SUMMARY_URL = "https://raw.githubusercontent.com/defipatriot/nft-inventory-data_2026/main/data/v2/summary.json";
+
+let analyticsLoaded = false;
+
+// ---- formatters ----
+const fmtUsd = (n) => {
+    if (n == null || isNaN(n)) return "—";
+    const neg = n < 0 ? "-" : "";
+    const a = Math.abs(n);
+    if (a >= 1e6) return `${neg}$${(a / 1e6).toFixed(2)}M`;
+    if (a >= 1e3) return `${neg}$${(a / 1e3).toFixed(1)}K`;
+    return `${neg}$${a.toFixed(a < 10 ? 2 : 0)}`;
+};
+const fmtUsdFull = (n) => (n == null || isNaN(n)) ? "—" : `$${Math.round(n).toLocaleString()}`;
+const fmtNum = (n) => (n == null || isNaN(n)) ? "—" : Math.round(n).toLocaleString();
+const fmtTok = (n, sym) => `${(+n).toLocaleString(undefined, { maximumFractionDigits: 2 })} ${sym}`;
+const aShort = (a) => a ? `${a.slice(0, 6)}…${a.slice(-4)}` : "—";
+// owner display for leaderboards: member name if known, else short addr (system addrs are pre-filtered)
+const aLabel = (a) => {
+    const sys = (typeof getSystemWalletLabel === "function") ? getSystemWalletLabel(a) : null;
+    if (sys) return sys;
+    const m = (typeof getMemberName === "function") ? getMemberName(a) : null;
+    return m ? `${m}` : aShort(a);
+};
+
+// ---- tiny SVG charts (no external lib) ----
+// Vertical bars with native <title> tooltips. values: [{label, value, sub}]
+function svgBars(values, { h = 170, accent = "#22d3ee", fmt = fmtUsd } = {}) {
+    if (!values.length) return "";
+    const max = Math.max(...values.map(v => v.value), 1);
+    const n = values.length;
+    const gap = 2, bw = Math.max(2, (100 - gap * n) / n);
+    let bars = "", x = 0;
+    values.forEach((v, i) => {
+        const bh = max ? (v.value / max) * 88 : 0;
+        const y = 92 - bh;
+        bars += `<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${bw.toFixed(2)}" height="${bh.toFixed(2)}" rx="0.6" fill="url(#agrad)" opacity="0.92"><title>${v.label}: ${fmt(v.value)}${v.sub ? ` · ${v.sub}` : ""}</title></rect>`;
+        x += bw + gap;
+    });
+    return `<svg viewBox="0 0 100 100" preserveAspectRatio="none" style="width:100%;height:${h}px;display:block">
+      <defs><linearGradient id="agrad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="${accent}" stop-opacity="0.95"/>
+        <stop offset="100%" stop-color="${accent}" stop-opacity="0.25"/>
+      </linearGradient></defs>${bars}</svg>`;
+}
+// horizontal proportion bar
+function hBar(value, max, accent = "#22d3ee") {
+    const pct = max ? Math.min(100, (value / max) * 100) : 0;
+    return `<div style="background:rgba(255,255,255,.06);border-radius:4px;height:8px;overflow:hidden">
+      <div style="width:${pct.toFixed(1)}%;height:100%;background:${accent};border-radius:4px"></div></div>`;
+}
+
+// ---- main render ----
+async function renderAnalytics() {
+    const root = document.getElementById("analytics-view");
+    if (!root) return;
+    if (analyticsLoaded) return; // build once
+    root.innerHTML = `<div class="text-center text-gray-400 py-16"><i class="fas fa-circle-notch fa-spin text-cyan-400 text-2xl"></i><p class="mt-3 text-sm">Loading collection analytics…</p></div>`;
+
+    let A, S;
+    try {
+        const [ar, sr] = await Promise.all([
+            fetch(ANALYTICS_URL),
+            fetch(ANALYTICS_SUMMARY_URL)
+        ]);
+        if (!ar.ok) throw new Error(`analytics feed ${ar.status}`);
+        A = await ar.json();
+        S = sr.ok ? await sr.json() : null; // summary is enhancement, not core
+        if (!A || !A.volume || !A.leaderboards) throw new Error("analytics feed malformed");
+    } catch (e) {
+        root.innerHTML = `<div class="text-center py-16"><i class="fas fa-triangle-exclamation text-amber-400 text-2xl"></i>
+          <p class="mt-3 text-gray-300">Analytics data is unavailable right now.</p>
+          <p class="text-xs text-gray-500 mt-1">${e.message}. This panel shows live pipeline data only — try again shortly.</p></div>`;
+        return;
+    }
+
+    analyticsLoaded = true;
+    root.innerHTML = buildAnalyticsHtml(A, S);
+}
+
+function buildAnalyticsHtml(A, S) {
+    const card = "bg-gray-800/50 border border-gray-700 rounded-xl p-4";
+    const h = (t, sub) => `<div class="flex items-baseline justify-between mb-3"><h3 class="text-cyan-400 font-bold">${t}</h3>${sub ? `<span class="text-xs text-gray-500">${sub}</span>` : ""}</div>`;
+
+    // ----- HERO: total volume + monthly sparkline -----
+    const vol = A.volume || {};
+    const months = (A.monthly || []);
+    const heroSpark = svgBars(months.map(m => ({ label: m.month, value: m.notional_usd, sub: `${m.count} sales` })), { h: 90 });
+    const hero = `
+      <div class="${card} mb-4" style="background:linear-gradient(135deg,rgba(34,211,238,.08),rgba(17,24,39,.4))">
+        <div class="flex flex-wrap items-end gap-x-10 gap-y-3 mb-3">
+          <div>
+            <div class="text-xs uppercase tracking-wider text-gray-400">All-time volume</div>
+            <div class="text-4xl font-extrabold text-white leading-none mt-1">${fmtUsdFull(vol.usd_at_sale)}</div>
+            <div class="text-xs text-gray-500 mt-1">USD at time of each sale</div>
+          </div>
+          <div><div class="text-xs uppercase tracking-wider text-gray-400">Sales</div><div class="text-2xl font-bold text-cyan-300 mt-1">${fmtNum(vol.sales_count)}</div></div>
+          <div><div class="text-xs uppercase tracking-wider text-gray-400">Value today</div><div class="text-2xl font-bold text-gray-200 mt-1">${fmtUsd(vol.value_today_usd)}</div></div>
+          <div><div class="text-xs uppercase tracking-wider text-gray-400">LUNA traded</div><div class="text-2xl font-bold text-gray-200 mt-1">${fmtNum(vol.luna_equiv_total)}</div></div>
+        </div>
+        ${heroSpark}
+        <div class="text-[11px] text-gray-500 mt-1 text-right">monthly volume · ${months.length ? months[0].month : ""} → ${months.length ? months[months.length - 1].month : ""}</div>
+      </div>`;
+
+    // ----- VALUE TILES: backing + royalties + liquidity -----
+    const bk = (S && S.backing) || {};
+    const roy = A.royalties || {};
+    let askUsd = 0, listed = 0;
+    if (S && S.marketplaces) {
+        for (const mk of Object.values(S.marketplaces)) {
+            listed += mk.count || 0;
+            for (const t of Object.values(mk.by_token || {})) askUsd += t.total_usd || 0;
+        }
+    }
+    const tile = (label, big, sub) => `<div class="${card}"><div class="text-xs uppercase tracking-wider text-gray-400">${label}</div><div class="text-2xl font-bold text-white mt-1">${big}</div><div class="text-xs text-gray-500 mt-0.5">${sub}</div></div>`;
+    const tiles = `<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+      ${tile("Backing / NFT", `${(+bk.per_nft_ampluna || 0).toFixed(2)} <span class='text-base text-cyan-300'>ampLUNA</span>`, `${fmtUsd(bk.per_nft_value_usd)} · ${fmtNum(bk.unbroken_count)} unbroken`)}
+      ${tile("Total backing", fmtUsd(bk.treasury_value_usd), `${fmtNum(bk.ampluna_balance)} ampLUNA in vault`)}
+      ${tile("Royalties → DAO", fmtUsd(roy.to_dao_usd_when_earned), `${fmtUsd(roy.to_dao_usd_today)} at today's prices`)}
+      ${tile("Listed now", fmtNum(listed), `${fmtUsd(askUsd)} ask-side liquidity`)}
+    </div>`;
+
+    // ----- MONTHLY VOLUME (signature) -----
+    const monthChart = `<div class="${card} mb-4">${h("Volume over time", `${months.length} months`)}
+      ${svgBars(months.map(m => ({ label: m.month, value: m.notional_usd, sub: `${m.count} sales` })), { h: 180 })}
+      <div class="flex justify-between text-[11px] text-gray-500 mt-1"><span>${months.length ? months[0].month : ""}</span><span>${months.length ? months[months.length - 1].month : ""}</span></div></div>`;
+
+    // ----- LEADERBOARDS (system addrs filtered defensively) -----
+    const lb = A.leaderboards || {};
+    const clean = (arr) => (arr || []).filter(x => !(typeof isSystemAddress === "function" && isSystemAddress(x.address))).slice(0, 10);
+    const lbRow = (x, i, valKey) => `<div class="flex items-center gap-3 py-1.5 ${i ? "border-t border-gray-700/50" : ""}">
+        <span class="text-gray-500 text-xs w-5 text-right">${i + 1}</span>
+        <span class="flex-1 truncate text-sm text-gray-200">${aLabel(x.address)}</span>
+        <span class="text-xs text-gray-400">${fmtNum(x.count)}×</span>
+        <span class="text-sm font-semibold text-cyan-300 w-16 text-right">${fmtUsd(x[valKey])}</span></div>`;
+    const buyers = clean(lb.top_buyers), sellers = clean(lb.top_sellers);
+    const leaderboards = `<div class="grid md:grid-cols-2 gap-3 mb-4">
+      <div class="${card}">${h("Top buyers", "by USD spent")}${buyers.map((x, i) => lbRow(x, i, "notional_usd")).join("")}</div>
+      <div class="${card}">${h("Top sellers", "by USD received")}${sellers.map((x, i) => lbRow(x, i, "notional_usd")).join("")}</div>
+    </div>`;
+
+    // ----- MOST-TRADED NFTS (join to allNfts for image/rank) -----
+    const byId = {};
+    if (typeof allNfts !== "undefined" && Array.isArray(allNfts)) allNfts.forEach(n => { byId[String(n.id)] = n; });
+    const ipfs = (u) => u ? u.replace("ipfs://", "https://ipfs.io/ipfs/") : "";
+    const traded = (lb.most_traded_tokens || []).slice(0, 12).map(t => {
+        const n = byId[String(t.token_id)] || {};
+        return `<div class="flex flex-col items-center text-center">
+          <div class="w-full aspect-square rounded-lg overflow-hidden bg-gray-900 border border-gray-700">${n.image ? `<img src="${ipfs(n.image)}" loading="lazy" class="w-full h-full object-cover">` : ""}</div>
+          <div class="text-xs text-gray-200 mt-1">#${t.token_id}</div>
+          <div class="text-[11px] text-cyan-300">${t.sales}× · ${fmtUsd(t.notional_usd)}</div>
+          ${n.rank ? `<div class="text-[10px] text-gray-500">rank ${n.rank}</div>` : ""}</div>`;
+    }).join("");
+    const mostTraded = `<div class="${card} mb-4">${h("Most-traded NFTs", "by sale count")}
+      <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">${traded}</div></div>`;
+
+    // ----- FLIPS -----
+    const fl = A.flips || {};
+    const pnlColor = (fl.realized_pnl_usd >= 0) ? "text-green-400" : "text-red-400";
+    const topFlips = (fl.top_flips || []).slice(0, 6).map((f, i) => `<div class="flex items-center gap-2 py-1.5 ${i ? "border-t border-gray-700/50" : ""}">
+        <span class="text-sm text-gray-200 w-14">#${f.token_id}</span>
+        <span class="text-xs text-gray-500 flex-1 truncate">${fmtUsd(f.buy_usd)} → ${fmtUsd(f.sell_usd)} · ${(+f.hold_days).toFixed(1)}d</span>
+        <span class="text-sm font-semibold ${f.pnl_usd >= 0 ? "text-green-400" : "text-red-400"}">${f.pnl_usd >= 0 ? "+" : ""}${fmtUsd(f.pnl_usd)}</span></div>`).join("");
+    const ht = A.hold_time_days || {};
+    const flips = `<div class="grid md:grid-cols-2 gap-3 mb-4">
+      <div class="${card}">${h("Flip P&L", "buy→sell within the dataset")}
+        <div class="flex gap-6 mb-2"><div><div class="text-xs text-gray-400">Realized P&L</div><div class="text-2xl font-bold ${pnlColor}">${fl.realized_pnl_usd >= 0 ? "+" : ""}${fmtUsd(fl.realized_pnl_usd)}</div></div>
+          <div><div class="text-xs text-gray-400">Flips</div><div class="text-2xl font-bold text-gray-200">${fmtNum(fl.flip_count)}</div></div>
+          <div><div class="text-xs text-gray-400">Median hold</div><div class="text-2xl font-bold text-gray-200">${(+ht.median || 0).toFixed(1)}d</div></div></div></div>
+      <div class="${card}">${h("Best flips", "by profit")}${topFlips}</div>
+    </div>`;
+
+    // ----- SALE FREQUENCY + DENOM SPLIT -----
+    const dist = A.sale_number_distribution || {};
+    const distMax = Math.max(...Object.values(dist).map(Number), 1);
+    const distRows = Object.entries(dist).map(([k, v]) => `<div class="flex items-center gap-3 py-1 text-sm">
+        <span class="w-20 text-gray-400">${k}× sold</span><div class="flex-1">${hBar(v, distMax)}</div><span class="w-14 text-right text-gray-300">${fmtNum(v)}</span></div>`).join("");
+    const denom = A.denom_split || {};
+    const denomTot = Object.values(denom).reduce((s, d) => s + (d.count || 0), 0) || 1;
+    const denomRows = Object.entries(denom).sort((a, b) => b[1].count - a[1].count).map(([sym, d]) => `<div class="flex items-center gap-3 py-1 text-sm">
+        <span class="w-16 text-gray-300">${sym}</span><div class="flex-1">${hBar(d.count, denomTot)}</div><span class="w-24 text-right text-gray-400">${fmtNum(d.count)} sales</span></div>`).join("");
+    const splits = `<div class="grid md:grid-cols-2 gap-3 mb-4">
+      <div class="${card}">${h("Sale frequency", "how many times NFTs change hands")}${distRows}</div>
+      <div class="${card}">${h("Paid in", "by sale count")}${denomRows}</div>
+    </div>`;
+
+    const footer = `<div class="text-center text-[11px] text-gray-600 pb-6">Chain-of-truth analytics · built ${A.builtAt ? new Date(A.builtAt).toLocaleString() : ""}</div>`;
+
+    return hero + tiles + monthChart + leaderboards + mostTraded + flips + splits + footer;
+}
+
 
 const updateAddressDropdown = (nftList) => {
     const ownerCounts = {};
@@ -2549,7 +2771,7 @@ const calculateAndDisplayLeaderboard = () => {
 
     const ownerStats = {};
     allNfts.forEach(nft => {
-        if (nft.owner) {
+        if (nft.owner && !isSystemAddress(nft.owner)) {
             if (!ownerStats[nft.owner]) {
                  ownerStats[nft.owner] = { address: nft.owner, total: 0, liquid: 0, daodaoStaked: 0, enterpriseStaked: 0, broken: 0, unbroken: 0, bblListed: 0, boostListed: 0 };
             }
@@ -3999,8 +4221,13 @@ const searchWallet = () => {
             walletGalleryTitle.innerHTML = `Showing ${walletNfts.length} of ${totalForWallet} NFTs for: ${memberName ? `<span class="text-yellow-400">${memberName}</span> <span class="text-gray-400">(${shortAddr})</span>` : shortAddr}`;
         } else {
             const memberName = getMemberName(address);
+            const sysLabel = getSystemWalletLabel(address) || (isSystemAddress(address) ? 'DAO / system wallet' : null);
             const shortAddr = `terra...${address.slice(-4)}`;
-            walletGalleryTitle.innerHTML = `Found ${walletNfts.length} NFTs for: ${memberName ? `<span class="text-yellow-400">${memberName}</span> <span class="text-gray-400">(${shortAddr})</span>` : shortAddr}`;
+            if (sysLabel) {
+                walletGalleryTitle.innerHTML = `<span class="text-amber-400">${sysLabel}</span> <span class="text-gray-400">(${shortAddr})</span> — ${walletNfts.length} NFTs <span class="text-xs text-gray-500">(not an individual holder)</span>`;
+            } else {
+                walletGalleryTitle.innerHTML = `Found ${walletNfts.length} NFTs for: ${memberName ? `<span class="text-yellow-400">${memberName}</span> <span class="text-gray-400">(${shortAddr})</span>` : shortAddr}`;
+            }
         }
         
         walletGallery.innerHTML = '';
