@@ -112,9 +112,10 @@ let walletMobileSearchMode = 'full';
 
 // --- Config ---
 const METADATA_URL = "https://cdn.jsdelivr.net/gh/defipatriot/nft-metadata/all_nfts_metadata.json";
-const STATUS_DATA_URL = "https://deving.zone/nfts/alliance_daos.json";
+const STATUS_DATA_URL = "https://raw.githubusercontent.com/defipatriot/nft-inventory-data_2026/main/data/v2/nfts.json";
 const MEMBERS_CSV_URL = "https://raw.githubusercontent.com/defipatriot/adao_json_storage/main/members.csv";
 const DAO_WALLET_ADDRESS = "terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm";
+const EXPECTED_TOTAL_NFTS = 10000; // Fixed collection size — used to hard-fail on a truncated/partial feed.
 const DAO_LOCKED_WALLET_SUFFIXES = ["8ywv", "417v", "6ugw"]; // Added from previous logic
 const itemsPerPage = 20;
 const traitOrder = ["Rarity", "Planet", "Inhabitant", "Object", "Weather", "Light"];
@@ -325,38 +326,67 @@ const formatAddressWithMember = (address, shortFormat = true) => {
 };
 
 const mergeNftData = (metadata, statusData) => {
-    const statusMap = new Map(statusData.nfts.map(nft => [String(nft.id), nft]));
+    // The v2 chain-of-truth pipeline is the ONLY status source. No deving.zone fallback,
+    // no silent empty-array coercion — if records[] is missing we throw and the page fails
+    // loudly rather than rendering placeholder data.
+    const records = statusData && statusData.records;
+    if (!Array.isArray(records)) {
+        throw new Error("Status feed missing records[] — refusing to render placeholder data.");
+    }
+    const statusMap = new Map(records.map(r => [String(r.id), r]));
+
     return metadata.map(nft => {
         const status = statusMap.get(String(nft.id));
-        let mergedNft = { ...nft }; // Start with metadata
+        let mergedNft = { ...nft }; // Start with metadata (attributes/traits/image)
 
         if (status) {
-            // Merge status data
-            mergedNft.owner = status.owner;
-            mergedNft.broken = status.broken;
-            mergedNft.staked_daodao = status.daodao;
-            mergedNft.staked_enterprise_legacy = status.enterprise;
-            mergedNft.bbl_market = status.bbl;
-            mergedNft.boost_market = status.boost;
+            // --- Ownership ---
+            // Attribute marketplace-listed NFTs to the seller (real_owner) rather than
+            // the marketplace contract. For all non-listed NFTs real_owner === owner.
+            mergedNft.owner = status.real_owner || status.owner || null;
+            mergedNft.custody_owner = status.owner || null; // raw on-chain holder (contract for listed/staked)
+            mergedNft.real_owner = status.real_owner || status.owner || null;
+            mergedNft.broken = !!status.broken;
 
-            // Re-calculate liquid status based on all fields
-            const isStaked = status.daodao || status.enterprise;
-            const isListed = status.bbl || status.boost;
-            const isOwnedByMainDAO = status.owner === DAO_WALLET_ADDRESS;
-            const isOwnedByLockedDAO = status.owner ? DAO_LOCKED_WALLET_SUFFIXES.some(suffix => status.owner.endsWith(suffix)) : false;
-            
-            mergedNft.liquid = !isOwnedByMainDAO && !isOwnedByLockedDAO && !isStaked && !isListed;
-            mergedNft.owned_by_alliance_dao = isOwnedByMainDAO || isOwnedByLockedDAO; // Keep this if needed
+            // --- Classification (corrected v2 flags; legacy aliases as fallback) ---
+            mergedNft.staked_daodao = !!(status.daodao_staked ?? status.daodao);
+            // FIX: "Staked on Enterprise" now reflects REAL user stakes (~403), not the
+            // ~898 treasury NFTs that the old deving.zone feed conflated into `enterprise`.
+            mergedNft.staked_enterprise_legacy = !!status.enterprise_staked;
+            mergedNft.bbl_market = !!(status.bbl_listed ?? status.bbl);
+            mergedNft.boost_market = !!(status.boost_listed ?? status.boost);
+            mergedNft.atrium_market = !!status.atrium_listed; // NEW marketplace (badge wired in Pass 2)
+
+            // --- New v2 classifications (carried now, surfaced in Pass 2 UI) ---
+            mergedNft.unminted = !!status.unminted;
+            mergedNft.treasury_held = !!status.treasury_held;
+            mergedNft.dao_wallet_8ywv_held = !!status.dao_wallet_8ywv_held;
+            mergedNft.enterprise_dao_broken = !!status.enterprise_dao_broken;
+            mergedNft.listing = status.listing || null; // { marketplace, price, token, price_usd, price_display }
+
+            // --- Derived ---
+            // "Owned by DAO" = unminted main-wallet supply + treasury contract + small locked wallet.
+            mergedNft.owned_by_alliance_dao = !!(status.unminted || status.treasury_held || status.dao_wallet_8ywv_held || status.dao);
+            // liquid = freely held by a user (cron-authoritative user_held flag).
+            mergedNft.liquid = !!status.user_held;
         } else {
-            // Set defaults if no status data is found
-             mergedNft.owner = null;
-             mergedNft.broken = false;
-             mergedNft.staked_daodao = false;
-             mergedNft.staked_enterprise_legacy = false;
-             mergedNft.bbl_market = false;
-             mergedNft.boost_market = false;
-             mergedNft.liquid = true; // Default to liquid if not in status file?
-             mergedNft.owned_by_alliance_dao = false;
+            // No status record for this token id — safe defaults.
+            mergedNft.owner = null;
+            mergedNft.custody_owner = null;
+            mergedNft.real_owner = null;
+            mergedNft.broken = false;
+            mergedNft.staked_daodao = false;
+            mergedNft.staked_enterprise_legacy = false;
+            mergedNft.bbl_market = false;
+            mergedNft.boost_market = false;
+            mergedNft.atrium_market = false;
+            mergedNft.unminted = false;
+            mergedNft.treasury_held = false;
+            mergedNft.dao_wallet_8ywv_held = false;
+            mergedNft.enterprise_dao_broken = false;
+            mergedNft.listing = null;
+            mergedNft.owned_by_alliance_dao = false;
+            mergedNft.liquid = true;
         }
         return mergedNft;
     });
@@ -380,9 +410,22 @@ const initializeExplorer = async () => {
         const metadata = await metaResponse.json();
         const statusData = await statusResponse.json();
 
-        if (!Array.isArray(metadata) || metadata.length === 0) { showError(gallery, "Metadata is empty or in the wrong format."); return; }
-        
+        // Hard-fail integrity gate: good data or a visible error, nothing in between.
+        if (!Array.isArray(metadata) || metadata.length === 0) {
+            throw new Error("Metadata feed is empty or malformed.");
+        }
+        const statusRecords = statusData && statusData.records;
+        if (!Array.isArray(statusRecords) || statusRecords.length < EXPECTED_TOTAL_NFTS) {
+            throw new Error(`Status feed failed integrity check: expected ${EXPECTED_TOTAL_NFTS} records, got ${Array.isArray(statusRecords) ? statusRecords.length : 'none'}.`);
+        }
+
         allNfts = mergeNftData(metadata, statusData);
+
+        // Every NFT must resolve to an owner via the pipeline; a shortfall means a corrupt/partial feed.
+        const resolvedCount = allNfts.filter(nft => nft.owner).length;
+        if (resolvedCount < EXPECTED_TOTAL_NFTS) {
+            throw new Error(`Status merge incomplete: only ${resolvedCount}/${EXPECTED_TOTAL_NFTS} NFTs resolved to an owner.`);
+        }
         ownerAddresses = [...new Set(allNfts.map(nft => nft.owner).filter(Boolean))]; // Populate master list
 
         calculateRanks();
@@ -4143,7 +4186,7 @@ const showSnapshotTool = async () => {
                 
                 <!-- NFT Stats -->
                 <div class="bg-gray-700/50 rounded-lg p-4">
-                    <h3 class="text-lg font-semibold text-cyan-400 mb-2">NFT Status (deving.zone)</h3>
+                    <h3 class="text-lg font-semibold text-cyan-400 mb-2">NFT Status (on-chain)</h3>
                     <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
                         <div>Total:</div><div class="text-white">${stats.total.toLocaleString()}</div>
                         <div>Minted:</div><div class="text-white">${stats.minted.toLocaleString()}</div>
@@ -4687,10 +4730,10 @@ const showSnapshotTool = async () => {
             const statusEl = document.getElementById('snapshot-status');
             
             btn.disabled = true;
-            statusEl.textContent = 'Downloading from deving.zone...';
+            statusEl.textContent = 'Downloading from chain-of-truth pipeline...';
             
             try {
-                const response = await fetch('https://deving.zone/api/nft/meta/terra1tpl03d6mvh2emu7lwl3062w8h3f7e7q5xd7zcx');
+                const response = await fetch(STATUS_DATA_URL);
                 if (!response.ok) throw new Error('Failed to fetch');
                 const data = await response.json();
                 
