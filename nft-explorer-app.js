@@ -116,6 +116,17 @@ const STATUS_DATA_URL = "https://raw.githubusercontent.com/defipatriot/nft-inven
 const MEMBERS_CSV_URL = "https://raw.githubusercontent.com/defipatriot/adao_json_storage/main/members.csv";
 const DAO_WALLET_ADDRESS = "terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm";
 const EXPECTED_TOTAL_NFTS = 10000; // Fixed collection size — used to hard-fail on a truncated/partial feed.
+
+// Known DAO / system contract addresses (verified against live chain-of-truth data).
+// These are NOT holders — they're labeled in the holders dropdown so it's clear.
+// The small ...8ywv wallet is intentionally left unlabeled.
+const SYSTEM_WALLET_LABELS = {
+    "terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm": "DAO Unminted",
+    "terra1h8psjgcsg9fef7w2yv0j6262sfcaszj8vs4tsy3uwla6zwtaspvqrp4l7v": "DAO Broken",
+    "terra1e54tcdyulrtslvf79htx4zntqntd4r550cg22sj24r6gfm0anrvq0y8tdv": "DAO Broken Enterprise"
+};
+
+const getSystemWalletLabel = (address) => SYSTEM_WALLET_LABELS[address] || null;
 const DAO_LOCKED_WALLET_SUFFIXES = ["8ywv", "417v", "6ugw"]; // Added from previous logic
 const itemsPerPage = 20;
 const traitOrder = ["Rarity", "Planet", "Inhabitant", "Object", "Weather", "Light"];
@@ -1177,9 +1188,12 @@ const updateAddressDropdown = (nftList) => {
             if (!dropdown) return;
             const option = document.createElement('option');
             option.value = address;
+            const systemLabel = getSystemWalletLabel(address);
             const memberName = getMemberName(address);
             const shortAddr = `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
-            if (memberName) {
+            if (systemLabel) {
+                option.textContent = `(${count}) ${systemLabel} - ${shortAddr}`;
+            } else if (memberName) {
                 option.textContent = `(${count}) ${memberName} - ${shortAddr}`;
             } else {
                 option.textContent = `(${count}) ${shortAddr}`;
