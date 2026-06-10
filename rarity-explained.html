@@ -4,10 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Alliance DAO - Rarity Explained</title>
+    <meta name="description" content="How AllianceDAO NFT rarity was designed, how the marketplaces rank, and how to read both. Object-driven grades, the Phoenix apex, and the weather quirk explained.">
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-
     <script>
       window.va = window.va || function () { (window.va.q = window.va.q || []).push(arguments); };
     </script>
@@ -23,16 +23,14 @@
             border: 1px solid rgba(255, 255, 255, 0.1);
             backdrop-filter: blur(10px);
         }
-        h1, h2, h3 {
-            color: #fff;
-            font-weight: 700;
-        }
+        h1, h2, h3 { color: #fff; font-weight: 700; }
         h2 {
             font-size: 2.25rem;
             margin-top: 4rem;
             margin-bottom: 1.5rem;
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
             padding-bottom: 0.75rem;
+            scroll-margin-top: 1.5rem;
         }
         .layer-card {
             background: rgba(13, 20, 32, 0.5);
@@ -41,176 +39,50 @@
             padding: 1.5rem;
             border-radius: 0.75rem;
         }
-        .layer-icon {
-            font-size: 2.5rem;
+        .layer-icon { font-size: 2.25rem; color: #2dd4bf; margin-bottom: 0.75rem; }
+        .layer-icon.muted { color: #6b7280; }
+        .eyebrow {
+            text-transform: uppercase;
+            letter-spacing: 0.18em;
+            font-size: 0.72rem;
+            font-weight: 700;
             color: #2dd4bf;
-            margin-bottom: 1rem;
         }
-        .rarity-bar {
-            height: 10px;
-            border-radius: 5px;
-            background-color: #374151; /* gray-700 */
+        .pill {
+            display: inline-flex; align-items: center; gap: 0.4rem;
+            font-size: 0.72rem; font-weight: 600;
+            padding: 0.2rem 0.6rem; border-radius: 9999px;
+            border: 1px solid rgba(255,255,255,0.12);
         }
-        .rarity-fill {
-            height: 100%;
-            border-radius: 5px;
-            background: linear-gradient(90deg, #a855f7, #ec4899); /* purple-500 to pink-500 */
+        .pill-rarity { color: #5eead4; background: rgba(45,212,191,0.08); border-color: rgba(45,212,191,0.3); }
+        .pill-scene  { color: #9ca3af; background: rgba(156,163,175,0.07); }
+        .grade-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        .grade-table th, .grade-table td { padding: 0.6rem 0.9rem; text-align: left; }
+        .grade-table thead th {
+            text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.7rem;
+            color: #9ca3af; border-bottom: 1px solid rgba(255,255,255,0.12);
         }
-        .nft-example-card {
-             background: #1A1A1A;
-             border: 1px solid #2e2e2e;
-             overflow: hidden;
+        .grade-table tbody tr { border-bottom: 1px solid rgba(255,255,255,0.06); }
+        .grade-table tbody tr:nth-child(odd) { background: rgba(255,255,255,0.025); }
+        .apex-row { background: linear-gradient(90deg, rgba(168,85,247,0.14), rgba(236,72,153,0.06)) !important; }
+        .apex-row td:first-child { color: #f0abfc; font-weight: 700; }
+        .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+        .callout {
+            border-left: 3px solid #2dd4bf;
+            background: rgba(45,212,191,0.06);
+            padding: 1rem 1.25rem; border-radius: 0 0.5rem 0.5rem 0;
         }
-        /* Table styles */
-        .sortable thead th {
-            cursor: pointer;
-            transition: background-color 0.2s;
-        }
-        .sortable thead th:hover {
-            background-color: rgba(255, 255, 255, 0.1);
-        }
-        .sortable .th-sort-asc::after {
-            content: " ▲";
-        }
-        .sortable .th-sort-desc::after {
-            content: " ▼";
-        }
-        /* Modal Styles */
-        .modal {
-            display: none; /* Hidden by default */
-            position: fixed;
-            z-index: 50;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            overflow: auto;
-            background-color: rgba(0,0,0,0.8);
-        }
-        .modal-content {
-            background-color: #1a1a1a;
-            margin: 5% auto;
-            padding: 2rem;
-            border: 1px solid #2e2e2e;
-            width: 90%;
-            max-width: 1200px;
-            border-radius: 0.75rem;
-            position: relative;
-        }
-        .close-button {
-            color: #aaa;
-            position: absolute;
-            top: 1rem;
-            right: 1.5rem;
-            font-size: 2rem;
-            font-weight: bold;
-            cursor: pointer;
-        }
-        .close-button:hover,
-        .close-button:focus {
-            color: #fff;
-        }
+        .callout.warn { border-left-color: #f59e0b; background: rgba(245,158,11,0.07); }
+        .toc a { color: #9ca3af; transition: color .15s; }
+        .toc a:hover { color: #fff; }
+        .num-bad { color: #f87171; font-weight: 600; }
+        .num-good { color: #34d399; font-weight: 600; }
+        a.inline-link { color: #5eead4; }
+        a.inline-link:hover { text-decoration: underline; }
     </style>
-
-    <!-- ============================================================
-         SHARED CHROME CSS (header/nav/footer/changelog modal)
-         Keep in sync with index.html. Eventually move to shared file.
-         ============================================================ -->
-    <style id="shared-chrome-css">
-        /* Top Nav Tab */
-        .top-nav-tab {
-            min-width: 110px;
-        }
-        @media (min-width: 768px) {
-            .top-nav-tab { min-width: 140px; }
-        }
-        .top-nav-tab.active {
-            background: rgba(34, 211, 238, 0.15) !important;
-            color: #67e8f9 !important;
-            border-color: rgba(34, 211, 238, 0.6) !important;
-        }
-        .top-nav-tab.active:hover { background: rgba(34, 211, 238, 0.2) !important; }
-        
-        /* Mobile bottom tab bar */
-        .mobile-bottom-nav { display: none; }
-        @media (max-width: 767px) {
-            .mobile-bottom-nav {
-                display: grid;
-                grid-template-columns: repeat(5, 1fr);
-                position: fixed;
-                bottom: 0;
-                left: 0;
-                right: 0;
-                z-index: 50;
-                background: rgba(10, 11, 15, 0.92);
-                backdrop-filter: blur(16px);
-                -webkit-backdrop-filter: blur(16px);
-                border-top: 1px solid rgba(34, 211, 238, 0.2);
-                padding: 0.4rem 0.25rem calc(0.4rem + env(safe-area-inset-bottom)) 0.25rem;
-                gap: 0.15rem;
-            }
-            .mobile-bottom-nav-tab {
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-                gap: 0.15rem;
-                padding: 0.4rem 0.2rem;
-                color: #9ca3af;
-                text-decoration: none;
-                font-size: 0.65rem;
-                font-weight: 600;
-                line-height: 1;
-                border-radius: 0.5rem;
-                transition: all 0.15s ease;
-                min-height: 48px;
-            }
-            .mobile-bottom-nav-tab i { font-size: 1.1rem; color: #6b7280; transition: color 0.15s; }
-            .mobile-bottom-nav-tab:hover, .mobile-bottom-nav-tab:active { color: #d1d5db; }
-            .mobile-bottom-nav-tab:hover i, .mobile-bottom-nav-tab:active i { color: #9ca3af; }
-            .mobile-bottom-nav-tab.active { color: #67e8f9; }
-            .mobile-bottom-nav-tab.active i { color: #22d3ee; }
-            body { padding-bottom: calc(64px + env(safe-area-inset-bottom)) !important; }
-        }
-        
-        /* Changelog modal */
-        .changelog-body h2 {
-            font-size: 1.05rem; font-weight: 700; color: #67e8f9;
-            margin-top: 1.5rem; margin-bottom: 0.5rem;
-            padding-bottom: 0.35rem;
-            border-bottom: 1px solid rgba(34, 211, 238, 0.2);
-        }
-        .changelog-body h2:first-child { margin-top: 0; }
-        .changelog-body h3 { font-size: 0.9rem; font-weight: 600; color: #d1d5db; margin-top: 1rem; margin-bottom: 0.4rem; }
-        .changelog-body h4 { font-size: 0.85rem; font-weight: 600; color: #9ca3af; margin-top: 0.75rem; margin-bottom: 0.25rem; }
-        .changelog-body p { color: #d1d5db; margin-bottom: 0.65rem; line-height: 1.5; }
-        .changelog-body ul { list-style-type: disc; padding-left: 1.25rem; margin-bottom: 0.75rem; }
-        .changelog-body li { color: #d1d5db; margin-bottom: 0.3rem; line-height: 1.5; }
-        .changelog-body strong { color: #fff; font-weight: 600; }
-        .changelog-body em { color: #a5f3fc; font-style: italic; }
-        .changelog-body code {
-            background: rgba(34, 211, 238, 0.1); color: #67e8f9;
-            padding: 0.1rem 0.35rem; border-radius: 0.25rem;
-            font-size: 0.85em; font-family: 'SF Mono', 'Monaco', 'Courier New', monospace;
-        }
-        .changelog-body .rev-date { color: #6b7280; font-size: 0.8rem; font-weight: 400; margin-left: 0.5rem; }
-        
-        /* Generic modal styles (in case page doesn't already have them) */
-        #changelogModal.modal {
-            transition: opacity 0.2s;
-        }
-        #changelogModal .modal-content {
-            transition: opacity 0.2s, transform 0.2s;
-        }
-    </style>
-    <link rel="icon" type="image/x-icon" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/favicon.ico">
-    <link rel="icon" type="image/png" sizes="32x32" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/favicon-32x32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/favicon-16x16.png">
-    <link rel="apple-touch-icon" sizes="180x180" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/apple-touch-icon.png">
 </head>
 <body class="antialiased">
 
-    <!-- Header Section -->
     <!-- ============================================================
          SHARED HEADER (logo + 5-tab nav + Terra logo)
          Keep in sync with index.html
@@ -221,24 +93,17 @@
                 <a href="index.html"><img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Alliance%20DAO%20Logo.png" alt="Alliance DAO Logo" class="h-12 md:h-16 w-auto" onerror="this.src='https://placehold.co/128x64/0D0D0D/EAEAEA?text=Logo'; this.onerror=null;"></a>
             </div>
             <nav class="hidden md:flex flex-1 w-full md:w-auto justify-center items-center gap-2 sm:gap-3 order-3 md:order-2 mt-4 md:mt-0">
-                <a href="index.html" data-page="index" class="top-nav-tab bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-4 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center flex-1 md:flex-initial">
-                    Home
-                </a>
+                <a href="index.html" data-page="index" class="top-nav-tab bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-4 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center flex-1 md:flex-initial">Home</a>
                 <a href="nft-explorer-index.html" data-page="nft-explorer-index" class="top-nav-tab bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-4 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center flex-1 md:flex-initial">
-                    <span class="md:hidden">Explorer</span>
-                    <span class="hidden md:inline">NFT Explorer</span>
+                    <span class="md:hidden">Explorer</span><span class="hidden md:inline">NFT Explorer</span>
                 </a>
                 <a href="adao-lore.html" data-page="adao-lore" class="top-nav-tab bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-4 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center flex-1 md:flex-initial">
-                    <span class="md:hidden">Lore</span>
-                    <span class="hidden md:inline">aDAO Lore</span>
+                    <span class="md:hidden">Lore</span><span class="hidden md:inline">aDAO Lore</span>
                 </a>
                 <a href="tla-stats.html" data-page="tla-stats" class="top-nav-tab bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-4 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center flex-1 md:flex-initial">
-                    <span class="md:hidden">TLA</span>
-                    <span class="hidden md:inline">TLA Stats</span>
+                    <span class="md:hidden">TLA</span><span class="hidden md:inline">TLA Stats</span>
                 </a>
-                <a href="dao.html" data-page="dao" class="top-nav-tab bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-4 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center flex-1 md:flex-initial">
-                    DAO
-                </a>
+                <a href="dao.html" data-page="dao" class="top-nav-tab bg-gray-800/50 hover:bg-gray-700/80 border border-gray-700 text-white font-bold py-2 px-3 text-xs sm:text-sm md:py-3 md:px-4 md:text-base rounded-lg shadow-lg transition-all transform hover:scale-105 whitespace-nowrap text-center flex-1 md:flex-initial">DAO</a>
             </nav>
             <div class="w-1/2 md:w-32 flex-shrink-0 flex justify-end order-2 md:order-3">
                 <img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Planets-Empty/main/Terra.PNG" alt="Terra Logo" class="h-12 md:h-16 w-auto" onerror="this.src='https://placehold.co/128x64/0D0D0D/EAEAEA?text=Logo'; this.onerror=null;">
@@ -246,364 +111,468 @@
         </div>
     </header>
 
-
-    <!-- Main Content -->
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div class="content-card rounded-xl p-4 sm:p-8 md:p-12">
-            <div class="text-center mb-16">
-                <h1 class="text-4xl font-bold">Rarity Explained</h1>
-                <p class="text-lg text-gray-400 mt-2">How 5 simple layers create 10,000 unique and verifiable NFTs.</p>
+
+            <!-- HERO -->
+            <div class="text-center mb-10">
+                <p class="eyebrow mb-3">AllianceDAO NFT Collection</p>
+                <h1 class="text-4xl md:text-5xl font-bold">Rarity, Explained</h1>
+                <p class="mt-4 max-w-3xl mx-auto text-gray-400 leading-relaxed">
+                    Every AllianceDAO NFT is generative art assembled from layered traits. This page covers exactly
+                    how rarity was <em>designed</em>, how the marketplaces actually <em>rank</em>, why the two don't
+                    always agree, and how to read each one with confidence.
+                </p>
             </div>
 
-            <!-- The 5 Layers Section -->
-            <section>
-                <h2 class="!mt-0">The 5 Layers of an AllianceDAO NFT</h2>
-                <p class="text-gray-400 mb-8">
-                    Each AllianceDAO NFT is a composite image generated from five distinct layers. The open-source Hashlips Art Engine randomly selects one option from each layer to create a unique combination, ensuring no two NFTs are exactly alike.
+            <!-- HOW MADE -->
+            <h2 id="how-made">How the art was made</h2>
+            <div class="text-gray-300 leading-relaxed space-y-4 max-w-4xl">
+                <p>
+                    The collection was produced with the
+                    <a class="inline-link" href="https://github.com/HashLips/hashlips_art_engine" target="_blank" rel="noopener">HashLips Art Engine</a>,
+                    a generative tool that stacks image <strong>layers</strong> to build each NFT. Every layer
+                    (the planet, the character, the weapon, and so on) holds a set of trait options, and each option
+                    is assigned a <strong>weight</strong> that controls how often it should appear. The engine then
+                    rolls 10,000 unique combinations against those weights.
                 </p>
-                <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
-                    <div class="layer-card"><i class="fas fa-mountain-sun layer-icon"></i><h3 class="text-lg">Background</h3><span class="text-sm text-gray-400">20 Options</span></div>
-                    <div class="layer-card"><i class="fas fa-wand-sparkles layer-icon"></i><h3 class="text-lg">Object</h3><span class="text-sm text-gray-400">40 Options</span></div>
-                    <div class="layer-card"><i class="fas fa-user-astronaut layer-icon"></i><h3 class="text-lg">Inhabitant</h3><span class="text-sm text-gray-400">20 Options</span></div>
-                    <div class="layer-card"><i class="fas fa-lightbulb layer-icon"></i><h3 class="text-lg">Light</h3><span class="text-sm text-gray-400">10 Options</span></div>
-                    <div class="layer-card"><i class="fas fa-cloud-sun-rain layer-icon"></i><h3 class="text-lg">Weather</h3><span class="text-sm text-gray-400">~5 Options</span></div>
-                </div>
-            </section>
-            
-            <!-- How Rarity Works Section -->
-            <section>
-                <h2>How Rarity Works: The "Object" Layer</h2>
-                <p class="text-gray-400 mb-8">
-                    While most layers have an equal chance of being chosen, the **Object** layer is where rarity is introduced. Each of the 40 objects was assigned a different weight, from 1 (rarest) to 40 (most common). This means some objects are intentionally much scarcer than others, making them highly sought after.
+                <p>
+                    Two consequences of that process matter for rarity. First, <strong>rarity is something the
+                    designers set on purpose</strong> through the weights &mdash; it isn't an accident of the art.
+                    Second, because 10,000 draws is a finite sample, the <strong>actual</strong> mint counts land
+                    close to the <strong>planned</strong> weights but rarely exactly on them. Both facts show up below.
                 </p>
-                <div class="space-y-4">
-                    <div>
-                        <div class="flex justify-between text-sm mb-1">
-                            <span class="font-bold text-pink-400">Rarest Object (Weight: 1)</span>
-                            <span>Probability: ~0.12%</span>
-                        </div>
-                        <div class="rarity-bar"><div class="rarity-fill" style="width: 0.12%;"></div></div>
-                    </div>
-                     <div>
-                        <div class="flex justify-between text-sm mb-1">
-                            <span class="font-bold text-gray-300">A Mid-Tier Object (Weight: 20)</span>
-                            <span>Probability: ~2.44%</span>
-                        </div>
-                        <div class="rarity-bar"><div class="rarity-fill" style="width: 2.44%;"></div></div>
-                    </div>
-                     <div>
-                        <div class="flex justify-between text-sm mb-1">
-                            <span class="font-bold text-purple-400">Most Common Object (Weight: 40)</span>
-                            <span>Probability: ~4.88%</span>
-                        </div>
-                        <div class="rarity-bar"><div class="rarity-fill" style="width: 4.88%;"></div></div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Technical Breakdown Section -->
-            <section>
-                <h2>The Technical Details</h2>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 text-gray-400 leading-relaxed">
-                    <div>
-                        <h3 class="text-xl mb-2">Unique DNA</h3>
-                        <p>As the generator creates random combinations, it checks the "DNA" of every previously created image. If a new image has the same combination of attributes as an existing one, it is discarded, and the program tries again. This guarantees that all 10,000 NFTs in the final collection are verifiably unique.</p>
-                    </div>
-                    <div>
-                        <h3 class="text-xl mb-2">Rarity Scoring</h3>
-                         <p>For the AllianceDAO NFT collection, rarity weights and rarity scores are inverses. This means an object with a low weight (e.g., 1) is the rarest and receives the highest score (e.g., 40). This scoring convention matches the industry standard, where a higher score means a rarer NFT.</p>
-                    </div>
-                </div>
-            </section>
-
-             <!-- Trait Analysis Section -->
-            <section>
-                <h2>Trait Analysis: Planned vs. Actual</h2>
-                <p class="text-gray-400 mb-6">
-                    Due to the random nature of the generation process, the final count for each trait may differ slightly from the planned distribution. Click a button below to view the detailed comparison for that trait category.
+                <p class="callout">
+                    The collection's own rarity reference lives in the official
+                    <a class="inline-link" href="https://terra-money.notion.site/AllianceDAO-NFT-Rarity-8703a27a9eb74844a71469936afba6b4" target="_blank" rel="noopener">AllianceDAO NFT Rarity</a>
+                    document. This page expands on it with the marketplace comparison and the data behind each claim.
                 </p>
-                <div class="flex flex-wrap gap-4">
-                    <button id="openObjectModal" class="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-lg">View Object Traits</button>
-                    <button id="openInhabitantModal" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg">View Inhabitant Traits</button>
-                    <button id="openPlanetModal" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg">View Planet Traits</button>
+            </div>
+
+            <!-- LAYERS -->
+            <h2 id="layers">The trait layers</h2>
+            <p class="text-gray-300 leading-relaxed max-w-4xl mb-6">
+                Each NFT carries six attributes. Only one of them &mdash; the <strong>Object</strong> (the weapon or
+                item) &mdash; was built as a graded rarity ladder. The others set the scene and the character, and
+                were generated with even or atmospheric weights, not as rarity.
+            </p>
+            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                <div class="layer-card">
+                    <div class="layer-icon"><i class="fa-solid fa-wand-sparkles"></i></div>
+                    <h3 class="text-lg">Object</h3>
+                    <p class="text-xs text-gray-400 mt-1">The weapon / item</p>
+                    <span class="pill pill-rarity mt-3"><i class="fa-solid fa-star"></i> Rarity driver</span>
                 </div>
-            </section>
+                <div class="layer-card">
+                    <div class="layer-icon muted"><i class="fa-solid fa-globe"></i></div>
+                    <h3 class="text-lg">Planet</h3>
+                    <p class="text-xs text-gray-400 mt-1">20 worlds, ~500 each</p>
+                    <span class="pill pill-scene mt-3">Setting</span>
+                </div>
+                <div class="layer-card">
+                    <div class="layer-icon muted"><i class="fa-solid fa-user-astronaut"></i></div>
+                    <h3 class="text-lg">Inhabitant</h3>
+                    <p class="text-xs text-gray-400 mt-1">20 characters, ~500 each</p>
+                    <span class="pill pill-scene mt-3">Identity</span>
+                </div>
+                <div class="layer-card">
+                    <div class="layer-icon muted"><i class="fa-solid fa-sun"></i></div>
+                    <h3 class="text-lg">Light</h3>
+                    <p class="text-xs text-gray-400 mt-1">Time-of-day mood</p>
+                    <span class="pill pill-scene mt-3">Atmosphere</span>
+                </div>
+                <div class="layer-card">
+                    <div class="layer-icon muted"><i class="fa-solid fa-cloud-bolt"></i></div>
+                    <h3 class="text-lg">Weather</h3>
+                    <p class="text-xs text-gray-400 mt-1">Sky &amp; effects</p>
+                    <span class="pill pill-scene mt-3">Atmosphere</span>
+                </div>
+                <div class="layer-card">
+                    <div class="layer-icon"><i class="fa-solid fa-medal"></i></div>
+                    <h3 class="text-lg">Grade</h3>
+                    <p class="text-xs text-gray-400 mt-1">1&ndash;40, set by the Object</p>
+                    <span class="pill pill-rarity mt-3"><i class="fa-solid fa-star"></i> The rarity</span>
+                </div>
+            </div>
+            <p class="text-gray-400 text-sm mt-4 max-w-4xl">
+                Planet and Inhabitant were each planned at a flat 500 per option &mdash; deliberately even, so they
+                describe a token's world and character without making it rarer. Light and Weather are atmospheric
+                flourishes. The <strong>Object</strong> is the one layer with a graded weight curve, and the
+                metadata's <span class="mono">Rarity</span> attribute (1&ndash;40) is simply the grade that each
+                Object maps to.
+            </p>
+
+            <!-- DESIGNED RARITY -->
+            <h2 id="designed-rarity">The designed grades</h2>
+            <div class="text-gray-300 leading-relaxed space-y-4 max-w-4xl">
+                <p>
+                    There are 40 Objects and 40 grades, one-to-one. The grade reflects the Object's
+                    <strong>planned weight</strong>: the lower the planned count, the rarer it was meant to be, and
+                    the higher its grade. <strong>Phoenix Rising sits at the top &mdash; Grade 40 &mdash; because it
+                    was planned as the single rarest Object (a planned count of 12).</strong>
+                </p>
+                <p>
+                    Generation variance then nudged the realized counts. Phoenix overshot to 25 mints; the Sindarin
+                    Fire Saber, planned at 24, undershot all the way to 6. So by <em>raw count</em> the Saber ended
+                    up scarcer than the Phoenix &mdash; but the <em>designed grade</em> keeps Phoenix as the apex,
+                    because that's what the weights intended. This is the single most important thing to understand
+                    about aDAO rarity.
+                </p>
+            </div>
+
+            <div class="overflow-x-auto rounded-lg border border-gray-800 mt-6">
+                <table class="grade-table">
+                    <thead>
+                        <tr>
+                            <th>Grade</th><th>Object</th><th>Planned</th><th>Actual</th><th>Intended rank range</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="apex-row"><td>40 &middot; Apex</td><td>Phoenix Rising</td><td class="mono">12</td><td class="mono">25</td><td class="mono">#1&ndash;25</td></tr>
+                        <tr><td>39</td><td>Sindarin Fire Saber</td><td class="mono">24</td><td class="mono">6</td><td class="mono">#26&ndash;31</td></tr>
+                        <tr><td>38</td><td>Sword of Zando</td><td class="mono">37</td><td class="mono">14</td><td class="mono">#32&ndash;45</td></tr>
+                        <tr><td>37</td><td>Zandoan Vine Bow</td><td class="mono">49</td><td class="mono">19</td><td class="mono">#46&ndash;64</td></tr>
+                        <tr><td>36</td><td>Lusan Xtreme Soaker</td><td class="mono">61</td><td class="mono">27</td><td class="mono">#65&ndash;91</td></tr>
+                        <tr><td>35</td><td>Sindarin Flame Thrower</td><td class="mono">73</td><td class="mono">44</td><td class="mono">#92&ndash;135</td></tr>
+                        <tr><td class="text-gray-500" colspan="5">&hellip; grades 34 &rarr; 1 continue down to the most common Object, Battle Axe (Grade 1, 466 mints). Full ladder in the data file below.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="text-gray-400 text-sm mt-3 max-w-4xl">
+                Notice the planned column descends cleanly (12, 24, 37, 49&hellip;) while the actual column wobbles.
+                The grade follows the <em>plan</em>. That's why Phoenix is the apex even though 25 exist.
+            </p>
+
+            <!-- INTENDED RANK -->
+            <h2 id="intended-rank">From grades to a 1&ndash;10,000 rank</h2>
+            <div class="text-gray-300 leading-relaxed space-y-4 max-w-4xl">
+                <p>
+                    A grade on its own can't say &ldquo;I'm #3 of 10,000&rdquo; &mdash; hundreds of tokens share a
+                    grade (466 share Grade 1). To give every token a usable ordinal, we lay the grades end to end
+                    from the apex down: the 25 Phoenixes occupy ranks <span class="mono">#1&ndash;25</span>, the 6
+                    Sabers take <span class="mono">#26&ndash;31</span>, the 14 Swords of Zando
+                    <span class="mono">#32&ndash;45</span>, and so on to the common Objects at the bottom.
+                </p>
+                <p>
+                    Within a single grade every token is <strong>equal rarity by design</strong> &mdash;
+                    they're the same Object. To assign distinct numbers we use the token's mint ID
+                    (lower = minted earlier), so the apex tokens get the lowest ordinals in mint order.
+                    Think of it as a tiebreaker, not a ranking: a Phoenix is &ldquo;top 0.25%, mint #X&rdquo;
+                    &mdash; the grade is the rarity, the within-grade number just records who showed up first.
+                    The meaningful signal is the grade and its band; the exact spot inside it doesn't carry
+                    further design weight, and the value of one Phoenix over another comes from its
+                    <em>scene</em> (planet, inhabitant, light, weather), not its rank within the grade.
+                </p>
+                <p class="callout">
+                    We call this the <strong>Intended Rank</strong>. It's derived entirely from the collection's own
+                    <span class="mono">Rarity</span> grade, so anyone can reproduce and verify it from the public
+                    metadata.
+                </p>
+            </div>
+
+            <!-- MARKETPLACE -->
+            <h2 id="marketplace">How BBL ranks &mdash; and where it diverges</h2>
+            <div class="text-gray-300 leading-relaxed space-y-4 max-w-4xl">
+                <p>
+                    Marketplaces like BackBone Labs (BBL) apply a <strong>generic, collection-agnostic rarity
+                    score</strong>: every trait counts equally, and a trait's rarity is just how few tokens share it.
+                    It's a reasonable default that works across thousands of collections, and for collections
+                    without a deliberate grade ladder it usually produces sensible results. For aDAO it just
+                    doesn't quite match the design intent, in three specific ways.
+                </p>
+                <p><strong>1. It inverts the apex.</strong> Because the score ranks by realized count, the
+                    6&ndash;mint Sindarin Fire Saber lands at BBL #1, while Phoenix Rising &mdash; the designed apex
+                    &mdash; drifts down to roughly #66.</p>
+                <p><strong>2. It scores the weather.</strong> Atmosphere counts the same as the weapon, so an
+                    ultra-rare <em>sky</em> can rocket a common weapon up the board. The clearest example is the
+                    six tokens BBL ranks #7&ndash;12: every one carries a common Object but the rare
+                    <span class="mono">Weather = Lightning strike</span> (6 mints), which BBL treats as exactly as
+                    rare as the rarest weapon.</p>
+                <p><strong>3. Broken-NFT handling differs.</strong> BBL leaves most broken NFTs
+                    unranked &mdash; though a small number still slip through with a rank, so the
+                    behavior isn't fully consistent. The Intended ranking, by contrast, ranks every
+                    token the same way: the grade is set by the Object, so brokenness simply doesn't
+                    change it.</p>
+            </div>
+
+            <div class="overflow-x-auto rounded-lg border border-gray-800 mt-6">
+                <table class="grade-table">
+                    <thead>
+                        <tr><th>BBL rank</th><th>Token</th><th>Object (mints)</th><th>Weather (mints)</th><th>Intended rank</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td class="mono">#7</td><td class="mono">#3402</td><td>Kitan Ice Bow (287)</td><td>Lightning strike (6)</td><td class="mono num-bad">#3,022</td></tr>
+                        <tr><td class="mono">#8</td><td class="mono">#3680</td><td>Gredican Power Staff (292)</td><td>Lightning strike (6)</td><td class="mono num-bad">#3,598</td></tr>
+                        <tr><td class="mono">#9</td><td class="mono">#3578</td><td>Gredican Power Staff (292)</td><td>Lightning strike (6)</td><td class="mono num-bad">#3,595</td></tr>
+                        <tr><td class="mono">#10</td><td class="mono">#3982</td><td>Pampan Grass Staff (342)</td><td>Lightning strike (6)</td><td class="mono num-bad">#4,506</td></tr>
+                        <tr><td class="mono">#11</td><td class="mono">#3637</td><td>Minasan Ore Staff (380)</td><td>Lightning strike (6)</td><td class="mono num-bad">#6,289</td></tr>
+                        <tr><td class="mono">#12</td><td class="mono">#3211</td><td>Ozaran Bone Axe (415)</td><td>Lightning strike (6)</td><td class="mono num-bad">#7,476</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="text-gray-400 text-sm mt-3 max-w-4xl">
+                Under the design, these are mid-to-low-pack tokens with a striking sky. Under BBL's all-trait score,
+                the sky alone puts them in the top twelve. Neither is a bug &mdash; it's a difference in
+                <em>what counts as rarity</em>.
+            </p>
+
+            <!-- WHICH RANK -->
+            <h2 id="which-rank">Which rank should you use?</h2>
+            <div class="text-gray-300 leading-relaxed space-y-4 max-w-4xl">
+                <p>
+                    Honestly, both are valid &mdash; they answer different questions. The Intended Rank says
+                    &ldquo;how rare was this <em>meant</em> to be&rdquo;; BBL's rank says &ldquo;how scarce is each
+                    trait in the final mint, atmosphere included.&rdquo;
+                </p>
+                <p class="callout warn">
+                    There's a practical point that matters here: <strong>BBL launched this collection and has been the
+                    primary marketplace, carrying nearly all of aDAO's trading volume.</strong> Its ranking is the one
+                    buyers and sellers have actually used to price NFTs since day one. Even though it diverges from the
+                    original design, it has effectively become the market's reference &mdash; so it can't simply be
+                    dismissed as &ldquo;wrong.&rdquo;
+                </p>
+                <p>
+                    Rather than pick a winner, the <a class="inline-link" href="nft-explorer-index.html">NFT Explorer</a>
+                    lets you choose. A <strong>BBL Rank / Intended Rank</strong> toggle switches every rank shown on the
+                    page, so you can browse by the market's standard or by the collection's design and compare them
+                    directly.
+                </p>
+                <p>
+                    To keep the design standard consistent everywhere, the full Intended Rank is published as an open
+                    data file (below) that any marketplace &mdash; Atrium included &mdash; can read directly or host
+                    themselves. The goal is a single, verifiable source of truth for &ldquo;as intended&rdquo; rarity.
+                </p>
+            </div>
 
 
-            <!-- Example NFT -->
-            <section>
-                <h2>Example NFT & Metadata</h2>
-                <div class="nft-example-card rounded-lg grid grid-cols-1 md:grid-cols-2">
-                    <img src="https://dweb.link/ipfs/bafybeiek4cv2w6ot767nriveyzagejnvzpw3qr2b7iyc6ccddid6jj77za/363.png" alt="NFT Example" class="w-full h-auto object-cover rounded-t-lg md:rounded-l-lg md:rounded-t-none">
-                    <div class="p-6">
-                        <h3 class="text-2xl font-bold mb-4">NFT #363</h3>
-                        <div class="space-y-2 text-sm">
-                            <div class="flex justify-between p-2 rounded bg-black/20"><span>Background:</span> <span class="font-bold text-teal-400">Ozara South</span></div>
-                            <div class="flex justify-between p-2 rounded bg-black/20"><span>Object:</span> <span class="font-bold text-teal-400">Crystal Staff</span></div>
-                            <div class="flex justify-between p-2 rounded bg-black/20"><span>Inhabitant:</span> <span class="font-bold text-teal-400">Ozaran Female</span></div>
-                            <div class="flex justify-between p-2 rounded bg-black/20"><span>Light:</span> <span class="font-bold text-teal-400">Ozara</span></div>
-                            <div class="flex justify-between p-2 rounded bg-black/20"><span>Weather:</span> <span class="font-bold text-teal-400">None</span></div>
-                        </div>
-                    </div>
+            <!-- FULL TRAIT BREAKDOWNS -->
+            <h2 id="traits-full">All five trait layers, in full</h2>
+            <div class="text-gray-300 leading-relaxed space-y-4 max-w-4xl">
+                <p>
+                    Only the <strong>Object</strong> is a graded rarity layer. The other four describe
+                    where the character is, who they are, and the scene around them &mdash; flat by design.
+                    But "flat by design" doesn't mean uniform in practice: generation variance and a few
+                    intentionally narrow trait weights produced some genuinely scarce values that the
+                    Intended grade doesn't capture. They aren't rarity in the design sense, but a
+                    collector can absolutely value them. The tables below are the public scoreboard so
+                    you can decide for yourself.
+                </p>
+            </div>
+
+            <h3 class="mt-8 text-xl">Object &mdash; the graded layer (40 tiers, planned weights drive the grade)</h3>
+            <div class="overflow-x-auto rounded-lg border border-gray-800 mt-3 max-h-96 overflow-y-auto"><table class="grade-table"><thead><tr><th>Trait</th><th>Planned</th><th>Actual</th><th>% of supply</th></tr></thead><tbody><tr><td>Sindarin Fire Saber</td><td class="mono">24</td><td class="mono">6</td><td class="mono">0.06%</td></tr>
+<tr><td>Sword of Zando</td><td class="mono">37</td><td class="mono">14</td><td class="mono">0.14%</td></tr>
+<tr><td>Zandoan Vine Bow</td><td class="mono">49</td><td class="mono">19</td><td class="mono">0.19%</td></tr>
+<tr><td>Phoenix Rising</td><td class="mono">12</td><td class="mono">25</td><td class="mono">0.25%</td></tr>
+<tr><td>Lusan Xtreme Soaker</td><td class="mono">61</td><td class="mono">27</td><td class="mono">0.27%</td></tr>
+<tr><td>Sindarin Flame Thrower</td><td class="mono">73</td><td class="mono">44</td><td class="mono">0.44%</td></tr>
+<tr><td>Cristallian Ray Gun</td><td class="mono">98</td><td class="mono">87</td><td class="mono">0.87%</td></tr>
+<tr><td>Ozaran Blaster</td><td class="mono">85</td><td class="mono">106</td><td class="mono">1.06%</td></tr>
+<tr><td>Quartz Ray Gun</td><td class="mono">110</td><td class="mono">131</td><td class="mono">1.31%</td></tr>
+<tr><td>SST Fishing Pole</td><td class="mono">134</td><td class="mono">135</td><td class="mono">1.35%</td></tr>
+<tr><td>Cruthan Blaster</td><td class="mono">122</td><td class="mono">136</td><td class="mono">1.36%</td></tr>
+<tr><td>Cristallian Sword</td><td class="mono">146</td><td class="mono">149</td><td class="mono">1.49%</td></tr>
+<tr><td>Gredican Sword</td><td class="mono">159</td><td class="mono">179</td><td class="mono">1.79%</td></tr>
+<tr><td>Lusan Water Saber</td><td class="mono">183</td><td class="mono">186</td><td class="mono">1.86%</td></tr>
+<tr><td>Pampan Grass Sword</td><td class="mono">171</td><td class="mono">208</td><td class="mono">2.08%</td></tr>
+<tr><td>Kitan Ice Sword</td><td class="mono">195</td><td class="mono">212</td><td class="mono">2.12%</td></tr>
+<tr><td>Ozaran Death Saber</td><td class="mono">207</td><td class="mono">236</td><td class="mono">2.36%</td></tr>
+<tr><td>Royal Ozaran Bow</td><td class="mono">232</td><td class="mono">239</td><td class="mono">2.39%</td></tr>
+<tr><td>Minasan Ore Sword</td><td class="mono">220</td><td class="mono">248</td><td class="mono">2.48%</td></tr>
+<tr><td>Cristallian Bow</td><td class="mono">244</td><td class="mono">256</td><td class="mono">2.56%</td></tr>
+<tr><td>Sindarin Fire Bow</td><td class="mono">256</td><td class="mono">274</td><td class="mono">2.74%</td></tr>
+<tr><td>Minasan Bow</td><td class="mono">280</td><td class="mono">275</td><td class="mono">2.75%</td></tr>
+<tr><td>Kitan Ice Bow</td><td class="mono">—</td><td class="mono">287</td><td class="mono">2.87%</td></tr>
+<tr><td>Staff of Zando</td><td class="mono">305</td><td class="mono">290</td><td class="mono">2.90%</td></tr>
+<tr><td>Gredican Power Staff</td><td class="mono">293</td><td class="mono">292</td><td class="mono">2.92%</td></tr>
+<tr><td>Sindarin Fire Staff</td><td class="mono">317</td><td class="mono">308</td><td class="mono">3.08%</td></tr>
+<tr><td>Cristallian Staff</td><td class="mono">354</td><td class="mono">340</td><td class="mono">3.40%</td></tr>
+<tr><td>Pampan Grass Staff</td><td class="mono">329</td><td class="mono">342</td><td class="mono">3.42%</td></tr>
+<tr><td>Kitan Ice Staff</td><td class="mono">366</td><td class="mono">351</td><td class="mono">3.51%</td></tr>
+<tr><td>Ozaran Sand Staff</td><td class="mono">341</td><td class="mono">369</td><td class="mono">3.69%</td></tr>
+<tr><td>Minasan Ore Staff</td><td class="mono">390</td><td class="mono">380</td><td class="mono">3.80%</td></tr>
+<tr><td>Lusan Water Staff</td><td class="mono">378</td><td class="mono">382</td><td class="mono">3.82%</td></tr>
+<tr><td>Ice Cleaver</td><td class="mono">402</td><td class="mono">390</td><td class="mono">3.90%</td></tr>
+<tr><td>Ozaran Bone Axe</td><td class="mono">427</td><td class="mono">415</td><td class="mono">4.15%</td></tr>
+<tr><td>Ancient Lusan Trident</td><td class="mono">415</td><td class="mono">427</td><td class="mono">4.27%</td></tr>
+<tr><td>Cruthan Death Mace</td><td class="mono">439</td><td class="mono">430</td><td class="mono">4.30%</td></tr>
+<tr><td>Golden Hammer</td><td class="mono">463</td><td class="mono">436</td><td class="mono">4.36%</td></tr>
+<tr><td>The Eternal Torch</td><td class="mono">451</td><td class="mono">440</td><td class="mono">4.40%</td></tr>
+<tr><td>Battle Shovel</td><td class="mono">476</td><td class="mono">463</td><td class="mono">4.63%</td></tr>
+<tr><td>Battle Axe</td><td class="mono">488</td><td class="mono">466</td><td class="mono">4.66%</td></tr></tbody></table></div>
+            <p class="text-gray-400 text-xs mt-2">Sorted rarest by realized count. The grade follows the <em>planned</em> column; the realized counts are the actual mint outcomes.</p>
+
+            <h3 class="mt-10 text-xl">Weather &mdash; atmosphere (not graded, but the widest scarcity spread)</h3>
+            <div class="overflow-x-auto rounded-lg border border-gray-800 mt-3 max-h-96 overflow-y-auto"><table class="grade-table"><thead><tr><th>Trait</th><th>Actual</th><th>% of supply</th></tr></thead><tbody><tr><td>Lightning strike</td><td class="mono">6</td><td class="mono">0.06%</td></tr>
+<tr><td>Cosmic dust</td><td class="mono">24</td><td class="mono">0.24%</td></tr>
+<tr><td>Bubbles</td><td class="mono">27</td><td class="mono">0.27%</td></tr>
+<tr><td>Mining dust</td><td class="mono">35</td><td class="mono">0.35%</td></tr>
+<tr><td>Light wind</td><td class="mono">40</td><td class="mono">0.40%</td></tr>
+<tr><td>Arctic winds</td><td class="mono">47</td><td class="mono">0.47%</td></tr>
+<tr><td>Blizzard</td><td class="mono">49</td><td class="mono">0.49%</td></tr>
+<tr><td>Pink breeze</td><td class="mono">58</td><td class="mono">0.58%</td></tr>
+<tr><td>Pink pollen</td><td class="mono">58</td><td class="mono">0.58%</td></tr>
+<tr><td>Gredican fog</td><td class="mono">66</td><td class="mono">0.66%</td></tr>
+<tr><td>Desert winds</td><td class="mono">71</td><td class="mono">0.71%</td></tr>
+<tr><td>Volcanic dust</td><td class="mono">89</td><td class="mono">0.89%</td></tr>
+<tr><td>Heavy rain</td><td class="mono">99</td><td class="mono">0.99%</td></tr>
+<tr><td>Quartz dust</td><td class="mono">102</td><td class="mono">1.02%</td></tr>
+<tr><td>Kipple</td><td class="mono">108</td><td class="mono">1.08%</td></tr>
+<tr><td>Granite dust</td><td class="mono">110</td><td class="mono">1.10%</td></tr>
+<tr><td>Mountain winds</td><td class="mono">116</td><td class="mono">1.16%</td></tr>
+<tr><td>Heavy showers</td><td class="mono">119</td><td class="mono">1.19%</td></tr>
+<tr><td>Ocean winds</td><td class="mono">120</td><td class="mono">1.20%</td></tr>
+<tr><td>Diamond dust</td><td class="mono">127</td><td class="mono">1.27%</td></tr>
+<tr><td>Mountain fog</td><td class="mono">145</td><td class="mono">1.45%</td></tr>
+<tr><td>Dew drops</td><td class="mono">183</td><td class="mono">1.83%</td></tr>
+<tr><td>Star dust</td><td class="mono">228</td><td class="mono">2.28%</td></tr>
+<tr><td>Acid rain drops</td><td class="mono">233</td><td class="mono">2.33%</td></tr>
+<tr><td>Desert dust</td><td class="mono">277</td><td class="mono">2.77%</td></tr>
+<tr><td>Comet dust</td><td class="mono">308</td><td class="mono">3.08%</td></tr>
+<tr><td>Rainbow</td><td class="mono">331</td><td class="mono">3.31%</td></tr>
+<tr><td>Light rain</td><td class="mono">358</td><td class="mono">3.58%</td></tr>
+<tr><td>Double rainbow</td><td class="mono">425</td><td class="mono">4.25%</td></tr>
+<tr><td>Rain drops</td><td class="mono">783</td><td class="mono">7.83%</td></tr>
+<tr><td>Light snow</td><td class="mono">904</td><td class="mono">9.04%</td></tr>
+<tr><td>Clear</td><td class="mono">4354</td><td class="mono">43.54%</td></tr></tbody></table></div>
+            <p class="text-gray-400 text-xs mt-2">32 distinct weathers from 6 to 4,354. <strong>Lightning strike (6)</strong> matches the Sindarin Fire Saber for sheer scarcity; <strong>Cosmic dust (24)</strong>, <strong>Bubbles (27)</strong>, and <strong>Mining dust (35)</strong> are also notable rare-sky finds. Not rarity in the design sense &mdash; but absolutely real scarcity if a collector wants it.</p>
+
+            <h3 class="mt-10 text-xl">Light &mdash; mood &amp; time-of-day</h3>
+            <div class="overflow-x-auto rounded-lg border border-gray-800 mt-3 max-h-96 overflow-y-auto"><table class="grade-table"><thead><tr><th>Trait</th><th>Actual</th><th>% of supply</th></tr></thead><tbody><tr><td>Noonlight</td><td class="mono">237</td><td class="mono">2.37%</td></tr>
+<tr><td>Ozaran sun</td><td class="mono">245</td><td class="mono">2.45%</td></tr>
+<tr><td>Bright</td><td class="mono">256</td><td class="mono">2.56%</td></tr>
+<tr><td>Sunset</td><td class="mono">489</td><td class="mono">4.89%</td></tr>
+<tr><td>Minasan Mining light</td><td class="mono">493</td><td class="mono">4.93%</td></tr>
+<tr><td>Cristall clear</td><td class="mono">499</td><td class="mono">4.99%</td></tr>
+<tr><td>Amethyst glow</td><td class="mono">501</td><td class="mono">5.01%</td></tr>
+<tr><td>Pampan summer sun</td><td class="mono">506</td><td class="mono">5.06%</td></tr>
+<tr><td>Cruthan sun</td><td class="mono">507</td><td class="mono">5.07%</td></tr>
+<tr><td>Sunlight</td><td class="mono">507</td><td class="mono">5.07%</td></tr>
+<tr><td>Pink Poison Fog</td><td class="mono">510</td><td class="mono">5.10%</td></tr>
+<tr><td>Treelight</td><td class="mono">511</td><td class="mono">5.11%</td></tr>
+<tr><td>Sindari heatwave</td><td class="mono">1000</td><td class="mono">10.00%</td></tr>
+<tr><td>Ice reflection</td><td class="mono">1000</td><td class="mono">10.00%</td></tr>
+<tr><td>Ocean reflection</td><td class="mono">1000</td><td class="mono">10.00%</td></tr>
+<tr><td>Clear</td><td class="mono">1739</td><td class="mono">17.39%</td></tr></tbody></table></div>
+            <p class="text-gray-400 text-xs mt-2">16 distinct lights. The spread is narrower than Weather; <strong>Noonlight (237)</strong> is the scarcest, <strong>Sunlight</strong> the most common.</p>
+
+            <h3 class="mt-10 text-xl">Planet &mdash; setting (flat by design, 20 worlds &times; ~500 each)</h3>
+            <div class="overflow-x-auto rounded-lg border border-gray-800 mt-3 max-h-96 overflow-y-auto"><table class="grade-table"><thead><tr><th>Trait</th><th>Actual</th><th>% of supply</th></tr></thead><tbody><tr><td>Lusa North</td><td class="mono">480</td><td class="mono">4.80%</td></tr>
+<tr><td>Sindari North</td><td class="mono">483</td><td class="mono">4.83%</td></tr>
+<tr><td>Crutha South</td><td class="mono">484</td><td class="mono">4.84%</td></tr>
+<tr><td>Gredica South</td><td class="mono">486</td><td class="mono">4.86%</td></tr>
+<tr><td>Ozara North</td><td class="mono">488</td><td class="mono">4.88%</td></tr>
+<tr><td>Minas North</td><td class="mono">496</td><td class="mono">4.96%</td></tr>
+<tr><td>Zando South</td><td class="mono">498</td><td class="mono">4.98%</td></tr>
+<tr><td>Cristall South</td><td class="mono">498</td><td class="mono">4.98%</td></tr>
+<tr><td>Kita North</td><td class="mono">498</td><td class="mono">4.98%</td></tr>
+<tr><td>Pampas North</td><td class="mono">499</td><td class="mono">4.99%</td></tr>
+<tr><td>Pampas South</td><td class="mono">501</td><td class="mono">5.01%</td></tr>
+<tr><td>Zando North</td><td class="mono">502</td><td class="mono">5.02%</td></tr>
+<tr><td>Cristall North</td><td class="mono">502</td><td class="mono">5.02%</td></tr>
+<tr><td>Kita South</td><td class="mono">502</td><td class="mono">5.02%</td></tr>
+<tr><td>Minas South</td><td class="mono">504</td><td class="mono">5.04%</td></tr>
+<tr><td>Ozara South</td><td class="mono">512</td><td class="mono">5.12%</td></tr>
+<tr><td>Gredica North</td><td class="mono">514</td><td class="mono">5.14%</td></tr>
+<tr><td>Crutha North</td><td class="mono">516</td><td class="mono">5.16%</td></tr>
+<tr><td>Sindari South</td><td class="mono">517</td><td class="mono">5.17%</td></tr>
+<tr><td>Lusa South</td><td class="mono">520</td><td class="mono">5.20%</td></tr></tbody></table></div>
+            <p class="text-gray-400 text-xs mt-2">20 planets clustered tightly between 480 and 520 &mdash; this layer is identity, not rarity.</p>
+
+            <h3 class="mt-10 text-xl">Inhabitant &mdash; identity (10 species &times; M/F)</h3>
+            <div class="overflow-x-auto rounded-lg border border-gray-800 mt-3 max-h-96 overflow-y-auto"><table class="grade-table"><thead><tr><th>Trait</th><th>Actual</th><th>% of supply</th></tr></thead><tbody><tr><td>Cristallian M</td><td class="mono">463</td><td class="mono">4.63%</td></tr>
+<tr><td>Gredican M</td><td class="mono">463</td><td class="mono">4.63%</td></tr>
+<tr><td>Sindarin M</td><td class="mono">466</td><td class="mono">4.66%</td></tr>
+<tr><td>Cruthan F</td><td class="mono">478</td><td class="mono">4.78%</td></tr>
+<tr><td>Ozaran M</td><td class="mono">488</td><td class="mono">4.88%</td></tr>
+<tr><td>Lusan F</td><td class="mono">490</td><td class="mono">4.90%</td></tr>
+<tr><td>Pampan F</td><td class="mono">491</td><td class="mono">4.91%</td></tr>
+<tr><td>Lusan M</td><td class="mono">494</td><td class="mono">4.94%</td></tr>
+<tr><td>Sindarin F</td><td class="mono">495</td><td class="mono">4.95%</td></tr>
+<tr><td>Gredican F</td><td class="mono">500</td><td class="mono">5.00%</td></tr>
+<tr><td>Ozaran F</td><td class="mono">500</td><td class="mono">5.00%</td></tr>
+<tr><td>Pampan M</td><td class="mono">506</td><td class="mono">5.06%</td></tr>
+<tr><td>Zandoan M</td><td class="mono">512</td><td class="mono">5.12%</td></tr>
+<tr><td>Minasan M</td><td class="mono">512</td><td class="mono">5.12%</td></tr>
+<tr><td>Cristallian F</td><td class="mono">515</td><td class="mono">5.15%</td></tr>
+<tr><td>Minasan F</td><td class="mono">519</td><td class="mono">5.19%</td></tr>
+<tr><td>Cruthan M</td><td class="mono">521</td><td class="mono">5.21%</td></tr>
+<tr><td>Zandoan F</td><td class="mono">522</td><td class="mono">5.22%</td></tr>
+<tr><td>Kitan F</td><td class="mono">522</td><td class="mono">5.22%</td></tr>
+<tr><td>Kitan M</td><td class="mono">543</td><td class="mono">5.43%</td></tr></tbody></table></div>
+            <p class="text-gray-400 text-xs mt-2">20 inhabitants similarly clustered (463&ndash;543). Like Planet, this is who you are, not how rare you are.</p>
+
+            <!-- MATCHES / HOME SYSTEM -->
+            <h2 id="matches">Trait matches &mdash; the &ldquo;home system&rdquo;</h2>
+            <div class="text-gray-300 leading-relaxed space-y-4 max-w-4xl">
+                <p>
+                    There's one more lens that doesn't appear in any single trait: how often the layers
+                    line up. Each Planet has a paired species (Sindari &harr; Sindarin, Cristall &harr; Cristallian,
+                    and so on), so an NFT can show an inhabitant <em>on their home planet</em>, sometimes
+                    holding their species's <em>signature weapon</em>. These aren't rarity by the design
+                    spec, but they're cohesive in a way the metadata makes legible only if you go looking.
+                </p>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+                <div class="layer-card !text-left">
+                    <p class="eyebrow !text-cyan-300">All 10,000</p>
+                    <p class="text-4xl font-bold mt-1">100%</p>
+                    <p class="text-sm text-gray-400 mt-2">Total supply</p>
                 </div>
-            </section>
+                <div class="layer-card !text-left">
+                    <p class="eyebrow !text-cyan-300">Inhabitant native to planet</p>
+                    <p class="text-4xl font-bold mt-1">967</p>
+                    <p class="text-sm text-gray-400 mt-2">9.67% of supply &mdash; an inhabitant standing on a planet of their own species's world.</p>
+                </div>
+                <div class="layer-card !text-left">
+                    <p class="eyebrow !text-cyan-300">Full home-system (P + I + O)</p>
+                    <p class="text-4xl font-bold mt-1">80</p>
+                    <p class="text-sm text-gray-400 mt-2">0.80% of supply &mdash; native planet, native inhabitant, <em>and</em> the species's signature Object. The rarest cohesion in the collection.</p>
+                </div>
+            </div>
+            <p class="text-gray-400 text-sm mt-4 max-w-4xl">
+                None of this changes the Intended grade &mdash; the design says rarity is the Object, period.
+                But if you collect for scene cohesion rather than scoreboard rank, a full home-system Phoenix
+                Rising on a native world is the kind of token a generative-art collector quietly hunts for.
+            </p>
+
+            <!-- REFERENCES -->
+            <h2 id="references">References &amp; data</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <a class="layer-card !text-left hover:border-cyan-500/40 transition-colors" href="https://github.com/HashLips/hashlips_art_engine" target="_blank" rel="noopener">
+                    <div class="layer-icon !text-2xl !mb-2"><i class="fa-brands fa-github"></i></div>
+                    <h3 class="text-base">HashLips Art Engine</h3>
+                    <p class="text-xs text-gray-400 mt-1">The generative engine and weight model the collection was built on.</p>
+                </a>
+                <a class="layer-card !text-left hover:border-cyan-500/40 transition-colors" href="https://terra-money.notion.site/AllianceDAO-NFT-Rarity-8703a27a9eb74844a71469936afba6b4" target="_blank" rel="noopener">
+                    <div class="layer-icon !text-2xl !mb-2"><i class="fa-solid fa-book"></i></div>
+                    <h3 class="text-base">Official Rarity Doc</h3>
+                    <p class="text-xs text-gray-400 mt-1">The collection's original rarity reference on Notion.</p>
+                </a>
+                <a class="layer-card !text-left hover:border-cyan-500/40 transition-colors" href="https://raw.githubusercontent.com/defipatriot/nft-metadata/main/adao-rarity-intended.json" target="_blank" rel="noopener">
+                    <div class="layer-icon !text-2xl !mb-2"><i class="fa-solid fa-file-code"></i></div>
+                    <h3 class="text-base">Intended Rank (JSON)</h3>
+                    <p class="text-xs text-gray-400 mt-1">All 10,000 tokens: object, grade, planned/actual counts, and intended rank. Open for any marketplace to adopt.</p>
+                </a>
+                <a class="layer-card !text-left hover:border-cyan-500/40 transition-colors" href="https://raw.githubusercontent.com/defipatriot/nft-metadata/main/all_nfts_metadata.json" target="_blank" rel="noopener">
+                    <div class="layer-icon !text-2xl !mb-2"><i class="fa-solid fa-database"></i></div>
+                    <h3 class="text-base">Full Metadata</h3>
+                    <p class="text-xs text-gray-400 mt-1">Per-token traits used to derive every figure on this page.</p>
+                </a>
+            </div>
+            <p class="text-gray-500 text-xs mt-6 max-w-4xl">
+                Methodology summary: Intended Rank = the collection's <span class="mono">Rarity</span> grade (1&ndash;40,
+                set by the Object) laid out apex-first into a 1&ndash;10,000 ordinal; within a grade, tokens are
+                equal-rarity and ordered by token ID. Planet, Inhabitant, Light and Weather are scene/atmosphere layers
+                and do not affect the grade. BBL figures are observed from the marketplace; the marketplace computes its
+                own all-trait score independently.
+            </p>
+
         </div>
     </main>
 
-    <!-- Object Trait Modal -->
-    <div id="objectModal" class="modal">
-        <div class="modal-content">
-            <span class="close-button" id="closeObjectModal">&times;</span>
-            <h2 class="!mt-0 !text-3xl">Object Trait Analysis</h2>
-             <div class="overflow-x-auto rounded-lg border border-gray-700">
-                 <table class="w-full text-sm text-left text-gray-300 sortable">
-                     <thead class="text-xs text-gray-400 uppercase bg-gray-500/10">
-                         <tr>
-                             <th scope="col" class="px-6 py-3">Trait Value</th>
-                             <th scope="col" class="px-6 py-3">Planned Count</th>
-                             <th scope="col" class="px-6 py-3">Actual Count</th>
-                             <th scope="col" class="px-6 py-3">Difference</th>
-                             <th scope="col" class="px-6 py-3">Planned %</th>
-                             <th scope="col" class="px-6 py-3">Actual %</th>
-                             <th scope="col" class="px-6 py-3">Difference %</th>
-                         </tr>
-                     </thead>
-                     <tbody class="divide-y divide-gray-700">
-                         <tr class="bg-white/5"><td class="px-6 py-4 font-medium text-white">Sindarin Fire Saber</td><td class="px-6 py-4">24</td><td class="px-6 py-4">6</td><td class="px-6 py-4 font-semibold text-red-400">-18</td><td class="px-6 py-4">0.24%</td><td class="px-6 py-4">0.06%</td><td class="px-6 py-4 font-semibold text-red-400">-0.18%</td></tr>
-                         <tr><td class="px-6 py-4 font-medium text-white">Sword of Zando</td><td class="px-6 py-4">37</td><td class="px-6 py-4">14</td><td class="px-6 py-4 font-semibold text-red-400">-23</td><td class="px-6 py-4">0.37%</td><td class="px-6 py-4">0.14%</td><td class="px-6 py-4 font-semibold text-red-400">-0.23%</td></tr>
-                         <tr class="bg-white/5"><td class="px-6 py-4 font-medium text-white">Zandoan Vine Bow</td><td class="px-6 py-4">49</td><td class="px-6 py-4">19</td><td class="px-6 py-4 font-semibold text-red-400">-30</td><td class="px-6 py-4">0.49%</td><td class="px-6 py-4">0.19%</td><td class="px-6 py-4 font-semibold text-red-400">-0.30%</td></tr>
-                         <tr><td class="px-6 py-4 font-medium text-white">Phoenix Rising</td><td class="px-6 py-4">12</td><td class="px-6 py-4">25</td><td class="px-6 py-4 font-semibold text-green-400">+13</td><td class="px-6 py-4">0.12%</td><td class="px-6 py-4">0.25%</td><td class="px-6 py-4 font-semibold text-green-400">+0.13%</td></tr>
-                         <tr class="bg-white/5"><td class="px-6 py-4 font-medium text-white">Lusan Xtreme Soaker</td><td class="px-6 py-4">61</td><td class="px-6 py-4">27</td><td class="px-6 py-4 font-semibold text-red-400">-34</td><td class="px-6 py-4">0.61%</td><td class="px-6 py-4">0.27%</td><td class="px-6 py-4 font-semibold text-red-400">-0.34%</td></tr>
-                         <tr><td class="px-6 py-4 font-medium text-white">Sindarin Flame Thrower</td><td class="px-6 py-4">73</td><td class="px-6 py-4">44</td><td class="px-6 py-4 font-semibold text-red-400">-29</td><td class="px-6 py-4">0.73%</td><td class="px-6 py-4">0.44%</td><td class="px-6 py-4 font-semibold text-red-400">-0.29%</td></tr>
-                         <tr class="bg-white/5"><td class="px-6 py-4 font-medium text-white">Cristallian Ray Gun</td><td class="px-6 py-4">98</td><td class="px-6 py-4">87</td><td class="px-6 py-4 font-semibold text-red-400">-11</td><td class="px-6 py-4">0.98%</td><td class="px-6 py-4">0.87%</td><td class="px-6 py-4 font-semibold text-red-400">-0.11%</td></tr>
-                         <tr><td class="px-6 py-4 font-medium text-white">Ozaran Blaster</td><td class="px-6 py-4">85</td><td class="px-6 py-4">106</td><td class="px-6 py-4 font-semibold text-green-400">+21</td><td class="px-6 py-4">0.85%</td><td class="px-6 py-4">1.06%</td><td class="px-6 py-4 font-semibold text-green-400">+0.21%</td></tr>
-                         <tr class="bg-white/5"><td class="px-6 py-4 font-medium text-white">Quartz Ray Gun</td><td class="px-6 py-4">110</td><td class="px-6 py-4">131</td><td class="px-6 py-4 font-semibold text-green-400">+21</td><td class="px-6 py-4">1.10%</td><td class="px-6 py-4">1.31%</td><td class="px-6 py-4 font-semibold text-green-400">+0.21%</td></tr>
-                         <tr><td class="px-6 py-4 font-medium text-white">SST Fishing Pole</td><td class="px-6 py-4">134</td><td class="px-6 py-4">135</td><td class="px-6 py-4 font-semibold text-green-400">+1</td><td class="px-6 py-4">1.34%</td><td class="px-6 py-4">1.35%</td><td class="px-6 py-4 font-semibold text-green-400">+0.01%</td></tr>
-                         <tr class="bg-white/5"><td class="px-6 py-4 font-medium text-white">Cruthan Blaster</td><td class="px-6 py-4">122</td><td class="px-6 py-4">136</td><td class="px-6 py-4 font-semibold text-green-400">+14</td><td class="px-6 py-4">1.22%</td><td class="px-6 py-4">1.36%</td><td class="px-6 py-4 font-semibold text-green-400">+0.14%</td></tr>
-                         <tr><td class="px-6 py-4 font-medium text-white">Cristallian Sword</td><td class="px-6 py-4">146</td><td class="px-6 py-4">149</td><td class="px-6 py-4 font-semibold text-green-400">+3</td><td class="px-6 py-4">1.46%</td><td class="px-6 py-4">1.49%</td><td class="px-6 py-4 font-semibold text-green-400">+0.03%</td></tr>
-                         <tr class="bg-white/5"><td class="px-6 py-4 font-medium text-white">Gredican Sword</td><td class="px-6 py-4">159</td><td class="px-6 py-4">179</td><td class="px-6 py-4 font-semibold text-green-400">+20</td><td class="px-6 py-4">1.59%</td><td class="px-6 py-4">1.79%</td><td class="px-6 py-4 font-semibold text-green-400">+0.20%</td></tr>
-                         <tr><td class="px-6 py-4 font-medium text-white">Lusan Water Saber</td><td class="px-6 py-4">183</td><td class="px-6 py-4">186</td><td class="px-6 py-4 font-semibold text-green-400">+3</td><td class="px-6 py-4">1.83%</td><td class="px-6 py-4">1.86%</td><td class="px-6 py-4 font-semibold text-green-400">+0.03%</td></tr>
-                         <tr class="bg-white/5"><td class="px-6 py-4 font-medium text-white">Pampan Grass Sword</td><td class="px-6 py-4">171</td><td class="px-6 py-4">208</td><td class="px-6 py-4 font-semibold text-green-400">+37</td><td class="px-6 py-4">1.71%</td><td class="px-6 py-4">2.08%</td><td class="px-6 py-4 font-semibold text-green-400">+0.37%</td></tr>
-                         <tr><td class="px-6 py-4 font-medium text-white">Kitan Ice Sword</td><td class="px-6 py-4">195</td><td class="px-6 py-4">212</td><td class="px-6 py-4 font-semibold text-green-400">+17</td><td class="px-6 py-4">1.95%</td><td class="px-6 py-4">2.12%</td><td class="px-6 py-4 font-semibold text-green-400">+0.17%</td></tr>
-                         <tr class="bg-white/5"><td class="px-6 py-4 font-medium text-white">Ozaran Death Saber</td><td class="px-6 py-4">207</td><td class="px-6 py-4">236</td><td class="px-6 py-4 font-semibold text-green-400">+29</td><td class="px-6 py-4">2.07%</td><td class="px-6 py-4">2.36%</td><td class="px-6 py-4 font-semibold text-green-400">+0.29%</td></tr>
-                         <tr><td class="px-6 py-4 font-medium text-white">Royal Ozaran Bow</td><td class="px-6 py-4">232</td><td class="px-6 py-4">239</td><td class="px-6 py-4 font-semibold text-green-400">+7</td><td class="px-6 py-4">2.32%</td><td class="px-6 py-4">2.39%</td><td class="px-6 py-4 font-semibold text-green-400">+0.07%</td></tr>
-                         <tr class="bg-white/5"><td class="px-6 py-4 font-medium text-white">Minasan Ore Sword</td><td class="px-6 py-4">220</td><td class="px-6 py-4">248</td><td class="px-6 py-4 font-semibold text-green-400">+28</td><td class="px-6 py-4">2.20%</td><td class="px-6 py-4">2.48%</td><td class="px-6 py-4 font-semibold text-green-400">+0.28%</td></tr>
-                         <tr><td class="px-6 py-4 font-medium text-white">Cristallian Bow</td><td class="px-6 py-4">244</td><td class="px-6 py-4">256</td><td class="px-6 py-4 font-semibold text-green-400">+12</td><td class="px-6 py-4">2.44%</td><td class="px-6 py-4">2.56%</td><td class="px-6 py-4 font-semibold text-green-400">+0.12%</td></tr>
-                         <tr class="bg-white/5"><td class="px-6 py-4 font-medium text-white">Sindarin Fire Bow</td><td class="px-6 py-4">256</td><td class="px-6 py-4">274</td><td class="px-6 py-4 font-semibold text-green-400">+18</td><td class="px-6 py-4">2.56%</td><td class="px-6 py-4">2.74%</td><td class="px-6 py-4 font-semibold text-green-400">+0.18%</td></tr>
-                         <tr><td class="px-6 py-4 font-medium text-white">Minasan Bow</td><td class="px-6 py-4">280</td><td class="px-6 py-4">275</td><td class="px-6 py-4 font-semibold text-red-400">-5</td><td class="px-6 py-4">2.80%</td><td class="px-6 py-4">2.75%</td><td class="px-6 py-4 font-semibold text-red-400">-0.05%</td></tr>
-                         <tr class="bg-white/5"><td class="px-6 py-4 font-medium text-white">Gredican Power Staff</td><td class="px-6 py-4">293</td><td class="px-6 py-4">292</td><td class="px-6 py-4 font-semibold text-red-400">-1</td><td class="px-6 py-4">2.93%</td><td class="px-6 py-4">2.92%</td><td class="px-6 py-4 font-semibold text-red-400">-0.01%</td></tr>
-                         <tr><td class="px-6 py-4 font-medium text-white">Staff of Zando</td><td class="px-6 py-4">305</td><td class="px-6 py-4">290</td><td class="px-6 py-4 font-semibold text-red-400">-15</td><td class="px-6 py-4">3.05%</td><td class="px-6 py-4">2.90%</td><td class="px-6 py-4 font-semibold text-red-400">-0.15%</td></tr>
-                         <tr class="bg-white/5"><td class="px-6 py-4 font-medium text-white">Sindarin Fire Staff</td><td class="px-6 py-4">317</td><td class="px-6 py-4">308</td><td class="px-6 py-4 font-semibold text-red-400">-9</td><td class="px-6 py-4">3.17%</td><td class="px-6 py-4">3.08%</td><td class="px-6 py-4 font-semibold text-red-400">-0.09%</td></tr>
-                         <tr><td class="px-6 py-4 font-medium text-white">Pampan Grass Staff</td><td class="px-6 py-4">329</td><td class="px-6 py-4">342</td><td class="px-6 py-4 font-semibold text-green-400">+13</td><td class="px-6 py-4">3.29%</td><td class="px-6 py-4">3.42%</td><td class="px-6 py-4 font-semibold text-green-400">+0.13%</td></tr>
-                         <tr class="bg-white/5"><td class="px-6 py-4 font-medium text-white">Ozaran Sand Staff</td><td class="px-6 py-4">341</td><td class="px-6 py-4">369</td><td class="px-6 py-4 font-semibold text-green-400">+28</td><td class="px-6 py-4">3.41%</td><td class="px-6 py-4">3.69%</td><td class="px-6 py-4 font-semibold text-green-400">+0.28%</td></tr>
-                         <tr><td class="px-6 py-4 font-medium text-white">Cristallian Staff</td><td class="px-6 py-4">354</td><td class="px-6 py-4">340</td><td class="px-6 py-4 font-semibold text-red-400">-14</td><td class="px-6 py-4">3.54%</td><td class="px-6 py-4">3.40%</td><td class="px-6 py-4 font-semibold text-red-400">-0.14%</td></tr>
-                         <tr class="bg-white/5"><td class="px-6 py-4 font-medium text-white">Kitan Ice Staff</td><td class="px-6 py-4">366</td><td class="px-6 py-4">351</td><td class="px-6 py-4 font-semibold text-red-400">-15</td><td class="px-6 py-4">3.66%</td><td class="px-6 py-4">3.51%</td><td class="px-6 py-4 font-semibold text-red-400">-0.15%</td></tr>
-                         <tr><td class="px-6 py-4 font-medium text-white">Lusan Water Staff</td><td class="px-6 py-4">378</td><td class="px-6 py-4">382</td><td class="px-6 py-4 font-semibold text-green-400">+4</td><td class="px-6 py-4">3.78%</td><td class="px-6 py-4">3.82%</td><td class="px-6 py-4 font-semibold text-green-400">+0.04%</td></tr>
-                         <tr class="bg-white/5"><td class="px-6 py-4 font-medium text-white">Minasan Ore Staff</td><td class="px-6 py-4">390</td><td class="px-6 py-4">380</td><td class="px-6 py-4 font-semibold text-red-400">-10</td><td class="px-6 py-4">3.90%</td><td class="px-6 py-4">3.80%</td><td class="px-6 py-4 font-semibold text-red-400">-0.10%</td></tr>
-                         <tr><td class="px-6 py-4 font-medium text-white">Ice Cleaver</td><td class="px-6 py-4">402</td><td class="px-6 py-4">390</td><td class="px-6 py-4 font-semibold text-red-400">-12</td><td class="px-6 py-4">4.02%</td><td class="px-6 py-4">3.90%</td><td class="px-6 py-4 font-semibold text-red-400">-0.12%</td></tr>
-                         <tr class="bg-white/5"><td class="px-6 py-4 font-medium text-white">Ancient Lusan Trident</td><td class="px-6 py-4">415</td><td class="px-6 py-4">427</td><td class="px-6 py-4 font-semibold text-green-400">+12</td><td class="px-6 py-4">4.15%</td><td class="px-6 py-4">4.27%</td><td class="px-6 py-4 font-semibold text-green-400">+0.12%</td></tr>
-                         <tr><td class="px-6 py-4 font-medium text-white">Ozaran Bone Axe</td><td class="px-6 py-4">427</td><td class="px-6 py-4">415</td><td class="px-6 py-4 font-semibold text-red-400">-12</td><td class="px-6 py-4">4.27%</td><td class="px-6 py-4">4.15%</td><td class="px-6 py-4 font-semibold text-red-400">-0.12%</td></tr>
-                         <tr class="bg-white/5"><td class="px-6 py-4 font-medium text-white">Cruthan Death Mace</td><td class="px-6 py-4">439</td><td class="px-6 py-4">430</td><td class="px-6 py-4 font-semibold text-red-400">-9</td><td class="px-6 py-4">4.39%</td><td class="px-6 py-4">4.30%</td><td class="px-6 py-4 font-semibold text-red-400">-0.09%</td></tr>
-                         <tr><td class="px-6 py-4 font-medium text-white">The Eternal Torch</td><td class="px-6 py-4">451</td><td class="px-6 py-4">440</td><td class="px-6 py-4 font-semibold text-red-400">-11</td><td class="px-6 py-4">4.51%</td><td class="px-6 py-4">4.40%</td><td class="px-6 py-4 font-semibold text-red-400">-0.11%</td></tr>
-                         <tr class="bg-white/5"><td class="px-6 py-4 font-medium text-white">Golden Hammer</td><td class="px-6 py-4">463</td><td class="px-6 py-4">436</td><td class="px-6 py-4 font-semibold text-red-400">-27</td><td class="px-6 py-4">4.63%</td><td class="px-6 py-4">4.36%</td><td class="px-6 py-4 font-semibold text-red-400">-0.27%</td></tr>
-                         <tr><td class="px-6 py-4 font-medium text-white">Battle Shovel</td><td class="px-6 py-4">476</td><td class="px-6 py-4">463</td><td class="px-6 py-4 font-semibold text-red-400">-13</td><td class="px-6 py-4">4.76%</td><td class="px-6 py-4">4.63%</td><td class="px-6 py-4 font-semibold text-red-400">-0.13%</td></tr>
-                         <tr class="bg-white/5"><td class="px-6 py-4 font-medium text-white">Battle Axe</td><td class="px-6 py-4">488</td><td class="px-6 py-4">466</td><td class="px-6 py-4 font-semibold text-red-400">-22</td><td class="px-6 py-4">4.88%</td><td class="px-6 py-4">4.66%</td><td class="px-6 py-4 font-semibold text-red-400">-0.22%</td></tr>
-                         <tr class="bg-gray-700/50"><td class="px-6 py-4 font-bold text-white">Total</td><td class="px-6 py-4 font-bold">10,000</td><td class="px-6 py-4 font-bold">10,000</td><td class="px-6 py-4"></td><td class="px-6 py-4 font-bold">100.00%</td><td class="px-6 py-4 font-bold">100.00%</td><td class="px-6 py-4"></td></tr>
-                     </tbody>
-                 </table>
-             </div>
-        </div>
-    </div>
-
-    <!-- Inhabitant Trait Modal -->
-    <div id="inhabitantModal" class="modal">
-        <div class="modal-content">
-            <span class="close-button" id="closeInhabitantModal">&times;</span>
-            <h2 class="!mt-0 !text-3xl">Inhabitant Trait Analysis</h2>
-            <div class="overflow-x-auto rounded-lg border border-gray-700">
-                <table class="w-full text-sm text-left text-gray-300 sortable">
-                     <thead class="text-xs text-gray-400 uppercase bg-gray-500/10">
-                         <tr>
-                             <th scope="col" class="px-6 py-3">Trait Value</th>
-                             <th scope="col" class="px-6 py-3">Planned Count</th>
-                             <th scope="col" class="px-6 py-3">Actual Count</th>
-                             <th scope="col" class="px-6 py-3">Difference</th>
-                             <th scope="col" class="px-6 py-3">Planned %</th>
-                             <th scope="col" class="px-6 py-3">Actual %</th>
-                             <th scope="col" class="px-6 py-3">Difference %</th>
-                         </tr>
-                     </thead>
-                    <tbody class="divide-y divide-gray-700">
-                         <tr class="bg-white/5"><td class="px-6 py-4 font-medium text-white">Crystallian F</td><td class="px-6 py-4">500</td><td class="px-6 py-4">484</td><td class="px-6 py-4 font-semibold text-red-400">-16</td><td class="px-6 py-4">5.00%</td><td class="px-6 py-4">4.84%</td><td class="px-6 py-4 font-semibold text-red-400">-0.16%</td></tr>
-                         <tr><td class="px-6 py-4 font-medium text-white">Crystallian M</td><td class="px-6 py-4">500</td><td class="px-6 py-4">501</td><td class="px-6 py-4 font-semibold text-green-400">+1</td><td class="px-6 py-4">5.00%</td><td class="px-6 py-4">5.01%</td><td class="px-6 py-4 font-semibold text-green-400">+0.01%</td></tr>
-                         <tr class="bg-white/5"><td class="px-6 py-4 font-medium text-white">Cruthan F</td><td class="px-6 py-4">500</td><td class="px-6 py-4">489</td><td class="px-6 py-4 font-semibold text-red-400">-11</td><td class="px-6 py-4">5.00%</td><td class="px-6 py-4">4.89%</td><td class="px-6 py-4 font-semibold text-red-400">-0.11%</td></tr>
-                         <tr><td class="px-6 py-4 font-medium text-white">Cruthan M</td><td class="px-6 py-4">500</td><td class="px-6 py-4">520</td><td class="px-6 py-4 font-semibold text-green-400">+20</td><td class="px-6 py-4">5.00%</td><td class="px-6 py-4">5.20%</td><td class="px-6 py-4 font-semibold text-green-400">+0.20%</td></tr>
-                         <tr class="bg-white/5"><td class="px-6 py-4 font-medium text-white">Gredican F</td><td class="px-6 py-4">500</td><td class="px-6 py-4">494</td><td class="px-6 py-4 font-semibold text-red-400">-6</td><td class="px-6 py-4">5.00%</td><td class="px-6 py-4">4.94%</td><td class="px-6 py-4 font-semibold text-red-400">-0.06%</td></tr>
-                         <tr><td class="px-6 py-4 font-medium text-white">Gredican M</td><td class="px-6 py-4">500</td><td class="px-6 py-4">499</td><td class="px-6 py-4 font-semibold text-red-400">-1</td><td class="px-6 py-4">5.00%</td><td class="px-6 py-4">4.99%</td><td class="px-6 py-4 font-semibold text-red-400">-0.01%</td></tr>
-                         <tr class="bg-white/5"><td class="px-6 py-4 font-medium text-white">Kitan F</td><td class="px-6 py-4">500</td><td class="px-6 py-4">496</td><td class="px-6 py-4 font-semibold text-red-400">-4</td><td class="px-6 py-4">5.00%</td><td class="px-6 py-4">4.96%</td><td class="px-6 py-4 font-semibold text-red-400">-0.04%</td></tr>
-                         <tr><td class="px-6 py-4 font-medium text-white">Kitan M</td><td class="px-6 py-4">500</td><td class="px-6 py-4">491</td><td class="px-6 py-4 font-semibold text-red-400">-9</td><td class="px-6 py-4">5.00%</td><td class="px-6 py-4">4.91%</td><td class="px-6 py-4 font-semibold text-red-400">-0.09%</td></tr>
-                         <tr class="bg-white/5"><td class="px-6 py-4 font-medium text-white">Lusan F</td><td class="px-6 py-4">500</td><td class="px-6 py-4">521</td><td class="px-6 py-4 font-semibold text-green-400">+21</td><td class="px-6 py-4">5.00%</td><td class="px-6 py-4">5.21%</td><td class="px-6 py-4 font-semibold text-green-400">+0.21%</td></tr>
-                         <tr><td class="px-6 py-4 font-medium text-white">Lusan M</td><td class="px-6 py-4">500</td><td class="px-6 py-4">497</td><td class="px-6 py-4 font-semibold text-red-400">-3</td><td class="px-6 py-4">5.00%</td><td class="px-6 py-4">4.97%</td><td class="px-6 py-4 font-semibold text-red-400">-0.03%</td></tr>
-                         <tr class="bg-white/5"><td class="px-6 py-4 font-medium text-white">Minasan F</td><td class="px-6 py-4">500</td><td class="px-6 py-4">509</td><td class="px-6 py-4 font-semibold text-green-400">+9</td><td class="px-6 py-4">5.00%</td><td class="px-6 py-4">5.09%</td><td class="px-6 py-4 font-semibold text-green-400">+0.09%</td></tr>
-                         <tr><td class="px-6 py-4 font-medium text-white">Minasan M</td><td class="px-6 py-4">500</td><td class="px-6 py-4">497</td><td class="px-6 py-4 font-semibold text-red-400">-3</td><td class="px-6 py-4">5.00%</td><td class="px-6 py-4">4.97%</td><td class="px-6 py-4 font-semibold text-red-400">-0.03%</td></tr>
-                         <tr class="bg-white/5"><td class="px-6 py-4 font-medium text-white">Ozaran F</td><td class="px-6 py-4">500</td><td class="px-6 py-4">507</td><td class="px-6 py-4 font-semibold text-green-400">+7</td><td class="px-6 py-4">5.00%</td><td class="px-6 py-4">5.07%</td><td class="px-6 py-4 font-semibold text-green-400">+0.07%</td></tr>
-                         <tr><td class="px-6 py-4 font-medium text-white">Ozaran M</td><td class="px-6 py-4">500</td><td class="px-6 py-4">491</td><td class="px-6 py-4 font-semibold text-red-400">-9</td><td class="px-6 py-4">5.00%</td><td class="px-6 py-4">4.91%</td><td class="px-6 py-4 font-semibold text-red-400">-0.09%</td></tr>
-                         <tr class="bg-white/5"><td class="px-6 py-4 font-medium text-white">Pampan F</td><td class="px-6 py-4">500</td><td class="px-6 py-4">516</td><td class="px-6 py-4 font-semibold text-green-400">+16</td><td class="px-6 py-4">5.00%</td><td class="px-6 py-4">5.16%</td><td class="px-6 py-4 font-semibold text-green-400">+0.16%</td></tr>
-                         <tr><td class="px-6 py-4 font-medium text-white">Pampan M</td><td class="px-6 py-4">500</td><td class="px-6 py-4">486</td><td class="px-6 py-4 font-semibold text-red-400">-14</td><td class="px-6 py-4">5.00%</td><td class="px-6 py-4">4.86%</td><td class="px-6 py-4 font-semibold text-red-400">-0.14%</td></tr>
-                         <tr class="bg-white/5"><td class="px-6 py-4 font-medium text-white">Sindarin F</td><td class="px-6 py-4">500</td><td class="px-6 py-4">499</td><td class="px-6 py-4 font-semibold text-red-400">-1</td><td class="px-6 py-4">5.00%</td><td class="px-6 py-4">4.99%</td><td class="px-6 py-4 font-semibold text-red-400">-0.01%</td></tr>
-                         <tr><td class="px-6 py-4 font-medium text-white">Sindarin M</td><td class="px-6 py-4">500</td><td class="px-6 py-4">503</td><td class="px-6 py-4 font-semibold text-green-400">+3</td><td class="px-6 py-4">5.00%</td><td class="px-6 py-4">5.03%</td><td class="px-6 py-4 font-semibold text-green-400">+0.03%</td></tr>
-                         <tr class="bg-white/5"><td class="px-6 py-4 font-medium text-white">Zandoan F</td><td class="px-6 py-4">500</td><td class="px-6 py-4">503</td><td class="px-6 py-4 font-semibold text-green-400">+3</td><td class="px-6 py-4">5.00%</td><td class="px-6 py-4">5.03%</td><td class="px-6 py-4 font-semibold text-green-400">+0.03%</td></tr>
-                         <tr><td class="px-6 py-4 font-medium text-white">Zandoan M</td><td class="px-6 py-4">500</td><td class="px-6 py-4">497</td><td class="px-6 py-4 font-semibold text-red-400">-3</td><td class="px-6 py-4">5.00%</td><td class="px-6 py-4">4.97%</td><td class="px-6 py-4 font-semibold text-red-400">-0.03%</td></tr>
-                         <tr class="bg-gray-700/50"><td class="px-6 py-4 font-bold text-white">Total</td><td class="px-6 py-4 font-bold">10,000</td><td class="px-6 py-4 font-bold">10,000</td><td class="px-6 py-4"></td><td class="px-6 py-4 font-bold">100.00%</td><td class="px-6 py-4 font-bold">100.00%</td><td class="px-6 py-4"></td></tr>
-                     </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
-    <!-- Planet Trait Modal -->
-    <div id="planetModal" class="modal">
-        <div class="modal-content">
-            <span class="close-button" id="closePlanetModal">&times;</span>
-            <h2 class="!mt-0 !text-3xl">Planet (Background) Trait Analysis</h2>
-            <div class="overflow-x-auto rounded-lg border border-gray-700">
-                <table class="w-full text-sm text-left text-gray-300 sortable">
-                     <thead class="text-xs text-gray-400 uppercase bg-gray-500/10">
-                         <tr>
-                             <th scope="col" class="px-6 py-3">Trait Value</th>
-                             <th scope="col" class="px-6 py-3">Planned Count</th>
-                             <th scope="col" class="px-6 py-3">Actual Count</th>
-                             <th scope="col" class="px-6 py-3">Difference</th>
-                             <th scope="col" class="px-6 py-3">Planned %</th>
-                             <th scope="col" class="px-6 py-3">Actual %</th>
-                             <th scope="col" class="px-6 py-3">Difference %</th>
-                         </tr>
-                     </thead>
-                    <tbody class="divide-y divide-gray-700">
-                         <tr class="bg-white/5"><td class="px-6 py-4 font-medium text-white">Crystall North</td><td class="px-6 py-4">500</td><td class="px-6 py-4">506</td><td class="px-6 py-4 font-semibold text-green-400">+6</td><td class="px-6 py-4">5.00%</td><td class="px-6 py-4">5.06%</td><td class="px-6 py-4 font-semibold text-green-400">+0.06%</td></tr>
-                         <tr><td class="px-6 py-4 font-medium text-white">Crystall South</td><td class="px-6 py-4">500</td><td class="px-6 py-4">516</td><td class="px-6 py-4 font-semibold text-green-400">+16</td><td class="px-6 py-4">5.00%</td><td class="px-6 py-4">5.16%</td><td class="px-6 py-4 font-semibold text-green-400">+0.16%</td></tr>
-                         <tr class="bg-white/5"><td class="px-6 py-4 font-medium text-white">Crutha North</td><td class="px-6 py-4">500</td><td class="px-6 py-4">489</td><td class="px-6 py-4 font-semibold text-red-400">-11</td><td class="px-6 py-4">5.00%</td><td class="px-6 py-4">4.89%</td><td class="px-6 py-4 font-semibold text-red-400">-0.11%</td></tr>
-                         <tr><td class="px-6 py-4 font-medium text-white">Crutha South</td><td class="px-6 py-4">500</td><td class="px-6 py-4">488</td><td class="px-6 py-4 font-semibold text-red-400">-12</td><td class="px-6 py-4">5.00%</td><td class="px-6 py-4">4.88%</td><td class="px-6 py-4 font-semibold text-red-400">-0.12%</td></tr>
-                         <tr class="bg-white/5"><td class="px-6 py-4 font-medium text-white">Gredica North</td><td class="px-6 py-4">500</td><td class="px-6 py-4">492</td><td class="px-6 py-4 font-semibold text-red-400">-8</td><td class="px-6 py-4">5.00%</td><td class="px-6 py-4">4.92%</td><td class="px-6 py-4 font-semibold text-red-400">-0.08%</td></tr>
-                         <tr><td class="px-6 py-4 font-medium text-white">Gredica South</td><td class="px-6 py-4">500</td><td class="px-6 py-4">511</td><td class="px-6 py-4 font-semibold text-green-400">+11</td><td class="px-6 py-4">5.00%</td><td class="px-6 py-4">5.11%</td><td class="px-6 py-4 font-semibold text-green-400">+0.11%</td></tr>
-                         <tr class="bg-white/5"><td class="px-6 py-4 font-medium text-white">Kita North</td><td class="px-6 py-4">500</td><td class="px-6 py-4">497</td><td class="px-6 py-4 font-semibold text-red-400">-3</td><td class="px-6 py-4">5.00%</td><td class="px-6 py-4">4.97%</td><td class="px-6 py-4 font-semibold text-red-400">-0.03%</td></tr>
-                         <tr><td class="px-6 py-4 font-medium text-white">Kita South</td><td class="px-6 py-4">500</td><td class="px-6 py-4">485</td><td class="px-6 py-4 font-semibold text-red-400">-15</td><td class="px-6 py-4">5.00%</td><td class="px-6 py-4">4.85%</td><td class="px-6 py-4 font-semibold text-red-400">-0.15%</td></tr>
-                         <tr class="bg-white/5"><td class="px-6 py-4 font-medium text-white">Lusa North</td><td class="px-6 py-4">500</td><td class="px-6 py-4">511</td><td class="px-6 py-4 font-semibold text-green-400">+11</td><td class="px-6 py-4">5.00%</td><td class="px-6 py-4">5.11%</td><td class="px-6 py-4 font-semibold text-green-400">+0.11%</td></tr>
-                         <tr><td class="px-6 py-4 font-medium text-white">Lusa South</td><td class="px-6 py-4">500</td><td class="px-6 py-4">499</td><td class="px-6 py-4 font-semibold text-red-400">-1</td><td class="px-6 py-4">5.00%</td><td class="px-6 py-4">4.99%</td><td class="px-6 py-4 font-semibold text-red-400">-0.01%</td></tr>
-                         <tr class="bg-white/5"><td class="px-6 py-4 font-medium text-white">Minas North</td><td class="px-6 py-4">500</td><td class="px-6 py-4">503</td><td class="px-6 py-4 font-semibold text-green-400">+3</td><td class="px-6 py-4">5.00%</td><td class="px-6 py-4">5.03%</td><td class="px-6 py-4 font-semibold text-green-400">+0.03%</td></tr>
-                         <tr><td class="px-6 py-4 font-medium text-white">Minas South</td><td class="px-6 py-4">500</td><td class="px-6 py-4">510</td><td class="px-6 py-4 font-semibold text-green-400">+10</td><td class="px-6 py-4">5.00%</td><td class="px-6 py-4">5.10%</td><td class="px-6 py-4 font-semibold text-green-400">+0.10%</td></tr>
-                         <tr class="bg-white/5"><td class="px-6 py-4 font-medium text-white">Ozara North</td><td class="px-6 py-4">500</td><td class="px-6 py-4">491</td><td class="px-6 py-4 font-semibold text-red-400">-9</td><td class="px-6 py-4">5.00%</td><td class="px-6 py-4">4.91%</td><td class="px-6 py-4 font-semibold text-red-400">-0.09%</td></tr>
-                         <tr><td class="px-6 py-4 font-medium text-white">Ozara South</td><td class="px-6 py-4">500</td><td class="px-6 py-4">506</td><td class="px-6 py-4 font-semibold text-green-400">+6</td><td class="px-6 py-4">5.00%</td><td class="px-6 py-4">5.06%</td><td class="px-6 py-4 font-semibold text-green-400">+0.06%</td></tr>
-                         <tr class="bg-white/5"><td class="px-6 py-4 font-medium text-white">Pampas North</td><td class="px-6 py-4">500</td><td class="px-6 py-4">501</td><td class="px-6 py-4 font-semibold text-green-400">+1</td><td class="px-6 py-4">5.00%</td><td class="px-6 py-4">5.01%</td><td class="px-6 py-4 font-semibold text-green-400">+0.01%</td></tr>
-                         <tr><td class="px-6 py-4 font-medium text-white">Pampas South</td><td class="px-6 py-4">500</td><td class="px-6 py-4">487</td><td class="px-6 py-4 font-semibold text-red-400">-13</td><td class="px-6 py-4">5.00%</td><td class="px-6 py-4">4.87%</td><td class="px-6 py-4 font-semibold text-red-400">-0.13%</td></tr>
-                         <tr class="bg-white/5"><td class="px-6 py-4 font-medium text-white">Sindari North</td><td class="px-6 py-4">500</td><td class="px-6 py-4">498</td><td class="px-6 py-4 font-semibold text-red-400">-2</td><td class="px-6 py-4">5.00%</td><td class="px-6 py-4">4.98%</td><td class="px-6 py-4 font-semibold text-red-400">-0.02%</td></tr>
-                         <tr><td class="px-6 py-4 font-medium text-white">Sindari South</td><td class="px-6 py-4">500</td><td class="px-6 py-4">504</td><td class="px-6 py-4 font-semibold text-green-400">+4</td><td class="px-6 py-4">5.00%</td><td class="px-6 py-4">5.04%</td><td class="px-6 py-4 font-semibold text-green-400">+0.04%</td></tr>
-                         <tr class="bg-white/5"><td class="px-6 py-4 font-medium text-white">Zando North</td><td class="px-6 py-4">500</td><td class="px-6 py-4">510</td><td class="px-6 py-4 font-semibold text-green-400">+10</td><td class="px-6 py-4">5.00%</td><td class="px-6 py-4">5.10%</td><td class="px-6 py-4 font-semibold text-green-400">+0.10%</td></tr>
-                         <tr><td class="px-6 py-4 font-medium text-white">Zando South</td><td class="px-6 py-4">500</td><td class="px-6 py-4">496</td><td class="px-6 py-4 font-semibold text-red-400">-4</td><td class="px-6 py-4">5.00%</td><td class="px-6 py-4">4.96%</td><td class="px-6 py-4 font-semibold text-red-400">-0.04%</td></tr>
-                         <tr class="bg-gray-700/50"><td class="px-6 py-4 font-bold text-white">Total</td><td class="px-6 py-4 font-bold">10,000</td><td class="px-6 py-4 font-bold">10,000</td><td class="px-6 py-4"></td><td class="px-6 py-4 font-bold">100.00%</td><td class="px-6 py-4 font-bold">100.00%</td><td class="px-6 py-4"></td></tr>
-                     </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
-
-    <script>
-        /**
-         * Sorts an HTML table.
-         * @param {HTMLTableElement} table The table to sort
-         * @param {number} column The index of the column to sort
-         * @param {boolean} asc Determines if the sorting will be in ascending
-         */
-        function sortTableByColumn(table, column, asc = true) {
-            const dirModifier = asc ? 1 : -1;
-            const tBody = table.tBodies[0];
-            const rows = Array.from(tBody.querySelectorAll("tr"));
-
-            // Sort each row
-            const sortedRows = rows.sort((a, b) => {
-                let aColText = a.querySelector(`td:nth-child(${ column + 1 })`).textContent.trim();
-                let bColText = b.querySelector(`td:nth-child(${ column + 1 })`).textContent.trim();
-                
-                // Convert to number if possible
-                const aNum = parseFloat(aColText.replace('%', '').replace('+', ''));
-                const bNum = parseFloat(bColText.replace('%', '').replace('+', ''));
-
-                if (!isNaN(aNum) && !isNaN(bNum)) {
-                     return aNum > bNum ? (1 * dirModifier) : (-1 * dirModifier);
-                }
-
-                return aColText > bColText ? (1 * dirModifier) : (-1 * dirModifier);
-            });
-
-            // Remove all existing TRs from the table
-            while (tBody.firstChild) {
-                tBody.removeChild(tBody.firstChild);
-            }
-
-            // Re-add the newly sorted rows
-            tBody.append(...sortedRows);
-
-            // Remember how the column is currently sorted
-            table.querySelectorAll("th").forEach(th => th.classList.remove("th-sort-asc", "th-sort-desc"));
-            table.querySelector(`th:nth-child(${ column + 1})`).classList.toggle("th-sort-asc", asc);
-            table.querySelector(`th:nth-child(${ column + 1})`).classList.toggle("th-sort-desc", !asc);
-        }
-
-        document.addEventListener('DOMContentLoaded', () => {
-            // Setup sorting for all tables
-            document.querySelectorAll(".sortable th").forEach(headerCell => {
-                headerCell.addEventListener("click", () => {
-                    const tableElement = headerCell.closest('.sortable');
-                    const headerIndex = Array.prototype.indexOf.call(headerCell.parentElement.children, headerCell);
-                    const currentIsAsc = headerCell.classList.contains("th-sort-asc");
-
-                    sortTableByColumn(tableElement, headerIndex, !currentIsAsc);
-                });
-            });
-
-            // Modal functionality
-            const objectModal = document.getElementById('objectModal');
-            const inhabitantModal = document.getElementById('inhabitantModal');
-            const planetModal = document.getElementById('planetModal');
-
-
-            const openObjectBtn = document.getElementById('openObjectModal');
-            const openInhabitantBtn = document.getElementById('openInhabitantModal');
-            const openPlanetBtn = document.getElementById('openPlanetModal');
-
-            
-            const closeObjectBtn = document.getElementById('closeObjectModal');
-            const closeInhabitantBtn = document.getElementById('closeInhabitantModal');
-            const closePlanetBtn = document.getElementById('closePlanetModal');
-
-
-            openObjectBtn.onclick = () => objectModal.style.display = "block";
-            openInhabitantBtn.onclick = () => inhabitantModal.style.display = "block";
-            openPlanetBtn.onclick = () => planetModal.style.display = "block";
-
-
-            closeObjectBtn.onclick = () => objectModal.style.display = "none";
-            closeInhabitantBtn.onclick = () => inhabitantModal.style.display = "none";
-            closePlanetBtn.onclick = () => planetModal.style.display = "none";
-
-
-            window.onclick = (event) => {
-                if (event.target == objectModal) {
-                    objectModal.style.display = "none";
-                }
-                if (event.target == inhabitantModal) {
-                    inhabitantModal.style.display = "none";
-                }
-                if (event.target == planetModal) {
-                    planetModal.style.display = "none";
-                }
-            }
-        });
-    </script>
     <!-- ============================================================
-         SHARED FOOTER (links + rev + changelog trigger)
-         Keep in sync with index.html
+         SHARED FOOTER  (keep in sync with index.html)
          ============================================================ -->
     <footer class="py-6 mt-12 border-t border-gray-800">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-gray-400">
@@ -618,155 +587,19 @@
                 <a href="https://github.com/SCV-Security/PublicReports/blob/b819ec669f81e603caca261931e2a4aaca1cddf7/Alliance/Alliance%20DAO%20-%20NFT%20Collection%20Contract%20-%20Audit%20Report%20v1.0.pdf" target="_blank" rel="noopener noreferrer" class="hover:text-white hover:underline transition-colors">Contract Audit</a>
             </div>
             <div class="mt-4 text-xs text-gray-500">
-                <button id="changelog-trigger" class="hover:text-cyan-400 transition-colors cursor-pointer">
-                    <span class="font-mono">Rev 1.3</span>
-                    <span class="opacity-60 mx-1">·</span>
-                    <span>Changelog</span>
-                </button>
+                <span class="font-mono">Rarity Explained &middot; Rev 2.0</span>
             </div>
         </div>
     </footer>
-    
-    <!-- Changelog Modal -->
-    <div id="changelogModal" class="modal fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50 hidden opacity-0">
-        <div class="modal-content bg-[#0f1117] border border-cyan-700/40 rounded-xl shadow-xl w-full max-w-2xl relative text-white opacity-0 scale-95 p-6 max-h-[85vh] overflow-y-auto">
-            <button class="modal-close absolute top-4 right-4 text-gray-400 hover:text-white text-3xl leading-none">&times;</button>
-            <h3 class="text-2xl font-bold text-cyan-400 mb-1 flex items-center gap-3">
-                <i class="fas fa-clock-rotate-left"></i>
-                Changelog
-            </h3>
-            <p class="text-gray-500 text-xs mb-5">Page revisions, newest first</p>
-            <div id="changelog-content" class="changelog-body text-sm">
-                <div class="text-gray-500 text-center py-8">
-                    <i class="fas fa-spinner fa-spin mr-2"></i>Loading changelog...
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Mobile bottom tab bar — fixed to viewport, native-app feel -->
-    <nav class="mobile-bottom-nav" aria-label="Main navigation">
-        <a href="index.html" class="mobile-bottom-nav-tab" data-page="index">
-            <i class="fas fa-house"></i>
-            <span>Home</span>
-        </a>
-        <a href="nft-explorer-index.html" class="mobile-bottom-nav-tab" data-page="nft-explorer-index">
-            <i class="fas fa-images"></i>
-            <span>NFTs</span>
-        </a>
-        <a href="adao-lore.html" class="mobile-bottom-nav-tab" data-page="adao-lore">
-            <i class="fas fa-globe"></i>
-            <span>Lore</span>
-        </a>
-        <a href="tla-stats.html" class="mobile-bottom-nav-tab" data-page="tla-stats">
-            <i class="fas fa-chart-line"></i>
-            <span>TLA</span>
-        </a>
-        <a href="dao.html" class="mobile-bottom-nav-tab" data-page="dao">
-            <i class="fas fa-landmark"></i>
-            <span>DAO</span>
-        </a>
-    </nav>
 
     <script>
-        // ============================================================
-        // SHARED CHROME SCRIPT — active tab highlight + changelog modal
-        // Keep in sync with index.html
-        // ============================================================
-        (function() {
-            // Active tab in both navs
-            var path = window.location.pathname.split('/').pop().replace('.html', '');
-            if (!path || path === '') path = 'index';
-            var topActive = document.querySelector('.top-nav-tab[data-page="' + path + '"]');
-            if (topActive) topActive.classList.add('active');
-            var bottomActive = document.querySelector('.mobile-bottom-nav-tab[data-page="' + path + '"]');
-            if (bottomActive) bottomActive.classList.add('active');
-            
-            // Changelog modal
-            var changelogModal = document.getElementById('changelogModal');
-            var changelogTrigger = document.getElementById('changelog-trigger');
-            var changelogContent = document.getElementById('changelog-content');
-            var changelogClose = changelogModal ? changelogModal.querySelector('.modal-close') : null;
-            var changelogLoaded = false;
-            
-            function parseMarkdown(md) {
-                var escapeHtml = function(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
-                var lines = md.split(/\r?\n/);
-                var out = [];
-                var inList = false;
-                function applyInline(s) {
-                    return s
-                        .replace(/`([^`]+)`/g, '<code>$1</code>')
-                        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-                        .replace(/(^|[^*])\*([^*]+)\*(?!\*)/g, '$1<em>$2</em>');
-                }
-                for (var i = 0; i < lines.length; i++) {
-                    var line = lines[i];
-                    if (line.trim() === '') {
-                        if (inList) { out.push('</ul>'); inList = false; }
-                        continue;
-                    }
-                    var hm = line.match(/^(#{1,4})\s+(.+)$/);
-                    if (hm) {
-                        if (inList) { out.push('</ul>'); inList = false; }
-                        var level = hm[1].length;
-                        var tag = level <= 2 ? 'h2' : (level === 3 ? 'h3' : 'h4');
-                        var ht = hm[2];
-                        var rd = ht.match(/^(.+?)\s+[—–-]\s+(.+)$/);
-                        if (rd && tag === 'h2') {
-                            out.push('<' + tag + '>' + escapeHtml(rd[1]) + '<span class="rev-date">' + escapeHtml(rd[2]) + '</span></' + tag + '>');
-                        } else {
-                            out.push('<' + tag + '>' + escapeHtml(ht) + '</' + tag + '>');
-                        }
-                        continue;
-                    }
-                    var lm = line.match(/^\s*-\s+(.+)$/);
-                    if (lm) {
-                        if (!inList) { out.push('<ul>'); inList = true; }
-                        out.push('<li>' + applyInline(escapeHtml(lm[1])) + '</li>');
-                        continue;
-                    }
-                    if (inList) { out.push('</ul>'); inList = false; }
-                    out.push('<p>' + applyInline(escapeHtml(line)) + '</p>');
-                }
-                if (inList) out.push('</ul>');
-                return out.join('\n');
-            }
-            
-            if (changelogModal && changelogTrigger) {
-                var openCl = function() {
-                    changelogModal.classList.remove('hidden');
-                    requestAnimationFrame(function() {
-                        changelogModal.style.opacity = '1';
-                        var c = changelogModal.querySelector('.modal-content');
-                        if (c) { c.style.opacity = '1'; c.style.transform = 'scale(1)'; }
-                    });
-                    if (!changelogLoaded && changelogContent) {
-                        var url = 'https://raw.githubusercontent.com/defipatriot/website-adao-core/main/index-log.md';
-                        fetch(url, { cache: 'no-cache' })
-                            .then(function(r) { if (!r.ok) throw new Error('Network response not ok: ' + r.status); return r.text(); })
-                            .then(function(md) { changelogContent.innerHTML = parseMarkdown(md); changelogLoaded = true; })
-                            .catch(function(err) {
-                                console.error('Changelog fetch failed:', err);
-                                changelogContent.innerHTML = '<p class="text-gray-400">Could not load changelog. <a href="' + url + '" target="_blank" rel="noopener" class="text-cyan-400 hover:underline">View raw on GitHub</a></p>';
-                            });
-                    }
-                };
-                var closeCl = function() {
-                    changelogModal.style.opacity = '0';
-                    var c = changelogModal.querySelector('.modal-content');
-                    if (c) { c.style.opacity = '0'; c.style.transform = 'scale(0.95)'; }
-                    setTimeout(function() { changelogModal.classList.add('hidden'); }, 200);
-                };
-                changelogTrigger.addEventListener('click', openCl);
-                if (changelogClose) changelogClose.addEventListener('click', closeCl);
-                changelogModal.addEventListener('click', function(e) { if (e.target === changelogModal) closeCl(); });
-                document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && !changelogModal.classList.contains('hidden')) closeCl(); });
-            }
-        })();
+        // Smooth-scroll for in-page TOC links
+        document.querySelectorAll('a[href^="#"]').forEach(function (a) {
+            a.addEventListener('click', function (e) {
+                var el = document.querySelector(a.getAttribute('href'));
+                if (el) { e.preventDefault(); el.scrollIntoView({ behavior: 'smooth' }); }
+            });
+        });
     </script>
-
 </body>
 </html>
-
-
