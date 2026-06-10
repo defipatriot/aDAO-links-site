@@ -115,6 +115,21 @@ let walletMobileSearchMode = 'full';
 // --- Config ---
 const METADATA_URL = "https://cdn.jsdelivr.net/gh/defipatriot/nft-metadata/all_nfts_metadata.json";
 const STATUS_DATA_URL = "https://raw.githubusercontent.com/defipatriot/nft-inventory-data_2026/main/data/v2/nfts.json";
+
+// Canonical rarity files (defipatriot/nft-metadata) — ranks come ONLY from these.
+const RARITY_INTENDED_URL = "https://raw.githubusercontent.com/defipatriot/nft-metadata/main/adao-rarity-intended.json";
+const RARITY_BBL_URL = "https://raw.githubusercontent.com/defipatriot/nft-metadata/main/adao-rarity-bbl.json";
+// Active rank system: 'intended' (default) or 'bbl'. Persisted per session.
+let rankMode = sessionStorage.getItem('adao_rank_mode') === 'bbl' ? 'bbl' : 'intended';
+let bblRarityBuilt = null; // BBL file top-level `built` — "last time BBL ranks moved"
+// Active-rank accessor honoring the toggle. BBL leaves most broken NFTs unranked (null).
+const getActiveRank = (nft) => rankMode === 'bbl' ? (nft.bbl_rank ?? null) : (nft.intended_rank ?? null);
+// Rank display string per spec: grade stays visible in both modes; the rank is what switches.
+const rankDisplay = (nft) => {
+    const grade = nft.rarityClass ?? '—';
+    const r = getActiveRank(nft);
+    return r == null ? `Rarity ${grade}, Unranked` : `Rarity ${grade}, Rank ${r}`;
+};
 const MEMBERS_CSV_URL = "https://raw.githubusercontent.com/defipatriot/adao_json_storage/main/members.csv";
 const DAO_WALLET_ADDRESS = "terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm";
 const EXPECTED_TOTAL_NFTS = 10000; // Fixed collection size — used to hard-fail on a truncated/partial feed.
@@ -145,9 +160,9 @@ const SYSTEM_ADDRESSES = new Set([
 const isSystemAddress = (address) => SYSTEM_ADDRESSES.has(address);
 const DAO_LOCKED_WALLET_SUFFIXES = ["8ywv", "417v", "6ugw"]; // Added from previous logic
 const itemsPerPage = 20;
-const traitOrder = ["Rarity", "Planet", "Inhabitant", "Object", "Weather", "Light"];
+const traitOrder = ["Rank", "Planet", "Inhabitant", "Object", "Weather", "Light", "Rarity"];
+const defaultTraitsOn = ["Rank", "Planet", "Inhabitant", "Object"];
 const filterLayoutOrder = ["Rarity", "Object", "Weather", "Light"];
-const defaultTraitsOn = ["Rarity", "Planet", "Inhabitant", "Object"];
 
 // --- DAO Members Lookup ---
 let addressToMember = {}; // address -> { name, staked, votingPower }
@@ -163,7 +178,7 @@ const PLANET_INHABITANT_MAP = {
     'Lusa': 'Lusan',
     'Minas': 'Minasan',
     'Ozara': 'Ozaran',
-    'Pampa': 'Pampan',
+    'Pampas': 'Pampan',
     'Sindari': 'Sindarin',
     'Zando': 'Zandoan'
 };
@@ -177,7 +192,7 @@ const PLANET_OBJECTS_MAP = {
     'Lusa': ['Lusan Water Staff', 'Lusan Water Saber', 'Ancient Lusan Trident', 'Lusan Xtreme Soaker'],
     'Minas': ['Minasan Ore Staff', 'Minasan Bow', 'Minasan Ore Sword'],
     'Ozara': ['Ozaran Sand Staff', 'Ozaran Bone Axe', 'Ozaran Death Saber', 'Royal Ozaran Bow', 'Ozaran Blaster'],
-    'Pampa': ['Pampan Grass Staff', 'Pampan Grass Sword'],
+    'Pampas': ['Pampan Grass Staff', 'Pampan Grass Sword'],
     'Sindari': ['Sindarin Fire Staff', 'Sindarin Fire Bow', 'Sindarin Fire Saber', 'Sindarin Flame Thrower'],
     'Zando': ['Staff of Zando', 'Sword of Zando', 'Zandoan Vine Bow']
 };
@@ -425,17 +440,23 @@ const initializeExplorer = async () => {
     showLoading(walletGallery, 'Search for or select a wallet to see owned NFTs.');
     try {
         // Fetch all data in parallel (members CSV is non-critical, won't block on error)
-        const [metaResponse, statusResponse] = await Promise.all([
+        const [metaResponse, statusResponse, rarityIntendedResponse, rarityBblResponse] = await Promise.all([
             fetch(METADATA_URL),
             fetch(STATUS_DATA_URL),
+            fetch(RARITY_INTENDED_URL),
+            fetch(RARITY_BBL_URL),
             fetchAndParseMembers() // Load DAO members (non-blocking)
         ]);
 
         if (!metaResponse.ok) throw new Error(`Metadata network response was not ok: ${metaResponse.status}`);
         if (!statusResponse.ok) throw new Error(`Status data network response was not ok: ${statusResponse.status}`);
+        if (!rarityIntendedResponse.ok) throw new Error(`Intended-rarity feed was not ok: ${rarityIntendedResponse.status}`);
+        if (!rarityBblResponse.ok) throw new Error(`BBL-rarity feed was not ok: ${rarityBblResponse.status}`);
         
         const metadata = await metaResponse.json();
         const statusData = await statusResponse.json();
+        const rarityIntended = await rarityIntendedResponse.json();
+        const rarityBbl = await rarityBblResponse.json();
 
         // Hard-fail integrity gate: good data or a visible error, nothing in between.
         if (!Array.isArray(metadata) || metadata.length === 0) {
@@ -447,6 +468,31 @@ const initializeExplorer = async () => {
         }
 
         allNfts = mergeNftData(metadata, statusData);
+
+        // --- Canonical rarity join (ranks come ONLY from these files) ---
+        const intendedRecords = rarityIntended && rarityIntended.records;
+        const bblRecords = rarityBbl && rarityBbl.records;
+        if (!Array.isArray(intendedRecords) || intendedRecords.length < EXPECTED_TOTAL_NFTS) {
+            throw new Error(`Intended-rarity feed failed integrity check: expected ${EXPECTED_TOTAL_NFTS} records, got ${Array.isArray(intendedRecords) ? intendedRecords.length : 'none'}.`);
+        }
+        if (!Array.isArray(bblRecords) || bblRecords.length < EXPECTED_TOTAL_NFTS) {
+            throw new Error(`BBL-rarity feed failed integrity check: expected ${EXPECTED_TOTAL_NFTS} records, got ${Array.isArray(bblRecords) ? bblRecords.length : 'none'}.`);
+        }
+        bblRarityBuilt = rarityBbl.built || null;
+        const intendedMap = new Map(intendedRecords.map(r => [String(r.token_id), r]));
+        const bblMap = new Map(bblRecords.map(r => [String(r.token_id), r]));
+        allNfts.forEach(nft => {
+            const ir = intendedMap.get(String(nft.id));
+            const br = bblMap.get(String(nft.id));
+            nft.intended_rank = ir ? ir.intended_rank : null;
+            nft.intended_grade = ir ? ir.grade : null;
+            nft.bbl_rank = br ? br.bbl_rank : null;          // null = BBL unranked (mostly broken)
+            nft.bbl_top_percent = br ? br.bbl_top_percent : null;
+        });
+        const rankedCount = allNfts.filter(n => n.intended_rank != null).length;
+        if (rankedCount < EXPECTED_TOTAL_NFTS) {
+            throw new Error(`Rarity join incomplete: only ${rankedCount}/${EXPECTED_TOTAL_NFTS} NFTs received an intended rank.`);
+        }
 
         // Every NFT must resolve to an owner via the pipeline; a shortfall means a corrupt/partial feed.
         const resolvedCount = allNfts.filter(nft => nft.owner).length;
@@ -512,14 +558,14 @@ const calculateRanks = () => {
         }
     });
 
-    // Second pass: assign rarity class and calculate sub-score for tie-breaking
-    // Rarity Class = Official "Rarity" attribute (1-40, based on Object)
-    // Sub-score uses OTHER traits in order: Inhabitant, Planet, Weather, Light
-    // For Inhabitant and Planet, we use the SPECIFIC variant count (M/F, North/South)
+    // Second pass: per-NFT trait values/counts (still used by trait filters, medals, matching checks).
+    // NOTE: ranks are NOT derived here anymore — intended_rank / bbl_rank come only from the
+    // canonical files in defipatriot/nft-metadata (joined in initializeExplorer). The old
+    // within-grade tie-break sort + subRank (source of the "40/1" display) is retired.
     allNfts.forEach(nft => {
-        // Get official rarity score from metadata (Object rarity 1-40)
+        // Grade (1-40): canonical intended file is authoritative; metadata Rarity attr as fallback.
         const officialRarity = nft.attributes?.find(a => a.trait_type === 'Rarity')?.value || 0;
-        nft.rarityClass = Number(officialRarity);
+        nft.rarityClass = nft.intended_grade ?? Number(officialRarity);
         
         // Get individual trait values
         const inhabitantValue = nft.attributes?.find(a => a.trait_type === 'Inhabitant')?.value;
@@ -528,11 +574,9 @@ const calculateRanks = () => {
         const lightValue = nft.attributes?.find(a => a.trait_type === 'Light')?.value;
         
         // For Inhabitant: use the specific M/F variant count, not the base count
-        // traitCounts['Inhabitant']['Lusan M'] gives exact count of Lusan M
         nft.inhabitantCount = inhabitantValue ? (traitCounts['Inhabitant']?.[inhabitantValue] || 9999) : 9999;
         
         // For Planet: use the specific North/South variant count
-        // traitCounts['Planet']['Cristall South'] gives exact count of Cristall South
         nft.planetCount = planetValue ? (traitCounts['Planet']?.[planetValue] || 9999) : 9999;
         
         // Weather and Light counts
@@ -546,49 +590,8 @@ const calculateRanks = () => {
         nft.lightValue = lightValue;
     });
 
-    // Sort by: Rarity Class DESC, then Planet ASC, Inhabitant ASC, Weather ASC, Light ASC, NFT ID ASC
-    // (Lower count = rarer = should come first, so ASC)
-    allNfts.sort((a, b) => {
-        // Primary: Rarity class (higher = rarer = first)
-        if (b.rarityClass !== a.rarityClass) return b.rarityClass - a.rarityClass;
-        
-        // Tie-breaker 1: Planet variant count (lower = rarer = first)
-        // Background is ~80% of visual, so most important after Object
-        if (a.planetCount !== b.planetCount) return a.planetCount - b.planetCount;
-        
-        // Tie-breaker 2: Inhabitant variant count (lower = rarer = first)
-        if (a.inhabitantCount !== b.inhabitantCount) return a.inhabitantCount - b.inhabitantCount;
-        
-        // Tie-breaker 3: Weather count (lower = rarer = first)
-        if (a.weatherCount !== b.weatherCount) return a.weatherCount - b.weatherCount;
-        
-        // Tie-breaker 4: Light count (lower = rarer = first)
-        if (a.lightCount !== b.lightCount) return a.lightCount - b.lightCount;
-        
-        // Final tie-breaker: NFT ID (lower = first)
-        return (a.id || 0) - (b.id || 0);
-    });
-
-    // Assign sub-rank within each rarity class
-    let currentClass = null;
-    let subRank = 0;
-    allNfts.forEach((nft, index) => {
-        if (nft.rarityClass !== currentClass) {
-            currentClass = nft.rarityClass;
-            subRank = 1;
-        } else {
-            subRank++;
-        }
-        nft.subRank = subRank;
-        nft.displayOrder = index + 1;
-    });
-    
-    // Log top 25 for debugging (to see all Rarity 40s)
-    console.log('Top 25 NFTs by Rarity Class (tie-break: Planet N/S → Inhabitant M/F → Weather → Light → ID):');
-    console.log('Lower counts = rarer = ranked higher within class');
-    allNfts.slice(0, 25).forEach((nft) => {
-        console.log(`${nft.rarityClass}/${nft.subRank} - #${nft.id} | Planet: ${nft.planetValue} (${nft.planetCount}) | Inh: ${nft.inhabitantValue} (${nft.inhabitantCount}) | Weather: ${nft.weatherValue} (${nft.weatherCount})`);
-    });
+    // Base order: canonical intended rank ascending (rank 1 = best, first).
+    allNfts.sort((a, b) => (a.intended_rank ?? Infinity) - (b.intended_rank ?? Infinity));
 };
 
 // Helper function to get trait rarity rank (for medal display)
@@ -738,7 +741,8 @@ const populateTraitFilters = () => {
             const style = value === 'Phoenix Rising' ? 'style="color: #f97316; font-weight: bold;"' : '';
             optionsHtml += `<label ${style}><input type="checkbox" class="multi-select-checkbox" data-trait="${traitType}" value="${value}"> <span class="trait-value">${value}</span> (<span class="trait-count">0</span>)</label>`;
         });
-        container.innerHTML = `<label class="block text-sm font-medium text-gray-300 mb-1">${traitType}</label><button type="button" class="multi-select-button"><span>All ${traitType}s</span><svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg></button><div class="multi-select-dropdown hidden">${optionsHtml}</div>`;
+        const displayLabel = traitType === 'Rarity' ? 'Rank' : traitType; // grade dropdown shown as "Rank" (filters by 1-40 grade)
+        container.innerHTML = `<label class="block text-sm font-medium text-gray-300 mb-1">${displayLabel}</label><button type="button" class="multi-select-button"><span>All ${displayLabel}s</span><svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg></button><div class="multi-select-dropdown hidden">${optionsHtml}</div>`;
         const button = container.querySelector('.multi-select-button');
         const dropdown = container.querySelector('.multi-select-dropdown');
         button.addEventListener('click', (e) => { e.stopPropagation(); closeAllDropdowns(dropdown); dropdown.classList.toggle('hidden'); });
@@ -820,7 +824,7 @@ const populateTraitToggles = () => {
 
 const populateWalletTraitToggles = () => {
     walletTraitTogglesContainer.innerHTML = '';
-    const walletTraits = ["Rarity", "Planet", "Inhabitant", "Object"];
+    const walletTraits = ["Rank", "Planet", "Inhabitant", "Object"];
     walletTraits.forEach(traitType => {
         const label = document.createElement('label');
         label.className = 'toggle-label';
@@ -830,6 +834,35 @@ const populateWalletTraitToggles = () => {
 };
 
 const addAllEventListeners = () => {
+    // --- Rank-system toggle (Intended / BBL) ---
+    const rankModeIntendedBtn = document.getElementById('rank-mode-intended');
+    const rankModeBblBtn = document.getElementById('rank-mode-bbl');
+    const bblDisclaimer = document.getElementById('bbl-rank-disclaimer');
+    const applyRankModeUi = () => {
+        if (rankModeIntendedBtn) rankModeIntendedBtn.classList.toggle('active', rankMode === 'intended');
+        if (rankModeBblBtn) rankModeBblBtn.classList.toggle('active', rankMode === 'bbl');
+        if (bblDisclaimer) {
+            if (rankMode === 'bbl') {
+                const builtDate = bblRarityBuilt ? new Date(bblRarityBuilt).toISOString().slice(0, 10) : 'unknown';
+                bblDisclaimer.textContent = `BBL ranks mirrored from BackBone Labs · last changed ${builtDate} · BBL leaves most broken NFTs unranked.`;
+                bblDisclaimer.classList.remove('hidden');
+            } else {
+                bblDisclaimer.classList.add('hidden');
+            }
+        }
+    };
+    const setRankMode = (mode) => {
+        if (mode === rankMode) return;
+        rankMode = mode;
+        sessionStorage.setItem('adao_rank_mode', mode);
+        applyRankModeUi();
+        applyFiltersAndSort();           // re-sorts (rank-aware) and re-renders every visible card
+        if (typeof renderWalletResults === 'function') { /* wallet re-renders on next interaction */ }
+    };
+    if (rankModeIntendedBtn) rankModeIntendedBtn.addEventListener('click', () => setRankMode('intended'));
+    if (rankModeBblBtn) rankModeBblBtn.addEventListener('click', () => setRankMode('bbl'));
+    applyRankModeUi(); // restore persisted mode on load
+
      document.querySelectorAll('.toggle-checkbox').forEach(toggle => {
         toggle.addEventListener('change', (e) => {
             const parent = e.target.closest('.justify-between');
@@ -1581,17 +1614,37 @@ const applyFiltersAndSort = () => {
     });
 
     const sortValue = sortSelect.value;
-    if (sortValue === 'desc') {
-        // Rarity High to Low: 40/1, 40/2... 39/1, 39/2... (default, best first)
+    // Active-rank comparator: rank 1 = best; unranked (BBL null) always sorts to the end.
+    const rankAsc = (a, b) => {
+        const ra = getActiveRank(a), rb = getActiveRank(b);
+        if (ra == null && rb == null) return (a.id ?? 0) - (b.id ?? 0);
+        if (ra == null) return 1;
+        if (rb == null) return -1;
+        return ra - rb;
+    };
+    if (sortValue === 'rank-best' || sortValue === 'desc') {
+        // Ranking: best first (default). Legacy 'desc' value maps here for old saved URLs.
+        tempNfts.sort(rankAsc);
+    } else if (sortValue === 'rank-worst' || sortValue === 'asc') {
+        // Ranking: worst first — unranked still last (they're unranked, not worst).
         tempNfts.sort((a, b) => {
-            if (b.rarityClass !== a.rarityClass) return b.rarityClass - a.rarityClass;
-            return (a.subRank ?? 0) - (b.subRank ?? 0); // Within same class, lower subRank first
+            const ra = getActiveRank(a), rb = getActiveRank(b);
+            if (ra == null && rb == null) return (a.id ?? 0) - (b.id ?? 0);
+            if (ra == null) return 1;
+            if (rb == null) return -1;
+            return rb - ra;
         });
-    } else if (sortValue === 'asc') {
-        // Rarity Low to High: 1/1, 1/2... 2/1, 2/2... (common first)
+    } else if (sortValue === 'rarity-desc') {
+        // Rarity (grade) High to Low; within a grade, best active rank first
         tempNfts.sort((a, b) => {
-            if (a.rarityClass !== b.rarityClass) return a.rarityClass - b.rarityClass;
-            return (a.subRank ?? 0) - (b.subRank ?? 0); // Within same class, lower subRank first
+            if ((b.rarityClass ?? 0) !== (a.rarityClass ?? 0)) return (b.rarityClass ?? 0) - (a.rarityClass ?? 0);
+            return rankAsc(a, b);
+        });
+    } else if (sortValue === 'rarity-asc') {
+        // Rarity (grade) Low to High; within a grade, best active rank first
+        tempNfts.sort((a, b) => {
+            if ((a.rarityClass ?? 0) !== (b.rarityClass ?? 0)) return (a.rarityClass ?? 0) - (b.rarityClass ?? 0);
+            return rankAsc(a, b);
         });
     } else if (sortValue === 'id-asc') {
         // ID Low to High
@@ -1653,7 +1706,7 @@ const applyStateFromUrl = () => {
     if (sortSelect && [...sortSelect.options].some(o => o.value === sortParam)) {
         sortSelect.value = sortParam;
     } else if (sortSelect) {
-        sortSelect.value = 'desc'; // Default: Rarity High to Low (40 first)
+        sortSelect.value = 'rank-best'; // Default: Ranking, best first
     }
     
     document.querySelectorAll('.multi-select-container').forEach(container => {
@@ -1689,13 +1742,14 @@ const updateMultiSelectButtonText = (container) => {
     if (!buttonSpan || !traitCheckbox) return; // Safety check
     
     const traitType = traitCheckbox.dataset.trait;
+    const displayLabel = traitType === 'Rarity' ? 'Rank' : traitType; // grade dropdown is shown as "Rank"
     const checkedCount = container.querySelectorAll('.multi-select-checkbox:checked').length;
     const totalCount = container.querySelectorAll('.multi-select-checkbox').length;
     
     if (checkedCount === 0 || checkedCount === totalCount) {
-        buttonSpan.textContent = `All ${traitType}s`;
+        buttonSpan.textContent = `All ${displayLabel}s`;
     } else {
-        buttonSpan.textContent = `${checkedCount} ${traitType}(s) selected`;
+        buttonSpan.textContent = `${checkedCount} ${displayLabel}(s) selected`;
     }
 };
 
@@ -1754,13 +1808,12 @@ const createNftCard = (nft, toggleSelector) => {
     
     visibleTraits.forEach(traitType => {
         let value = 'N/A';
-        if (traitType === 'Rarity') {
-            // Show as RarityClass/SubRank (e.g., 40/1 means Rarity 40, ranked 1st within that class)
-            if (nft.rarityClass != null && nft.subRank != null) {
-                value = `${nft.rarityClass}/${nft.subRank}`;
-            } else if (nft.rarityClass != null) {
-                value = `${nft.rarityClass}`;
-            }
+        if (traitType === 'Rank') {
+            // Canonical rank, honoring the Intended/BBL toggle. e.g. "Rarity 40, Rank 24"
+            value = rankDisplay(nft);
+        } else if (traitType === 'Rarity') {
+            // Plain 1-40 grade (legacy "40/1" sub-rank display retired)
+            value = nft.rarityClass != null ? `${nft.rarityClass}` : 'N/A';
         } else {
             value = nft.attributes?.find(attr => attr.trait_type === traitType)?.value || 'N/A';
         }
@@ -1856,7 +1909,7 @@ const resetAll = () => {
     if(searchInput) searchInput.value = '';
     if(searchAddressInput) searchAddressInput.value = '';
     if(addressDropdown) addressDropdown.value = '';
-    if(sortSelect) sortSelect.value = 'desc'; // Default: Rarity High to Low (40 first)
+    if(sortSelect) sortSelect.value = 'rank-best'; // Default: Ranking, best first
     if(matchingTraitsToggle) matchingTraitsToggle.checked = false;
     if(matchingTraitsSlider) {
         matchingTraitsSlider.value = 0;
@@ -2020,7 +2073,7 @@ const findHighestRaritySample = (filterFn) => {
     // Find the highest *score* (lowest rank)
     const matches = allNfts.filter(filterFn);
     if (matches.length === 0) return null;
-    matches.sort((a, b) => (b.rarityClass ?? 0) - (a.rarityClass ?? 0)); // Sort by rarity class desc
+    matches.sort((a, b) => (getActiveRank(a) ?? Infinity) - (getActiveRank(b) ?? Infinity)); // Best active rank first
     return matches[0];
 };
 
@@ -2480,12 +2533,9 @@ const showNftDetails = (nft) => {
     // Get the "Rarity" trait value (official object rarity 1-40)
     const rarityValue = nft.attributes?.find(a => a.trait_type === 'Rarity')?.value || 'N/A';
     
-    // Start traits HTML with Rank and Rarity
-    // Show Rarity as Class/SubRank (e.g., 40/1)
-    const rarityDisplay = (nft.rarityClass != null && nft.subRank != null) 
-        ? `${nft.rarityClass}/${nft.subRank}` 
-        : (nft.rarityClass || 'N/A');
-    let traitsHtml = `<div class="flex justify-between text-sm"><span class="text-gray-400">Rarity:</span><span class="font-semibold text-cyan-400 text-lg">${rarityDisplay}</span></div>`;
+    // Canonical rank line, honoring the Intended/BBL toggle (e.g. "Rarity 40, Rank 24")
+    const rarityDisplay = rankDisplay(nft);
+    let traitsHtml = `<div class="flex justify-between text-sm"><span class="text-gray-400">Rank:</span><span class="font-semibold text-cyan-400 text-lg">${rarityDisplay}</span></div>`;
     
     // Separator
     traitsHtml += `<div class="pt-2 mt-2 border-t border-gray-600"></div>`;
@@ -2712,10 +2762,7 @@ const drawPostImage = (canvas, ctx, img, logo, nft, button) => {
     };
 
     drawText(`NFT #${nft.id || '?'}`, margin, imageTop + margin + 48, 'left');
-    const rarityDisplay = (nft.rarityClass != null && nft.subRank != null) 
-        ? `${nft.rarityClass}/${nft.subRank}` 
-        : (nft.rarityClass || 'N/A');
-    drawText(`Rarity ${rarityDisplay}`, canvas.width - margin, imageTop + margin + 48, 'right');
+    drawText(rankDisplay(nft), canvas.width - margin, imageTop + margin + 48, 'right');
     drawText(getTrait('Planet'), margin, imageTop + 1080 - margin, 'left');
     
     let inhabitantText = getTrait('Inhabitant');
@@ -4031,7 +4078,7 @@ const showWalletExplorerModal = (address) => {
         `;
     });
 
-    walletNfts.sort((a,b) => (b.rarityClass ?? 0) - (a.rarityClass ?? 0)).forEach(nft => {
+    walletNfts.sort((a,b) => (getActiveRank(a) ?? Infinity) - (getActiveRank(b) ?? Infinity)).forEach(nft => {
         galleryEl.appendChild(createNftCard(nft, '.wallet-trait-toggle'));
     });
 
@@ -4279,7 +4326,7 @@ const searchWallet = () => {
         }
         
         // Sort NFTs
-        walletNfts.sort((a,b) => (b.rarityClass ?? 0) - (a.rarityClass ?? 0));
+        walletNfts.sort((a,b) => (getActiveRank(a) ?? Infinity) - (getActiveRank(b) ?? Infinity));
         
         // Render cards in batches for better performance
         const batchSize = 20;
