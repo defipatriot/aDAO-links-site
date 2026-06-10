@@ -404,7 +404,8 @@ const mergeNftData = (metadata, statusData) => {
             mergedNft.treasury_held = !!status.treasury_held;
             mergedNft.dao_wallet_8ywv_held = !!status.dao_wallet_8ywv_held;
             mergedNft.enterprise_dao_broken = !!status.enterprise_dao_broken;
-            mergedNft.listing = status.listing || null; // { marketplace, price, token, price_usd, price_display }
+            mergedNft.listing = status.listing || null; // listing object incl. price_usd when an active listing exists
+            mergedNft.daodao_pending_claim = !!status.daodao_pending_claim; // unstaked, in claim window
 
             // --- Derived ---
             // "Owned by DAO" = unminted main-wallet supply + treasury contract + small locked wallet.
@@ -680,6 +681,7 @@ const updateMatchingTraitsCount = () => {
  const createFilterItem = (config) => {
     const container = document.createElement('div');
     container.className = 'flex items-center justify-between';
+    if (config.tooltip) container.title = config.tooltip; // native hover tooltip
     
     const toggleLabel = document.createElement('label');
     toggleLabel.className = 'toggle-label';
@@ -788,7 +790,7 @@ const populateStatusFilters = () => {
         { key: 'listed', label: 'Listed', left: 'Boost', right: 'BBL' },
         { key: 'rewards', label: 'Rewards', left: 'Broken', right: 'Unbroken' },
         { key: 'mint_status', label: 'Mint Status', left: 'Un-Minted', right: 'Minted' },
-        { key: 'matching_traits', label: 'Matching', left: 'P+I', right: 'P+I+O' },
+        { key: 'matching_traits', label: 'Matching', left: 'P+I', right: 'P+I+O', tooltip: 'Home-system trait match \u2014 P+I: the Inhabitant is standing on its home planet (e.g. a Lusan on Lusa). P+I+O: planet + inhabitant + a native object of that world (e.g. Lusan Water Staff). Slide to choose which match the count shows.' },
         { key: 'liquid_status', label: 'Liquid', left: 'Liquid', right: 'Not Liq' }
     ];
 
@@ -800,7 +802,8 @@ const populateStatusFilters = () => {
             countClass: 'status-count',
             sliderClass: 'status-slider', 
             left: filter.left, 
-            right: filter.right
+            right: filter.right,
+            tooltip: filter.tooltip
         });
         statusFiltersGrid.appendChild(container);
     });
@@ -1226,6 +1229,9 @@ const ANALYTICS_ENRICHED_URL = "https://raw.githubusercontent.com/defipatriot/nf
 let analyticsLoaded = false;
 let _avMonths = [];          // monthly data, for chart scale toggle
 let _avScale = "log";        // default log so recent months are visible
+let _fpData = null;          // floor-history slots {monthly:{labels,tiers},weekly:{...}}
+let _fpTier = "base";        // broken | base | phoenix
+let _fpGran = "monthly";     // monthly (12M) | weekly (12W)
 
 // ---- formatters ----
 const fmtUsd = (n) => {
@@ -1279,6 +1285,70 @@ function renderVolChart() {
     }
 }
 
+// Floor-history chart (sales-derived): floating low-high bar per period, dash at median.
+function renderFpChart() {
+    const el = document.getElementById("av-fp-chart");
+    if (!el || !_fpData) return;
+    const d = _fpData[_fpGran]; const slots = d.tiers[_fpTier]; const labels = d.labels;
+    const highs = slots.filter(Boolean).map(s => s.high);
+    const max = highs.length ? Math.max(...highs) * 1.08 : 1;
+    const W = 600, H = 210, padL = 44, padB = 22, padT = 8;
+    const x = (i) => padL + i * ((W - padL - 8) / labels.length) + 4;
+    const bw = ((W - padL - 8) / labels.length) - 8;
+    const y = (v) => padT + (1 - v / max) * (H - padT - padB);
+    let g = "";
+    // gridlines: 0, mid, max
+    [[0, "0"], [max / 2, fmtUsd(max / 2)], [max / 1.08, fmtUsd(max / 1.08)]].forEach(([v, l]) => {
+        g += `<line x1="${padL}" y1="${y(v)}" x2="${W - 4}" y2="${y(v)}" stroke="rgba(255,255,255,.07)"/><text x="${padL - 6}" y="${y(v) + 3}" text-anchor="end" font-size="9" fill="#6b7280">${l}</text>`;
+    });
+    labels.forEach((lab, i) => {
+        const s = slots[i];
+        const lx = x(i) + bw / 2;
+        g += `<text x="${lx}" y="${H - 6}" text-anchor="middle" font-size="8.5" fill="${s ? "#9ca3af" : "#4b5563"}">${lab}</text>`;
+        if (!s) { g += `<line x1="${x(i) + 2}" y1="${y(0) - 1}" x2="${x(i) + bw - 2}" y2="${y(0) - 1}" stroke="#374151" stroke-width="2"/>`; return; }
+        const yH = y(s.high), yL = y(s.low), yM = y(s.med);
+        g += `<g><title>${lab} · ${s.n} sale${s.n === 1 ? "" : "s"} · low ${fmtUsd(s.low)} · median ${fmtUsd(s.med)} · high ${fmtUsd(s.high)}</title>
+          <rect x="${x(i)}" y="${yH}" width="${bw}" height="${Math.max(2, yL - yH)}" rx="2" fill="rgba(34,211,238,.28)" stroke="rgba(34,211,238,.5)" stroke-width="0.5"/>
+          <line x1="${x(i)}" y1="${yM}" x2="${x(i) + bw}" y2="${yM}" stroke="#fbbf24" stroke-width="2"/></g>`;
+    });
+    el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;display:block">${g}</svg>`;
+    document.querySelectorAll(".av-fp-tier").forEach(b => b.classList.toggle("active", b.dataset.tier === _fpTier));
+    document.querySelectorAll(".av-fp-gran").forEach(b => b.classList.toggle("active", b.dataset.gran === _fpGran));
+}
+function buildFpData(salesDesc, tierOfId) {
+    const mk = (date, gran) => {
+        if (gran === "monthly") return date.toISOString().slice(0, 7);
+        const d = new Date(date); const day = (d.getUTCDay() + 6) % 7; d.setUTCDate(d.getUTCDate() - day); // Monday
+        return d.toISOString().slice(0, 10);
+    };
+    const out = {};
+    for (const gran of ["monthly", "weekly"]) {
+        const labels = [], keys = [];
+        const now = new Date();
+        for (let i = 11; i >= 0; i--) {
+            const d = new Date(now);
+            if (gran === "monthly") { d.setUTCMonth(d.getUTCMonth() - i); const k = mk(d, gran); keys.push(k); labels.push(k.slice(2)); }
+            else { d.setUTCDate(d.getUTCDate() - i * 7); const k = mk(d, gran); keys.push(k); labels.push(k.slice(5)); }
+        }
+        const tiers = { broken: keys.map(() => null), base: keys.map(() => null), phoenix: keys.map(() => null) };
+        const buckets = { broken: {}, base: {}, phoenix: {} };
+        salesDesc.forEach(s => {
+            if (s.notional_usd == null || !s.timestamp) return;
+            const t = tierOfId(s.token_id); if (!t) return;
+            const k = mk(new Date(s.timestamp), gran);
+            (buckets[t][k] = buckets[t][k] || []).push(s.notional_usd);
+        });
+        for (const t of ["broken", "base", "phoenix"]) keys.forEach((k, i) => {
+            const v = (buckets[t][k] || []).sort((a, b) => a - b);
+            if (!v.length) return;
+            const med = v.length % 2 ? v[(v.length - 1) / 2] : (v[v.length / 2 - 1] + v[v.length / 2]) / 2;
+            tiers[t][i] = { n: v.length, low: v[0], med, high: v[v.length - 1] };
+        });
+        out[gran] = { labels, tiers };
+    }
+    return out;
+}
+
 // current-holdings map (who holds what NOW) for buyer/seller behaviour context
 function buildHoldingsMap() {
     const m = {};
@@ -1328,9 +1398,12 @@ async function renderAnalytics() {
     _avMonths = A.monthly || [];
     root.innerHTML = buildAnalyticsHtml(A, S, E);
     renderVolChart();
+    renderFpChart();
     const lin = document.getElementById("av-scale-lin"), log = document.getElementById("av-scale-log");
     if (lin) lin.onclick = () => { _avScale = "linear"; renderVolChart(); };
     if (log) log.onclick = () => { _avScale = "log"; renderVolChart(); };
+    document.querySelectorAll(".av-fp-tier").forEach(b => b.onclick = () => { _fpTier = b.dataset.tier; renderFpChart(); });
+    document.querySelectorAll(".av-fp-gran").forEach(b => b.onclick = () => { _fpGran = b.dataset.gran; renderFpChart(); });
 }
 
 function buildAnalyticsHtml(A, S, E) {
@@ -1374,6 +1447,104 @@ function buildAnalyticsHtml(A, S, E) {
       ${tile("Listed now", fmtNum(listed), `${fmtUsd(askUsd)} ask-side liquidity`)}
     </div>`;
 
+    // ----- INVESTOR PANELS: supply screener · floor by tier · governance concentration -----
+    const nfts = (typeof allNfts !== "undefined" && Array.isArray(allNfts)) ? allNfts : [];
+    const isPhoenix = (n) => n.rarityClass === 40; // grade 40 <-> Phoenix Rising, 1:1 by design
+    const tierOf = (n) => n.broken ? "broken" : (isPhoenix(n) ? "phoenix" : "base");
+
+    // --- Supply (the collection read like a token) ---
+    const sup = { minted: 0, unminted: 0, staked: 0, pending: 0, daoBroken: 0, float: 0, listedN: 0 };
+    nfts.forEach(n => {
+        if (n.unminted) { sup.unminted++; return; }
+        sup.minted++;
+        if (n.staked_daodao || n.staked_enterprise_legacy) sup.staked++;
+        else if (n.daodao_pending_claim) sup.pending++;
+        else if (n.treasury_held || n.dao_wallet_8ywv_held || n.enterprise_dao_broken) sup.daoBroken++;
+        else if (n.listing && n.listing.price_usd != null) sup.listedN++;
+        else sup.float++;
+    });
+    const controlled = sup.staked + sup.pending + sup.daoBroken;
+    const segBar = (segs) => {
+        const tot = segs.reduce((s, x) => s + x.v, 0) || 1;
+        return `<div class="flex h-3 rounded-full overflow-hidden">${segs.map(x => `<div style="width:${(x.v / tot * 100).toFixed(2)}%;background:${x.c}" title="${x.l}: ${fmtNum(x.v)}"></div>`).join("")}</div>
+          <div class="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-[11px] text-gray-400">${segs.map(x => `<span><span style="color:${x.c}">●</span> ${x.l} ${fmtNum(x.v)}</span>`).join("")}</div>`;
+    };
+    const srow = (l, v, sub) => `<div class="flex items-baseline justify-between py-1"><span class="text-sm text-gray-400">${l}</span><span class="text-sm font-semibold text-gray-100">${v}${sub ? ` <span class="text-xs text-gray-500 font-normal">${sub}</span>` : ""}</span></div>`;
+    const supplyCard = `<div class="${card}">${h("Supply", "the collection, read like a token")}
+        ${srow("Max supply", fmtNum(nfts.length || 10000))}
+        ${srow("Circulating (minted)", fmtNum(sup.minted), `${(sup.minted / (nfts.length || 10000) * 100).toFixed(1)}%`)}
+        ${srow("Staked / DAO-controlled", fmtNum(controlled), `${(controlled / Math.max(sup.minted, 1) * 100).toFixed(1)}% of circulating`)}
+        ${srow("Free float", fmtNum(sup.float + sup.listedN), `${fmtNum(sup.listedN)} of it listed`)}
+        <div class="mt-3">${segBar([
+            { l: "Staked", v: sup.staked, c: "#22d3ee" },
+            { l: "Pending claim", v: sup.pending, c: "#67e8f9" },
+            { l: "DAO broken", v: sup.daoBroken, c: "#f59e0b" },
+            { l: "Float", v: sup.float, c: "#34d399" },
+            { l: "Listed", v: sup.listedN, c: "#a78bfa" },
+            { l: "Unminted", v: sup.unminted, c: "#374151" }
+        ])}</div></div>`;
+
+    // --- Governance concentration (DAODAO VP) ---
+    let govCard = "";
+    const stakers = (S && Array.isArray(S.daodao_stakers)) ? [...S.daodao_stakers].sort((a, b) => b.voting_power_pct - a.voting_power_pct) : [];
+    if (stakers.length) {
+        let cum = 0, nakamoto = 0;
+        for (const x of stakers) { cum += x.voting_power_pct; nakamoto++; if (cum > 50) break; }
+        const shareOf = (k) => stakers.slice(0, k).reduce((s, x) => s + x.voting_power_pct, 0);
+        const top1 = shareOf(1), top5 = shareOf(5), top10 = shareOf(10);
+        govCard = `<div class="${card}">${h("Governance concentration", "DAODAO-staked voting power")}
+          <div class="flex items-end gap-6 mb-3">
+            <div><div class="text-xs uppercase tracking-wider text-gray-400">Nakamoto coefficient</div>
+              <div class="text-4xl font-extrabold text-white leading-none mt-1">${nakamoto}</div>
+              <div class="text-[11px] text-gray-500 mt-1">wallets to reach &gt;50% of staked VP</div></div>
+            <div class="text-sm text-gray-400">${fmtNum(stakers.length)} stakers · ${fmtNum(sup.staked)} NFTs staked</div>
+          </div>
+          ${[["Top 1", top1], ["Top 5", top5], ["Top 10", top10]].map(([l, v]) => `<div class="flex items-center gap-3 py-1 text-sm"><span class="w-14 text-gray-400">${l}</span><div class="flex-1">${hBar(v, 100)}</div><span class="w-14 text-right text-gray-300">${v.toFixed(1)}%</span></div>`).join("")}
+          <div class="text-[11px] text-gray-600 mt-2">1 staked NFT = 1 vote (broken NFTs keep their voting power)</div></div>`;
+    }
+    const supplyGovRow = `<div class="grid md:grid-cols-2 gap-3 mb-4">${supplyCard}${govCard}</div>`;
+
+    // --- Floor by tier: listing floor vs sales-based floor ---
+    const tierData = { broken: { listed: [] }, base: { listed: [] }, phoenix: { listed: [] } };
+    nfts.forEach(n => { if (n.listing && n.listing.price_usd != null) tierData[tierOf(n)].listed.push(n.listing.price_usd); });
+    Object.values(tierData).forEach(t => t.listed.sort((a, b) => a - b));
+    const byIdT = {}; nfts.forEach(n => { byIdT[String(n.id)] = n; });
+    const salesDesc = (E && Array.isArray(E.sales)) ? [...E.sales].sort((a, b) => (b.timestamp || "").localeCompare(a.timestamp || "")) : [];
+    const lastSales = (tier, k) => { const out = []; for (const x of salesDesc) { const n = byIdT[String(x.token_id)]; if (n && tierOf(n) === tier) { out.push(x.notional_usd); if (out.length === k) break; } } return out; };
+    const median = (a) => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+    const tierRow = (label, tier, salesK) => {
+        const t = tierData[tier]; const ls = lastSales(tier, salesK); const sf = median(ls);
+        const lf = t.listed.length ? t.listed[0] : null;
+        const spread = (lf != null && sf) ? ((lf - sf) / sf * 100) : null;
+        return `<div class="grid grid-cols-5 gap-2 items-center py-2 border-t border-gray-700/50 text-sm">
+          <span class="text-gray-200 font-medium">${label}</span>
+          <span class="text-center text-gray-400">${t.listed.length}</span>
+          <span class="text-center font-semibold ${lf != null ? "text-cyan-300" : "text-gray-600"}">${lf != null ? fmtUsd(lf) : "none"}</span>
+          <span class="text-center font-semibold ${sf ? "text-amber-300" : "text-gray-600"}">${sf ? fmtUsd(sf) : "—"}</span>
+          <span class="text-center ${spread == null ? "text-gray-600" : spread < -15 ? "text-green-400" : spread > 15 ? "text-red-400" : "text-gray-300"}">${spread == null ? "—" : (spread > 0 ? "+" : "") + spread.toFixed(0) + "%"}</span></div>`;
+    };
+    const bkUsd = (S && S.backing && S.backing.per_nft_value_usd) || null;
+    const floorCard = `<div class="${card} mb-4">${h("Floor by tier", "listing floor vs what actually sells")}
+      <div class="grid grid-cols-5 gap-2 text-[11px] uppercase tracking-wider text-gray-500 pb-1">
+        <span>Tier</span><span class="text-center">Listed</span><span class="text-center">Listing floor</span><span class="text-center">Sales floor</span><span class="text-center">Spread</span></div>
+      ${tierRow("Broken", "broken", 5)}
+      ${tierRow("Unbroken (base)", "base", 10)}
+      ${tierRow("Phoenix", "phoenix", 3)}
+      <div class="text-[11px] text-gray-600 mt-3">Sales floor = median of recent sales in that tier (USD at sale). Spread = listing floor vs sales floor — a deep negative spread means the cheapest listing sits far below real trading prices. Backing reference: ${bkUsd ? fmtUsd(bkUsd) : "—"}/NFT. Sales are classified by the NFT's current broken state.</div></div>`;
+
+    // --- Floor history (sales-derived; listing-floor overlay arrives with listing backfill) ---
+    _fpData = buildFpData(salesDesc, (tid) => { const n = byIdT[String(tid)]; return n ? tierOf(n) : null; });
+    const fpBtn = (cls, val, lab) => `<button type="button" class="av-scale-btn ${cls}" data-${cls === "av-fp-tier" ? "tier" : "gran"}="${val}">${lab}</button>`;
+    const fpCard = `<div class="${card} mb-4">
+      <div class="flex items-baseline justify-between mb-3 flex-wrap gap-2">
+        <h3 class="text-cyan-400 font-bold">Floor history <span class="text-xs text-gray-500 font-normal">from actual sales</span></h3>
+        <div class="flex items-center gap-2 text-xs">
+          <span class="inline-flex rounded-md overflow-hidden border border-gray-600">${fpBtn("av-fp-tier", "broken", "Broken")}${fpBtn("av-fp-tier", "base", "Base")}${fpBtn("av-fp-tier", "phoenix", "Phoenix")}</span>
+          <span class="inline-flex rounded-md overflow-hidden border border-gray-600">${fpBtn("av-fp-gran", "weekly", "12W")}${fpBtn("av-fp-gran", "monthly", "12M")}</span>
+        </div></div>
+      <div id="av-fp-chart"></div>
+      <div class="text-[11px] text-gray-600 mt-2">Bar = low→high of the period's sales (USD at sale) · <span class="text-amber-300">━</span> median · flat gray tick = no sales that period. Listing-floor overlay (incl. USD drift of standing listings) arrives once listing history is backfilled/captured cron-side.</div></div>`;
+
     // ----- VOLUME OVER TIME (scale toggle; chart injected by renderVolChart) -----
     const monthChart = `<div class="${card} mb-4">
       <div class="flex items-baseline justify-between mb-3">
@@ -1403,11 +1574,14 @@ function buildAnalyticsHtml(A, S, E) {
 
     // ----- MOST-TRADED NFTS -----
     const byId = {}; if (typeof allNfts !== "undefined" && Array.isArray(allNfts)) allNfts.forEach(n => { byId[String(n.id)] = n; });
-    const ipfs = (u) => u ? u.replace("ipfs://", "https://ipfs.io/ipfs/") : "";
     const traded = (lb.most_traded_tokens || []).slice(0, 12).map(t => {
         const n = byId[String(t.token_id)] || {};
+        // Same image strategy as gallery cards: Cloudflare CDN primary, IPFS gateway fallback.
+        // (Direct ipfs.io requests rate-limit on bursts, which is why tiles randomly failed.)
+        const imgSrc = getImageUrl(t.token_id);
+        const imgFallback = getIpfsFallbackUrl(t.token_id, n.thumbnail_image || n.image);
         return `<div class="flex flex-col items-center text-center">
-          <div class="w-full aspect-square rounded-lg overflow-hidden bg-gray-900 border border-gray-700">${n.image ? `<img src="${ipfs(n.image)}" loading="lazy" class="w-full h-full object-cover">` : ""}</div>
+          <div class="w-full aspect-square rounded-lg overflow-hidden bg-gray-900 border border-gray-700"><img src="${imgSrc}" data-fallback="${imgFallback}" loading="lazy" class="w-full h-full object-cover" onerror="if(this.dataset.fallback && this.src !== this.dataset.fallback) { this.src = this.dataset.fallback; } else { this.onerror=null; this.style.display='none'; }"></div>
           <div class="text-xs text-gray-200 mt-1">#${t.token_id}</div><div class="text-[11px] text-cyan-300">${t.sales}× · ${fmtUsd(t.notional_usd)}</div>
           ${n.rank ? `<div class="text-[10px] text-gray-500">rank ${n.rank}</div>` : ""}</div>`;
     }).join("");
@@ -1435,7 +1609,7 @@ function buildAnalyticsHtml(A, S, E) {
       <span class="text-gray-600">— a per-wallet cost-basis view is coming to the Wallet tab</span></div>`;
 
     const footer = `<div class="text-center text-[11px] text-gray-600 pb-6">Chain-of-truth analytics · built ${A.builtAt ? new Date(A.builtAt).toLocaleString() : ""}</div>`;
-    return hero + tiles + monthChart + leaderboards + mostTraded + row3 + flipLine + footer;
+    return hero + tiles + supplyGovRow + floorCard + fpCard + monthChart + leaderboards + mostTraded + row3 + flipLine + footer;
 }
 
 const updateAddressDropdown = (nftList) => {
