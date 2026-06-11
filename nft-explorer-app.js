@@ -1371,6 +1371,7 @@ function renderFpChart() {
     if (band) band.forEach(v => { if (v != null) highs.push(v.hi); });
     if (lfRef != null) highs.push(lfRef);
     const max = highs.length ? Math.max(...highs) * 1.08 : 1;
+    const edgeLabels = []; // right-edge annotations, de-collided before drawing
     const W = 600, H = 210, padL = 44, padB = 22, padT = 8;
     const x = (i) => padL + i * ((W - padL - 8) / labels.length) + 4;
     const bw = ((W - padL - 8) / labels.length) - 8;
@@ -1421,13 +1422,20 @@ function renderFpChart() {
             pts.forEach((v, i) => { if (v == null) return; const px = x(i) + bw / 2, py = padT + (1 - v / lmax) * (H - padT - padB); lp += (lp ? " L" : "M") + ` ${px} ${py}`; });
             g += `<path d="${lp}" fill="none" stroke="#a78bfa" stroke-width="1" opacity="0.7"><title>LUNA price (own scale, right)</title></path>`;
             const lastV = [...pts].reverse().find(v => v != null);
-            if (lastV != null) lunaLabel = `<text x="${W - 6}" y="${padT + (1 - lastV / lmax) * (H - padT - padB) + 3}" text-anchor="end" font-size="8.5" fill="#a78bfa">LUNA $${lastV < 1 ? lastV.toFixed(3) : lastV.toFixed(2)}</text>`;
+            if (lastV != null) edgeLabels.push({ y: padT + (1 - lastV / lmax) * (H - padT - padB) + 3, text: `LUNA $${lastV < 1 ? lastV.toFixed(3) : lastV.toFixed(2)}`, fill: "#a78bfa" });
         }
     }
-    g += lunaLabel;
+
+    // Right-edge annotations: collected above, pushed apart vertically before drawing
     if (lfRef != null) {
-        g += `<g><title>Today's listing floor: ${fmtUsd(lfRef)}</title><line x1="${padL}" y1="${y(lfRef)}" x2="${W - 4}" y2="${y(lfRef)}" stroke="#34d399" stroke-width="1.2" stroke-dasharray="5,4"/><text x="${W - 6}" y="${y(lfRef) - 4}" text-anchor="end" font-size="9" fill="#34d399">listing floor ${fmtUsd(lfRef)}</text></g>`;
+        g += `<g><title>Today's listing floor: ${fmtUsd(lfRef)}</title><line x1="${padL}" y1="${y(lfRef)}" x2="${W - 4}" y2="${y(lfRef)}" stroke="#34d399" stroke-width="1.2" stroke-dasharray="5,4"/></g>`;
+        edgeLabels.push({ y: y(lfRef) - 4, text: `listing floor ${fmtUsd(lfRef)}`, fill: "#34d399" });
     }
+    // de-collide: sort by y, enforce >=11px spacing, clamp inside plot
+    edgeLabels.sort((a, b) => a.y - b.y);
+    for (let i = 1; i < edgeLabels.length; i++) if (edgeLabels[i].y - edgeLabels[i - 1].y < 11) edgeLabels[i].y = edgeLabels[i - 1].y + 11;
+    for (let i = edgeLabels.length - 2; i >= 0; i--) if (edgeLabels[i + 1].y - edgeLabels[i].y < 11) edgeLabels[i].y = edgeLabels[i + 1].y - 11;
+    edgeLabels.forEach(l => { l.y = Math.max(padT + 8, Math.min(H - padB - 2, l.y)); g += `<text x="${W - 6}" y="${l.y}" text-anchor="end" font-size="9" fill="${l.fill}" style="paint-order:stroke" stroke="rgba(13,17,23,.85)" stroke-width="3">${l.text}</text>`; });
     const tierNote = _fpBrokenAt
         ? `<span class="text-gray-600">Tiers exact via on-chain break timestamps.</span>`
         : `<span class="text-amber-400/90">&#9888; Tiers approximate (current broken state) — break-timestamp feed unavailable.</span>`;
@@ -1808,13 +1816,13 @@ function buildAnalyticsHtml(A, S, E) {
           <button id="av-fp-luna" type="button" class="av-scale-btn active rounded-md border border-gray-600">LUNA</button>
         </div></div>
       <div id="av-fp-chart"></div>
-      <div class="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-gray-500 mt-2">
-        <span><span class="inline-block w-3 h-2.5 rounded-sm align-middle" style="background:rgba(34,211,238,.28);border:1px solid rgba(34,211,238,.5)"></span> sales range (low→high, USD at sale)</span>
-        <span><span class="text-amber-300">━</span> median sale</span>
-        <span><span class="inline-block w-3 h-2.5 rounded-sm align-middle" style="background:rgba(34,211,238,.13);border:1px dashed rgba(34,211,238,.5)"></span> cheapest listing: USD range while listed <span class="text-cyan-400">- - mid</span></span>
-        <span><span class="text-green-400">- -</span> today's listing floor</span>
-        <span><span style="color:#a78bfa">—</span> LUNA price (own scale)</span>
-        <span><span class="text-gray-600">▬</span> no sales that period</span>
+      <div class="flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-gray-300 mt-3">
+        <span class="inline-flex items-center gap-1.5"><span class="inline-block w-4 h-3 rounded-sm" style="background:rgba(34,211,238,.35);border:1px solid rgba(34,211,238,.7)"></span>sales range (USD at sale)</span>
+        <span class="inline-flex items-center gap-1.5"><span class="inline-block w-4 rounded" style="height:3px;background:#fbbf24"></span>median sale</span>
+        <span class="inline-flex items-center gap-1.5"><span class="inline-block w-4 h-3 rounded-sm" style="background:rgba(34,211,238,.15);border:1.5px dashed rgba(34,211,238,.8)"></span>cheapest listing (USD range + <span class="text-cyan-300 font-semibold">--&nbsp;mid</span>)</span>
+        <span class="inline-flex items-center gap-1.5"><span class="inline-block w-4" style="height:0;border-top:2px dashed #34d399"></span>today's listing floor</span>
+        <span class="inline-flex items-center gap-1.5"><span class="inline-block w-4" style="height:0;border-top:2px solid #a78bfa"></span>LUNA price (own scale)</span>
+        <span class="inline-flex items-center gap-1.5"><span class="inline-block w-4 rounded" style="height:3px;background:#4b5563"></span>no sales</span>
       </div></div>`;
 
     // ----- VOLUME OVER TIME (scale toggle; chart injected by renderVolChart) -----
@@ -1860,15 +1868,21 @@ function buildAnalyticsHtml(A, S, E) {
         let pth = "";
         levels.forEach((v, i) => { pth += (i ? " L" : "M") + ` ${px(i).toFixed(1)} ${py(v).toFixed(1)}`; });
         const dots = levels.map((v, i) => i === 0 ? "" : `<circle cx="${px(i).toFixed(1)}" cy="${py(v).toFixed(1)}" r="2.4" fill="transparent"><title>${trendMonths[i - 1]}: ~${v} held (from marketplace trades)</title></circle>`).join("");
-        return `<span class="inline-flex items-center gap-1.5"><svg width="${Wd}" height="${Ht}" style="display:inline-block;vertical-align:middle"><path d="${pth}" fill="none" stroke="${col}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/>${dots}</svg><span class="text-[10px]" style="color:${col}">${yr > 0 ? "+" : ""}${yr}/12m</span></span>`;
+        return `<span class="inline-flex flex-col items-center"><svg width="${Wd}" height="${Ht}" style="display:block"><path d="${pth}" fill="none" stroke="${col}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/>${dots}</svg><span class="text-[10px] leading-none mt-0.5" style="color:${col}">${yr > 0 ? "+" : ""}${yr}/12m</span></span>`;
     };
     const clean = (arr) => (arr || []).filter(x => !(typeof isSystemAddress === "function" && isSystemAddress(x.address))).slice(0, 10);
-    const lbRow = (x, i) => `<div class="py-2 ${i ? "border-t border-gray-700/50" : ""}">
-        <div class="flex items-center gap-3"><span class="text-gray-500 text-xs w-5 text-right">${i + 1}</span>
-          <span class="flex-1 truncate text-sm text-gray-200">${aLabel(x.address)}</span>
-          <span class="text-xs text-gray-400">${fmtNum(x.count)}×</span>
-          <span class="text-sm font-semibold text-cyan-300 w-16 text-right">${fmtUsd(x.notional_usd)}</span></div>
-        <div class="flex items-center justify-between pl-8 mt-0.5"><span class="text-[11px]">${holdingsBlurb(hold[x.address])}</span>${trendSvg(x.address)}</div></div>`;
+    // Layout: [rank+name+behaviour | trend column (desktop only, sits in the blank middle) | count+$]
+    const lbRow = (x, i) => `<div class="flex items-center gap-3 py-2 ${i ? "border-t border-gray-700/50" : ""}">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2"><span class="text-gray-500 text-xs w-5 text-right flex-shrink-0">${i + 1}</span>
+            <span class="truncate text-sm text-gray-200">${aLabel(x.address)}</span></div>
+          <div class="pl-7 text-[11px] mt-0.5">${holdingsBlurb(hold[x.address])}</div>
+        </div>
+        <div class="hidden md:flex items-center justify-center flex-shrink-0" style="width:170px">${trendSvg(x.address)}</div>
+        <div class="text-right flex-shrink-0">
+          <div class="text-sm font-semibold text-cyan-300">${fmtUsd(x.notional_usd)}</div>
+          <div class="text-xs text-gray-400">${fmtNum(x.count)}×</div>
+        </div></div>`;
     const leaderboards = `<div class="grid md:grid-cols-2 gap-3 mb-4">
       <div class="${card}">${h("Top buyers", "spend · what they did with them")}${clean(lb.top_buyers).map(lbRow).join("")}</div>
       <div class="${card}">${h("Top sellers", "received · what they kept")}${clean(lb.top_sellers).map(lbRow).join("")}</div></div>`;
