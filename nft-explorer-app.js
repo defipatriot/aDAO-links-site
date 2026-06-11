@@ -1240,7 +1240,67 @@ let _fpTier = "base";        // broken | base | phoenix
 let _fpGran = "monthly";     // monthly (12M) | weekly (12W)
 let _fpListingFloor = {};    // current listing floor per tier (dashed reference line)
 let _fpBrokenAt = null;      // token_id -> broken_at ISO (exact sale-time tiers)
-let _fpBand = null;          // historical listing-floor per period {monthly:{key:usd}, weekly:{key:usd}}
+let _fpBand = null;          // historical listing-floor per period: {mid, lo, hi} per slot
+let _fpLuna = null;          // daily LUNA USD map for the price overlay
+let _fpShowLuna = true;      // LUNA overlay toggle
+let _avX = {};               // live numbers stashed for the metric-explainer modal
+
+// --- Metric explainers: click any big-ticket number for the full methodology ---
+function showMetricExplainer(key) {
+    const d = _avX || {};
+    const F = fmtUsdFull, f = fmtUsd, N = fmtNum;
+    const C = {
+        market_cap: ["Market cap — how we compute it", `
+          <p>Collections are usually quoted as <em>floor × supply</em> — one price for every NFT. That overstates a collection like this one, where three very different assets share the supply: <b>Broken</b> (no backing claim), <b>Unbroken base</b>, and <b>Phoenix</b> (the 40-grade apex trait).</p>
+          <p>So we price each tier separately with its <b>mark price</b> (see Mark) and sum:</p>
+          <p class="font-mono text-xs bg-gray-900/70 rounded p-2">Market cap = Σ (tier mark × tier circulating supply)<br>
+          Broken: ${f(d.tierMark?.broken)} × ${N(d.tierCounts?.circ.broken)} &nbsp;·&nbsp; Base: ${f(d.tierMark?.base)} × ${N(d.tierCounts?.circ.base)} &nbsp;·&nbsp; Phoenix: ${f(d.tierMark?.phoenix)} × ${N(d.tierCounts?.circ.phoenix)}<br>= <b>${F(d.marketCap)}</b></p>
+          <p><b>Circulating</b> = minted NFTs only (${N((d.tierCounts?.circ.broken||0)+(d.tierCounts?.circ.base||0)+(d.tierCounts?.circ.phoenix||0))}). The <b>FDV</b> subline applies the same marks to all 10,000 incl. the unminted reserve: ${F(d.fdv)}.</p>
+          <p class="text-gray-500">Caveat: marks come from a thin market — a handful of sales and asks move them. This is an estimate, not a quote.</p>`],
+        mark: ["Mark price — how we compute it", `
+          <p>Two honest prices exist for an NFT tier and they usually disagree: the <b>sales floor</b> (median of recent actual sales, USD at sale time) and the <b>listing floor</b> (cheapest current ask). The last trade can be stale; the ask can be wishful.</p>
+          <p>The mark takes the midpoint, like a market-maker quoting mid between bid history and ask:</p>
+          <p class="font-mono text-xs bg-gray-900/70 rounded p-2">mark = (sales floor + listing floor) / 2<br>
+          Base: (${f(d.tierStats?.base.sf)} + ${f(d.tierStats?.base.lf)}) / 2 = <b>${f(d.tierMark?.base)}</b><br>
+          Broken: <b>${f(d.tierMark?.broken)}</b> · Phoenix: <b>${f(d.tierMark?.phoenix)}</b></p>
+          <p>If one side is missing (e.g. no live ask in a tier), the mark falls back to the side that exists. Tier membership for sales uses on-chain <b>break timestamps</b>, so a sale counts in the tier the NFT was in when it sold.</p>`],
+        backing_nft: ["Backing per NFT — how it works", `
+          <p>Every <b>unbroken</b> NFT is a claim on the DAO's ampLUNA vault. Breaking an NFT forfeits that claim forever (the NFT keeps its art and voting power) — which is why backing concentrates into fewer NFTs as others break:</p>
+          <p class="font-mono text-xs bg-gray-900/70 rounded p-2">backing/NFT = vault ampLUNA ÷ unbroken count<br>= ${N(d.bk?.ampluna_balance)} ÷ ${N(d.bk?.unbroken_count)} = <b>${(+d.bk?.per_nft_ampluna||0).toFixed(2)} ampLUNA</b> (${f(d.bk?.per_nft_value_usd)})</p>
+          <p>The ampLUNA amount is the durable number; its USD value moves with LUNA. ampLUNA itself is Eris liquid-staked LUNA and appreciates vs LUNA via the staking exchange rate (currently ~${(+d.bk?.ratio||0) ? (+d.bk.ratio).toFixed(3) : "2.1+"}× LUNA).</p>`],
+        total_backing: ["Total backing — how we compute it", `
+          <p>The DAO vault's ampLUNA balance, read live from chain, valued at the live ampLUNA price (LUNA spot × Eris exchange rate):</p>
+          <p class="font-mono text-xs bg-gray-900/70 rounded p-2">${N(d.bk?.ampluna_balance)} ampLUNA × price = <b>${F(d.bk?.treasury_value_usd)}</b></p>
+          <p>This pool backs only the ${N(d.bk?.unbroken_count)} unbroken NFTs — broken NFTs forfeited their share permanently, which raised everyone else's.</p>`],
+        volume: ["All-time volume — USD at time of sale", `
+          <p>Every sale is swept from chain history across BBL, Atrium and Boost (${N(d.vol?.sales_count)} sales). The hard part is the dollar value: a 1,000-LUNA sale in Jan-2024 and one today are very different dollars.</p>
+          <p>So each sale is valued at <b>the token's USD price on the day it happened</b>, using daily price series (LUNA and bLUNA; bLUNA before its series begins is derived from LUNA × the historical bLUNA/LUNA ratio curve; SOLID is the $1 stablecoin):</p>
+          <p class="font-mono text-xs bg-gray-900/70 rounded p-2">sale USD = token amount × token's USD price on sale date<br>Σ all sales = <b>${F(d.vol?.usd_at_sale)}</b></p>
+          <p>That's why this number can't be reproduced by multiplying today's prices — it's a true historical record, not a revaluation.</p>`],
+        nakamoto: ["Nakamoto coefficient — what it means", `
+          <p>The minimum number of independent wallets that together control <b>more than 50%</b> of governance power. Named after the analogous measure for blockchain validators. Lower = more concentrated = fewer actors could decide any vote.</p>
+          <p>Here, governance power = DAODAO-staked NFTs (1 staked NFT = 1 vote; broken NFTs keep their vote). Sorting the ${N(d.stakerCount)} stakers by voting power and summing from the top:</p>
+          <p class="font-mono text-xs bg-gray-900/70 rounded p-2">top ${d.nakamoto} wallets &gt; 50% of staked VP → <b>Nakamoto = ${d.nakamoto}</b><br>top 1: ${(d.top1||0).toFixed(1)}% · top 5: ${(d.top5||0).toFixed(1)}% · top 10: ${(d.top10||0).toFixed(1)}%</p>
+          <p>Reading the scale: 1–3 highly concentrated, 4–7 concentrated, 8–15 moderately distributed, 16+ distributed. For context, major proof-of-stake chains often sit in the 2–7 range — small DAOs rarely score high, but knowing the number honestly is what matters for voters deciding whether their vote counts.</p>`],
+        supply: ["Supply — reading the collection like a token", `
+          <p><b>Max supply</b> 10,000 is fixed at mint. <b>Circulating</b> counts minted NFTs only — the ${N(d.sup?.unminted)} unminted sit in the DAO's reserve wallet like untapped max supply.</p>
+          <p>Within circulating: <b>staked</b> (DAODAO + Enterprise — locked but user-owned), <b>pending claim</b> (in the unstake window), <b>DAO broken</b> (treasury-held governance NFTs), and <b>free float</b> — the only part that can actually trade, of which a slice is listed right now.</p>
+          <p>Float ÷ circulating is the liquidity reality check: a small float means thin books and jumpy floors.</p>`]
+    };
+    const item = C[key]; if (!item) return;
+    let m = document.getElementById("av-explain-modal");
+    if (!m) {
+        m = document.createElement("div");
+        m.id = "av-explain-modal";
+        m.style.cssText = "position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.65);padding:1rem";
+        m.addEventListener("click", (e) => { if (e.target === m) m.style.display = "none"; });
+        document.body.appendChild(m);
+    }
+    m.innerHTML = `<div class="bg-gray-800 border border-gray-600 rounded-xl max-w-lg w-full p-5 text-sm text-gray-300 space-y-3" style="max-height:85vh;overflow-y:auto">
+      <div class="flex items-start justify-between"><h3 class="text-cyan-400 font-bold text-base pr-4">${item[0]}</h3>
+      <button class="text-gray-400 hover:text-white text-xl leading-none" onclick="document.getElementById('av-explain-modal').style.display='none'">&times;</button></div>${item[1]}</div>`;
+    m.style.display = "flex";
+}
 let _fpOffset = 0;           // paging: 0 = latest 12 periods, 1 = the 12 before, ...
 
 // ---- formatters ----
@@ -1308,7 +1368,7 @@ function renderFpChart() {
     const band = bandAll ? bandAll.slice(start, end) : null;
     const lfRef = _fpOffset === 0 ? (_fpListingFloor[_fpTier] ?? null) : null; // today's floor only on the live window
     const highs = slots.filter(Boolean).map(s => s.high);
-    if (band) band.forEach(v => { if (v != null) highs.push(v); });
+    if (band) band.forEach(v => { if (v != null) highs.push(v.hi); });
     if (lfRef != null) highs.push(lfRef);
     const max = highs.length ? Math.max(...highs) * 1.08 : 1;
     const W = 600, H = 210, padL = 44, padB = 22, padT = 8;
@@ -1331,17 +1391,40 @@ function renderFpChart() {
           <line x1="${x(i)}" y1="${yM}" x2="${x(i) + bw}" y2="${yM}" stroke="#fbbf24" stroke-width="2"/></g>`;
     });
     if (band) {
-        // historical listing floor: cyan dashed step-line per period
+        // historical listing floor: translucent range area (USD swing of the standing floor while
+        // the token amount stayed fixed) + dashed mid step-line
+        band.forEach((v, i) => {
+            if (v == null) return;
+            const yH = y(v.hi), yL = y(v.lo);
+            g += `<rect x="${x(i)}" y="${yH}" width="${bw}" height="${Math.max(1.5, yL - yH)}" fill="rgba(34,211,238,.13)" stroke="rgba(34,211,238,.25)" stroke-width="0.4" rx="1"><title>${labels[i]}: cheapest listing ${fmtUsd(v.mid)} mid · ${fmtUsd(v.lo)}–${fmtUsd(v.hi)} USD range while listed (token price moved, ask didn't)</title></rect>`;
+        });
         let path = "", lastY = null;
         band.forEach((v, i) => {
             if (v == null) { lastY = null; return; }
-            const yx = y(v), x0 = x(i), x1 = x(i) + bw;
+            const yx = y(v.mid), x0 = x(i), x1 = x(i) + bw;
             path += (lastY == null ? `M ${x0} ${yx}` : ` L ${x0} ${lastY} L ${x0} ${yx}`) + ` L ${x1} ${yx}`;
             lastY = yx;
         });
-        if (path) g += `<path d="${path}" fill="none" stroke="#22d3ee" stroke-width="1.2" stroke-dasharray="4,3" opacity="0.85"/>`;
-        band.forEach((v, i) => { if (v != null) g += `<rect x="${x(i)}" y="${y(v) - 3}" width="${bw}" height="6" fill="transparent"><title>${labels[i]}: listing floor ${fmtUsd(v)} (period-midpoint token prices)</title></rect>`; });
+        if (path) g += `<path d="${path}" fill="none" stroke="#22d3ee" stroke-width="1.2" stroke-dasharray="4,3" opacity="0.9"/>`;
     }
+    // LUNA price overlay (own scale, right axis) — read floor moves against the token's USD move
+    let lunaLabel = "";
+    if (_fpShowLuna && _fpLuna) {
+        const keysWin = d.keys.slice(start, end);
+        const lpKeys = Object.keys(_fpLuna).sort();
+        const near = (ds) => { let b = null; for (const k of lpKeys) { if (k <= ds) b = k; else break; } return b ? _fpLuna[b] : null; };
+        const pts = keysWin.map(k => near(_fpGran === "monthly" ? k + "-15" : k));
+        const vals = pts.filter(v => v != null);
+        if (vals.length) {
+            const lmax = Math.max(...vals) * 1.05;
+            let lp = "";
+            pts.forEach((v, i) => { if (v == null) return; const px = x(i) + bw / 2, py = padT + (1 - v / lmax) * (H - padT - padB); lp += (lp ? " L" : "M") + ` ${px} ${py}`; });
+            g += `<path d="${lp}" fill="none" stroke="#a78bfa" stroke-width="1" opacity="0.7"><title>LUNA price (own scale, right)</title></path>`;
+            const lastV = [...pts].reverse().find(v => v != null);
+            if (lastV != null) lunaLabel = `<text x="${W - 6}" y="${padT + (1 - lastV / lmax) * (H - padT - padB) + 3}" text-anchor="end" font-size="8.5" fill="#a78bfa">LUNA $${lastV < 1 ? lastV.toFixed(3) : lastV.toFixed(2)}</text>`;
+        }
+    }
+    g += lunaLabel;
     if (lfRef != null) {
         g += `<g><title>Today's listing floor: ${fmtUsd(lfRef)}</title><line x1="${padL}" y1="${y(lfRef)}" x2="${W - 4}" y2="${y(lfRef)}" stroke="#34d399" stroke-width="1.2" stroke-dasharray="5,4"/><text x="${W - 6}" y="${y(lfRef) - 4}" text-anchor="end" font-size="9" fill="#34d399">listing floor ${fmtUsd(lfRef)}</text></g>`;
     }
@@ -1449,12 +1532,16 @@ function buildListingFloorBand(listingRecords, lunaOracle, blunaOracle) {
                 const s1 = seg.to_ts ? Date.parse(seg.to_ts) : Date.now();
                 bounds.forEach(([ps, pe], i) => {
                     if (s1 <= ps || s0 >= pe) return; // no overlap
-                    const mid = new Date((Math.max(s0, ps) + Math.min(s1, pe)) / 2).toISOString().slice(0, 10);
-                    const usd = priceUsd(seg.denom, seg.price, mid);
-                    if (usd == null) return;
-                    const t = tierAt(r.token_id, (Math.max(s0, ps) + Math.min(s1, pe)) / 2);
+                    const o0 = Math.max(s0, ps), o1 = Math.min(s1, pe);
+                    const day = (t) => new Date(t).toISOString().slice(0, 10);
+                    // USD value sampled at overlap start / mid / end: same token amount, moving token price
+                    const samples = [priceUsd(seg.denom, seg.price, day(o0)), priceUsd(seg.denom, seg.price, day((o0 + o1) / 2)), priceUsd(seg.denom, seg.price, day(o1 - 1))].filter(v => v != null);
+                    if (!samples.length) return;
+                    const t = tierAt(r.token_id, (o0 + o1) / 2);
                     if (!t) return;
-                    if (floors[t][i] == null || usd < floors[t][i]) floors[t][i] = usd;
+                    const mid = samples[Math.floor(samples.length / 2)] ?? samples[0];
+                    const cur = floors[t][i];
+                    if (cur == null || mid < cur.mid) floors[t][i] = { mid, lo: Math.min(...samples), hi: Math.max(...samples) };
                 });
             });
         });
@@ -1513,6 +1600,7 @@ async function renderAnalytics() {
             const lo = (our && our.ok) ? await our.json() : null;
             const bo = (obr && obr.ok) ? await obr.json() : null;
             _fpBand = (lj && lj.records && lo && bo) ? buildListingFloorBand(lj.records, lo, bo) : null;
+            _fpLuna = lo ? (lo.prices || lo.daily || lo.data || null) : null;
         } catch (e) { _fpBand = null; }
     } catch (e) {
         root.innerHTML = `<div class="text-center py-16"><i class="fas fa-triangle-exclamation text-amber-400 text-2xl"></i>
@@ -1529,8 +1617,11 @@ async function renderAnalytics() {
     const lin = document.getElementById("av-scale-lin"), log = document.getElementById("av-scale-log");
     if (lin) lin.onclick = () => { _avScale = "linear"; renderVolChart(); };
     if (log) log.onclick = () => { _avScale = "log"; renderVolChart(); };
+    root.querySelectorAll("[data-explain]").forEach(el => el.addEventListener("click", () => showMetricExplainer(el.dataset.explain)));
     document.querySelectorAll(".av-fp-tier").forEach(b => b.onclick = () => { _fpTier = b.dataset.tier; renderFpChart(); });
     document.querySelectorAll(".av-fp-gran").forEach(b => b.onclick = () => { _fpGran = b.dataset.gran; renderFpChart(); });
+    const lunaBtn = document.getElementById("av-fp-luna");
+    if (lunaBtn) lunaBtn.onclick = () => { _fpShowLuna = !_fpShowLuna; lunaBtn.classList.toggle("active", _fpShowLuna); renderFpChart(); };
 }
 
 function buildAnalyticsHtml(A, S, E) {
@@ -1558,10 +1649,10 @@ function buildAnalyticsHtml(A, S, E) {
     const bk = (S && S.backing) || {}; const roy = A.royalties || {};
     let askUsd = 0, listed = 0;
     if (S && S.marketplaces) for (const mk of Object.values(S.marketplaces)) { listed += mk.count || 0; for (const t of Object.values(mk.by_token || {})) askUsd += t.total_usd || 0; }
-    const tile = (label, big, sub) => `<div class="${card}"><div class="text-xs uppercase tracking-wider text-gray-400">${label}</div><div class="text-2xl font-bold text-white mt-1">${big}</div><div class="text-xs text-gray-500 mt-0.5">${sub}</div></div>`;
+    const tile = (label, big, sub, xkey) => `<div class="${card} ${xkey ? "cursor-pointer" : ""}" ${xkey ? `data-explain="${xkey}" title="Click: how this is computed"` : ""}><div class="text-xs uppercase tracking-wider text-gray-400">${label}${xkey ? ' <span class="text-gray-600">&#9432;</span>' : ""}</div><div class="text-2xl font-bold text-white mt-1">${big}</div><div class="text-xs text-gray-500 mt-0.5">${sub}</div></div>`;
     const tiles = `<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-      ${tile("Backing / NFT", `${(+bk.per_nft_ampluna || 0).toFixed(2)} <span class='text-base text-cyan-300'>ampLUNA</span>`, `${fmtUsd(bk.per_nft_value_usd)} · ${fmtNum(bk.unbroken_count)} unbroken`)}
-      ${tile("Total backing", fmtUsdFull(bk.treasury_value_usd), `${fmtNum(bk.ampluna_balance)} ampLUNA in vault`)}
+      ${tile("Backing / NFT", `${(+bk.per_nft_ampluna || 0).toFixed(2)} <span class='text-base text-cyan-300'>ampLUNA</span>`, `${fmtUsd(bk.per_nft_value_usd)} · ${fmtNum(bk.unbroken_count)} unbroken`, "backing_nft")}
+      ${tile("Total backing", fmtUsdFull(bk.treasury_value_usd), `${fmtNum(bk.ampluna_balance)} ampLUNA in vault`, "total_backing")}
       ${tile("Royalties → DAO", fmtUsd(roy.to_dao_usd_today), `${fmtUsd(roy.to_dao_usd_when_earned)} if sold when received`)}
       ${tile("Listed now", fmtNum(listed), `${fmtUsd(askUsd)} ask-side liquidity`)}
     </div>`;
@@ -1589,7 +1680,7 @@ function buildAnalyticsHtml(A, S, E) {
           <div class="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-[11px] text-gray-400">${segs.map(x => `<span><span style="color:${x.c}">●</span> ${x.l} ${fmtNum(x.v)}</span>`).join("")}</div>`;
     };
     const srow = (l, v, sub) => `<div class="flex items-baseline justify-between py-1"><span class="text-sm text-gray-400">${l}</span><span class="text-sm font-semibold text-gray-100">${v}${sub ? ` <span class="text-xs text-gray-500 font-normal">${sub}</span>` : ""}</span></div>`;
-    const supplyCard = `<div class="${card}">${h("Supply", "the collection, read like a token")}
+    const supplyCard = `<div class="${card} cursor-pointer" data-explain="supply" title="Click: definitions">${h("Supply &#9432;", "the collection, read like a token")}
         ${srow("Max supply", fmtNum(nfts.length || 10000))}
         ${srow("Circulating (minted)", fmtNum(sup.minted), `${(sup.minted / (nfts.length || 10000) * 100).toFixed(1)}%`)}
         ${srow("Staked / DAO-controlled", fmtNum(controlled), `${(controlled / Math.max(sup.minted, 1) * 100).toFixed(1)}% of circulating`)}
@@ -1611,9 +1702,10 @@ function buildAnalyticsHtml(A, S, E) {
         for (const x of stakers) { cum += x.voting_power_pct; nakamoto++; if (cum > 50) break; }
         const shareOf = (k) => stakers.slice(0, k).reduce((s, x) => s + x.voting_power_pct, 0);
         const top1 = shareOf(1), top5 = shareOf(5), top10 = shareOf(10);
+        Object.assign(_avX, { nakamoto, top1, top5, top10, stakerCount: stakers.length });
         govCard = `<div class="${card}">${h("Governance concentration", "DAODAO-staked voting power")}
           <div class="flex items-end gap-6 mb-3">
-            <div><div class="text-xs uppercase tracking-wider text-gray-400">Nakamoto coefficient</div>
+            <div data-explain="nakamoto" class="cursor-pointer" title="Click: what this means"><div class="text-xs uppercase tracking-wider text-gray-400">Nakamoto coefficient <span class="text-gray-600">&#9432;</span></div>
               <div class="text-4xl font-extrabold text-white leading-none mt-1">${nakamoto} <span class="text-sm font-semibold ${nakamoto <= 3 ? "text-red-400" : nakamoto <= 7 ? "text-amber-400" : nakamoto <= 15 ? "text-lime-400" : "text-green-400"}">${nakamoto <= 3 ? "highly concentrated" : nakamoto <= 7 ? "concentrated" : nakamoto <= 15 ? "moderately distributed" : "distributed"}</span></div>
               <div class="text-[11px] text-gray-500 mt-1">wallets to reach &gt;50% of staked VP</div>
               <div class="mt-2" style="max-width:230px">
@@ -1678,16 +1770,17 @@ function buildAnalyticsHtml(A, S, E) {
     nfts.forEach(n => { const t = tierOf(n); tierCounts.all[t]++; if (!n.unminted) tierCounts.circ[t]++; });
     const mcapOf = (counts) => ["broken", "base", "phoenix"].reduce((s, t) => s + (tierMark[t] || 0) * counts[t], 0);
     const marketCap = mcapOf(tierCounts.circ), fdv = mcapOf(tierCounts.all);
+    _avX = { marketCap, fdv, tierMark, tierStats, tierCounts, bk, vol, sup };
 
     hero = `<div class="${card} mb-4" style="background:linear-gradient(135deg,rgba(34,211,238,.08),rgba(17,24,39,.4))">
         <div class="flex flex-wrap items-end gap-x-10 gap-y-3">
-          <div><div class="text-xs uppercase tracking-wider text-gray-400">Market cap</div>
+          <div data-explain="market_cap" class="cursor-pointer" title="Click: how this is computed"><div class="text-xs uppercase tracking-wider text-gray-400">Market cap <span class="text-gray-600">&#9432;</span></div>
             <div class="text-4xl font-extrabold text-white leading-none mt-1">${marketCap ? fmtUsdFull(marketCap) : "—"}</div>
             <div class="text-xs text-gray-500 mt-1">circulating (minted) · FDV ${fdv ? fmtUsdFull(fdv) : "—"} all 10,000</div></div>
-          <div><div class="text-xs uppercase tracking-wider text-gray-400">Mark price (base)</div>
+          <div data-explain="mark" class="cursor-pointer" title="Click: how this is computed"><div class="text-xs uppercase tracking-wider text-gray-400">Mark price (base) <span class="text-gray-600">&#9432;</span></div>
             <div class="text-2xl font-bold text-gray-100 mt-1">${tierMark.base ? fmtUsd(tierMark.base) : "—"}</div>
             <div class="text-[11px] text-gray-500 mt-0.5">mid of sales floor &amp; ask</div></div>
-          <div><div class="text-xs uppercase tracking-wider text-gray-400">All-time volume</div>
+          <div data-explain="volume" class="cursor-pointer" title="Click: how this is computed"><div class="text-xs uppercase tracking-wider text-gray-400">All-time volume <span class="text-gray-600">&#9432;</span></div>
             <div class="text-2xl font-bold text-cyan-300 mt-1">${fmtUsdFull(vol.usd_at_sale)}</div>
             <div class="text-[11px] text-gray-500 mt-0.5">${fmtNum(vol.sales_count)} sales · USD at sale</div></div>
           ${hiStat}
@@ -1712,9 +1805,17 @@ function buildAnalyticsHtml(A, S, E) {
         <div class="flex items-center gap-2 text-xs">
           <span class="inline-flex rounded-md overflow-hidden border border-gray-600">${fpBtn("av-fp-tier", "broken", "Broken")}${fpBtn("av-fp-tier", "base", "Base")}${fpBtn("av-fp-tier", "phoenix", "Phoenix")}</span>
           <span class="inline-flex rounded-md overflow-hidden border border-gray-600">${fpBtn("av-fp-gran", "weekly", "12W")}${fpBtn("av-fp-gran", "monthly", "12M")}</span>
+          <button id="av-fp-luna" type="button" class="av-scale-btn active rounded-md border border-gray-600">LUNA</button>
         </div></div>
       <div id="av-fp-chart"></div>
-      <div class="text-[11px] text-gray-600 mt-2">Bar = low→high of the period's sales (USD at sale) · <span class="text-amber-300">━</span> median · flat gray tick = no sales that period. Listing-floor overlay (incl. USD drift of standing listings) arrives once listing history is backfilled/captured cron-side.</div></div>`;
+      <div class="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-gray-500 mt-2">
+        <span><span class="inline-block w-3 h-2.5 rounded-sm align-middle" style="background:rgba(34,211,238,.28);border:1px solid rgba(34,211,238,.5)"></span> sales range (low→high, USD at sale)</span>
+        <span><span class="text-amber-300">━</span> median sale</span>
+        <span><span class="inline-block w-3 h-2.5 rounded-sm align-middle" style="background:rgba(34,211,238,.13);border:1px dashed rgba(34,211,238,.5)"></span> cheapest listing: USD range while listed <span class="text-cyan-400">- - mid</span></span>
+        <span><span class="text-green-400">- -</span> today's listing floor</span>
+        <span><span style="color:#a78bfa">—</span> LUNA price (own scale)</span>
+        <span><span class="text-gray-600">▬</span> no sales that period</span>
+      </div></div>`;
 
     // ----- VOLUME OVER TIME (scale toggle; chart injected by renderVolChart) -----
     const monthChart = `<div class="${card} mb-4">
@@ -1745,14 +1846,21 @@ function buildAnalyticsHtml(A, S, E) {
     const trendSvg = (addr) => {
         const net = netByAddr[addr]; if (!net) return "";
         const yr = net.reduce((a, b) => a + b, 0);
+        // Reconstruct monthly holdings level from current holdings minus later net trades
+        // (marketplace trades only — stakes/transfers don't move this line).
+        const heldNow = (hold[addr] && hold[addr].held) || 0;
+        const levels = new Array(13).fill(0); levels[12] = heldNow;
+        for (let i = 11; i >= 0; i--) levels[i] = levels[i + 1] - net[i];
         const col = yr >= 3 ? "#34d399" : yr <= -3 ? "#f87171" : "#f59e0b";
-        const bw = 5, gap = 1.5, H = 18, mid = H / 2, cap = 5;
-        const bars = net.map((v, i) => {
-            const h = Math.min(Math.abs(v), cap) / cap * (mid - 1);
-            if (!v) return `<rect x="${i * (bw + gap)}" y="${mid - 0.5}" width="${bw}" height="1" fill="#374151"/>`;
-            return `<rect x="${i * (bw + gap)}" y="${v > 0 ? mid - h : mid}" width="${bw}" height="${h}" rx="0.5" fill="${col}"><title>${trendMonths[i]}: ${v > 0 ? "+" : ""}${v} NFTs (trades)</title></rect>`;
-        }).join("");
-        return `<span class="inline-flex items-center gap-1.5"><svg width="${12 * (bw + gap)}" height="${H}" style="display:inline-block;vertical-align:middle">${bars}</svg><span class="text-[10px]" style="color:${col}">${yr > 0 ? "+" : ""}${yr}/12m</span></span>`;
+        const Wd = 150, Ht = 26, pad = 2;
+        const lo = Math.min(...levels), hiV = Math.max(...levels);
+        const span = Math.max(hiV - lo, 1);
+        const px = (i) => pad + i * ((Wd - pad * 2) / 12);
+        const py = (v) => pad + (1 - (v - lo) / span) * (Ht - pad * 2);
+        let pth = "";
+        levels.forEach((v, i) => { pth += (i ? " L" : "M") + ` ${px(i).toFixed(1)} ${py(v).toFixed(1)}`; });
+        const dots = levels.map((v, i) => i === 0 ? "" : `<circle cx="${px(i).toFixed(1)}" cy="${py(v).toFixed(1)}" r="2.4" fill="transparent"><title>${trendMonths[i - 1]}: ~${v} held (from marketplace trades)</title></circle>`).join("");
+        return `<span class="inline-flex items-center gap-1.5"><svg width="${Wd}" height="${Ht}" style="display:inline-block;vertical-align:middle"><path d="${pth}" fill="none" stroke="${col}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" opacity="0.9"/>${dots}</svg><span class="text-[10px]" style="color:${col}">${yr > 0 ? "+" : ""}${yr}/12m</span></span>`;
     };
     const clean = (arr) => (arr || []).filter(x => !(typeof isSystemAddress === "function" && isSystemAddress(x.address))).slice(0, 10);
     const lbRow = (x, i) => `<div class="py-2 ${i ? "border-t border-gray-700/50" : ""}">
