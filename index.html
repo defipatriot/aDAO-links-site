@@ -1411,6 +1411,7 @@
              </div>
         </div>
 
+
         <div id="dao-stats" class="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-6 mb-6 sm:mb-8">
             <div id="daodao-staked-card" class="stat-card p-6 rounded-xl text-center cursor-pointer group">
                 <div>
@@ -1573,6 +1574,26 @@
 
         <!-- NFT Marketplace Section -->
         <div id="nft-marketplace-section" class="mt-8">
+
+            <!-- NFT Collection Analytics: live-preview link banner -->
+            <a href="nft-explorer-index.html?view=analytics" class="stat-card rounded-xl mb-5 px-4 sm:px-6 py-3.5 flex flex-col lg:flex-row lg:items-center gap-3 lg:gap-6 group transition-all hover:border-cyan-500/60" style="border:1px solid rgba(34,211,238,.25);background:linear-gradient(90deg,rgba(34,211,238,.07),rgba(17,24,39,.3))">
+                <div class="flex items-center gap-3 min-w-0 flex-shrink-0">
+                    <i class="fas fa-chart-line text-cyan-400 text-lg"></i>
+                    <div class="min-w-0">
+                        <div class="text-white font-bold text-sm sm:text-base whitespace-nowrap">NFT Collection Analytics</div>
+                        <div class="text-gray-500 text-xs">market cap · floor history · trader leaderboards · governance</div>
+                    </div>
+                </div>
+                <div class="flex flex-wrap items-center gap-x-6 gap-y-1.5 flex-1 lg:justify-center">
+                    <div class="text-center"><div class="text-[10px] uppercase tracking-wider text-gray-500">All-time volume</div><div id="nftan-volume" class="text-sm font-bold text-cyan-300">—</div></div>
+                    <div class="text-center"><div class="text-[10px] uppercase tracking-wider text-gray-500">Sales</div><div id="nftan-sales" class="text-sm font-bold text-gray-200">—</div></div>
+                    <div class="text-center"><div class="text-[10px] uppercase tracking-wider text-gray-500">Backing / NFT</div><div id="nftan-backing" class="text-sm font-bold text-gray-200">—</div></div>
+                    <div class="text-center"><div class="text-[10px] uppercase tracking-wider text-gray-500">Listed now</div><div id="nftan-listed" class="text-sm font-bold text-gray-200">—</div></div>
+                    <div class="text-center"><div class="text-[10px] uppercase tracking-wider text-gray-500">Last sale</div><div id="nftan-lastsale" class="text-sm font-bold text-amber-300">—</div></div>
+                </div>
+                <span class="text-cyan-400 text-sm font-semibold whitespace-nowrap flex-shrink-0 self-end lg:self-auto group-hover:translate-x-0.5 transition-transform">Open analytics <i class="fas fa-arrow-right text-xs ml-1"></i></span>
+            </a>
+
             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
                 <h2 class="text-xl font-bold text-white flex items-center gap-3">
                     <i class="fas fa-store text-cyan-400"></i>
@@ -3430,6 +3451,28 @@
         document.addEventListener('DOMContentLoaded', () => {
             const pageLoadStart = performance.now();
             console.log('DEBUG: DOMContentLoaded - starting page initialization...');
+
+            // --- NFT Analytics banner: live preview stats (non-blocking; "—" on any failure) ---
+            (async function populateNftAnalyticsBanner() {
+                try {
+                    const V2 = 'https://raw.githubusercontent.com/defipatriot/nft-inventory-data_2026/main/data/v2/';
+                    const [aR, sR] = await Promise.all([fetch(V2 + 'nft-analytics.json'), fetch(V2 + 'summary.json')]);
+                    if (!aR.ok || !sR.ok) return;
+                    const a = await aR.json(), s = await sR.json();
+                    const set = (id, v) => { const el = document.getElementById(id); if (el && v != null) el.textContent = v; };
+                    const usd = (n) => '$' + Math.round(n).toLocaleString('en-US');
+                    if (a.volume?.usd_at_sale) set('nftan-volume', usd(a.volume.usd_at_sale));
+                    if (a.volume?.sales_count) set('nftan-sales', a.volume.sales_count.toLocaleString('en-US'));
+                    if (s.backing?.per_nft_value_usd) set('nftan-backing', '$' + (+s.backing.per_nft_value_usd).toFixed(2));
+                    const mk = s.marketplaces || {};
+                    const listed = ['bbl', 'atrium', 'boost'].reduce((t, k) => t + (mk[k]?.count || 0), 0);
+                    if (listed) set('nftan-listed', listed + ' NFTs');
+                    if (a.last_sale?.notional_usd != null) {
+                        const d = (a.last_sale.date || '').slice(5, 10).replace('-', '/');
+                        set('nftan-lastsale', `#${a.last_sale.token_id} · ${usd(a.last_sale.notional_usd)}${d ? ' · ' + d : ''}`);
+                    }
+                } catch (e) { /* teaser strip stays at em-dashes */ }
+            })();
 
             // --- CENTRAL DATA OBJECT ---
             // Snapshot values intentionally null — site shows "—" when live fetches fail
@@ -9843,7 +9886,12 @@
                     // Try newest first: currentEpoch+1 (just in case), currentEpoch (uploaded early),
                     // currentEpoch-1 (typical: last completed), then fall back to older epochs.
                     // This ensures a freshly uploaded epoch file is picked up immediately.
-                    const epochsToTry = [currentEpoch + 1, currentEpoch, currentEpoch - 1, currentEpoch - 2, currentEpoch - 3];
+                    // Walk back up to 12 epochs: the legacy epoch-end cron stopped publishing (last file
+                    // = epoch 185), so a 5-epoch window goes permanently blind. The staleness machinery
+                    // below (stale pill + "Epoch N data" label) keeps this honest until the DAO-dashboard
+                    // aggregates move to the new pipeline.
+                    const epochsToTry = [currentEpoch + 1, currentEpoch];
+                    for (let b = 1; b <= 12; b++) epochsToTry.push(currentEpoch - b);
                     
                     for (let i = 0; i < epochsToTry.length; i++) {
                         const tryEpoch = epochsToTry[i];
@@ -9883,24 +9931,23 @@
             async function fetchTlaExtData() {
                 if (cachedTlaExtData) return cachedTlaExtData;
                 try {
-                    const currentEpoch = dashboardData?.tlaDeposits?.currentEpoch || 163;
-                    // TLA ext files are in a separate repo
-                    const url = `https://raw.githubusercontent.com/defipatriot/tla-ext_json_storage/main/tla-ext-epoch-${currentEpoch}-end.json`;
-                    const response = await fetch(url);
-                    if (!response.ok) {
-                        // Fallback to previous epoch
-                        const prevUrl = `https://raw.githubusercontent.com/defipatriot/tla-ext_json_storage/main/tla-ext-epoch-${currentEpoch - 1}-end.json`;
-                        const prevResponse = await fetch(prevUrl);
-                        if (!prevResponse.ok) {
-                            console.warn('TLA ext data not found, using defaults');
-                            return null;
-                        }
-                        cachedTlaExtData = await prevResponse.json();
-                        return cachedTlaExtData;
+                    // Use the real current epoch (the old hardcoded 163 fallback pointed at files
+                    // that never existed) and walk back: ext epoch files are published sparsely
+                    // (…177, 178, 181, 182, 185), so a deep walk-back finds the newest available.
+                    const currentEpoch = await getCurrentEpoch();
+                    for (let b = 0; b <= 14; b++) {
+                        const tryEpoch = currentEpoch - b;
+                        try {
+                            const r = await fetch(`https://raw.githubusercontent.com/defipatriot/tla-ext_json_storage/main/tla-ext-epoch-${tryEpoch}-end.json`);
+                            if (r.ok) {
+                                cachedTlaExtData = await r.json();
+                                console.log('Loaded TLA ext data:', cachedTlaExtData?.meta?.epoch, b > 1 ? `(walked back ${b} epochs)` : '');
+                                return cachedTlaExtData;
+                            }
+                        } catch (e) { /* try older */ }
                     }
-                    cachedTlaExtData = await response.json();
-                    console.log('Loaded TLA ext data:', cachedTlaExtData?.meta?.epoch);
-                    return cachedTlaExtData;
+                    console.warn('TLA ext data not found, using defaults');
+                    return null;
                 } catch (error) {
                     console.error('Failed to fetch TLA ext data:', error);
                     return null;
