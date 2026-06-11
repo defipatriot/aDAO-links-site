@@ -514,6 +514,8 @@ const initializeExplorer = async () => {
         updateMatchingTraitsCount(); // Update matching traits count
         addAllEventListeners();
         applyStateFromUrl();
+        const initialView = new URLSearchParams(window.location.search).get('view');
+        if (['analytics', 'wallet', 'map'].includes(initialView)) switchView(initialView, true);
         applyFiltersAndSort();
         calculateAndDisplayLeaderboard();
         
@@ -979,6 +981,10 @@ const addAllEventListeners = () => {
     if (sortSelect) sortSelect.addEventListener('change', handleFilterChange);
     if (resetButton) resetButton.addEventListener('click', resetAll);
     
+    window.addEventListener('popstate', () => {
+        const v = new URLSearchParams(window.location.search).get('view');
+        switchView(['analytics', 'wallet', 'map'].includes(v) ? v : 'collection', true);
+    });
     if (collectionViewBtn) collectionViewBtn.addEventListener('click', () => switchView('collection'));
     if (analyticsViewBtn) analyticsViewBtn.addEventListener('click', () => switchView('analytics'));
     if (walletViewBtn) walletViewBtn.addEventListener('click', () => switchView('wallet'));
@@ -1184,7 +1190,21 @@ const addAllEventListeners = () => {
     window.addEventListener('hashchange', handleHashChange); // Add hashchange listener
 };
 
-function switchView(viewName) {
+function switchView(viewName, fromHistory = false) {
+    // Deep-linkable tabs: ?view=analytics|wallet (collection = clean URL). pushState lets
+    // Vercel Web Analytics count tab switches as navigations; popstate restores on back/forward.
+    if (!fromHistory) {
+        try {
+            const p = new URLSearchParams(window.location.search);
+            if (viewName === 'collection') p.delete('view'); else p.set('view', viewName);
+            const qs = p.toString();
+            const newUrl = window.location.pathname + (qs ? '?' + qs : '') + window.location.hash;
+            if (newUrl !== window.location.pathname + window.location.search + window.location.hash) {
+                history.pushState({ view: viewName }, '', newUrl);
+            }
+            if (typeof window.va === 'function') window.va('event', { name: 'explorer_tab', data: { tab: viewName } });
+        } catch (e) { /* URL update is best-effort */ }
+    }
     if (viewName !== 'map' && globalAnimationFrameId) {
         cancelAnimationFrame(globalAnimationFrameId);
         globalAnimationFrameId = null;
@@ -2160,6 +2180,8 @@ const handleFilterChange = () => { applyFiltersAndSort(); updateUrlState(); };
 
 const updateUrlState = () => {
     const params = new URLSearchParams();
+    const curView = new URLSearchParams(window.location.search).get('view');
+    if (curView) params.set('view', curView); // keep the active tab in the URL
     if (searchAddressInput.value) params.set('address', searchAddressInput.value);
     if (searchInput.value) params.set('id', searchInput.value);
     if (sortSelect.value !== 'asc') params.set('sort', sortSelect.value);
