@@ -1225,6 +1225,12 @@ function switchView(viewName) {
 const ANALYTICS_URL = "https://raw.githubusercontent.com/defipatriot/nft-inventory-data_2026/main/data/v2/nft-analytics.json";
 const ANALYTICS_SUMMARY_URL = "https://raw.githubusercontent.com/defipatriot/nft-inventory-data_2026/main/data/v2/summary.json";
 const ANALYTICS_ENRICHED_URL = "https://raw.githubusercontent.com/defipatriot/nft-inventory-data_2026/main/data/v2/sales-enriched.json";
+const BROKEN_AT_URL = "https://raw.githubusercontent.com/defipatriot/nft-inventory-data_2026/main/data/v2/broken-at.json";
+const LISTING_HISTORY_URL = "https://raw.githubusercontent.com/defipatriot/nft-inventory-data_2026/main/data/v2/listing-history.json";
+const LUNA_ORACLE_URL = "https://raw.githubusercontent.com/defipatriot/nft-inventory-data_2026/main/data/v2/luna-usd-daily.json";
+const BLUNA_ORACLE_URL = "https://raw.githubusercontent.com/defipatriot/nft-inventory-data_2026/main/data/v2/bluna-usd-daily.json";
+const DENOM_BLUNA = "cw20:terra17aj4ty4sz4yhgm08na8drc0v03v2jwr3waxcqrwhajj729zhl7zqnpc0ml";
+const DENOM_SOLID = "cw20:terra10aa3zdkrc7jwuf8ekl3zq7e7m42vmzqehcmu74e4egc7xkm5kr2s0muyst";
 
 let analyticsLoaded = false;
 let _avMonths = [];          // monthly data, for chart scale toggle
@@ -1232,6 +1238,10 @@ let _avScale = "log";        // default log so recent months are visible
 let _fpData = null;          // floor-history slots {monthly:{labels,tiers},weekly:{...}}
 let _fpTier = "base";        // broken | base | phoenix
 let _fpGran = "monthly";     // monthly (12M) | weekly (12W)
+let _fpListingFloor = {};    // current listing floor per tier (dashed reference line)
+let _fpBrokenAt = null;      // token_id -> broken_at ISO (exact sale-time tiers)
+let _fpBand = null;          // historical listing-floor per period {monthly:{key:usd}, weekly:{key:usd}}
+let _fpOffset = 0;           // paging: 0 = latest 12 periods, 1 = the 12 before, ...
 
 // ---- formatters ----
 const fmtUsd = (n) => {
@@ -1289,8 +1299,17 @@ function renderVolChart() {
 function renderFpChart() {
     const el = document.getElementById("av-fp-chart");
     if (!el || !_fpData) return;
-    const d = _fpData[_fpGran]; const slots = d.tiers[_fpTier]; const labels = d.labels;
+    const d = _fpData[_fpGran];
+    const total = d.keys.length;
+    const end = Math.max(12, total - _fpOffset * 12);
+    const start = Math.max(0, end - 12);
+    const slots = d.tiers[_fpTier].slice(start, end); const labels = d.labels.slice(start, end);
+    const bandAll = (_fpBand && _fpBand[_fpGran]) ? _fpBand[_fpGran].floors[_fpTier] : null;
+    const band = bandAll ? bandAll.slice(start, end) : null;
+    const lfRef = _fpOffset === 0 ? (_fpListingFloor[_fpTier] ?? null) : null; // today's floor only on the live window
     const highs = slots.filter(Boolean).map(s => s.high);
+    if (band) band.forEach(v => { if (v != null) highs.push(v); });
+    if (lfRef != null) highs.push(lfRef);
     const max = highs.length ? Math.max(...highs) * 1.08 : 1;
     const W = 600, H = 210, padL = 44, padB = 22, padT = 8;
     const x = (i) => padL + i * ((W - padL - 8) / labels.length) + 4;
@@ -1311,40 +1330,135 @@ function renderFpChart() {
           <rect x="${x(i)}" y="${yH}" width="${bw}" height="${Math.max(2, yL - yH)}" rx="2" fill="rgba(34,211,238,.28)" stroke="rgba(34,211,238,.5)" stroke-width="0.5"/>
           <line x1="${x(i)}" y1="${yM}" x2="${x(i) + bw}" y2="${yM}" stroke="#fbbf24" stroke-width="2"/></g>`;
     });
-    el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;display:block">${g}</svg>`;
+    if (band) {
+        // historical listing floor: cyan dashed step-line per period
+        let path = "", lastY = null;
+        band.forEach((v, i) => {
+            if (v == null) { lastY = null; return; }
+            const yx = y(v), x0 = x(i), x1 = x(i) + bw;
+            path += (lastY == null ? `M ${x0} ${yx}` : ` L ${x0} ${lastY} L ${x0} ${yx}`) + ` L ${x1} ${yx}`;
+            lastY = yx;
+        });
+        if (path) g += `<path d="${path}" fill="none" stroke="#22d3ee" stroke-width="1.2" stroke-dasharray="4,3" opacity="0.85"/>`;
+        band.forEach((v, i) => { if (v != null) g += `<rect x="${x(i)}" y="${y(v) - 3}" width="${bw}" height="6" fill="transparent"><title>${labels[i]}: listing floor ${fmtUsd(v)} (period-midpoint token prices)</title></rect>`; });
+    }
+    if (lfRef != null) {
+        g += `<g><title>Today's listing floor: ${fmtUsd(lfRef)}</title><line x1="${padL}" y1="${y(lfRef)}" x2="${W - 4}" y2="${y(lfRef)}" stroke="#34d399" stroke-width="1.2" stroke-dasharray="5,4"/><text x="${W - 6}" y="${y(lfRef) - 4}" text-anchor="end" font-size="9" fill="#34d399">listing floor ${fmtUsd(lfRef)}</text></g>`;
+    }
+    const tierNote = _fpBrokenAt
+        ? `<span class="text-gray-600">Tiers exact via on-chain break timestamps.</span>`
+        : `<span class="text-amber-400/90">&#9888; Tiers approximate (current broken state) — break-timestamp feed unavailable.</span>`;
+    const winLabel = `${labels[0]} → ${labels[labels.length - 1]}`;
+    const canBack = start > 0, canFwd = _fpOffset > 0;
+    el.innerHTML = `<div class="flex items-center justify-between mb-1 text-[11px]">
+        <div class="flex items-center gap-1">
+          <button id="av-fp-back" class="av-scale-btn" ${canBack ? "" : "disabled style='opacity:.3'"}>&lsaquo; older</button>
+          <button id="av-fp-fwd" class="av-scale-btn" ${canFwd ? "" : "disabled style='opacity:.3'"}>newer &rsaquo;</button>
+          <span class="text-gray-500 ml-1">${winLabel}</span>
+        </div>${tierNote}</div>
+      <svg viewBox="0 0 ${W} ${H}" style="width:100%;display:block">${g}</svg>`;
+    const bk = document.getElementById("av-fp-back"), fw = document.getElementById("av-fp-fwd");
+    if (bk && canBack) bk.onclick = () => { _fpOffset++; renderFpChart(); };
+    if (fw && canFwd) fw.onclick = () => { _fpOffset--; renderFpChart(); };
     document.querySelectorAll(".av-fp-tier").forEach(b => b.classList.toggle("active", b.dataset.tier === _fpTier));
     document.querySelectorAll(".av-fp-gran").forEach(b => b.classList.toggle("active", b.dataset.gran === _fpGran));
 }
-function buildFpData(salesDesc, tierOfId) {
-    const mk = (date, gran) => {
-        if (gran === "monthly") return date.toISOString().slice(0, 7);
-        const d = new Date(date); const day = (d.getUTCDay() + 6) % 7; d.setUTCDate(d.getUTCDate() - day); // Monday
-        return d.toISOString().slice(0, 10);
-    };
+function periodKey(date, gran) {
+    if (gran === "monthly") return date.toISOString().slice(0, 7);
+    const d = new Date(date); const day = (d.getUTCDay() + 6) % 7; d.setUTCDate(d.getUTCDate() - day); // Monday
+    return d.toISOString().slice(0, 10);
+}
+// Full period axis from first sale (Dec 2023) to now, so the chart can page back through all history.
+function fullPeriodKeys(gran) {
+    const keys = []; const now = new Date(); const start = new Date(Date.UTC(2023, 11, 1));
+    const d = new Date(start);
+    while (d <= now) {
+        keys.push(periodKey(d, gran));
+        if (gran === "monthly") d.setUTCMonth(d.getUTCMonth() + 1); else d.setUTCDate(d.getUTCDate() + 7);
+    }
+    return [...new Set(keys)];
+}
+function buildFpData(salesDesc, tierOfSale) {
     const out = {};
     for (const gran of ["monthly", "weekly"]) {
-        const labels = [], keys = [];
-        const now = new Date();
-        for (let i = 11; i >= 0; i--) {
-            const d = new Date(now);
-            if (gran === "monthly") { d.setUTCMonth(d.getUTCMonth() - i); const k = mk(d, gran); keys.push(k); labels.push(k.slice(2)); }
-            else { d.setUTCDate(d.getUTCDate() - i * 7); const k = mk(d, gran); keys.push(k); labels.push(k.slice(5)); }
-        }
-        const tiers = { broken: keys.map(() => null), base: keys.map(() => null), phoenix: keys.map(() => null) };
+        const keys = fullPeriodKeys(gran);
+        const labels = keys.map(k => gran === "monthly" ? k.slice(2) : k.slice(5));
         const buckets = { broken: {}, base: {}, phoenix: {} };
         salesDesc.forEach(s => {
             if (s.notional_usd == null || !s.timestamp) return;
-            const t = tierOfId(s.token_id); if (!t) return;
-            const k = mk(new Date(s.timestamp), gran);
+            const t = tierOfSale(s.token_id, s.timestamp); if (!t) return;
+            const k = periodKey(new Date(s.timestamp), gran);
             (buckets[t][k] = buckets[t][k] || []).push(s.notional_usd);
         });
+        const tiers = { broken: keys.map(() => null), base: keys.map(() => null), phoenix: keys.map(() => null) };
         for (const t of ["broken", "base", "phoenix"]) keys.forEach((k, i) => {
             const v = (buckets[t][k] || []).sort((a, b) => a - b);
             if (!v.length) return;
             const med = v.length % 2 ? v[(v.length - 1) / 2] : (v[v.length / 2 - 1] + v[v.length / 2]) / 2;
             tiers[t][i] = { n: v.length, low: v[0], med, high: v[v.length - 1] };
         });
-        out[gran] = { labels, tiers };
+        out[gran] = { keys, labels, tiers };
+    }
+    return out;
+}
+// Historical listing floor per period per tier, from the backfilled listing lifecycle.
+// Each active segment overlapping a period is valued at the period-midpoint token price (daily oracles;
+// SOLID treated as $1 stablecoin; segments with unknown denom skipped). Tier uses break timestamps.
+function buildListingFloorBand(listingRecords, lunaOracle, blunaOracle) {
+    const lp = lunaOracle.prices || lunaOracle.daily || lunaOracle.data || {};
+    const bp = blunaOracle.prices || blunaOracle.daily || blunaOracle.data || {};
+    const lpKeys = Object.keys(lp).sort(), bpKeys = Object.keys(bp).sort();
+    const nearest = (map, keys, dateStr) => {
+        if (map[dateStr] != null) return map[dateStr];
+        let best = null;
+        for (const k of keys) { if (k <= dateStr) best = k; else break; }
+        return best ? map[best] : (keys.length ? map[keys[0]] : null);
+    };
+    const priceUsd = (denom, amount, dateStr) => {
+        const a = Number(amount) / 1e6;
+        if (denom === "uluna") { const p = nearest(lp, lpKeys, dateStr); return p != null ? a * p : null; }
+        if (denom === DENOM_BLUNA) { const p = nearest(bp, bpKeys, dateStr) ?? ((nearest(lp, lpKeys, dateStr) || 0) * 1.3); return p ? a * p : null; }
+        if (denom === DENOM_SOLID) return a * 1.0;
+        return null;
+    };
+    const byIdLocal = {}; if (typeof allNfts !== "undefined") allNfts.forEach(n => { byIdLocal[String(n.id)] = n; });
+    // Liveness cross-check: an open-ended ("still_listed") segment is only credible if the token
+    // currently has a live priced listing — guards against stale auctions in the backfill (e.g. ghost 14765).
+    const liveListed = new Set(Object.values(byIdLocal).filter(n => n.listing && n.listing.price_usd != null).map(n => String(n.id)));
+    const brokenAtTs = (tid) => { const e = _fpBrokenAt && _fpBrokenAt[String(tid)]; return e ? Date.parse(e.broken_at || e) : null; };
+    const tierAt = (tid, ts) => {
+        const n = byIdLocal[String(tid)]; if (!n) return null;
+        const b = brokenAtTs(tid);
+        if (b != null && ts >= b) return "broken";
+        return n.rarityClass === 40 ? "phoenix" : "base";
+    };
+    const out = {};
+    for (const gran of ["monthly", "weekly"]) {
+        const keys = fullPeriodKeys(gran);
+        const bounds = keys.map(k => {
+            const s = gran === "monthly" ? Date.parse(k + "-01T00:00:00Z") : Date.parse(k + "T00:00:00Z");
+            const e = gran === "monthly" ? (() => { const d = new Date(s); d.setUTCMonth(d.getUTCMonth() + 1); return d.getTime(); })() : s + 7 * 86400e3;
+            return [s, e];
+        });
+        const floors = { broken: keys.map(() => null), base: keys.map(() => null), phoenix: keys.map(() => null) };
+        listingRecords.forEach(r => {
+            (r.segments || []).forEach(seg => {
+                if (!seg.denom || seg.price == null || !seg.from_ts) return;
+                if (!seg.to_ts && !liveListed.has(String(r.token_id))) return; // stale open segment
+                const s0 = Date.parse(seg.from_ts);
+                const s1 = seg.to_ts ? Date.parse(seg.to_ts) : Date.now();
+                bounds.forEach(([ps, pe], i) => {
+                    if (s1 <= ps || s0 >= pe) return; // no overlap
+                    const mid = new Date((Math.max(s0, ps) + Math.min(s1, pe)) / 2).toISOString().slice(0, 10);
+                    const usd = priceUsd(seg.denom, seg.price, mid);
+                    if (usd == null) return;
+                    const t = tierAt(r.token_id, (Math.max(s0, ps) + Math.min(s1, pe)) / 2);
+                    if (!t) return;
+                    if (floors[t][i] == null || usd < floors[t][i]) floors[t][i] = usd;
+                });
+            });
+        });
+        out[gran] = { keys, floors };
     }
     return out;
 }
@@ -1381,12 +1495,25 @@ async function renderAnalytics() {
 
     let A, S, E = null;
     try {
-        const [ar, sr, er] = await Promise.all([fetch(ANALYTICS_URL), fetch(ANALYTICS_SUMMARY_URL), fetch(ANALYTICS_ENRICHED_URL)]);
+        const [ar, sr, er, br, lr, our, obr] = await Promise.all([
+            fetch(ANALYTICS_URL), fetch(ANALYTICS_SUMMARY_URL), fetch(ANALYTICS_ENRICHED_URL),
+            fetch(BROKEN_AT_URL).catch(() => null), fetch(LISTING_HISTORY_URL).catch(() => null),
+            fetch(LUNA_ORACLE_URL).catch(() => null), fetch(BLUNA_ORACLE_URL).catch(() => null)
+        ]);
         if (!ar.ok) throw new Error(`analytics feed ${ar.status}`);
         A = await ar.json();
         if (!A || !A.volume || !A.leaderboards) throw new Error("analytics feed malformed");
         S = sr.ok ? await sr.json() : null;     // backing/listings — enhancement
         E = er.ok ? await er.json() : null;     // per-sale — enhancement
+        // Exact sale-time tier classification (NFTs can't unbreak, so this is deterministic)
+        try { const bj = (br && br.ok) ? await br.json() : null; _fpBrokenAt = bj && bj.entries ? bj.entries : null; } catch (e) { _fpBrokenAt = null; }
+        // Historical listing-floor band (backfilled listing lifecycle + daily oracles)
+        try {
+            const lj = (lr && lr.ok) ? await lr.json() : null;
+            const lo = (our && our.ok) ? await our.json() : null;
+            const bo = (obr && obr.ok) ? await obr.json() : null;
+            _fpBand = (lj && lj.records && lo && bo) ? buildListingFloorBand(lj.records, lo, bo) : null;
+        } catch (e) { _fpBand = null; }
     } catch (e) {
         root.innerHTML = `<div class="text-center py-16"><i class="fas fa-triangle-exclamation text-amber-400 text-2xl"></i>
           <p class="mt-3 text-gray-300">Analytics data is unavailable right now.</p>
@@ -1425,15 +1552,7 @@ function buildAnalyticsHtml(A, S, E) {
       </div>` : "";
 
     // ----- HERO -----
-    const hero = `<div class="${card} mb-4" style="background:linear-gradient(135deg,rgba(34,211,238,.08),rgba(17,24,39,.4))">
-        <div class="flex flex-wrap items-end gap-x-10 gap-y-3 mb-3">
-          <div><div class="text-xs uppercase tracking-wider text-gray-400">All-time volume</div>
-            <div class="text-4xl font-extrabold text-white leading-none mt-1">${fmtUsdFull(vol.usd_at_sale)}</div>
-            <div class="text-xs text-gray-500 mt-1">USD at time of each sale</div></div>
-          <div><div class="text-xs uppercase tracking-wider text-gray-400">Sales</div><div class="text-2xl font-bold text-cyan-300 mt-1">${fmtNum(vol.sales_count)}</div></div>
-          ${hiStat}
-          <div><div class="text-xs uppercase tracking-wider text-gray-400">Value today</div><div class="text-2xl font-bold text-gray-200 mt-1">${fmtUsd(vol.value_today_usd)}</div></div>
-        </div></div>`;
+    let hero = ""; // assembled after mark/market-cap computation below
 
     // ----- VALUE TILES (royalties: now primary) -----
     const bk = (S && S.backing) || {}; const roy = A.royalties || {};
@@ -1442,7 +1561,7 @@ function buildAnalyticsHtml(A, S, E) {
     const tile = (label, big, sub) => `<div class="${card}"><div class="text-xs uppercase tracking-wider text-gray-400">${label}</div><div class="text-2xl font-bold text-white mt-1">${big}</div><div class="text-xs text-gray-500 mt-0.5">${sub}</div></div>`;
     const tiles = `<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
       ${tile("Backing / NFT", `${(+bk.per_nft_ampluna || 0).toFixed(2)} <span class='text-base text-cyan-300'>ampLUNA</span>`, `${fmtUsd(bk.per_nft_value_usd)} · ${fmtNum(bk.unbroken_count)} unbroken`)}
-      ${tile("Total backing", fmtUsd(bk.treasury_value_usd), `${fmtNum(bk.ampluna_balance)} ampLUNA in vault`)}
+      ${tile("Total backing", fmtUsdFull(bk.treasury_value_usd), `${fmtNum(bk.ampluna_balance)} ampLUNA in vault`)}
       ${tile("Royalties → DAO", fmtUsd(roy.to_dao_usd_today), `${fmtUsd(roy.to_dao_usd_when_earned)} if sold when received`)}
       ${tile("Listed now", fmtNum(listed), `${fmtUsd(askUsd)} ask-side liquidity`)}
     </div>`;
@@ -1495,8 +1614,18 @@ function buildAnalyticsHtml(A, S, E) {
         govCard = `<div class="${card}">${h("Governance concentration", "DAODAO-staked voting power")}
           <div class="flex items-end gap-6 mb-3">
             <div><div class="text-xs uppercase tracking-wider text-gray-400">Nakamoto coefficient</div>
-              <div class="text-4xl font-extrabold text-white leading-none mt-1">${nakamoto}</div>
-              <div class="text-[11px] text-gray-500 mt-1">wallets to reach &gt;50% of staked VP</div></div>
+              <div class="text-4xl font-extrabold text-white leading-none mt-1">${nakamoto} <span class="text-sm font-semibold ${nakamoto <= 3 ? "text-red-400" : nakamoto <= 7 ? "text-amber-400" : nakamoto <= 15 ? "text-lime-400" : "text-green-400"}">${nakamoto <= 3 ? "highly concentrated" : nakamoto <= 7 ? "concentrated" : nakamoto <= 15 ? "moderately distributed" : "distributed"}</span></div>
+              <div class="text-[11px] text-gray-500 mt-1">wallets to reach &gt;50% of staked VP</div>
+              <div class="mt-2" style="max-width:230px">
+                <div class="relative flex h-2 rounded-full overflow-hidden">
+                  <div style="width:15%;background:#f87171" title="1–3 highly concentrated"></div>
+                  <div style="width:20%;background:#f59e0b" title="4–7 concentrated"></div>
+                  <div style="width:40%;background:#a3e635" title="8–15 moderately distributed"></div>
+                  <div style="width:25%;background:#34d399" title="16+ distributed"></div>
+                  <div class="absolute top-0 h-2 w-0.5 bg-white" style="left:${Math.min(98, nakamoto / 20 * 100).toFixed(1)}%"></div>
+                </div>
+                <div class="flex justify-between text-[9px] text-gray-600 mt-0.5"><span>1</span><span>4</span><span>8</span><span>16</span><span>20+</span></div>
+              </div></div>
             <div class="text-sm text-gray-400">${fmtNum(stakers.length)} stakers · ${fmtNum(sup.staked)} NFTs staked</div>
           </div>
           ${[["Top 1", top1], ["Top 5", top5], ["Top 10", top10]].map(([l, v]) => `<div class="flex items-center gap-3 py-1 text-sm"><span class="w-14 text-gray-400">${l}</span><div class="flex-1">${hBar(v, 100)}</div><span class="w-14 text-right text-gray-300">${v.toFixed(1)}%</span></div>`).join("")}
@@ -1510,30 +1639,72 @@ function buildAnalyticsHtml(A, S, E) {
     Object.values(tierData).forEach(t => t.listed.sort((a, b) => a - b));
     const byIdT = {}; nfts.forEach(n => { byIdT[String(n.id)] = n; });
     const salesDesc = (E && Array.isArray(E.sales)) ? [...E.sales].sort((a, b) => (b.timestamp || "").localeCompare(a.timestamp || "")) : [];
-    const lastSales = (tier, k) => { const out = []; for (const x of salesDesc) { const n = byIdT[String(x.token_id)]; if (n && tierOf(n) === tier) { out.push(x.notional_usd); if (out.length === k) break; } } return out; };
+    // Sale-time tier: exact via broken-at timestamps (NFTs can't unbreak); current-state fallback.
+    const tierOfSale = (tid, ts) => {
+        const n = byIdT[String(tid)]; if (!n) return null;
+        if (_fpBrokenAt) {
+            const e = _fpBrokenAt[String(tid)];
+            const b = e ? Date.parse(e.broken_at || e) : null;
+            if (b != null && Date.parse(ts) >= b) return "broken";
+            return n.rarityClass === 40 ? "phoenix" : "base";
+        }
+        return tierOf(n);
+    };
+    const lastSales = (tier, k) => { const out = []; for (const x of salesDesc) { if (tierOfSale(x.token_id, x.timestamp) === tier) { out.push(x.notional_usd); if (out.length === k) break; } } return out; };
     const median = (a) => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
-    const tierRow = (label, tier, salesK) => {
-        const t = tierData[tier]; const ls = lastSales(tier, salesK); const sf = median(ls);
+    // Mark price per tier = midpoint of sales floor (what trades) and listing floor (the ask),
+    // like a market-maker mid. Falls back to whichever side exists.
+    const tierMark = {};
+    const tierStats = {};
+    [["broken", 5], ["base", 10], ["phoenix", 3]].forEach(([tier, k]) => {
+        const t = tierData[tier]; const sf = median(lastSales(tier, k));
         const lf = t.listed.length ? t.listed[0] : null;
+        tierMark[tier] = (sf && lf != null) ? (sf + lf) / 2 : (sf || lf || null);
+        tierStats[tier] = { sf, lf };
+    });
+    const tierRow = (label, tier) => {
+        const { sf, lf } = tierStats[tier]; const t = tierData[tier]; const mk = tierMark[tier];
         const spread = (lf != null && sf) ? ((lf - sf) / sf * 100) : null;
-        return `<div class="grid grid-cols-5 gap-2 items-center py-2 border-t border-gray-700/50 text-sm">
+        return `<div class="grid grid-cols-6 gap-2 items-center py-2 border-t border-gray-700/50 text-sm">
           <span class="text-gray-200 font-medium">${label}</span>
           <span class="text-center text-gray-400">${t.listed.length}</span>
           <span class="text-center font-semibold ${lf != null ? "text-cyan-300" : "text-gray-600"}">${lf != null ? fmtUsd(lf) : "none"}</span>
           <span class="text-center font-semibold ${sf ? "text-amber-300" : "text-gray-600"}">${sf ? fmtUsd(sf) : "—"}</span>
+          <span class="text-center font-semibold ${mk ? "text-gray-100" : "text-gray-600"}">${mk ? fmtUsd(mk) : "—"}</span>
           <span class="text-center ${spread == null ? "text-gray-600" : spread < -15 ? "text-green-400" : spread > 15 ? "text-red-400" : "text-gray-300"}">${spread == null ? "—" : (spread > 0 ? "+" : "") + spread.toFixed(0) + "%"}</span></div>`;
     };
+    // Market cap = Σ tier mark × tier supply. Circulating uses minted only; FDV uses all 10,000.
+    const tierCounts = { circ: { broken: 0, base: 0, phoenix: 0 }, all: { broken: 0, base: 0, phoenix: 0 } };
+    nfts.forEach(n => { const t = tierOf(n); tierCounts.all[t]++; if (!n.unminted) tierCounts.circ[t]++; });
+    const mcapOf = (counts) => ["broken", "base", "phoenix"].reduce((s, t) => s + (tierMark[t] || 0) * counts[t], 0);
+    const marketCap = mcapOf(tierCounts.circ), fdv = mcapOf(tierCounts.all);
+
+    hero = `<div class="${card} mb-4" style="background:linear-gradient(135deg,rgba(34,211,238,.08),rgba(17,24,39,.4))">
+        <div class="flex flex-wrap items-end gap-x-10 gap-y-3">
+          <div><div class="text-xs uppercase tracking-wider text-gray-400">Market cap</div>
+            <div class="text-4xl font-extrabold text-white leading-none mt-1">${marketCap ? fmtUsdFull(marketCap) : "—"}</div>
+            <div class="text-xs text-gray-500 mt-1">circulating (minted) · FDV ${fdv ? fmtUsdFull(fdv) : "—"} all 10,000</div></div>
+          <div><div class="text-xs uppercase tracking-wider text-gray-400">Mark price (base)</div>
+            <div class="text-2xl font-bold text-gray-100 mt-1">${tierMark.base ? fmtUsd(tierMark.base) : "—"}</div>
+            <div class="text-[11px] text-gray-500 mt-0.5">mid of sales floor &amp; ask</div></div>
+          <div><div class="text-xs uppercase tracking-wider text-gray-400">All-time volume</div>
+            <div class="text-2xl font-bold text-cyan-300 mt-1">${fmtUsdFull(vol.usd_at_sale)}</div>
+            <div class="text-[11px] text-gray-500 mt-0.5">${fmtNum(vol.sales_count)} sales · USD at sale</div></div>
+          ${hiStat}
+        </div></div>`;
     const bkUsd = (S && S.backing && S.backing.per_nft_value_usd) || null;
     const floorCard = `<div class="${card} mb-4">${h("Floor by tier", "listing floor vs what actually sells")}
-      <div class="grid grid-cols-5 gap-2 text-[11px] uppercase tracking-wider text-gray-500 pb-1">
-        <span>Tier</span><span class="text-center">Listed</span><span class="text-center">Listing floor</span><span class="text-center">Sales floor</span><span class="text-center">Spread</span></div>
-      ${tierRow("Broken", "broken", 5)}
-      ${tierRow("Unbroken (base)", "base", 10)}
-      ${tierRow("Phoenix", "phoenix", 3)}
-      <div class="text-[11px] text-gray-600 mt-3">Sales floor = median of recent sales in that tier (USD at sale). Spread = listing floor vs sales floor — a deep negative spread means the cheapest listing sits far below real trading prices. Backing reference: ${bkUsd ? fmtUsd(bkUsd) : "—"}/NFT. Sales are classified by the NFT's current broken state.</div></div>`;
+      <div class="grid grid-cols-6 gap-2 text-[11px] uppercase tracking-wider text-gray-500 pb-1">
+        <span>Tier</span><span class="text-center">Listed</span><span class="text-center">Listing floor</span><span class="text-center">Sales floor</span><span class="text-center">Mark</span><span class="text-center">Spread</span></div>
+      ${tierRow("Broken", "broken")}
+      ${tierRow("Unbroken (base)", "base")}
+      ${tierRow("Phoenix", "phoenix")}
+      <div class="text-[11px] text-gray-600 mt-3">Sales floor = median of recent sales in that tier (USD at sale, tiered by break timestamps). Mark = midpoint of sales floor and listing floor (market-maker mid) — market cap above = Σ tier mark × supply. Spread = listing floor vs sales floor — a deep negative spread means the cheapest listing sits far below real trading prices. Backing reference: ${bkUsd ? fmtUsd(bkUsd) : "—"}/NFT. Sales are classified by the NFT's current broken state.</div></div>`;
 
     // --- Floor history (sales-derived; listing-floor overlay arrives with listing backfill) ---
-    _fpData = buildFpData(salesDesc, (tid) => { const n = byIdT[String(tid)]; return n ? tierOf(n) : null; });
+    _fpData = buildFpData(salesDesc, tierOfSale);
+    _fpOffset = 0;
+    _fpListingFloor = { broken: tierData.broken.listed[0] ?? null, base: tierData.base.listed[0] ?? null, phoenix: tierData.phoenix.listed[0] ?? null };
     const fpBtn = (cls, val, lab) => `<button type="button" class="av-scale-btn ${cls}" data-${cls === "av-fp-tier" ? "tier" : "gran"}="${val}">${lab}</button>`;
     const fpCard = `<div class="${card} mb-4">
       <div class="flex items-baseline justify-between mb-3 flex-wrap gap-2">
@@ -1561,13 +1732,35 @@ function buildAnalyticsHtml(A, S, E) {
 
     // ----- LEADERBOARDS with behaviour context -----
     const lb = A.leaderboards || {}; const hold = buildHoldingsMap();
+    // 12-month net position change per wallet from marketplace trades (buys +1, sells −1 per month).
+    const trendMonths = [];
+    { const now = new Date(); for (let i = 11; i >= 0; i--) { const d = new Date(now); d.setUTCMonth(d.getUTCMonth() - i); trendMonths.push(d.toISOString().slice(0, 7)); } }
+    const monthIdx = Object.fromEntries(trendMonths.map((m, i) => [m, i]));
+    const netByAddr = {};
+    salesDesc.forEach(s => {
+        const m = (s.timestamp || "").slice(0, 7); const i = monthIdx[m]; if (i == null) return;
+        (netByAddr[s.buyer] = netByAddr[s.buyer] || new Array(12).fill(0))[i]++;
+        (netByAddr[s.seller] = netByAddr[s.seller] || new Array(12).fill(0))[i]--;
+    });
+    const trendSvg = (addr) => {
+        const net = netByAddr[addr]; if (!net) return "";
+        const yr = net.reduce((a, b) => a + b, 0);
+        const col = yr >= 3 ? "#34d399" : yr <= -3 ? "#f87171" : "#f59e0b";
+        const bw = 5, gap = 1.5, H = 18, mid = H / 2, cap = 5;
+        const bars = net.map((v, i) => {
+            const h = Math.min(Math.abs(v), cap) / cap * (mid - 1);
+            if (!v) return `<rect x="${i * (bw + gap)}" y="${mid - 0.5}" width="${bw}" height="1" fill="#374151"/>`;
+            return `<rect x="${i * (bw + gap)}" y="${v > 0 ? mid - h : mid}" width="${bw}" height="${h}" rx="0.5" fill="${col}"><title>${trendMonths[i]}: ${v > 0 ? "+" : ""}${v} NFTs (trades)</title></rect>`;
+        }).join("");
+        return `<span class="inline-flex items-center gap-1.5"><svg width="${12 * (bw + gap)}" height="${H}" style="display:inline-block;vertical-align:middle">${bars}</svg><span class="text-[10px]" style="color:${col}">${yr > 0 ? "+" : ""}${yr}/12m</span></span>`;
+    };
     const clean = (arr) => (arr || []).filter(x => !(typeof isSystemAddress === "function" && isSystemAddress(x.address))).slice(0, 10);
     const lbRow = (x, i) => `<div class="py-2 ${i ? "border-t border-gray-700/50" : ""}">
         <div class="flex items-center gap-3"><span class="text-gray-500 text-xs w-5 text-right">${i + 1}</span>
           <span class="flex-1 truncate text-sm text-gray-200">${aLabel(x.address)}</span>
           <span class="text-xs text-gray-400">${fmtNum(x.count)}×</span>
           <span class="text-sm font-semibold text-cyan-300 w-16 text-right">${fmtUsd(x.notional_usd)}</span></div>
-        <div class="text-[11px] pl-8 mt-0.5">${holdingsBlurb(hold[x.address])}</div></div>`;
+        <div class="flex items-center justify-between pl-8 mt-0.5"><span class="text-[11px]">${holdingsBlurb(hold[x.address])}</span>${trendSvg(x.address)}</div></div>`;
     const leaderboards = `<div class="grid md:grid-cols-2 gap-3 mb-4">
       <div class="${card}">${h("Top buyers", "spend · what they did with them")}${clean(lb.top_buyers).map(lbRow).join("")}</div>
       <div class="${card}">${h("Top sellers", "received · what they kept")}${clean(lb.top_sellers).map(lbRow).join("")}</div></div>`;
@@ -1588,16 +1781,22 @@ function buildAnalyticsHtml(A, S, E) {
     const mostTraded = `<div class="${card} mb-4">${h("Most-traded NFTs", "by sale count")}<div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">${traded}</div></div>`;
 
     // ----- BIGGEST SALES + SALE FREQUENCY + DENOM -----
-    const bigRows = biggest.map((s, i) => `<div class="flex items-center gap-3 py-1.5 ${i ? "border-t border-gray-700/50" : ""}">
-        <span class="text-sm text-gray-200 w-14">#${s.token_id}</span>
-        <span class="text-xs text-gray-500 flex-1">${fmtNum(s.amount)} ${s.denom_symbol} · ${(s.timestamp || "").slice(0, 10)}</span>
-        <span class="text-sm font-semibold text-amber-300">${fmtUsd(s.notional_usd)}</span></div>`).join("");
+    const big10 = (E && Array.isArray(E.sales)) ? [...E.sales].sort((a, b) => (b.notional_usd || 0) - (a.notional_usd || 0)).slice(0, 10) : [];
+    const bigTiles = big10.map(s => {
+        const n = byId[String(s.token_id)] || {};
+        return `<div class="flex flex-col items-center text-center">
+          <div class="w-full aspect-square rounded-lg overflow-hidden bg-gray-900 border border-gray-700"><img src="${getImageUrl(s.token_id)}" data-fallback="${getIpfsFallbackUrl(s.token_id, n.thumbnail_image || n.image)}" loading="lazy" class="w-full h-full object-cover" onerror="if(this.dataset.fallback && this.src !== this.dataset.fallback) { this.src = this.dataset.fallback; } else { this.onerror=null; this.style.display='none'; }"></div>
+          <div class="text-xs text-gray-200 mt-1">#${s.token_id}</div>
+          <div class="text-[11px] font-semibold text-amber-300">${fmtUsd(s.notional_usd)}</div>
+          <div class="text-[10px] text-gray-500">${fmtNum(s.amount)} ${s.denom_symbol} · ${(s.timestamp || "").slice(0, 10)}</div></div>`;
+    }).join("");
+    const biggestCard = `<div class="${card} mb-4">${h("Biggest sales", "all-time top 10, USD at sale")}
+      <div class="grid grid-cols-3 sm:grid-cols-5 gap-3">${bigTiles}</div></div>`;
     const dist = A.sale_number_distribution || {}; const distMax = Math.max(...Object.values(dist).map(Number), 1);
     const distRows = Object.entries(dist).map(([k, v]) => `<div class="flex items-center gap-3 py-1 text-sm"><span class="w-20 text-gray-400">${k}× sold</span><div class="flex-1">${hBar(v, distMax)}</div><span class="w-14 text-right text-gray-300">${fmtNum(v)}</span></div>`).join("");
     const denom = A.denom_split || {}; const denomTot = Object.values(denom).reduce((s, d) => s + (d.count || 0), 0) || 1;
     const denomRows = Object.entries(denom).sort((a, b) => b[1].count - a[1].count).map(([sym, d]) => `<div class="flex items-center gap-3 py-1 text-sm"><span class="w-16 text-gray-300">${sym}</span><div class="flex-1">${hBar(d.count, denomTot)}</div><span class="w-24 text-right text-gray-400">${fmtNum(d.count)} sales</span></div>`).join("");
-    const row3 = `<div class="grid md:grid-cols-3 gap-3 mb-4">
-      <div class="${card}">${h("Biggest sales", "all-time, USD at sale")}${bigRows || '<div class="text-xs text-gray-500">—</div>'}</div>
+    const row3 = biggestCard + `<div class="grid md:grid-cols-2 gap-3 mb-4">
       <div class="${card}">${h("Sale frequency", "times changed hands")}${distRows}</div>
       <div class="${card}">${h("Paid in", "by sale count")}${denomRows}</div></div>`;
 
