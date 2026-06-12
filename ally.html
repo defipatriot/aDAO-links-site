@@ -213,7 +213,7 @@
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12 text-center">
             <div class="stat-card p-6 rounded-xl">
-                <p class="text-3xl font-bold text-cyan-400">~0.72%</p>
+                <p id="staking-share-pct" class="text-3xl font-bold text-cyan-400">~0.72%</p>
                 <p class="text-gray-400 mt-2">of Total LUNA Staking Rewards</p>
             </div>
             <div class="stat-card p-6 rounded-xl">
@@ -309,7 +309,7 @@
                             <p id="projected-gain-display" class="text-2xl font-bold text-cyan-300"><i class="fas fa-spinner fa-spin text-cyan-300"></i></p>
                         </div>
                     </div>
-                     <p class="text-xs text-gray-500 mt-4 text-center">Note: Daily Gain projection uses snapshot data.</p>
+                     <p class="text-xs text-gray-500 mt-4 text-center">Note: Daily Gain is computed live from the daily backing history (chain snapshots captured by the aDAO data pipeline).</p>
                 </div>
 
             </div>
@@ -337,7 +337,7 @@
                 <!-- New Disclaimer -->
                 <div class="mt-6 pt-6 border-t border-gray-700">
                      <p class="text-sm text-yellow-400/80 leading-relaxed">
-                        <strong class="font-bold">Important Disclaimer:</strong> The on-chain rewards allocated to the 'Ally' token are a privilege granted by the Terra community via governance. These rewards are not guaranteed and can be modified or removed at any time by a future governance proposal. All projections and historical data are based on past performance and are not indicative of future results. Daily Gain data is based on a snapshot.
+                        <strong class="font-bold">Important Disclaimer:</strong> The on-chain rewards allocated to the 'Ally' token are a privilege granted by the Terra community via governance. These rewards are not guaranteed and can be modified or removed at any time by a future governance proposal. All projections and historical data are based on past performance and are not indicative of future results. Daily Gain is derived from the most recent day-over-day change in on-chain backing and varies with staking rewards.
                     </p>
                 </div>
             </div>
@@ -348,7 +348,11 @@
         document.addEventListener('DOMContentLoaded', () => {
             
             // --- CONSTANTS ---
-            const SNAPSHOT_AVG_DAILY_GAIN_PER_NFT = 0.21; // Keep this static for now
+            // Fallback only — the live value comes from the backing cron's daily history
+            // (backing-data_2026/snapshots/index.json), same source as the dashboard tile.
+            const FALLBACK_AVG_DAILY_GAIN_PER_NFT = 0.21;
+            const BACKING_INDEX_URL = 'https://raw.githubusercontent.com/defipatriot/backing-data_2026/main/snapshots/index.json';
+            const V2_SUMMARY_URL = 'https://raw.githubusercontent.com/defipatriot/nft-inventory-data_2026/main/data/v2/summary.json';
 
             // --- UI ELEMENTS ---
             const totalLunaEl = document.getElementById('total-luna-in-contract');
@@ -364,19 +368,24 @@
 
             // --- API Fetch Function ---
             async function fetchLiveData() {
-                const onChainStatsUrl = 'https://deving.zone/nfts/alliance_daos.json';
+                // Unbroken count: chain-of-truth v2 pipeline (replaces dead deving.zone feed)
+                const onChainStatsUrl = V2_SUMMARY_URL;
                 // Contract query for rewards (using a known valid NFT ID like 9068)
                 const contractRewardsQuery = btoa(JSON.stringify({ all_nft_info: { token_id: "9068" } }));
                 const contractUrl = `https://terra.publicnode.com/cosmwasm/wasm/v1/contract/terra1phr9fngjv7a8an4dhmhd0u0f98wazxfnzccqtyheq4zqrrp4fpuqw3apw9/smart/${contractRewardsQuery}`;
                 // ampLUNA rate query
                 const ampLunaRateQuery = btoa(JSON.stringify({ exchange_rates: {} }));
                 const ampLunaRateUrl = `https://terra.publicnode.com/cosmwasm/wasm/v1/contract/terra10788fkzah89xrdm27zkj5yvhj9x3494lxawzm5qq3vvxcqz2yzaqyd3enk/smart/${ampLunaRateQuery}`;
+                // Total bonded LUNA (for "share of total staking rewards" tile)
+                const stakingPoolUrl = 'https://terra.publicnode.com/cosmos/staking/v1beta1/pool';
 
                 try {
-                    const [statsResponse, contractResponse, ampLunaRateResponse] = await Promise.all([
-                        fetch(onChainStatsUrl).catch(e => { console.error("Stats Fetch Error:", e); return null; }),
+                    const [statsResponse, contractResponse, ampLunaRateResponse, gainResponse, poolResponse] = await Promise.all([
+                        fetch(onChainStatsUrl).catch(e => { console.error("Summary Fetch Error:", e); return null; }),
                         fetch(contractUrl).catch(e => { console.error("Contract Fetch Error:", e); return null; }),
-                        fetch(ampLunaRateUrl).catch(e => { console.error("ampLUNA Rate Fetch Error:", e); return null; })
+                        fetch(ampLunaRateUrl).catch(e => { console.error("ampLUNA Rate Fetch Error:", e); return null; }),
+                        fetch(BACKING_INDEX_URL).catch(e => { console.warn("Backing history fetch error:", e); return null; }),
+                        fetch(stakingPoolUrl).catch(e => { console.warn("Staking pool fetch error:", e); return null; })
                     ]);
 
                     if (!statsResponse?.ok || !contractResponse?.ok || !ampLunaRateResponse?.ok) {
@@ -388,8 +397,41 @@
                     const ampLunaRateData = await ampLunaRateResponse.json();
 
                     // --- Process Data ---
-                    // Calculate live unbroken count
-                    const unbrokenNfts = statsData?.nfts?.filter(nft => !nft.broken).length || 0; 
+                    // Unbroken count from the v2 pipeline summary (10,000 collection, broken forfeit backing)
+                    const unbrokenNfts = statsData?.backing?.unbroken_count
+                        || (statsData?.counts?.broken != null ? 10000 - statsData.counts.broken : 0);
+
+                    // --- Live avg daily gain per NFT from the backing cron history (dashboard's source) ---
+                    let gainPerNft = FALLBACK_AVG_DAILY_GAIN_PER_NFT;
+                    let gainIsLive = false, gainWindow = '';
+                    try {
+                        const gainIdx = (gainResponse && gainResponse.ok) ? await gainResponse.json() : null;
+                        const hist = gainIdx?.history || [];
+                        if (hist.length >= 2) {
+                            const latest = hist[hist.length - 1], prev = hist[hist.length - 2];
+                            const days = (new Date(latest.date) - new Date(prev.date)) / 86400000;
+                            if (days > 0 && latest.backingInLuna != null && prev.backingInLuna != null) {
+                                gainPerNft = (latest.backingInLuna - prev.backingInLuna) / days;
+                                gainIsLive = true;
+                                gainWindow = `${prev.date} → ${latest.date}`;
+                            }
+                        }
+                    } catch (e) { console.warn('Gain history parse failed, using fallback:', e); }
+
+                    // --- Live share of total LUNA staking rewards ---
+                    try {
+                        const pool = (poolResponse && poolResponse.ok) ? await poolResponse.json() : null;
+                        const bonded = pool?.pool?.bonded_tokens ? Number(pool.pool.bonded_tokens) / 1e6 : null;
+                        const shareEl = document.getElementById('staking-share-pct');
+                        if (shareEl && bonded > 0) {
+                            // share = total LUNA backing in contract / all bonded LUNA
+                            const rewardsAttr0 = contractJson?.data?.info?.extension?.attributes?.find(a => a.trait_type === 'rewards');
+                            const ampBacking0 = rewardsAttr0?.value ? Number(rewardsAttr0.value) / 1e6 : 0;
+                            const rate0 = parseFloat(ampLunaRateData?.data?.exchange_rates?.[0]?.[1]) || 0;
+                            const totalLuna0 = ampBacking0 * rate0 * unbrokenNfts;
+                            if (totalLuna0 > 0) shareEl.textContent = '~' + (totalLuna0 / bonded * 100).toFixed(2) + '%';
+                        }
+                    } catch (e) { /* tile keeps its static estimate */ }
                     
                      // Safely access contract rewards data (ampLUNA backing)
                      const rewardsAttribute = contractJson?.data?.info?.extension?.attributes?.find(attr => attr.trait_type === 'rewards');
@@ -407,15 +449,17 @@
                     const totalLunaInContractLive = backingInLunaLive * unbrokenNfts;
                     
                     // --- Calculate using SNAPSHOT daily gain ---
-                    const totalDailyGainSnapshotBased = SNAPSHOT_AVG_DAILY_GAIN_PER_NFT * unbrokenNfts; 
+                    const totalDailyGain = gainPerNft * unbrokenNfts;
 
                     // --- Update UI ---
                     updateUI({
                         unbrokenNfts: unbrokenNfts,
                         backingInLunaLive: backingInLunaLive,
                         totalLunaInContractLive: totalLunaInContractLive,
-                        totalDailyGainSnapshotBased: totalDailyGainSnapshotBased,
-                        snapshotDailyGainPerNft: SNAPSHOT_AVG_DAILY_GAIN_PER_NFT, 
+                        totalDailyGain: totalDailyGain,
+                        gainPerNft: gainPerNft,
+                        gainIsLive: gainIsLive,
+                        gainWindow: gainWindow,
                         ampLunaToLunaRate: ampLunaToLunaRate // Pass rate for display if needed
                     });
 
@@ -441,12 +485,14 @@
 
                 // Update the two main stat cards
                 if (totalLunaEl) totalLunaEl.textContent = `${liveData.totalLunaInContractLive.toLocaleString('en-US', {maximumFractionDigits: 0})} LUNA`;
-                if (totalDailyEl) totalDailyEl.textContent = `+${liveData.totalDailyGainSnapshotBased.toLocaleString('en-US', {maximumFractionDigits: 2})} LUNA Daily Gain`;
+                if (totalDailyEl) totalDailyEl.textContent = `+${liveData.totalDailyGain.toLocaleString('en-US', {maximumFractionDigits: 2})} LUNA Daily Gain`;
                 if (perNftBackingEl) perNftBackingEl.textContent = `${liveData.backingInLunaLive.toFixed(2)} LUNA`;
-                if (perNftDailyEl) perNftDailyEl.textContent = `+${liveData.snapshotDailyGainPerNft.toFixed(2)} LUNA Daily Gain`; // Use snapshot value here
+                if (perNftDailyEl) perNftDailyEl.textContent = `+${liveData.gainPerNft.toFixed(4)} LUNA Daily Gain`;
 
                 // Update status text
-                const statusText = "Live Backing / Snapshot Gain"; 
+                const statusText = liveData.gainIsLive
+                    ? `Live Backing / Live Gain (${liveData.gainWindow})`
+                    : "Live Backing / Fallback Gain (history unavailable)";
                 if (dateEl1) dateEl1.textContent = statusText;
                 if (dateEl2) dateEl2.textContent = statusText;
 
@@ -468,7 +514,7 @@
                 function calculateProjection() {
                     const currentSliderValue = parseInt(slider.value) || 1; // Default to 1
                     // Use the total daily gain calculated with the live unbroken count
-                    const projectedGain = liveData.totalDailyGainSnapshotBased / currentSliderValue; 
+                    const projectedGain = liveData.totalDailyGain / currentSliderValue;
 
                     valueDisplay.textContent = currentSliderValue.toLocaleString();
                     projectedGainDisplay.textContent = `${projectedGain.toFixed(4)} LUNA`;
