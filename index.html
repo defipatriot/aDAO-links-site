@@ -7422,6 +7422,31 @@
                             setIfLoading('unminted-nft-backing-usd', `$${loc(Math.round(totLuna * lunaPrice))} USD`);
                         }
 
+                        // Marketplace cards pre-fill: counts + floors per venue from the
+                        // pipeline (the slow venue APIs overwrite with real-time values).
+                        try {
+                            const mk = s.marketplaces || {};
+                            const floorOf = (venue) => {
+                                // cheapest across that venue's tokens, with USD via the token's avg rate
+                                let best = null;
+                                for (const [tok, t] of Object.entries(mk[venue]?.by_token || {})) {
+                                    if (!(t.min > 0) || !(t.count > 0)) continue;
+                                    const usd = t.total > 0 ? t.min * (t.total_usd / t.total) : null;
+                                    if (!best || (usd != null && usd < best.usd)) best = { token: tok, amt: t.min, usd };
+                                }
+                                return best;
+                            };
+                            if (mk.bbl?.count != null) setIfLoading('bbl-listed-count', loc(mk.bbl.count));
+                            if (mk.boost?.count != null) setIfLoading('boost-listed-count', loc(mk.boost.count));
+                            if (mk.atrium?.count != null) setIfLoading('atrium-listed-count', loc(mk.atrium.count));
+                            const fB = floorOf('bbl');
+                            if (fB) { setIfLoading('bbl-floor-bluna', loc(fB.amt)); if (fB.usd != null) setIfLoading('bbl-floor-usd', `($${fix(fB.usd, 2)})`); }
+                            const fO = floorOf('boost');
+                            if (fO) { setIfLoading('boost-floor-luna', loc(fO.amt)); setIfLoading('boost-floor-token-label', fO.token); if (fO.usd != null) setIfLoading('boost-floor-usd', `($${fix(fO.usd, 2)})`); }
+                            const fA = floorOf('atrium');
+                            if (fA) { setIfLoading('atrium-floor-amt', loc(fA.amt)); setIfLoading('atrium-floor-token', fA.token); if (fA.usd != null) setIfLoading('atrium-floor-usd', `($${fix(fA.usd, 2)})`); }
+                        } catch (_) { /* cards stay on spinners for the live pass */ }
+
                         const lu = document.getElementById('last-updated');
                         if (lu) lu.textContent = `Data as of ${new Date(s.capturedAt).toLocaleTimeString()} (pipeline) — refreshing live…`;
                         console.log(`paintFromCron: instant paint in ${(performance.now() - t0).toFixed(0)}ms (pipeline data ${((Date.now() - Date.parse(s.capturedAt)) / 60000).toFixed(0)}m old)`);
