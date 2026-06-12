@@ -5276,28 +5276,41 @@
                             const ep = epochOfDate(h.date);
                             if (!backingByEpoch[ep] || h.date > backingByEpoch[ep].date) backingByEpoch[ep] = h;
                         }
-                        // v2 dailies exist since 2026-06-07: probe the last 7 dates of
-                        // each epoch (newest first) and take the first that exists.
-                        const V2_DAILY = 'https://raw.githubusercontent.com/defipatriot/nft-inventory-data_2026/main/data/v2/daily/';
-                        const fetchV2DailyForEpoch = async (ep) => {
+                        // Daily archives are date-keyed; per epoch, probe the last 7 dates
+                        // (newest first) and take the first file that exists. Generic over
+                        // the three archive families:
+                        //   v2 NFT dailies (since 2026-06-07), TLA snapshot dailies (since
+                        //   2026-05-13), dao-dashboard dailies (since 2026-06-12).
+                        const probeDaily = async (ep, urlForDate, earliest) => {
                             const epochEnd = new Date(epochReferenceDate.getTime() + (ep - epochReferenceNumber + 1) * msPerWeek);
                             for (let d = 1; d <= 7; d++) {
                                 const probe = new Date(Math.min(epochEnd.getTime() - d * 86400000, Date.now()));
-                                if (probe < new Date('2026-06-07')) break; // archive start
+                                if (probe < new Date(earliest)) break;
                                 const key = probe.toISOString().slice(0, 10);
                                 try {
-                                    const r = await fetch(V2_DAILY + key + '.json');
+                                    const r = await fetch(urlForDate(key));
                                     if (r.ok) return await r.json();
                                 } catch (_) {}
                             }
                             return null;
                         };
-                        const dailies = await Promise.all(toFill.map(r => fetchV2DailyForEpoch(r.epoch)));
+                        const V2_DAILY = 'https://raw.githubusercontent.com/defipatriot/nft-inventory-data_2026/main/data/v2/daily/';
+                        const TLA_DAILY = 'https://raw.githubusercontent.com/defipatriot/tla-snapshot-data_2026/main/data/daily/';
+                        const fetchV2DailyForEpoch = (ep) => probeDaily(ep, k => V2_DAILY + k + '.json', '2026-06-07');
+                        const fetchTlaDailyForEpoch = (ep) => probeDaily(ep, k => TLA_DAILY + k + '.json', '2026-05-13');
+                        const fetchDdDailyForEpoch = (ep) => probeDaily(ep, k => TLA_DAILY + 'dao-dashboard-' + k + '.json', '2026-06-12');
+                        const [dailies, tlaDailies, ddDailies] = await Promise.all([
+                            Promise.all(toFill.map(r => fetchV2DailyForEpoch(r.epoch))),
+                            Promise.all(toFill.map(r => fetchTlaDailyForEpoch(r.epoch))),
+                            Promise.all(toFill.map(r => fetchDdDailyForEpoch(r.epoch))),
+                        ]);
                         let filled = 0;
                         toFill.forEach((slot, i) => {
                             const vd = dailies[i];
+                            const td = tlaDailies[i];
+                            const dd = ddDailies[i];
                             const b = backingByEpoch[slot.epoch];
-                            if (!vd && !b) return; // stays an honest missing placeholder
+                            if (!vd && !b && !td && !dd) return; // stays an honest missing placeholder
                             delete slot.missing;
                             slot.source = 'v2_synth';
                             slot.timestamp = (vd?.capturedAt) || (b ? b.date + 'T23:00:00Z' : slot.timestamp);
@@ -5313,6 +5326,33 @@
                                     + (vd.dao_wallet_8ywv_held_count ?? 0)
                                     + (vd.enterprise_dao_broken_count ?? 0) || null;
                                 slot.circulatingSupply = vd.unminted_count != null ? 10000 - vd.unminted_count : null;
+                            }
+                            if (td) {
+                                // Canonical Total TLA VP = max bucket VP (each wallet's VP
+                                // allocates once per bucket; pool-summing inflates 4×).
+                                const vps = Object.values(td.buckets || {}).map(bk => bk.bucket_vp_human || 0);
+                                const vp = vps.length ? Math.max(...vps) : null;
+                                if (vp > 0) {
+                                    slot.tlaVpTotal_VP = vp;
+                                    slot.tlaVpTotal_LUNA = vp / 10;
+                                }
+                                if (!slot.timestamp || slot.timestamp.startsWith('20') === false) slot.timestamp = td.capturedAt;
+                            }
+                            if (dd) {
+                                // dao-dashboard daily archive (accruing since 2026-06-12):
+                                // DAO-specific TLA aggregates, same fields the legacy v3
+                                // dashboard block fed these charts from.
+                                const ddb = dd.dashboard || {};
+                                if (ddb.tla_deposits?.total_usd != null) slot.tlaDepositsTotal_USD = ddb.tla_deposits.total_usd;
+                                if (ddb.vote_rewards?.total_usd != null) slot.voteRewardsTotal_USD = ddb.vote_rewards.total_usd;
+                                if (ddb.unclaimed_rewards?.deposit_rewards_usd != null) slot.depositRewardsTotal_USD = ddb.unclaimed_rewards.deposit_rewards_usd;
+                                if (ddb.rebase?.usd != null) slot.rebaseTotal_USD = ddb.rebase.usd;
+                                const lp = dd.token_prices?.LUNA;
+                                if (lp > 0) {
+                                    slot.lunaPrice_USD = lp;
+                                    if (slot.tlaVpTotal_LUNA) slot.tlaVpTotal_USD = slot.tlaVpTotal_LUNA * lp;
+                                    if (slot.backingPerNft_LUNA) slot.backingPerNft_USD = slot.backingPerNft_LUNA * lp;
+                                }
                             }
                             filled++;
                         });

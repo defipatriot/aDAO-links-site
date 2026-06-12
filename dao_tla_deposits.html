@@ -587,9 +587,46 @@
             return null;
         }
         
+        // dao-dashboard.json / its daily archives → legacy "liquidity" shape adapter.
+        // The page consumes d.liquidity.adao_deposits.{total_usd,tokens} and
+        // d.liquidity.active_pools[].adao_deposit.{non_amp,amplified}; the cron
+        // emits dashboard.tla_deposits.{total_usd,tokens,positions}.
+        function adaptDaoDashboard(dd){
+            const td = dd?.dashboard?.tla_deposits;
+            if(!td) return null;
+            const byPool = {};
+            for(const p of (td.positions||[])){
+                const key = p.pool_name || (p.bucket+':single');
+                if(!byPool[key]) byPool[key] = { name: p.pool_name || key, dex: p.dex, type: p.bucket, apr: {}, tla_staked: p.pool_staked_usd || 0, adao_deposit: { non_amp: 0, amplified: 0 } };
+                byPool[key].adao_deposit[p.is_amplified ? 'amplified' : 'non_amp'] += p.position_usd || 0;
+            }
+            return {
+                meta: dd.meta,
+                token_prices: dd.token_prices || {},
+                liquidity: {
+                    adao_deposits: { total_usd: td.total_usd, tokens: td.tokens || [] },
+                    active_pools: Object.values(byPool),
+                },
+            };
+        }
+        const DD_URL = 'https://raw.githubusercontent.com/defipatriot/tla-snapshot-data_2026/main/data/dao-dashboard.json';
+        const DD_DAILY = 'https://raw.githubusercontent.com/defipatriot/tla-snapshot-data_2026/main/data/daily/dao-dashboard-';
+
         async function loadData(){
-            // Step 1: find the most recent epoch snapshot that exists (highest available)
-            for(let i=AVAILABLE_EPOCHS.length-1;i>=0;i--){const d=await fetchEpoch(AVAILABLE_EPOCHS[i]);if(d){currentData=d;break;}}
+            // Step 0 (PRIMARY): dao-dashboard cron — hourly live chain aggregates.
+            // Fresh-gated at 26h; on staleness fall through to the legacy walk.
+            try{
+                const r = await fetch(DD_URL);
+                if(r.ok){
+                    const dd = await r.json();
+                    const ageH = (Date.now() - Date.parse(dd?.meta?.generated_at||0))/36e5;
+                    const adapted = (ageH>=0 && ageH<26) ? adaptDaoDashboard(dd) : null;
+                    if(adapted){ currentData = adapted; console.log(`✓ dao-dashboard cron (${ageH.toFixed(1)}h old)`); }
+                }
+            }catch(e){/* legacy path below */}
+
+            // Step 1 (fallback): find the most recent legacy epoch snapshot
+            if(!currentData) for(let i=AVAILABLE_EPOCHS.length-1;i>=0;i--){const d=await fetchEpoch(AVAILABLE_EPOCHS[i]);if(d){currentData=d;break;}}
             if(!currentData)return false;
             const curr=currentData.meta?.epoch;
             // Step 2: pick compareData = the MOST RECENT prior epoch with data.
@@ -606,6 +643,36 @@
             }
             history=[];
             for(const e of AVAILABLE_EPOCHS){const d=await fetchEpoch(e);if(d)history.push({epoch:d.meta?.epoch||e,ts:d.meta?.generated_at,usd:d.liquidity?.adao_deposits?.total_usd||0,tokens:d.liquidity?.adao_deposits?.tokens||[],prices:d.token_prices||{}});}
+
+            // History continuation: dao-dashboard daily archives (since 2026-06-12),
+            // one entry per epoch (latest archive inside the epoch week).
+            try{
+                const REF=new Date('2025-12-01T00:00:00Z'),REFN=162,WK=7*24*3600e3;
+                const nowEp = REFN + Math.floor((Date.now()-REF.getTime())/WK);
+                const have = new Set(history.map(h=>h.epoch));
+                for(let ep=186; ep<=nowEp; ep++){
+                    if(have.has(ep)) continue;
+                    const epochEnd = new Date(REF.getTime()+(ep-REFN+1)*WK);
+                    for(let d2=1; d2<=7; d2++){
+                        const probe = new Date(Math.min(epochEnd.getTime()-d2*86400000, Date.now()));
+                        if(probe < new Date('2026-06-12')) break;
+                        const key = probe.toISOString().slice(0,10);
+                        try{
+                            const r = await fetch(DD_DAILY + key + '.json');
+                            if(!r.ok) continue;
+                            const a = adaptDaoDashboard(await r.json());
+                            if(!a) break;
+                            history.push({epoch:ep, ts:a.meta?.generated_at, usd:a.liquidity.adao_deposits.total_usd||0, tokens:a.liquidity.adao_deposits.tokens||[], prices:a.token_prices});
+                            // Newest archived epoch below current also becomes the default compare baseline
+                            const curr = currentData?.meta?.epoch;
+                            if(curr!=null && ep<curr && (!compareData || (compareData.meta?.epoch??0)<ep)) compareData = a;
+                            console.log(`✓ archive E${ep} (${key})`);
+                            break;
+                        }catch(_){/* try earlier date */}
+                    }
+                }
+                history.sort((x,y)=>x.epoch-y.epoch);
+            }catch(e){console.warn('archive history skipped:',e);}
             return true;
         }
         

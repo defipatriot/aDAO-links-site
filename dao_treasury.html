@@ -1427,11 +1427,26 @@
         }
         
         async function fetchCurrentTlaData() {
-            // Try to fetch the most recent TLA data file
+            // PRIMARY: dao-dashboard cron (hourly live chain aggregates, legacy-compatible
+            // shape incl. dashboard.treasury + token_prices). Fresh-gated at 26h so a
+            // stuck emitter falls back to the honest legacy walk-back below.
+            try {
+                const r = await fetch('https://raw.githubusercontent.com/defipatriot/tla-snapshot-data_2026/main/data/dao-dashboard.json');
+                if (r.ok) {
+                    const dd = await r.json();
+                    const ageH = (Date.now() - Date.parse(dd?.meta?.generated_at || 0)) / 36e5;
+                    if (dd?.dashboard?.treasury && ageH >= 0 && ageH < 26) {
+                        console.log(`Loaded dao-dashboard cron data (${ageH.toFixed(1)}h old)`);
+                        currentTlaData = dd;
+                        return dd;
+                    }
+                }
+            } catch (e) { /* fall through to legacy walk-back */ }
+
+            // FALLBACK: legacy epoch files. The legacy cron died after epoch 185, so the
+            // walk-back is extended to 12 epochs to keep reaching it as a last resort.
             const currentEpoch = getCurrentEpoch();
-            
-            // Try current-1 first (most recent completed), then current-2, etc.
-            for (let tryEpoch = currentEpoch - 1; tryEpoch >= currentEpoch - 5; tryEpoch--) {
+            for (let tryEpoch = currentEpoch - 1; tryEpoch >= currentEpoch - 12; tryEpoch--) {
                 try {
                     const url = `${TLA_DATA_BASE_URL}/tla-data-epoch-${tryEpoch}-end.json`;
                     console.log(`Trying to fetch TLA data: ${url}`);
@@ -1621,8 +1636,55 @@
                 }
             }
             
-            historicalSnapshots = snapshots.reverse(); // Oldest first
-            console.log(`Loaded ${historicalSnapshots.length} historical snapshots from TLA data`);
+            // ── dao-dashboard daily archives: history past the legacy cutoff ──
+            // The legacy epoch cron died after 185; the dao-dashboard cron archives
+            // its first run each UTC day (since 2026-06-12). One entry per epoch
+            // (latest archive within the epoch week), including the in-progress
+            // epoch so the compare tool always has a recent snapshot baseline.
+            try {
+                const have = new Set(snapshots.map(s => s.epoch));
+                const REF = new Date('2025-12-01T00:00:00Z'), REFN = 162, WK = 7 * 24 * 3600e3;
+                const DD = 'https://raw.githubusercontent.com/defipatriot/tla-snapshot-data_2026/main/data/daily/dao-dashboard-';
+                for (let ep = Math.max(186, currentEpoch - 20); ep <= currentEpoch; ep++) {
+                    if (have.has(ep)) continue;
+                    const epochEnd = new Date(REF.getTime() + (ep - REFN + 1) * WK);
+                    for (let d = 1; d <= 7; d++) {
+                        const probe = new Date(Math.min(epochEnd.getTime() - d * 86400000, Date.now()));
+                        if (probe < new Date('2026-06-12')) break; // archive start
+                        const key = probe.toISOString().slice(0, 10);
+                        try {
+                            const r = await fetch(DD + key + '.json');
+                            if (!r.ok) continue;
+                            const dd = await r.json();
+                            const t = dd?.dashboard?.treasury;
+                            if (!t) break;
+                            const lion = dd.dashboard?.alliances?.lion_dao?.chain_staking;
+                            const lunaP = dd.token_prices?.LUNA || 0;
+                            const lionStaked = lion?.validators?.[0]?.staked_luna || 0;
+                            snapshots.push({
+                                epoch: ep,
+                                timestamp: dd.meta?.generated_at,
+                                treasuryAssets: t.tokens || [],
+                                councilAssets: [],
+                                stakedTotal_USD: lionStaked * lunaP,
+                                treasuryTotal_USD: t.total_usd,
+                                councilTotal_USD: 0,
+                                prices: dd.token_prices || {},
+                                alliance: {
+                                    luna_staked: lionStaked,
+                                    luna_rewards: lion?.validators?.[0]?.unclaimed_rewards_luna || 0,
+                                    staking_apr: lion?.staking_apr_pct || 0,
+                                },
+                            });
+                            console.log(`Loaded dao-dashboard archive for epoch ${ep} (${key})`);
+                            break;
+                        } catch (_) { /* try earlier date */ }
+                    }
+                }
+            } catch (e) { console.warn('archive history augmentation skipped:', e); }
+
+            historicalSnapshots = snapshots.sort((a, b) => a.epoch - b.epoch); // Oldest first
+            console.log(`Loaded ${historicalSnapshots.length} historical snapshots`);
             return historicalSnapshots;
         }
         
