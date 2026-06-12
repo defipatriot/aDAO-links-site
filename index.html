@@ -7323,6 +7323,111 @@
                 // fetchTlaData is internally cached, so subsequent callers reuse the result.
                 fetchTlaData().then(() => applyTlaStaleness()).catch(() => {/* silent — UI handles missing data */});
 
+                // ── CRON-FIRST PAINT (Rev 3.53) ───────────────────────────────────
+                // The live path takes ~9s (dozens of LCD queries). The v2 pipeline +
+                // network-and-prices cron carry chain-truth copies of nearly every
+                // headline number, 15-min / hourly fresh, as two fast static fetches.
+                // Paint those FIRST so the page is readable in <1s; the live pass
+                // then lands on top. Safety: every fill here goes through updateTile
+                // or a spinner-guarded setter, so cron paint can never overwrite
+                // live data no matter how the race resolves.
+                (async function paintFromCron() {
+                    const t0 = performance.now();
+                    try {
+                        const V2 = 'https://raw.githubusercontent.com/defipatriot/nft-inventory-data_2026/main/data/v2/';
+                        const NET = 'https://raw.githubusercontent.com/defipatriot/network-and-prices-data_2026/main/data/network-and-prices.json';
+                        const [sumR, netR] = await Promise.all([
+                            fetch(V2 + 'summary.json').catch(() => null),
+                            fetch(NET).catch(() => null),
+                        ]);
+                        if (!sumR?.ok) return;
+                        const s = await sumR.json();
+                        // Freshness gate: a wedged cron must not paint stale numbers —
+                        // in that case leave the spinners for the live pass.
+                        if (!s.capturedAt || (Date.now() - Date.parse(s.capturedAt)) > 2 * 3600e3) {
+                            console.warn('paintFromCron: summary stale, skipping instant paint');
+                            return;
+                        }
+                        const net = netR?.ok ? await netR.json() : null;
+                        const lunaPrice = net?.token_prices?.LUNA?.final_price_usd || null;
+                        const ampRatio = net?.lst_ratios?.ampLUNA?.ratio || null;
+
+                        // Seed the gecko-shaped price cache so price-dependent components
+                        // (volume displays, unclaimed rewards) work before CoinGecko answers.
+                        if (net?.token_prices && !window.cachedPriceData) {
+                            const seeded = {};
+                            for (const [denom, info] of Object.entries(denomMap)) {
+                                const sym = info.name === 'wBTC' ? 'WBTC' : info.name;
+                                const p = net.token_prices[sym]?.final_price_usd ?? net.token_prices[info.name]?.final_price_usd;
+                                if (info.geckoId && p > 0) seeded[info.geckoId] = { usd: p };
+                            }
+                            if (lunaPrice) seeded['terra-luna-2'] = { usd: lunaPrice };
+                            if (Object.keys(seeded).length) { window.cachedPriceData = seeded; cachedPriceData = seeded; }
+                        }
+
+                        const loc = (n) => Number(n).toLocaleString('en-US');
+                        const fix = (n, d) => Number(n).toFixed(d);
+                        // Spinner-guarded direct setters (live path writes these unconditionally later)
+                        const setIfLoading = (id, txt, html) => {
+                            const el = document.getElementById(id);
+                            if (el && el.innerHTML.includes('fa-spinner')) { if (html) el.innerHTML = txt; else el.textContent = txt; }
+                        };
+
+                        // Mint / broken sliders + counts
+                        const minted = s.minted_count, unminted = s.unminted_count, broken = s.broken_count;
+                        if (minted != null && unminted != null) {
+                            const pct = minted / (minted + unminted) * 100;
+                            setIfLoading('unminted-count', loc(unminted), true);
+                            setIfLoading('minted-count', loc(minted), true);
+                            setIfLoading('minted-percent', `${fix(pct, 2)}% Minted`, true);
+                            const ms = document.getElementById('mint-slider');
+                            if (ms && !ms.innerHTML.includes('slider-fill')) ms.innerHTML = `<div class="slider-fill-blue" style="width: ${pct}%;"></div><div class="slider-fill-gray" style="width: ${100 - pct}%;"></div>`;
+                        }
+                        if (broken != null) {
+                            const pctB = broken / 10000 * 100;
+                            setIfLoading('unbroken-count', loc(10000 - broken));
+                            setIfLoading('broken-count', loc(broken));
+                            setIfLoading('broken-percent', `${fix(pctB, 2)}% Broken`);
+                            const bs = document.getElementById('broken-slider');
+                            if (bs && !bs.innerHTML.includes('slider-fill')) bs.innerHTML = `<div class="slider-fill-blue" style="width: ${100 - pctB}%;"></div><div class="slider-fill-gray" style="width: ${pctB}%;"></div>`;
+                        }
+
+                        // Staking tiles + supply screener (updateTile = spinner-fill-only)
+                        if (s.daodao_staked_count != null) updateTile('daodao-staked', loc(s.daodao_staked_count), true);
+                        if (s.dao_members_count != null) updateTile('dao-members', loc(s.dao_members_count), true);
+                        if (s.enterprise_staked_count != null) updateTile('enterprise-staked-holder', loc(s.enterprise_staked_count), true, { titleId: 'enterprise-staked-title' });
+                        const circulating = minted != null && s.dao_held_count != null ? minted - s.dao_held_count : null;
+                        if (s.daodao_staked_count != null && circulating > 0) {
+                            setIfLoading('daodao-staked-percentage', `${fix(s.daodao_staked_count / circulating * 100, 2)}% of Circulating`);
+                        }
+                        setIfLoading('supply-minted', minted != null ? loc(minted) : '—');
+                        setIfLoading('supply-circulating', circulating != null ? loc(circulating) : '—');
+                        setIfLoading('supply-liquid', s.user_liquid_count != null ? loc(s.user_liquid_count) : '—');
+                        setIfLoading('supply-daodao-staked', s.daodao_staked_count != null ? loc(s.daodao_staked_count) : '—');
+                        setIfLoading('supply-enterprise-staked', s.enterprise_staked_count != null ? loc(s.enterprise_staked_count) : '—');
+
+                        // Backing per NFT (ampLUNA from the pipeline, LUNA/USD via cron ratio+price)
+                        const perAmp = s.backing?.per_nft_ampluna;
+                        if (perAmp > 0) {
+                            updateTile('backing-per-nft-ampluna', fix(perAmp, 4), true, { titleId: 'backing-ampluna-title', subtextId: 'backing-per-nft-change', subtext: ampRatio ? `Ratio: ${fix(ampRatio, 4)}` : '' });
+                            if (ampRatio) {
+                                const perLuna = perAmp * ampRatio;
+                                updateTile('backing-per-nft-luna-live', fix(perLuna, 4), true, { titleId: 'backing-luna-live-title', subtextId: 'live-luna-price', subtext: lunaPrice ? `@ $${fix(lunaPrice, 4)} / LUNA` : '' });
+                                if (lunaPrice) updateTile('backing-per-nft-usd', `$${fix(perLuna * lunaPrice, 2)}`, true, { titleId: 'backing-usd-title' });
+                            }
+                        }
+                        // Unminted backing totals
+                        if (perAmp > 0 && ampRatio && lunaPrice && unminted != null) {
+                            const totLuna = perAmp * ampRatio * unminted;
+                            setIfLoading('unminted-nft-backing-usd', `$${loc(Math.round(totLuna * lunaPrice))} USD`);
+                        }
+
+                        const lu = document.getElementById('last-updated');
+                        if (lu) lu.textContent = `Data as of ${new Date(s.capturedAt).toLocaleTimeString()} (pipeline) — refreshing live…`;
+                        console.log(`paintFromCron: instant paint in ${(performance.now() - t0).toFixed(0)}ms (pipeline data ${((Date.now() - Date.parse(s.capturedAt)) / 60000).toFixed(0)}m old)`);
+                    } catch (e) { console.warn('paintFromCron skipped:', e.message); }
+                })();
+
                 fetchLiveOnChainData();
             }
 
@@ -7334,7 +7439,10 @@
 
 
                 // ... (API URLs setup remains the same) ...
-                 const onChainStatsUrl = 'https://deving.zone/nfts/alliance_daos.json';
+                 // Rev 3.53: deving.zone (dead pipeline, stale data, slow responses) replaced
+                 // with the v2 chain-of-truth inventory. The adapter below maps records[]
+                 // into the legacy {collection_stats, nfts} shape this function consumes.
+                 const onChainStatsUrl = 'https://raw.githubusercontent.com/defipatriot/nft-inventory-data_2026/main/data/v2/nfts.json';
                  const contractRewardsQuery = btoa(JSON.stringify({ all_nft_info: { token_id: "9068" } }));
                  const contractUrl = `https://terra.publicnode.com/cosmwasm/wasm/v1/contract/terra1phr9fngjv7a8an4dhmhd0u0f98wazxfnzccqtyheq4zqrrp4fpuqw3apw9/smart/${contractRewardsQuery}`;
                  const ampLunaRateQuery = btoa(JSON.stringify({ exchange_rates: {} }));
@@ -7390,7 +7498,14 @@
                     }
                     console.log("DEBUG: All primary API responses OK."); 
 
-                    const statsData = await statsResponse.json(); console.log("DEBUG: Parsed statsData."); 
+                    const statsRaw = await statsResponse.json(); console.log("DEBUG: Parsed statsRaw.");
+                    // v2 → legacy adapter: records[] carry owner/real_owner/broken/minted/
+                    // daodao/enterprise. Staked records hold the staking contract in `owner`
+                    // and the real staker in `real_owner` — downstream holder math expects
+                    // resolved owners (deving resolved them too), so prefer real_owner.
+                    const statsData = Array.isArray(statsRaw.records)
+                        ? { collection_stats: statsRaw.summary || {}, nfts: statsRaw.records.map(r => ({ ...r, owner: r.real_owner || r.owner })) }
+                        : statsRaw; 
                     const contractJson = await contractResponse.json(); console.log("DEBUG: Parsed contractJson."); 
                     const ampLunaRateData = await ampLunaRateResponse.json(); console.log("DEBUG: Parsed ampLunaRateData."); 
                     const priceData = await priceResponse.json(); console.log("DEBUG: Parsed priceData."); 
@@ -7554,6 +7669,9 @@
                         window._dashNfts = nfts;
                         window._dashMinted = mintedCount;
                         window._dashDaoWallet = DAO_MAIN_WALLET;
+                        // The analytics-strip market cap may have raced ahead of this stash —
+                        // re-trigger it now that the exact circulating split is computable.
+                        window.fillAnalyticsMcap?.();
                     }
                     const circulatingSupply = mintedCount != null ? Math.max(0, mintedCount - 1000) : null; // Assuming 1000 DAO broken
                     const rewardsAttribute = contractJson?.data?.info?.extension?.attributes?.find(attr => attr.trait_type === 'rewards');
@@ -11669,7 +11787,8 @@
                 console.log('DEBUG: Starting NFT Marketplace setup...');
                 
                 const CLOUDFLARE_CDN = 'https://imagedelivery.net/v_zOWVQCPb7Xpcbu-gQC1A/alliance_dao';
-                const STATUS_URL = 'https://deving.zone/nfts/alliance_daos.json';
+                // Rev 3.53: deving.zone replaced with the v2 chain-of-truth inventory
+                const STATUS_URL = 'https://raw.githubusercontent.com/defipatriot/nft-inventory-data_2026/main/data/v2/nfts.json';
                 const SALES_BASE_URL = 'https://raw.githubusercontent.com/defipatriot/adao_json_storage/main/';
                 const BBL_CONTRACT = 'terra1phr9fngjv7a8an4dhmhd0u0f98wazxfnzccqtyheq4zqrrp4fpuqw3apw9';
                 const PIXELIONS_CONTRACT = 'terra17z7fpaa8kah698xn5tarrcucvualdy4wsztkfc404g3garucpu6qmxp50g';
@@ -11905,7 +12024,12 @@
                     try {
                         const response = await fetch(STATUS_URL);
                         if (!response.ok) throw new Error('Failed to fetch');
-                        nftStatusData = await response.json();
+                        const raw = await response.json();
+                        // v2 → legacy adapter. Numeric ids: one consumer matches with
+                        // strict === against numeric sale ids, so normalize here.
+                        nftStatusData = Array.isArray(raw.records)
+                            ? { nfts: raw.records.map(r => ({ id: Number(r.id), broken: !!r.broken, bbl: !!r.bbl_listed, boost: !!r.boost_listed })) }
+                            : raw;
                         processListings();
                     } catch (err) {
                         console.error('NFT status fetch error:', err);
@@ -13104,7 +13228,52 @@
                 const V2_RARITY = 'https://raw.githubusercontent.com/defipatriot/nft-metadata/main/adao-rarity-intended.json';
                 window.v2Events = null; window.v2Top10 = null;
                 let _v2Promise = null;
-                let _v2TierCtx = null; // { gradeMap, atriumListings } once the module loads
+                let _v2TierCtx = null; // { gradeMap, atriumListings, brokenAt, salesDesc, rarRecords } once the module loads
+
+                // Analytics-strip market cap. Idempotent and re-entrant: it needs FOUR
+                // async things (v2 module data, BBL/Boost caches, the page's 10k NFT
+                // array stash, rarity) that finish in any order, so it's called from
+                // every completion point and computes when everything is ready.
+                window.fillAnalyticsMcap = function fillAnalyticsMcap() {
+                    try {
+                        const ctx = _v2TierCtx;
+                        if (!ctx || !ctx.rarRecords || !ctx.salesDesc) return;
+                        if (!Array.isArray(window._dashNfts) || !window._dashNfts.length || window._dashMinted == null) return;
+                        const { gradeMap, atriumListings, brokenAt, salesDesc, rarRecords } = ctx;
+                        const isBrokenNow = (id) => !!brokenAt[String(id)];
+                        const tierOfSale = (id, ts) => {
+                            const b = brokenAt[String(id)];
+                            if (b && Date.parse(ts) >= Date.parse(b.broken_at)) return 'broken';
+                            return gradeMap.get(String(id)) === 40 ? 'phoenix' : 'base';
+                        };
+                        const tierNow = (id) => isBrokenNow(id) ? 'broken' : (gradeMap.get(String(id)) === 40 ? 'phoenix' : 'base');
+                        const lastK = { broken: 5, base: 10, phoenix: 3 };
+                        const med = (a) => { if (!a.length) return null; const s2 = [...a].sort((x, y) => x - y); const m = s2.length >> 1; return s2.length % 2 ? s2[m] : (s2[m - 1] + s2[m]) / 2; };
+                        const allLst = [];
+                        if (marketplaceCache.bbl?.alliance_dao?.listings) allLst.push(...marketplaceCache.bbl.alliance_dao.listings);
+                        if (marketplaceCache.boost?.alliance_dao?.listings) allLst.push(...marketplaceCache.boost.alliance_dao.listings);
+                        allLst.push(...(atriumListings || []));
+                        const mcParts = ['broken', 'base', 'phoenix'].map(t => {
+                            const sf = med(salesDesc.filter(s => tierOfSale(s.token_id, s.timestamp) === t).slice(0, lastK[t]).map(s => s.notional_usd).filter(v => v != null));
+                            const lfArr = allLst.filter(l => tierNow(l.tokenId) === t && l.priceUsd > 0).map(l => l.priceUsd);
+                            const lf = lfArr.length ? Math.min(...lfArr) : null;
+                            const mark = (sf && lf != null) ? (sf + lf) / 2 : (sf || lf || 0);
+                            return { t, mark };
+                        });
+                        const unmintedSet = new Set(window._dashNfts.filter(n => n.owner === window._dashDaoWallet).map(n => String(n.id)));
+                        const phxCirc = rarRecords.filter(r => r.grade === 40 && !unmintedSet.has(String(r.token_id)) && !isBrokenNow(r.token_id)).length;
+                        const brokenCount = Object.keys(brokenAt).length;
+                        const circ = { broken: brokenCount, phoenix: phxCirc, base: window._dashMinted - brokenCount - phxCirc };
+                        const mcap = mcParts.reduce((s2, x) => s2 + x.mark * Math.max(0, circ[x.t] || 0), 0);
+                        if (mcap > 0) {
+                            const mcapTxt = '$' + Math.round(mcap).toLocaleString('en-US');
+                            const el = document.getElementById('nftan-mcap');
+                            const elM = document.getElementById('nftan-mcap-mobile');
+                            if (el) el.textContent = mcapTxt;
+                            if (elM) elM.textContent = mcapTxt;
+                        }
+                    } catch (e) { console.warn('mcap fill skipped:', e.message); }
+                };
 
                 // Per-tier floors on the marketplace tiles. Idempotent — called when the
                 // v2 module finishes AND when the BBL/Boost caches finish populating,
@@ -13123,7 +13292,7 @@
                             const fp = n ? Math.min(...arr) : null;
                             return `<div class="flex justify-between items-center text-xs">
                                 <span class="${color}">${label} FP</span>
-                                <span class="font-mono">${fp != null ? `<span class="text-green-400">$${fp >= 1000 ? Math.round(fp).toLocaleString() : fp.toFixed(2)}</span> <span class="text-gray-500">× ${n}</span>` : '<span class="text-gray-600">—</span>'}</span></div>`;
+                                <span class="font-mono">${fp != null ? `<span class="text-green-400">$${fp >= 1000 ? Math.round(fp).toLocaleString() : fp.toFixed(2)}</span> <span class="text-gray-500">× ${n}</span>` : '<span class="text-gray-600">N/A</span>'}</span></div>`;
                         };
                         el.innerHTML = row('Broken', 'text-red-400/80', tiers.broken)
                             + row('Unbroken base', 'text-gray-400', tiers.base)
@@ -13248,49 +13417,16 @@
                         }));
                         window.v2Top10Min = top.length ? Math.min(...top.map(s => s.notional_usd || 0)) : 0;
 
-                        // --- Market cap (per-tier mark x circulating), same methodology as the explorer ---
-                        try {
-                            if (rar && rar.records) {
-                                const grade = new Map(rar.records.map(r => [String(r.token_id), r.grade]));
-                                const tierOfSale = (id, ts) => {
-                                    const b = brokenAt[String(id)];
-                                    if (b && Date.parse(ts) >= Date.parse(b.broken_at)) return 'broken';
-                                    return grade.get(String(id)) === 40 ? 'phoenix' : 'base';
-                                };
-                                const tierNow = (id) => isBrokenNow(id) ? 'broken' : (grade.get(String(id)) === 40 ? 'phoenix' : 'base');
-                                const desc = [...sales].sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
-                                const lastK = { broken: 5, base: 10, phoenix: 3 };
-                                const med = (a) => { if (!a.length) return null; const s2 = [...a].sort((x, y) => x - y); const m = s2.length >> 1; return s2.length % 2 ? s2[m] : (s2[m - 1] + s2[m]) / 2; };
-                                const allLst = [];
-                                Object.values(marketplaceCache.bbl?.alliance_dao?.listings ? { a: marketplaceCache.bbl.alliance_dao.listings } : {}).forEach(L => allLst.push(...L));
-                                allLst.push(...atriumListings);
-                                if (marketplaceCache.boost?.alliance_dao?.listings) allLst.push(...marketplaceCache.boost.alliance_dao.listings);
-                                const mcParts = ['broken', 'base', 'phoenix'].map(t => {
-                                    const sf = med(desc.filter(s => tierOfSale(s.token_id, s.timestamp) === t).slice(0, lastK[t]).map(s => s.notional_usd).filter(v => v != null));
-                                    const lfArr = allLst.filter(l => tierNow(l.tokenId) === t && l.priceUsd > 0).map(l => l.priceUsd);
-                                    const lf = lfArr.length ? Math.min(...lfArr) : null;
-                                    const mark = (sf && lf != null) ? (sf + lf) / 2 : (sf || lf || 0);
-                                    return { t, mark };
-                                });
-                                // Exact circulating split (matches the explorer): minted = not held by the DAO
-                                // main wallet, from the per-token array the page already fetched. If that array
-                                // isn't available, leave market cap blank rather than show a number that
-                                // disagrees with the analytics page.
-                                if (!Array.isArray(window._dashNfts) || !window._dashNfts.length || window._dashMinted == null) return true;
-                                const unmintedSet = new Set(window._dashNfts.filter(n => n.owner === window._dashDaoWallet).map(n => String(n.id)));
-                                const phxCirc = rar.records.filter(r => r.grade === 40 && !unmintedSet.has(String(r.token_id)) && !isBrokenNow(r.token_id)).length;
-                                const brokenCount = Object.keys(brokenAt).length; // all broken are minted (unminted reserve has 0 broken)
-                                const circ = { broken: brokenCount, phoenix: phxCirc, base: window._dashMinted - brokenCount - phxCirc };
-                                const mcap = mcParts.reduce((s2, x) => s2 + x.mark * Math.max(0, circ[x.t] || 0), 0);
-                                if (mcap > 0) {
-                                    const mcapTxt = '$' + Math.round(mcap).toLocaleString('en-US');
-                                    const el = document.getElementById('nftan-mcap');
-                                    const elM = document.getElementById('nftan-mcap-mobile');
-                                    if (el) el.textContent = mcapTxt;
-                                    if (elM) elM.textContent = mcapTxt;
-                                }
-                            }
-                        } catch (e) { console.warn('v2 mcap skipped:', e.message); }
+                        // --- Market cap (per-tier mark x circulating), same methodology as the
+                        // explorer. Computation lives in window.fillAnalyticsMcap (idempotent)
+                        // because it races against the NFT-array stash and the BBL/Boost caches;
+                        // here we stash the module's data into the shared ctx and try a fill.
+                        if (rar && rar.records && _v2TierCtx) {
+                            _v2TierCtx.brokenAt = brokenAt;
+                            _v2TierCtx.salesDesc = [...sales].sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
+                            _v2TierCtx.rarRecords = rar.records;
+                            window.fillAnalyticsMcap();
+                        }
 
                         console.log(`v2 pipeline loaded: ${atriumListings.length} Atrium listings, ${ev.length} events (7d), top10 live`);
                         return true;
@@ -13924,7 +14060,7 @@
                     // v2 pipeline: Atrium listings + market cap arrive async, then re-render.
                     // fillAllTierFloors covers the race where the activity feed kicked the
                     // module off before these caches existed.
-                    loadV2MarketData().then((ok) => { if (ok) { renderCombinedListings(); fillAllTierFloors(); } });
+                    loadV2MarketData().then((ok) => { if (ok) { renderCombinedListings(); fillAllTierFloors(); window.fillAnalyticsMcap?.(); } });
                 }
                 
                 // Convert IPFS URL to HTTP gateway URL
