@@ -9939,6 +9939,27 @@
                     // Get accurate current epoch
                     const currentEpoch = await getCurrentEpoch();
                     tlaDataMeta.currentEpoch = currentEpoch;
+
+                    // ── PRIMARY: dao-dashboard cron (live chain aggregates, hourly) ──
+                    // Emits a legacy-v3-compatible { meta, dashboard } so every consumer
+                    // below works unchanged. Accepted only when fresh (< 26h) — a stale
+                    // emitter must not mask the honest legacy walk-back staleness pill.
+                    try {
+                        const ddResp = await fetch('https://raw.githubusercontent.com/defipatriot/tla-snapshot-data_2026/main/data/dao-dashboard.json');
+                        if (ddResp.ok) {
+                            const dd = await ddResp.json();
+                            const ageHours = (Date.now() - Date.parse(dd?.meta?.generated_at || 0)) / 36e5;
+                            if (dd?.dashboard && ageHours >= 0 && ageHours < 26) {
+                                cachedTlaData = dd;
+                                tlaDataMeta.loadedEpoch = dd.meta?.epoch ?? currentEpoch;
+                                tlaDataMeta.epochsOld = 0;
+                                tlaDataMeta.isStale = false;
+                                console.log(`Loaded dao-dashboard cron data (epoch ${tlaDataMeta.loadedEpoch}, ${ageHours.toFixed(1)}h old)`);
+                                return cachedTlaData;
+                            }
+                            console.warn(`dao-dashboard.json present but ${ageHours.toFixed(1)}h old — falling back to legacy epoch files`);
+                        }
+                    } catch (e) { /* fall through to legacy walk-back */ }
                     
                     // Try newest first: currentEpoch+1 (just in case), currentEpoch (uploaded early),
                     // currentEpoch-1 (typical: last completed), then fall back to older epochs.
