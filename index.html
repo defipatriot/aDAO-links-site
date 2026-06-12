@@ -5253,7 +5253,73 @@
                 if (missingEpochs.length > 0) {
                     console.log(`DEBUG: Missing epochs: ${missingEpochs.join(', ')}`);
                 }
-                
+
+                // ── V2 AUGMENTATION ─────────────────────────────────────────────
+                // The legacy epoch cron died after 185, so every epoch since is a
+                // "missing" placeholder and the charts stop accruing points. Fill
+                // those epochs from the new pipeline instead:
+                //   - backing-data_2026 daily history → backing LUNA/ampLUNA + ratio
+                //   - nft-inventory data/v2/daily/   → DAODAO staked, Enterprise,
+                //     DAO held, circulating supply
+                // One synthetic point per epoch (latest day inside the epoch week),
+                // so cadence/labels stay uniform with the legacy series. Metrics a
+                // source can't provide stay null — honest gaps, no fabrication.
+                try {
+                    const epochOfDate = (dStr) => epochReferenceNumber +
+                        Math.floor((new Date(dStr + 'T12:00:00Z') - epochReferenceDate) / msPerWeek);
+                    const toFill = allResults.filter(r => r.missing && r.epoch > 185);
+                    if (toFill.length > 0) {
+                        // Backing daily history: pick the latest entry inside each epoch
+                        const bHist = (await fetchBackingCronHistory()) || [];
+                        const backingByEpoch = {};
+                        for (const h of bHist) {
+                            const ep = epochOfDate(h.date);
+                            if (!backingByEpoch[ep] || h.date > backingByEpoch[ep].date) backingByEpoch[ep] = h;
+                        }
+                        // v2 dailies exist since 2026-06-07: probe the last 7 dates of
+                        // each epoch (newest first) and take the first that exists.
+                        const V2_DAILY = 'https://raw.githubusercontent.com/defipatriot/nft-inventory-data_2026/main/data/v2/daily/';
+                        const fetchV2DailyForEpoch = async (ep) => {
+                            const epochEnd = new Date(epochReferenceDate.getTime() + (ep - epochReferenceNumber + 1) * msPerWeek);
+                            for (let d = 1; d <= 7; d++) {
+                                const probe = new Date(Math.min(epochEnd.getTime() - d * 86400000, Date.now()));
+                                if (probe < new Date('2026-06-07')) break; // archive start
+                                const key = probe.toISOString().slice(0, 10);
+                                try {
+                                    const r = await fetch(V2_DAILY + key + '.json');
+                                    if (r.ok) return await r.json();
+                                } catch (_) {}
+                            }
+                            return null;
+                        };
+                        const dailies = await Promise.all(toFill.map(r => fetchV2DailyForEpoch(r.epoch)));
+                        let filled = 0;
+                        toFill.forEach((slot, i) => {
+                            const vd = dailies[i];
+                            const b = backingByEpoch[slot.epoch];
+                            if (!vd && !b) return; // stays an honest missing placeholder
+                            delete slot.missing;
+                            slot.source = 'v2_synth';
+                            slot.timestamp = (vd?.capturedAt) || (b ? b.date + 'T23:00:00Z' : slot.timestamp);
+                            if (b) {
+                                slot.backingPerNft_LUNA = b.backingInLuna || null;
+                                slot.backingPerNft_ampLUNA = b.ampLunaPerNft || null;
+                                slot.lstRatios = { ampLUNA: b.ampLunaRate || null };
+                            }
+                            if (vd) {
+                                slot.daodaoStaked = vd.daodao_staked_count ?? null;
+                                slot.enterpriseStaked = vd.enterprise_staked_count ?? null;
+                                slot.daoHeldNfts = (vd.treasury_held_count ?? 0)
+                                    + (vd.dao_wallet_8ywv_held_count ?? 0)
+                                    + (vd.enterprise_dao_broken_count ?? 0) || null;
+                                slot.circulatingSupply = vd.unminted_count != null ? 10000 - vd.unminted_count : null;
+                            }
+                            filled++;
+                        });
+                        if (filled) console.log(`DEBUG: v2 augmentation filled ${filled} post-185 epoch(s) from the new pipeline`);
+                    }
+                } catch (e) { console.warn('v2 chart augmentation skipped:', e.message); }
+
                 historicalSnapshots = allResults;
                 console.log(`DEBUG: Loaded ${allResults.filter(r => !r.missing).length} historical snapshots (missing: ${missingEpochs.join(', ') || 'none'})`);
                 return historicalSnapshots;
@@ -7999,12 +8065,15 @@
                 },
                 'nft-inventory': {
                     label: 'NFT Inventory',
-                    cadence: 'hourly',
-                    cadenceMs: 60 * 60 * 1000,
-                    warningMs: 75 * 60 * 1000,
+                    // v2 pipeline: hot runs every 15 min. The old data/heartbeat.json froze
+                    // on 2026-06-07 when the cron moved to data/v2/ — reading it produced a
+                    // false "5d stale" alarm while the real pipeline was green.
+                    cadence: '15-min (hot)',
+                    cadenceMs: 15 * 60 * 1000,
+                    warningMs: 45 * 60 * 1000,
                     staleMs: 2 * 60 * 60 * 1000,
-                    sourceUrl: 'https://raw.githubusercontent.com/defipatriot/nft-inventory-data_2026/main/data/heartbeat.json',
-                    description: 'Per-NFT chain ownership + broken status (10k NFTs)',
+                    sourceUrl: 'https://raw.githubusercontent.com/defipatriot/nft-inventory-data_2026/main/data/v2/heartbeat.json',
+                    description: 'Per-NFT chain ownership + broken status (10k NFTs, v2 pipeline)',
                 },
                 'marketplace-stats': {
                     label: 'Marketplace Stats',
@@ -13035,6 +13104,36 @@
                 const V2_RARITY = 'https://raw.githubusercontent.com/defipatriot/nft-metadata/main/adao-rarity-intended.json';
                 window.v2Events = null; window.v2Top10 = null;
                 let _v2Promise = null;
+                let _v2TierCtx = null; // { gradeMap, atriumListings } once the module loads
+
+                // Per-tier floors on the marketplace tiles. Idempotent — called when the
+                // v2 module finishes AND when the BBL/Boost caches finish populating,
+                // because those two races can land in either order.
+                function fillAllTierFloors() {
+                    if (!_v2TierCtx) return;
+                    const { gradeMap, atriumListings } = _v2TierCtx;
+                    const tierOfListing = (l) => l.isBroken ? 'broken' : (gradeMap.get(String(l.tokenId)) === 40 ? 'phoenix' : 'base');
+                    const fillTiers = (mpKey, listings) => {
+                        const el = document.getElementById(mpKey + '-tier-floors');
+                        if (!el || !listings || !listings.length) return;
+                        const tiers = { broken: [], base: [], phoenix: [] };
+                        listings.forEach(l => { if (l.priceUsd > 0) tiers[tierOfListing(l)].push(l.priceUsd); });
+                        const row = (label, color, arr) => {
+                            const n = arr.length;
+                            const fp = n ? Math.min(...arr) : null;
+                            return `<div class="flex justify-between items-center text-xs">
+                                <span class="${color}">${label} FP</span>
+                                <span class="font-mono">${fp != null ? `<span class="text-green-400">$${fp >= 1000 ? Math.round(fp).toLocaleString() : fp.toFixed(2)}</span> <span class="text-gray-500">× ${n}</span>` : '<span class="text-gray-600">—</span>'}</span></div>`;
+                        };
+                        el.innerHTML = row('Broken', 'text-red-400/80', tiers.broken)
+                            + row('Unbroken base', 'text-gray-400', tiers.base)
+                            + row('Phoenix', 'text-amber-400/90', tiers.phoenix);
+                        el.classList.remove('hidden');
+                    };
+                    fillTiers('bbl',    marketplaceCache.bbl?.alliance_dao?.listings);
+                    fillTiers('boost',  marketplaceCache.boost?.alliance_dao?.listings);
+                    fillTiers('atrium', atriumListings);
+                }
                 function loadV2MarketData() {
                     if (_v2Promise) return _v2Promise;
                     _v2Promise = (async () => {
@@ -13095,34 +13194,15 @@
                             if (ds) ds.innerHTML = '<i class="fas fa-link text-pink-400 mr-1"></i>Chain-of-truth pipeline';
                         } catch (e) { /* card stays at placeholders */ }
 
-                        // --- Per-tier floors on each marketplace tile (Broken / Base / Phoenix) ---
-                        // Tier: broken via broken-at (current state), Phoenix = grade-40 unbroken.
-                        try {
-                            if (rar && rar.records) {
-                                const gradeMap = new Map(rar.records.map(r => [String(r.token_id), r.grade]));
-                                const tierOfListing = (l) => l.isBroken ? 'broken' : (gradeMap.get(String(l.tokenId)) === 40 ? 'phoenix' : 'base');
-                                const fillTiers = (mpKey, listings) => {
-                                    const el = document.getElementById(mpKey + '-tier-floors');
-                                    if (!el) return;
-                                    const tiers = { broken: [], base: [], phoenix: [] };
-                                    (listings || []).forEach(l => { if (l.priceUsd > 0) tiers[tierOfListing(l)].push(l.priceUsd); });
-                                    const row = (label, color, arr) => {
-                                        const n = arr.length;
-                                        const fp = n ? Math.min(...arr) : null;
-                                        return `<div class="flex justify-between items-center text-xs">
-                                            <span class="${color}">${label} FP</span>
-                                            <span class="font-mono">${fp != null ? `<span class="text-green-400">$${fp >= 1000 ? Math.round(fp).toLocaleString() : fp.toFixed(2)}</span> <span class="text-gray-500">× ${n}</span>` : '<span class="text-gray-600">—</span>'}</span></div>`;
-                                    };
-                                    el.innerHTML = row('Broken', 'text-red-400/80', tiers.broken)
-                                        + row('Unbroken base', 'text-gray-400', tiers.base)
-                                        + row('Phoenix', 'text-amber-400/90', tiers.phoenix);
-                                    el.classList.remove('hidden');
-                                };
-                                fillTiers('bbl',    marketplaceCache.bbl?.alliance_dao?.listings);
-                                fillTiers('boost',  marketplaceCache.boost?.alliance_dao?.listings);
-                                fillTiers('atrium', atriumListings);
-                            }
-                        } catch (e) { console.warn('tier floors skipped:', e.message); }
+                        // Per-tier floors: stash context, fill what's ready now; the
+                        // loadAllMarketplaceData completion handler re-fills for BBL/Boost.
+                        if (rar && rar.records) {
+                            _v2TierCtx = {
+                                gradeMap: new Map(rar.records.map(r => [String(r.token_id), r.grade])),
+                                atriumListings,
+                            };
+                            fillAllTierFloors();
+                        }
 
                         // --- Multi-venue events for Live Activity (last 7 days) ---
                         const cutoff = Date.now() - 7 * 86400e3;
@@ -13841,8 +13921,10 @@
                     // Render combined listings
                     renderCombinedListings();
 
-                    // v2 pipeline: Atrium listings + market cap arrive async, then re-render
-                    loadV2MarketData().then((ok) => { if (ok) renderCombinedListings(); });
+                    // v2 pipeline: Atrium listings + market cap arrive async, then re-render.
+                    // fillAllTierFloors covers the race where the activity feed kicked the
+                    // module off before these caches existed.
+                    loadV2MarketData().then((ok) => { if (ok) { renderCombinedListings(); fillAllTierFloors(); } });
                 }
                 
                 // Convert IPFS URL to HTTP gateway URL
