@@ -1684,6 +1684,7 @@
                             <span class="text-gray-400 text-sm">Currently Listed</span>
                             <span id="bbl-listed-count" class="text-cyan-400 text-sm font-bold">--</span>
                         </div>
+                        <div id="bbl-tier-floors" class="mt-2 pt-2 border-t border-gray-700/60 space-y-1 hidden"></div>
                     </div>
                     <div id="bbl-data-source" class="text-[10px] text-gray-600 mt-2 text-center">
                         <i class="fas fa-spinner fa-spin mr-1"></i>Loading live data...
@@ -1728,6 +1729,7 @@
                             <span class="text-gray-400 text-sm">Currently Listed</span>
                             <span id="boost-listed-count" class="text-cyan-400 text-sm font-bold">--</span>
                         </div>
+                        <div id="boost-tier-floors" class="mt-2 pt-2 border-t border-gray-700/60 space-y-1 hidden"></div>
                     </div>
                     <div id="boost-data-source" class="text-[10px] text-gray-600 mt-2 text-center">
                         <i class="fas fa-spinner fa-spin mr-1"></i>Loading live data...
@@ -1770,6 +1772,7 @@
                             <span class="text-gray-400 text-sm">Currently Listed</span>
                             <span id="atrium-listed-count" class="text-cyan-400 text-sm font-bold">--</span>
                         </div>
+                        <div id="atrium-tier-floors" class="mt-2 pt-2 border-t border-gray-700/60 space-y-1 hidden"></div>
                     </div>
                     <div id="atrium-data-source" class="text-[10px] text-gray-600 mt-2 text-center">
                         <i class="fas fa-spinner fa-spin mr-1"></i>Loading pipeline data...
@@ -1806,8 +1809,8 @@
                     .activity-row {
                         display: flex;
                         align-items: center;
-                        gap: 0.75rem;
-                        padding: 0.5rem 0.75rem;
+                        gap: 1rem;
+                        padding: 0.65rem 1rem;
                         transition: background 0.15s;
                         cursor: pointer;
                     }
@@ -1815,11 +1818,11 @@
                         background: rgba(55, 65, 81, 0.3);
                     }
                     .activity-event {
-                        font-size: 10px;
-                        padding: 2px 6px;
+                        font-size: 11px;
+                        padding: 3px 9px;
                         border-radius: 4px;
                         font-weight: 600;
-                        min-width: 55px;
+                        min-width: 62px;
                         text-align: center;
                     }
                     .activity-event.settle { background: rgba(16, 185, 129, 0.2); color: #10b981; }
@@ -13092,6 +13095,35 @@
                             if (ds) ds.innerHTML = '<i class="fas fa-link text-pink-400 mr-1"></i>Chain-of-truth pipeline';
                         } catch (e) { /* card stays at placeholders */ }
 
+                        // --- Per-tier floors on each marketplace tile (Broken / Base / Phoenix) ---
+                        // Tier: broken via broken-at (current state), Phoenix = grade-40 unbroken.
+                        try {
+                            if (rar && rar.records) {
+                                const gradeMap = new Map(rar.records.map(r => [String(r.token_id), r.grade]));
+                                const tierOfListing = (l) => l.isBroken ? 'broken' : (gradeMap.get(String(l.tokenId)) === 40 ? 'phoenix' : 'base');
+                                const fillTiers = (mpKey, listings) => {
+                                    const el = document.getElementById(mpKey + '-tier-floors');
+                                    if (!el) return;
+                                    const tiers = { broken: [], base: [], phoenix: [] };
+                                    (listings || []).forEach(l => { if (l.priceUsd > 0) tiers[tierOfListing(l)].push(l.priceUsd); });
+                                    const row = (label, color, arr) => {
+                                        const n = arr.length;
+                                        const fp = n ? Math.min(...arr) : null;
+                                        return `<div class="flex justify-between items-center text-xs">
+                                            <span class="${color}">${label} FP</span>
+                                            <span class="font-mono">${fp != null ? `<span class="text-green-400">$${fp >= 1000 ? Math.round(fp).toLocaleString() : fp.toFixed(2)}</span> <span class="text-gray-500">× ${n}</span>` : '<span class="text-gray-600">—</span>'}</span></div>`;
+                                    };
+                                    el.innerHTML = row('Broken', 'text-red-400/80', tiers.broken)
+                                        + row('Unbroken base', 'text-gray-400', tiers.base)
+                                        + row('Phoenix', 'text-amber-400/90', tiers.phoenix);
+                                    el.classList.remove('hidden');
+                                };
+                                fillTiers('bbl',    marketplaceCache.bbl?.alliance_dao?.listings);
+                                fillTiers('boost',  marketplaceCache.boost?.alliance_dao?.listings);
+                                fillTiers('atrium', atriumListings);
+                            }
+                        } catch (e) { console.warn('tier floors skipped:', e.message); }
+
                         // --- Multi-venue events for Live Activity (last 7 days) ---
                         const cutoff = Date.now() - 7 * 86400e3;
                         const ev = [];
@@ -13289,18 +13321,18 @@
                     if (item.synthetic) {
                         const nftId = item.token_id;
                         const eventLabel = ({ settle: 'SOLD', listed: 'LIST', cancel: 'DELIST', break: 'BREAK' })[item.event_type] || String(item.event_type).toUpperCase();
-                        const mpTag = item.mp && item.mp !== 'chain' ? `<span class="text-pink-400 text-[9px]">${item.mp}</span>` : '';
-                        const usdStr = item.usd != null ? `<span class="text-green-400 text-[10px]">$${item.usd.toFixed(2)}</span>` : '';
-                        const priceStr = item.priceTxt ? `<span class="text-yellow-400 text-xs font-medium whitespace-nowrap">${item.priceTxt}</span>` : '';
+                        const mpTag = item.mp && item.mp !== 'chain' ? `<span class="text-pink-400 text-[10px] font-medium bg-pink-500/10 px-1.5 py-0.5 rounded">${item.mp}</span>` : '';
+                        const usdStr = item.usd != null ? `<span class="text-green-400 text-xs">$${item.usd.toFixed(2)}</span>` : '';
+                        const priceStr = item.priceTxt ? `<span class="text-yellow-400 text-sm font-semibold whitespace-nowrap">${item.priceTxt}</span>` : '';
                         const timeAgo = getTimeAgo(new Date(item.timestamp));
                         row.innerHTML = `
                             <img src="${getNftImageUrl(nftId)}" alt="#${nftId}"
-                                 class="activity-img w-8 h-8 rounded object-cover flex-shrink-0"
-                                 onerror="this.src='https://placehold.co/32x32/1f2937/666?text=${nftId}'">
+                                 class="activity-img w-10 h-10 rounded-lg object-cover flex-shrink-0"
+                                 onerror="this.src='https://placehold.co/40x40/1f2937/666?text=${nftId}'">
                             <div class="activity-info flex-1 min-w-0">
-                                <div class="flex items-center gap-1.5 flex-wrap">
-                                    <span class="text-white text-sm font-medium whitespace-nowrap">#${nftId}</span>
-                                    <span class="text-cyan-400 text-[9px]">aDAO</span>
+                                <div class="flex items-center gap-2 flex-wrap">
+                                    <span class="text-white text-base font-semibold whitespace-nowrap">#${nftId}</span>
+                                    <span class="text-cyan-400 text-[10px] font-medium">aDAO</span>
                                     ${mpTag}
                                     <span class="activity-event ${item.event_type}">${eventLabel}</span>
                                 </div>
@@ -13369,12 +13401,12 @@
                     
                     row.innerHTML = `
                         <img src="${imageUrl}" alt="#${nftId}" 
-                             class="activity-img w-8 h-8 rounded object-cover flex-shrink-0 ${isBroken ? 'opacity-60' : ''}"
-                             onerror="this.src='https://placehold.co/32x32/1f2937/666?text=${nftId}'">
+                             class="activity-img w-10 h-10 rounded-lg object-cover flex-shrink-0 ${isBroken ? 'opacity-60' : ''}"
+                             onerror="this.src='https://placehold.co/40x40/1f2937/666?text=${nftId}'">
                         <div class="activity-info flex-1 min-w-0">
-                            <div class="flex items-center gap-1.5 flex-wrap">
-                                <span class="text-white text-sm font-medium whitespace-nowrap">#${nftId}${brokenBadge}</span>
-                                <span class="text-${collectionColor}-400 text-[9px]">${collectionName}</span>
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <span class="text-white text-base font-semibold whitespace-nowrap">#${nftId}${brokenBadge}</span>
+                                <span class="text-${collectionColor}-400 text-[10px] font-medium">${collectionName}</span>
                                 <span class="activity-event ${item.event_type}">${eventLabel}</span>
                             </div>
                             <div class="flex items-center gap-2 mt-0.5 sm:hidden">
@@ -13383,7 +13415,7 @@
                             </div>
                         </div>
                         <div class="hidden sm:flex flex-col items-end flex-shrink-0 mr-3">
-                            <span class="text-yellow-400 text-xs font-medium whitespace-nowrap">${price} bLUNA</span>
+                            <span class="text-yellow-400 text-sm font-semibold whitespace-nowrap">${price} bLUNA</span>
                             ${usdStr}
                         </div>
                         <span class="activity-time text-gray-500 text-xs whitespace-nowrap flex-shrink-0">${timeAgo}</span>
