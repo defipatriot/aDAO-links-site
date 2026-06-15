@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Transparency Hub — TLA Stats</title>
+<style>
+  :root{
+    --bg:#0a0e12; --panel:#11161c; --panel2:#161d25; --line:#222c38;
+    --ink:#e7edf3; --muted:#8a98a8; --faint:#5a6675;
+    --ok:#3ecf8e; --ok-dim:#1c3a2e; --warn:#f0b042; --warn-dim:#3a2f16;
+    --down:#f0556a; --down-dim:#3a1c22; --info:#5aa9e6; --info-dim:#16293a;
+    --accent:#3ecf8e; --milestone:#b98aff;
+    --mono:'SFMono-Regular',ui-monospace,'JetBrains Mono',Menlo,Consolas,monospace;
+    --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.5;-webkit-font-smoothing:antialiased;padding:0 0 80px}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 20px}
+  a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
+
+  header.top{padding:44px 0 0}
+  .eyebrow{font:600 11px/1 var(--mono);letter-spacing:.18em;text-transform:uppercase;color:var(--faint)}
+  h1{font-size:clamp(28px,4vw,40px);font-weight:700;letter-spacing:-.02em;margin:6px 0 0}
+  .lede{color:var(--muted);font-size:15px;margin-top:10px;max-width:64ch}
+
+  /* tabs */
+  .tabs{display:flex;gap:4px;margin-top:28px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .tab{padding:12px 18px;font:600 13px/1 var(--sans);color:var(--muted);cursor:pointer;
+    border-bottom:2px solid transparent;margin-bottom:-1px;transition:color .15s,border-color .15s;display:flex;align-items:center;gap:8px}
+  .tab:hover{color:var(--ink)}
+  .tab.active{color:var(--ink);border-bottom-color:var(--accent)}
+  .tab .badge{font:600 10px/1 var(--mono);padding:3px 7px;border-radius:20px;background:var(--panel2)}
+  .tab .badge.ok{color:var(--ok)} .tab .badge.warn{color:var(--warn)} .tab .badge.down{color:var(--down)}
+
+  .panel-wrap{padding-top:30px}
+  .view{display:none} .view.active{display:block}
+  .loading{text-align:center;padding:50px;color:var(--muted)}
+
+  /* UPDATES */
+  .upd{border-left:2px solid var(--line);padding:0 0 4px 22px;margin-left:8px}
+  .upd-item{position:relative;padding:0 0 26px}
+  .upd-item::before{content:'';position:absolute;left:-29px;top:5px;width:11px;height:11px;border-radius:50%;background:var(--faint);border:2px solid var(--bg)}
+  .upd-item.milestone::before{background:var(--milestone);box-shadow:0 0 0 3px rgba(185,138,255,.18)}
+  .upd-date{font:600 11px/1 var(--mono);color:var(--faint);letter-spacing:.04em}
+  .upd-title{font-weight:700;font-size:16px;margin-top:5px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  .tag{font:600 9px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;padding:3px 7px;border-radius:5px}
+  .tag.MILESTONE{background:rgba(185,138,255,.15);color:var(--milestone)}
+  .tag.LIVE{background:var(--ok-dim);color:var(--ok)}
+  .tag.FIX{background:var(--warn-dim);color:var(--warn)}
+  .tag.VERIFIED{background:var(--info-dim);color:var(--info)}
+  .tag.STEP{background:var(--panel2);color:var(--muted)}
+  .upd-body{color:var(--muted);font-size:14px;margin-top:7px;max-width:70ch}
+  .upd-steps{margin-top:10px;display:flex;flex-direction:column;gap:6px}
+  .upd-step{font-size:13px;color:var(--faint);padding-left:14px;border-left:1px solid var(--line);line-height:1.5}
+  .upd-step b{color:var(--muted);font-weight:600}
+
+  /* DOCS */
+  .docgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+  .doccard{border:1px solid var(--line);border-radius:11px;background:var(--panel);padding:18px;transition:border-color .15s,transform .15s}
+  .doccard:hover{border-color:var(--faint);transform:translateY(-1px)}
+  .doccard h3{font-size:15px;font-weight:700;margin-bottom:6px}
+  .doccard p{font-size:13px;color:var(--muted);line-height:1.5}
+  .doccard .ch{font:600 10px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin-bottom:10px}
+  .docview{display:none}
+  .docview.active{display:block}
+  .docback{font:600 12px/1 var(--mono);color:var(--muted);cursor:pointer;margin-bottom:18px;display:inline-flex;gap:6px;align-items:center}
+  .docback:hover{color:var(--accent)}
+  .md{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:30px 34px;line-height:1.7}
+  .md h1{font-size:26px;margin:0 0 14px} .md h2{font-size:20px;margin:26px 0 10px;padding-top:14px;border-top:1px solid var(--line)}
+  .md h3{font-size:16px;margin:18px 0 8px} .md p{margin:10px 0;color:var(--muted)}
+  .md ul,.md ol{margin:10px 0 10px 22px;color:var(--muted)} .md li{margin:4px 0}
+  .md code{font-family:var(--mono);font-size:.88em;background:var(--panel2);padding:2px 6px;border-radius:4px;color:var(--ink)}
+  .md pre{background:var(--panel2);padding:14px;border-radius:8px;overflow-x:auto;margin:12px 0}
+  .md pre code{background:none;padding:0} .md strong{color:var(--ink)} .md table{border-collapse:collapse;margin:12px 0;font-size:13px;width:100%}
+  .md th,.md td{border:1px solid var(--line);padding:7px 10px;text-align:left} .md th{background:var(--panel2)}
+  .md a{color:var(--accent)}
+
+  /* HEALTH + ENDPOINTS shared card style */
+  .conf{display:flex;align-items:center;gap:16px;margin-bottom:24px;padding:18px 20px;border:1px solid var(--line);border-radius:12px;background:linear-gradient(160deg,var(--panel),var(--panel2))}
+  .conf .big{font-size:30px;font-weight:700;letter-spacing:-.02em}
+  .conf .lbl{font:600 11px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+  .conf .verdict{font-size:14px;color:var(--muted);max-width:50ch}
+  .dot{width:10px;height:10px;border-radius:50%;flex:none;display:inline-block}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+  .card{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:14px 15px;border-left-width:3px;border-left-color:var(--line)}
+  .card.ok{border-left-color:var(--ok)} .card.warn{border-left-color:var(--warn)}
+  .card.down{border-left-color:var(--down)} .card.info{border-left-color:var(--info)}
+  .card-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .card-name{font:600 13px/1 var(--mono)}
+  .card-stat{font:600 11px/1 var(--mono);text-transform:uppercase;letter-spacing:.06em}
+  .card.ok .card-stat{color:var(--ok)} .card.warn .card-stat{color:var(--warn)}
+  .card.down .card-stat{color:var(--down)} .card.info .card-stat{color:var(--info)}
+  .card-role{font-size:12px;color:var(--faint);margin-top:7px}
+  .card-reason{font-size:12px;color:var(--muted);margin-top:6px}
+  .card-err{margin-top:9px;border-top:1px dashed var(--line);padding-top:8px;font:500 11px/1.45 var(--mono);color:var(--muted)}
+  .card-err .s{color:var(--warn)}
+  .card-links{margin-top:9px;display:flex;gap:13px}
+  .card-links a{font:600 11px/1 var(--mono);color:var(--faint)} .card-links a:hover{color:var(--accent)}
+
+  .foot{margin-top:40px;padding-top:20px;border-top:1px solid var(--line);font-size:12px;color:var(--faint);line-height:1.6}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="eyebrow">TLA Stats</div>
+    <h1>Transparency Hub</h1>
+    <div class="lede">How we get the data, how we verify it, and what's changing. Follow along — see live system health, the endpoints we depend on, the docs behind every number, and what we're actively building.</div>
+    <div class="tabs" id="tabs">
+      <div class="tab active" data-v="updates">Updates</div>
+      <div class="tab" data-v="docs">Docs</div>
+      <div class="tab" data-v="health">System Health <span class="badge" id="healthBadge">…</span></div>
+      <div class="tab" data-v="endpoints">Endpoints <span class="badge" id="epBadge">…</span></div>
+    </div>
+  </header>
+
+  <div class="panel-wrap">
+    <!-- UPDATES -->
+    <section class="view active" id="v-updates">
+      <div id="updates"><div class="loading">Loading updates…</div></div>
+    </section>
+
+    <!-- DOCS -->
+    <section class="view" id="v-docs">
+      <div id="docList" class="docgrid"><div class="loading">Loading docs…</div></div>
+      <div id="docView" class="docview">
+        <span class="docback" id="docBack">← all docs</span>
+        <div class="md" id="docContent"></div>
+      </div>
+    </section>
+
+    <!-- HEALTH -->
+    <section class="view" id="v-health">
+      <div id="healthConf"></div>
+      <div class="grid" id="healthGrid"><div class="loading">Loading system health…</div></div>
+    </section>
+
+    <!-- ENDPOINTS -->
+    <section class="view" id="v-endpoints">
+      <p style="color:var(--muted);font-size:14px;margin-bottom:18px">The external services our crons depend on. If one of these is down, that's often <em>why</em> a data feed might be stale — surfacing it closes the loop.</p>
+      <div class="grid" id="epGrid"><div class="loading">Loading endpoints…</div></div>
+    </section>
+  </div>
+
+  <div class="foot">
+    Everything here is public and verifiable. Health &amp; endpoint data refreshes from <code>system-health-data_2026</code> (updated ~every 30 min). Updates &amp; docs read from the <code>website-adao-core</code> repo. No wallet, no tracking.
+  </div>
+</div>
+
+<script>
+const RAW='https://raw.githubusercontent.com/defipatriot';
+const HEALTH_SRC=`${RAW}/system-health-data_2026/main/data/system-health.json`;
+const CHANGELOG_SRC=`${RAW}/website-adao-core/main/CHANGELOG.md`;
+
+// doc library — chapters (editable titles). file = path in website-adao-core.
+const DOCS=[
+  {ch:'Vision', title:'Mission', file:'MISSION.md', desc:'Why TLA Stats exists — the three-layer strategy (aDAO, Allies, LP grading).'},
+  {ch:'Method', title:'Pricing Doctrine', file:'PRICING-DOCTRINE.md', desc:'How every asset is priced and why — match the source to the asset.'},
+  {ch:'Operations', title:'System Audit & Ops', file:'SYSTEM-AUDIT-AND-OPS.md', desc:'Every cron, repo, schedule, and the cleanup + year-rollover plan.'},
+  {ch:'Spec', title:'Portfolio Tracker', file:'SPEC-portfolio-tracker.md', desc:'The unified NFT + TLA + Votion position companion.'},
+  {ch:'Spec', title:'LP Grading', file:'SPEC-lp-grading.md', desc:'The incentive-routing oracle — grade every LP on real quality.'},
+  {ch:'Spec', title:'Votion Capture', file:'SPEC-votion-capture.md', desc:'How per-user Votion vault holdings are captured.'},
+  {ch:'Notes', title:'arbLUNA Pricing', file:'NOTE-arbLUNA-pricing-gap.md', desc:'The pricing investigation — and what it taught us.'},
+];
+
+const C={ok:'var(--ok)',warn:'var(--warn)',down:'var(--down)',info:'var(--info)',healthy:'var(--ok)',watch:'var(--warn)',minor:'var(--warn)',degraded:'var(--down)'};
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function ago(iso){if(!iso)return'—';const s=(Date.now()-Date.parse(iso))/1000;if(s<90)return Math.round(s)+'s ago';if(s<5400)return Math.round(s/60)+'m ago';if(s<129600)return Math.round(s/3600)+'h ago';return Math.round(s/86400)+'d ago';}
+
+// ---- tabs ----
+document.getElementById('tabs').addEventListener('click',e=>{
+  const t=e.target.closest('.tab'); if(!t)return;
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
+  t.classList.add('active');
+  document.getElementById('v-'+t.dataset.v).classList.add('active');
+  if(t.dataset.v==='health'&&!healthLoaded)loadHealth();
+  if(t.dataset.v==='endpoints'&&!healthLoaded)loadHealth();
+});
+
+// ---- UPDATES (parse CHANGELOG.md) ----
+async function loadUpdates(){
+  try{
+    const md=await (await fetch(CHANGELOG_SRC+'?t='+Date.now())).text();
+    document.getElementById('updates').innerHTML='<div class="upd">'+parseChangelog(md)+'</div>';
+  }catch(e){ document.getElementById('updates').innerHTML='<div class="loading">No updates yet — the changelog will appear here.</div>'; }
+}
+function parseChangelog(md){
+  // each "## Title — Rev N (date) [TAGS]" starts an entry; bullet lines are steps
+  const lines=md.split('\n'); let out=''; let cur=null;
+  const flush=()=>{ if(!cur)return;
+    const isM=cur.tags.includes('MILESTONE');
+    out+=`<div class="upd-item ${isM?'milestone':''}">
+      <div class="upd-date">${esc(cur.date||'')}${cur.rev?' · '+esc(cur.rev):''}</div>
+      <div class="upd-title">${esc(cur.title)} ${cur.tags.map(t=>`<span class="tag ${t}">${t}</span>`).join('')}</div>
+      ${cur.body?`<div class="upd-body">${esc(cur.body)}</div>`:''}
+      ${cur.steps.length?`<div class="upd-steps">${cur.steps.map(s=>`<div class="upd-step">${fmtStep(s)}</div>`).join('')}</div>`:''}
+    </div>`; cur=null; };
+  for(let line of lines){
+    const h=line.match(/^##\s+(.+?)\s+—\s+Rev\s+([\d.]+)\s*\(([^)]+)\)\s*(.*)$/);
+    if(h){ flush(); const tags=(h[4].match(/\[([A-Z]+)\]/g)||[]).map(t=>t.replace(/[\[\]]/g,''));
+      cur={title:h[1],rev:'Rev '+h[2],date:h[3],tags,body:'',steps:[]}; continue; }
+    if(!cur)continue;
+    const b=line.match(/^-\s+(.+)$/);
+    if(b){ cur.steps.push(b[1]); }
+    else if(line.trim()&&!line.startsWith('#')&&!line.startsWith('Format:')&&!line.startsWith('Discipline:')&&!line.startsWith('Entry tags')){ cur.body+=(cur.body?' ':'')+line.trim(); }
+  }
+  flush();
+  return out||'<div class="loading">No milestones logged yet.</div>';
+}
+function fmtStep(s){ // bold the **x.y** step marker + render [TAG]s
+  s=esc(s).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/\[([A-Z]+)\]/g,'<span class="tag $1" style="font-size:8px">$1</span>'); return s; }
+
+// ---- DOCS ----
+function renderDocList(){
+  document.getElementById('docList').innerHTML=DOCS.map((d,i)=>`
+    <div class="doccard" onclick="openDoc(${i})">
+      <div class="ch">${esc(d.ch)}</div><h3>${esc(d.title)}</h3><p>${esc(d.desc)}</p>
+    </div>`).join('');
+}
+async function openDoc(i){
+  const d=DOCS[i];
+  document.getElementById('docList').style.display='none';
+  document.getElementById('docView').classList.add('active');
+  document.getElementById('docContent').innerHTML='<div class="loading">Loading…</div>';
+  try{
+    const md=await (await fetch(`${RAW}/website-adao-core/main/${d.file}?t=${Date.now()}`)).text();
+    document.getElementById('docContent').innerHTML=miniMd(md);
+  }catch(e){ document.getElementById('docContent').innerHTML='<p>Could not load this doc.</p>'; }
+}
+document.getElementById('docBack').onclick=()=>{
+  document.getElementById('docView').classList.remove('active');
+  document.getElementById('docList').style.display='grid';
+};
+// tiny markdown renderer (headings, bold, code, lists, tables, links)
+function miniMd(md){
+  const esc2=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  let h=esc2(md);
+  // code fences
+  h=h.replace(/```[\w]*\n([\s\S]*?)```/g,(m,c)=>`<pre><code>${c}</code></pre>`);
+  // tables
+  h=h.replace(/((?:^\|.*\|\s*\n)+)/gm,block=>{
+    const rows=block.trim().split('\n').filter(r=>!/^\|[\s|:-]+\|$/.test(r));
+    const cells=rows.map(r=>r.split('|').slice(1,-1).map(c=>c.trim()));
+    if(!cells.length)return block;
+    const head=cells[0],body=cells.slice(1);
+    return '<table><thead><tr>'+head.map(c=>`<th>${c}</th>`).join('')+'</tr></thead><tbody>'+
+      body.map(r=>'<tr>'+r.map(c=>`<td>${c}</td>`).join('')+'</tr>').join('')+'</tbody></table>';
+  });
+  h=h.replace(/^### (.+)$/gm,'<h3>$1</h3>').replace(/^## (.+)$/gm,'<h2>$1</h2>').replace(/^# (.+)$/gm,'<h1>$1</h1>');
+  h=h.replace(/`([^`]+)`/g,'<code>$1</code>');
+  h=h.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
+  h=h.replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
+  // lists
+  h=h.replace(/((?:^[-*] .*\n?)+)/gm,b=>'<ul>'+b.trim().split('\n').map(l=>`<li>${l.replace(/^[-*] /,'')}</li>`).join('')+'</ul>');
+  h=h.replace(/((?:^\d+\. .*\n?)+)/gm,b=>'<ol>'+b.trim().split('\n').map(l=>`<li>${l.replace(/^\d+\. /,'')}</li>`).join('')+'</ol>');
+  // paragraphs (lines not already in a tag)
+  h=h.split('\n\n').map(p=>/^\s*<(h\d|ul|ol|pre|table)/.test(p.trim())?p:(p.trim()?`<p>${p.trim()}</p>`:'')).join('\n');
+  return h;
+}
+
+// ---- HEALTH + ENDPOINTS ----
+let healthLoaded=false;
+async function loadHealth(){
+  try{
+    const d=await (await fetch(HEALTH_SRC+'?t='+Date.now())).json();
+    healthLoaded=true;
+    // badges
+    const hb=document.getElementById('healthBadge');
+    hb.textContent=d.confidence_pct+'%'; hb.className='badge '+(d.confidence_pct>=90?'ok':d.confidence_pct>=70?'warn':'down');
+    const epDown=(d.endpoints||[]).filter(e=>e.health==='down').length;
+    const eb=document.getElementById('epBadge');
+    eb.textContent=epDown?epDown+' down':'all up'; eb.className='badge '+(epDown?'down':'ok');
+    // confidence header
+    document.getElementById('healthConf').innerHTML=`
+      <div class="conf"><div><div class="big">${d.confidence_pct}%</div><div class="lbl">Confidence</div></div>
+      <div><div style="font-weight:700;font-size:17px;display:flex;align-items:center;gap:8px"><span class="dot" style="background:${C[d.overall]}"></span>${({healthy:'All systems healthy',watch:'Minor items to watch',minor:'Auxiliary feed down',degraded:'Core data degraded'})[d.overall]||d.overall}</div>
+      <div class="verdict">${esc(d.overall_reason||'')} · updated ${ago(d.capturedAt)}</div></div></div>`;
+    // systems grid
+    const order={down:0,warn:1,info:2,ok:3};
+    document.getElementById('healthGrid').innerHTML=(d.systems||[]).slice().sort((a,b)=>order[a.health]-order[b.health]).map(s=>`
+      <div class="card ${s.health}">
+        <div class="card-top"><span class="card-name">${s.key}</span><span class="card-stat">${(s.status||s.health||'').replace(/_/g,' ')}</span></div>
+        <div class="card-reason">${esc(s.reason||'')}</div>
+        ${(s.recent_errors&&s.recent_errors.length)?`<div class="card-err">${s.recent_errors.map(e=>`<div><span class="s">${esc(e.step)}</span>${e.code?' ['+e.code+']':''}: ${esc(e.message)}</div>`).join('')}</div>`:''}
+        <div class="card-links">${s.data_repo_url?`<a href="${s.data_repo_url}" target="_blank" rel="noopener">data ↗</a>`:''}${s.cron_source_url?`<a href="${s.cron_source_url}" target="_blank" rel="noopener">cron ↗</a>`:''}</div>
+      </div>`).join('');
+    // endpoints grid
+    document.getElementById('epGrid').innerHTML=(d.endpoints||[]).slice().sort((a,b)=>order[a.health]-order[b.health]).map(e=>`
+      <div class="card ${e.health}">
+        <div class="card-top"><span class="card-name">${esc(e.key)}</span><span class="card-stat">${e.up?(e.latency_ms!=null?e.latency_ms+'ms':'up'):'down'}</span></div>
+        <div class="card-role">${esc(e.role||'')}</div>
+        <div class="card-reason">${esc(e.reason||'')}</div>
+      </div>`).join('');
+  }catch(e){
+    document.getElementById('healthGrid').innerHTML='<div class="loading">System health data not available yet — the monitor may not have run.</div>';
+    document.getElementById('epGrid').innerHTML='<div class="loading">Endpoint data not available yet.</div>';
+  }
+}
+
+// init
+loadUpdates(); renderDocList(); loadHealth();
+setInterval(()=>{ if(healthLoaded)loadHealth(); },120000);
+</script>
+</body>
+</html>
