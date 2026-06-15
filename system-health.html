@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Health — TLA Stats</title>
+<style>
+  :root{
+    --bg:#0a0e12; --panel:#11161c; --panel2:#161d25; --line:#222c38;
+    --ink:#e7edf3; --muted:#8a98a8; --faint:#5a6675;
+    --ok:#3ecf8e; --ok-dim:#1c3a2e; --warn:#f0b042; --warn-dim:#3a2f16;
+    --down:#f0556a; --down-dim:#3a1c22; --info:#5aa9e6; --info-dim:#16293a;
+    --accent:#3ecf8e;
+    --mono:'SFMono-Regular',ui-monospace,'JetBrains Mono',Menlo,Consolas,monospace;
+    --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);
+    line-height:1.5;-webkit-font-smoothing:antialiased;padding:0 0 80px}
+  .wrap{max-width:1100px;margin:0 auto;padding:0 20px}
+
+  /* hero: the confidence board */
+  header.hero{padding:48px 0 28px;border-bottom:1px solid var(--line);margin-bottom:32px}
+  .hero-top{display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px}
+  .eyebrow{font:600 11px/1 var(--mono);letter-spacing:.18em;text-transform:uppercase;color:var(--faint)}
+  h1{font-size:clamp(28px,4vw,40px);font-weight:700;letter-spacing:-.02em;margin:6px 0 0}
+  .updated{font:500 12px/1 var(--mono);color:var(--muted)}
+
+  .board{display:grid;grid-template-columns:auto 1fr;gap:28px;align-items:center;margin-top:28px}
+  @media(max-width:600px){.board{grid-template-columns:1fr}}
+  .gauge{position:relative;width:150px;height:150px}
+  .gauge svg{transform:rotate(-90deg)}
+  .gauge .val{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .gauge .num{font:700 34px/1 var(--sans);letter-spacing:-.02em}
+  .gauge .lbl{font:600 10px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-top:6px}
+
+  .verdict{}
+  .verdict .state{display:inline-flex;align-items:center;gap:9px;font-size:22px;font-weight:700;letter-spacing:-.01em}
+  .dot{width:11px;height:11px;border-radius:50%;flex:none}
+  .verdict p{color:var(--muted);margin-top:8px;max-width:52ch;font-size:14px}
+  .counts{display:flex;gap:18px;margin-top:16px;flex-wrap:wrap}
+  .count{display:flex;align-items:center;gap:7px;font:600 13px/1 var(--mono)}
+
+  /* attention strip */
+  .attention{margin-bottom:32px}
+  .attention h2{font:600 12px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:12px}
+  .alert{display:flex;gap:14px;padding:14px 16px;border:1px solid var(--line);border-radius:10px;
+    background:var(--panel);margin-bottom:8px;border-left-width:3px}
+  .alert.down{border-left-color:var(--down)}
+  .alert.warn{border-left-color:var(--warn)}
+  .alert.info{border-left-color:var(--info)}
+  .alert .a-key{font:600 13px/1.4 var(--mono);min-width:150px;color:var(--ink)}
+  .alert .a-reason{font-size:13px;color:var(--muted);flex:1}
+  .alert .a-badge{font:600 10px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;
+    padding:4px 8px;border-radius:5px;align-self:flex-start;white-space:nowrap}
+  .badge-down{background:var(--down-dim);color:var(--down)}
+  .badge-warn{background:var(--warn-dim);color:var(--warn)}
+  .badge-info{background:var(--info-dim);color:var(--info)}
+
+  /* systems grid */
+  .grid-h{font:600 12px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:14px}
+  .systems{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+  .sys{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:14px 15px;
+    transition:border-color .15s,transform .15s;cursor:default}
+  .sys:hover{border-color:var(--faint);transform:translateY(-1px)}
+  .sys-top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:9px}
+  .sys-name{font:600 13px/1 var(--mono);color:var(--ink)}
+  .sys-tier{font:600 9px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
+  .sys-status{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted)}
+  .sys-reason{font-size:12px;color:var(--faint);margin-top:8px;line-height:1.45}
+  .sys.ok .dot{background:var(--ok)} .sys.ok .sys-status{color:var(--ok)}
+  .sys.warn .dot{background:var(--warn)} .sys.warn .sys-status{color:var(--warn)}
+  .sys.down .dot{background:var(--down)} .sys.down .sys-status{color:var(--down)}
+  .sys.info .dot{background:var(--info)} .sys.info .sys-status{color:var(--info)}
+  .sys-meta{font:500 11px/1 var(--mono);color:var(--faint);margin-top:10px;display:flex;gap:12px;flex-wrap:wrap}
+  .sys-errors{margin-top:10px;border-top:1px dashed var(--line);padding-top:9px;display:flex;flex-direction:column;gap:6px}
+  .errline{font:500 11px/1.4 var(--mono);display:flex;gap:7px;align-items:baseline;flex-wrap:wrap}
+  .errline .estep{color:var(--warn)} .errline .ecode{color:var(--down);background:var(--down-dim);padding:1px 5px;border-radius:4px;font-size:10px}
+  .errline .emsg{color:var(--muted);flex:1;min-width:140px}
+  .sys-links{margin-top:10px;display:flex;gap:14px}
+  .sys-links a{font:600 11px/1 var(--mono);color:var(--faint)}
+  .sys-links a:hover{color:var(--accent)}
+
+  .loading,.error{text-align:center;padding:60px 20px;color:var(--muted)}
+  .footnote{margin-top:36px;padding-top:20px;border-top:1px solid var(--line);
+    font-size:12px;color:var(--faint);line-height:1.6}
+  .footnote code{font-family:var(--mono);color:var(--muted)}
+  a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="hero">
+    <div class="hero-top">
+      <div>
+        <div class="eyebrow">TLA Stats · Operations</div>
+        <h1>System Health</h1>
+      </div>
+      <div class="updated" id="updated">checking…</div>
+    </div>
+    <div class="board">
+      <div class="gauge">
+        <svg width="150" height="150" viewBox="0 0 150 150">
+          <circle cx="75" cy="75" r="64" fill="none" stroke="var(--line)" stroke-width="11"/>
+          <circle id="gaugeArc" cx="75" cy="75" r="64" fill="none" stroke="var(--accent)"
+            stroke-width="11" stroke-linecap="round" stroke-dasharray="402" stroke-dashoffset="402"
+            style="transition:stroke-dashoffset 1s ease, stroke .4s"/>
+        </svg>
+        <div class="val"><div class="num" id="confNum">—</div><div class="lbl">Confidence</div></div>
+      </div>
+      <div class="verdict">
+        <div class="state"><span class="dot" id="verdictDot"></span><span id="verdictState">Checking systems…</span></div>
+        <p id="verdictReason">Reading the latest heartbeat from every data feed.</p>
+        <div class="counts" id="counts"></div>
+      </div>
+    </div>
+  </header>
+
+  <section class="attention" id="attentionWrap" style="display:none">
+    <h2>Needs attention</h2>
+    <div id="attention"></div>
+  </section>
+
+  <section>
+    <div class="grid-h">All systems</div>
+    <div class="systems" id="systems"><div class="loading">Loading…</div></div>
+  </section>
+
+  <div class="footnote">
+    <strong>How to read this:</strong> each card is one data feed. <span style="color:var(--ok)">Green</span> = fresh and healthy ·
+    <span style="color:var(--warn)">Amber</span> = late, partial, or stuck (worth a glance) ·
+    <span style="color:var(--down)">Red</span> = stale or failed (data may be out of date) ·
+    <span style="color:var(--info)">Blue</span> = info / not yet monitored.
+    Confidence is the share of core feeds that are fresh. Updated whenever the health monitor runs (every ~30&nbsp;min).
+    <br><br>
+    Reads <code>system-health-data_2026/data/system-health.json</code>.
+  </div>
+</div>
+
+<script>
+const SRC = 'https://raw.githubusercontent.com/defipatriot/system-health-data_2026/main/data/system-health.json';
+const C = { ok:'var(--ok)', warn:'var(--warn)', down:'var(--down)', info:'var(--info)',
+            healthy:'var(--ok)', watch:'var(--warn)', minor:'var(--warn)', degraded:'var(--down)' };
+
+function ago(iso){ if(!iso) return '—'; const s=(Date.now()-Date.parse(iso))/1000;
+  if(s<90) return Math.round(s)+'s ago'; if(s<5400) return Math.round(s/60)+'m ago';
+  if(s<129600) return Math.round(s/3600)+'h ago'; return Math.round(s/86400)+'d ago'; }
+
+function stateLabel(o){ return {healthy:'All systems healthy',watch:'Minor items to watch',
+  minor:'Auxiliary feed down',degraded:'Core data degraded'}[o] || o; }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+async function load(){
+  try{
+    const r = await fetch(SRC + '?t=' + Date.now());
+    if(!r.ok) throw new Error('fetch '+r.status);
+    const d = await r.json();
+    render(d);
+  }catch(e){
+    document.getElementById('systems').innerHTML =
+      '<div class="error">Couldn\'t load system health.<br>The health monitor may not have run yet, or the data repo is empty.</div>';
+    document.getElementById('verdictState').textContent = 'Health data unavailable';
+    document.getElementById('verdictReason').textContent = 'The monitor hasn\'t published yet — check back shortly.';
+    document.getElementById('updated').textContent = 'no data';
+  }
+}
+
+function render(d){
+  // gauge
+  const conf = d.confidence_pct ?? 0;
+  document.getElementById('confNum').textContent = conf + '%';
+  const arc = document.getElementById('gaugeArc');
+  const circ = 402;
+  arc.style.strokeDashoffset = circ - (circ * conf/100);
+  const arcColor = conf>=90 ? 'var(--ok)' : conf>=70 ? 'var(--warn)' : 'var(--down)';
+  arc.style.stroke = arcColor;
+
+  // verdict
+  document.getElementById('verdictState').textContent = stateLabel(d.overall);
+  document.getElementById('verdictReason').textContent = d.overall_reason || '';
+  document.getElementById('verdictDot').style.background = C[d.overall] || 'var(--muted)';
+  document.getElementById('updated').textContent = 'Updated ' + ago(d.capturedAt);
+
+  // counts
+  const cn = d.counts || {};
+  document.getElementById('counts').innerHTML =
+    [['ok','Healthy','--ok'],['warn','Watch','--warn'],['down','Down','--down']]
+    .filter(([k])=>cn[k])
+    .map(([k,lbl,v])=>`<span class="count"><span class="dot" style="background:var(${v})"></span>${cn[k]} ${lbl}</span>`)
+    .join('');
+
+  // attention
+  const att = d.attention || [];
+  const aw = document.getElementById('attentionWrap');
+  if(att.length){
+    aw.style.display='';
+    document.getElementById('attention').innerHTML = att.map(a=>`
+      <div class="alert ${a.health}">
+        <span class="a-key">${a.key}</span>
+        <span class="a-reason">${a.reason||''}${(a.recent_errors&&a.recent_errors.length)?'<br><span style="color:var(--faint);font-size:12px">'+a.recent_errors.map(e=>esc(e.step)+': '+esc(e.message)).join('<br>')+'</span>':''}</span>
+        <span class="a-badge badge-${a.health}">${a.status||a.health}</span>
+      </div>`).join('');
+  } else { aw.style.display='none'; }
+
+  // systems grid — sort: down, warn, info, ok; within, by tier
+  const order = {down:0,warn:1,info:2,ok:3};
+  const sys = (d.systems||[]).slice().sort((a,b)=>(order[a.health]-order[b.health]));
+  document.getElementById('systems').innerHTML = sys.map(s=>`
+    <div class="sys ${s.health}">
+      <div class="sys-top">
+        <span class="sys-name">${s.key}</span>
+        <span class="sys-tier">${s.tier||''}</span>
+      </div>
+      <div class="sys-status"><span class="dot"></span>${(s.status||s.health||'').replace(/_/g,' ')}</div>
+      <div class="sys-reason">${s.reason||''}</div>
+      ${(s.recent_errors&&s.recent_errors.length)?`<div class="sys-errors">${s.recent_errors.map(e=>`<div class="errline"><span class="estep">${esc(e.step)}</span>${e.code?`<span class="ecode">${e.code}</span>`:''}<span class="emsg">${esc(e.message)}</span></div>`).join('')}</div>`:''}
+      <div class="sys-meta">
+        ${s.last_run?`<span>last ${ago(s.last_run)}</span>`:''}
+        ${s.cadence_min?`<span>every ${s.cadence_min>=1440?(s.cadence_min/1440)+'d':s.cadence_min>=60?(s.cadence_min/60)+'h':s.cadence_min+'m'}</span>`:''}
+        ${s.run_status?`<span>run: ${s.run_status}</span>`:''}
+      </div>
+      <div class="sys-links">
+        ${s.data_repo_url?`<a href="${s.data_repo_url}" target="_blank" rel="noopener">data ↗</a>`:''}
+        ${s.cron_source_url?`<a href="${s.cron_source_url}" target="_blank" rel="noopener">cron ↗</a>`:''}
+      </div>
+    </div>`).join('');
+}
+
+load();
+setInterval(load, 120000); // refresh every 2 min
+</script>
+</body>
+</html>
