@@ -271,7 +271,8 @@ async function loadHealth(){
     hb.textContent=d.confidence_pct+'%'; hb.className='badge '+(d.confidence_pct>=90?'ok':d.confidence_pct>=70?'warn':'down');
     const epDown=(d.endpoints||[]).filter(e=>e.health==='down').length;
     const eb=document.getElementById('epBadge');
-    eb.textContent=epDown?epDown+' down':'all up'; eb.className='badge '+(epDown?'down':'ok');
+    if(!d.endpoints||!d.endpoints.length){ eb.textContent='…'; eb.className='badge'; }
+    else { eb.textContent=epDown?epDown+' down':'all up'; eb.className='badge '+(epDown?'down':'ok'); }
     // confidence header
     document.getElementById('healthConf').innerHTML=`
       <div class="conf"><div><div class="big">${d.confidence_pct}%</div><div class="lbl">Confidence</div></div>
@@ -286,10 +287,22 @@ async function loadHealth(){
         ${(s.recent_errors&&s.recent_errors.length)?`<div class="card-err">${s.recent_errors.map(e=>`<div><span class="s">${esc(e.step)}</span>${e.code?' ['+e.code+']':''}: ${esc(e.message)}</div>`).join('')}</div>`:''}
         <div class="card-links">${s.data_repo_url?`<a href="${s.data_repo_url}" target="_blank" rel="noopener">data ↗</a>`:''}${s.cron_source_url?`<a href="${s.cron_source_url}" target="_blank" rel="noopener">cron ↗</a>`:''}</div>
       </div>`).join('');
-    // endpoints grid
-    document.getElementById('epGrid').innerHTML=(d.endpoints||[]).slice().sort((a,b)=>order[a.health]-order[b.health]).map(e=>`
+    // endpoints grid — if monitor hasn't published endpoint data yet, show the
+    // known list in a "checking" state so the tab is never blank.
+    const KNOWN_EP=[
+      ['terra-lcd (primary)','Terra LCD — chain queries (primary)'],
+      ['terra-rest (fallback)','Terra LCD — chain queries (fallback)'],
+      ['daodao indexer','DAODAO indexer — staker resolution'],
+      ['pfpk','PFPK — wallet name resolution'],
+      ['coingecko','CoinGecko — base asset prices'],
+      ['eris backend','Eris Protocol — LST/pool data'],
+      ['warlock (BBL)','BackBone Labs — marketplace listings'],
+    ];
+    const eps=(d.endpoints&&d.endpoints.length)?d.endpoints.slice().sort((a,b)=>order[a.health]-order[b.health])
+      :KNOWN_EP.map(([k,r])=>({key:k,role:r,health:'info',up:null,reason:'Awaiting first endpoint check (monitor will report shortly).'}));
+    document.getElementById('epGrid').innerHTML=eps.map(e=>`
       <div class="card ${e.health}">
-        <div class="card-top"><span class="card-name">${esc(e.key)}</span><span class="card-stat">${e.up?(e.latency_ms!=null?e.latency_ms+'ms':'up'):'down'}</span></div>
+        <div class="card-top"><span class="card-name">${esc(e.key)}</span><span class="card-stat">${e.health==='info'?'checking':e.up?(e.latency_ms!=null?e.latency_ms+'ms':'up'):'down'}</span></div>
         <div class="card-role">${esc(e.role||'')}</div>
         <div class="card-reason">${esc(e.reason||'')}</div>
       </div>`).join('');

@@ -354,21 +354,59 @@
             <div class="tile-cta" style="color:#f472b6"><i class="fas fa-arrow-right text-xs"></i> Open Tool</div>
         </a>
 
-        <!-- 4. Test Page (admin scratch slot) -->
-        <a href="test.html" class="tool-tile tool-tile-amber" style="text-decoration:none">
-            <div class="flex items-center gap-3 w-full">
-                <div class="tile-icon-wrap icon-amber"><i class="fas fa-flask"></i></div>
-                <div>
-                    <div class="tile-label label-amber">Admin · Scratch</div>
-                    <div class="tile-title">Test Page</div>
-                </div>
-            </div>
-            <div class="tile-desc">Slot for testing a WIP tool live before committing it under its real filename. Whatever's currently committed at <code>test.html</code> opens here — useful when local <code>file://</code> origin breaks CORS for live API tests. <span style="display:inline-flex;align-items:center;gap:4px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:4px;padding:1px 7px;font-size:10px;color:#f59e0b;font-weight:700;letter-spacing:0.5px;margin-top:6px"><i class="fas fa-flask" style="font-size:9px"></i> Admin use · ephemeral</span></div>
-            <div class="tile-cta" style="color:#f59e0b"><i class="fas fa-arrow-right text-xs"></i> Open Test</div>
-        </a>
+        <!-- Dynamic Test Page tiles — test.html … test-5.html.
+             A tile appears ONLY if that file exists in the repo. Each test file's
+             description is read from a <meta name="test-desc"> tag inside it (or a
+             default). Populated by the script at the bottom of this page. -->
+        <div id="test-tiles" style="display:contents"></div>
 
     </div>
 </main>
+
+<script>
+// Dynamic test-page tiles: probe test.html, test-2.html … test-5.html.
+// Show a tile only for files that exist. Title format: "Test-N (description)".
+(function(){
+  const slots = [
+    { file: 'test.html',   label: 'Test 1' },
+    { file: 'test-2.html', label: 'Test 2' },
+    { file: 'test-3.html', label: 'Test 3' },
+    { file: 'test-4.html', label: 'Test 4' },
+    { file: 'test-5.html', label: 'Test 5' },
+  ];
+  const container = document.getElementById('test-tiles');
+
+  function tile(file, label, desc){
+    const a = document.createElement('a');
+    a.href = file; a.className = 'tool-tile tool-tile-amber'; a.style.textDecoration = 'none';
+    a.innerHTML = `
+      <div class="flex items-center gap-3 w-full">
+        <div class="tile-icon-wrap icon-amber"><i class="fas fa-flask"></i></div>
+        <div>
+          <div class="tile-label label-amber">Admin · Scratch</div>
+          <div class="tile-title">${label}${desc ? ' <span style="font-weight:400;opacity:0.7;font-size:0.85em">('+desc+')</span>' : ''}</div>
+        </div>
+      </div>
+      <div class="tile-desc">WIP test slot. Whatever's committed at <code>${file}</code> opens here.
+        <span style="display:inline-flex;align-items:center;gap:4px;background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.25);border-radius:4px;padding:1px 7px;font-size:10px;color:#f59e0b;font-weight:700;letter-spacing:0.5px;margin-top:6px"><i class="fas fa-flask" style="font-size:9px"></i> Admin use · ephemeral</span></div>
+      <div class="tile-cta" style="color:#f59e0b"><i class="fas fa-arrow-right text-xs"></i> Open Test</div>`;
+    return a;
+  }
+
+  // Read a short description from the test file's <meta name="test-desc" content="…">.
+  function descFrom(html){
+    const m = html.match(/<meta\s+name=["']test-desc["']\s+content=["']([^"']+)["']/i);
+    return m ? m[1].slice(0, 40) : '';
+  }
+
+  slots.forEach(s => {
+    fetch(s.file, { method: 'GET' })
+      .then(r => r.ok ? r.text() : null)
+      .then(html => { if (html && !/Cannot GET|404/.test(html.slice(0,200))) container.appendChild(tile(s.file, s.label, descFrom(html))); })
+      .catch(() => {});
+  });
+})();
+</script>
 
 
 
