@@ -399,7 +399,7 @@
     Live price from <a href="https://app.astroport.fi" target="_blank">Astroport</a>
     (<code>tokens.byChain</code> API, phoenix-1).
     7-day chart from Astroport <code>token.getTokens</code> series.
-    Daily confirmed history from <a href="https://github.com/defipatriot/fuel-data_2026" target="_blank">fuel-data_2026</a> (hourly cron job).
+    Daily confirmed history from <a href="https://github.com/defipatriot/tla-core/tree/main/fuel" target="_blank">tla-core/fuel</a> (hourly cron job).
     <br><br>
     <strong>Epoch estimates (amber dashed line):</strong> Historical prices are approximated using
     the current LUNA/FUEL pool reserve ratio from the Terra LCD, multiplied by the LUNA price
@@ -415,7 +415,7 @@ const BYCHAIN_URL  = 'https://app.astroport.fi/api/trpc/tokens.byChain?input=' +
     encodeURIComponent(JSON.stringify({ json: { chainId: 'phoenix-1' } }));
 const GETTOK_URL   = 'https://app.astroport.fi/api/trpc/token.getTokens?input=' +
     encodeURIComponent(JSON.stringify({ "0": { "json": { "chainIds": ["phoenix-1"] } } }));
-const SNAP_BASE    = 'https://raw.githubusercontent.com/defipatriot/fuel-data_2026/main/snapshots';
+const SNAP_BASE    = 'https://raw.githubusercontent.com/defipatriot/tla-core/main/fuel/snapshots';
 const FUEL_POOL    = 'terra10yfnsqn20rzlnlzkeva5255q27zp6ws9te9uuql9e0lacfcze7zsffjct5';
 const LCD          = 'https://terra-lcd.publicnode.com';
 const EPOCH_BASE   = 'https://raw.githubusercontent.com/defipatriot/tla-ext_json_storage/main';
@@ -621,12 +621,18 @@ function switchChart(mode, el) {
     document.querySelectorAll('.chart-tab').forEach(t => t.classList.remove('active'));
     el.classList.add('active');
 
-    if (mode === 'price7d' && seriesData.length) {
-        const labels = seriesData.map(p => {
-            const d = new Date(p.time * 1000);
-            return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
-        });
-        buildChart(labels, seriesData.map(p => p.value), '7 Days', 'price');
+    if (mode === 'price7d') {
+        // Prefer captured daily history (reliable); fall back to live intraday series
+        if (historyData.length) {
+            const last7 = historyData.slice(-7);
+            buildChart(last7.map(h => h.date), last7.map(h => h.closePrice), '7 Days', 'price');
+        } else if (seriesData.length) {
+            const labels = seriesData.map(p => {
+                const d = new Date(p.time * 1000);
+                return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+            });
+            buildChart(labels, seriesData.map(p => p.value), '7 Days', 'price');
+        }
 
     } else if (mode === 'priceAll') {
         const combined = [
@@ -644,26 +650,20 @@ function switchChart(mode, el) {
         buildChartDual(estPts, realPts);
 
     } else if (mode === 'liquidity') {
-        if (!liqSeries.length) {
+        if (!historyData.length) {
             document.getElementById('chart-title').textContent = 'Liquidity — loading...';
             return;
         }
-        const labels = liqSeries.map(p => {
-            const d = new Date(p.time * 1000);
-            return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-        });
-        buildChart(labels, liqSeries.map(p => p.value), 'Pool TVL (24h)', 'tvl');
+        const labels = historyData.map(h => h.date);
+        buildChart(labels, historyData.map(h => h.avgTvlUsd), `Pool TVL · Daily ($, ${historyData.length}d)`, 'tvl');
 
     } else if (mode === 'volume') {
-        if (!volSeries.length) {
+        if (!historyData.length) {
             document.getElementById('chart-title').textContent = 'Volume — loading...';
             return;
         }
-        const labels = volSeries.map(p => {
-            const d = new Date(p.time * 1000);
-            return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-        });
-        buildChart(labels, volSeries.map(p => p.value), 'Volume per Trade · LUNA (24h)', 'volume');
+        const labels = historyData.map(h => h.date);
+        buildChart(labels, historyData.map(h => h.dailyVolumeLuna), `Daily Volume · LUNA (${historyData.length}d)`, 'volume');
     }
 }
 
@@ -864,13 +864,39 @@ async function loadAll() {
 
     // 5. Load cron history (async, non-blocking)
     await loadCronHistory();
+    populateStatsFromHistory();   // captured daily history → TVL, 24h/7d change, 24h volume (reliable; overrides flaky live APIs)
 
     // 6. Load epoch historical estimates from LCD + epoch files
     await loadEpochHistory();
 }
 
+// Derive the stat cards + change %s from captured daily history (reliable),
+// instead of the external token API which returns nothing for an obscure token
+// like FUEL (that's why 24h/7d change + the 7-day chart were blank).
+function populateStatsFromHistory() {
+    if (!historyData.length) return;
+    const last = historyData[historyData.length - 1];
+    if (last.dailyVolumeLuna != null) document.getElementById('vol-24h').textContent = last.dailyVolumeLuna.toFixed(2) + ' LUNA';
+    if (last.avgTvlUsd != null) document.getElementById('pool-tvl').textContent = fmtTvl(Math.round(last.avgTvlUsd));
+    if (historyData.length >= 2) {
+        const p = historyData[historyData.length - 2];
+        const c = fmtPct((last.closePrice - p.closePrice) / p.closePrice);
+        const e = document.getElementById('change-24h'); e.textContent = c.text; e.className = 'stat-value ' + c.cls;
+    }
+    if (historyData.length >= 8) {
+        const p = historyData[historyData.length - 8];
+        const c = fmtPct((last.closePrice - p.closePrice) / p.closePrice);
+        const e = document.getElementById('change-7d'); e.textContent = c.text; e.className = 'stat-value ' + c.cls;
+    }
+}
+
 // Boot
-loadAll();
+loadAll().then(() => {
+    // Render the default (7-day) chart from captured history once it's loaded —
+    // the live external series is empty for FUEL, so without this the default tab was blank.
+    const active = document.querySelector('.chart-tab.active') || document.querySelector('.chart-tab');
+    if (active) switchChart('price7d', active);
+});
 </script>
     <!-- ============================================================
          SHARED FOOTER (links + rev + changelog trigger)
