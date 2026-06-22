@@ -2845,6 +2845,17 @@
                 </div>
             </div>
             
+            <!-- Time Granularity Toggle (14 points; epoch default) -->
+            <div id="chart-granularity-toggle" class="mb-3">
+                <span class="text-gray-400 text-sm mr-2">View:</span>
+                <div class="inline-flex bg-gray-800 rounded-lg p-1">
+                    <button id="gran-epoch" onclick="setChartGranularity('epoch')" class="px-3 py-1 text-xs rounded-md bg-cyan-600 text-white transition-colors">Epoch</button>
+                    <button id="gran-daily" onclick="setChartGranularity('daily')" class="px-3 py-1 text-xs rounded-md text-gray-400 hover:text-white transition-colors">Daily</button>
+                    <button id="gran-monthly" onclick="setChartGranularity('monthly')" class="px-3 py-1 text-xs rounded-md text-gray-400 hover:text-white transition-colors">Monthly</button>
+                </div>
+                <span class="text-gray-500 text-xs ml-2">last 14 points</span>
+            </div>
+
             <!-- VP Gain Indicator (only for VP metrics) -->
             <div id="chart-vp-gain-indicator" class="mb-3 hidden">
                 <div class="flex items-center justify-center gap-4">
@@ -5279,7 +5290,7 @@
                 // Daily cron is still used for the live tile via fetchAvgDailyGainFromGitHub(),
                 // but mixing daily and weekly points on one chart was visually noisy and
                 // some derived USD fields are only present on epoch snapshots anyway.
-                const mergedSnapshots = snapshots.filter(s => !s.missing);
+                const mergedSnapshots = aggregateSnapshots(snapshots, window.chartGranularity || 'epoch');
                 
                 // For the ampLUNA backing chart, prefetch the staking APR CSV so each
                 // chart data point can carry the APR value for its epoch date.
@@ -5468,7 +5479,7 @@
                 }
                 
                 // Build chart data - filter out missing epochs first
-                const validSnapshots = snapshots.filter(s => !s.missing);
+                const validSnapshots = aggregateSnapshots(snapshots, window.chartGranularity || 'epoch');
                 
                 // For the ampLUNA backing chart, prefetch staking APR (cached after first load).
                 if (metricKey === 'backingPerNft_ampLUNA') {
@@ -5609,6 +5620,51 @@
                 }
             }
             
+            // ── Time granularity: 14-point epoch / daily / monthly aggregation ──
+            window.chartGranularity = window.chartGranularity || 'epoch';
+
+            // Collapse the daily raw series into the selected bucket (end-of-period value),
+            // last 14 points. State metrics (backing, VP, supply) take each period's final
+            // reading; per-day gain is recomputed across the displayed points.
+            function aggregateSnapshots(daily, mode) {
+                const valid = (daily || []).filter(s => !s.missing);
+                let out;
+                if (mode === 'daily') {
+                    out = valid.slice(-14).map(s => ({ ...s }));
+                } else {
+                    const keyOf = (s) => mode === 'monthly' ? String(s.date || '').slice(0, 7) : s.epoch;
+                    const buckets = new Map();
+                    for (const s of valid) buckets.set(keyOf(s), s); // valid is date-ascending → last wins = end-of-period
+                    out = Array.from(buckets.values()).slice(-14).map(s => ({ ...s }));
+                }
+                for (let i = 1; i < out.length; i++) {
+                    const c = out[i], p = out[i - 1];
+                    if (c.backingPerNft_LUNA != null && p.backingPerNft_LUNA != null) {
+                        const gapDays = Math.max(1, Math.round((Date.parse(c.date) - Date.parse(p.date)) / 86400000));
+                        c.avgDailyGainPerNft_LUNA = (c.backingPerNft_LUNA - p.backingPerNft_LUNA) / gapDays;
+                    }
+                }
+                return out;
+            }
+
+            function updateGranularityButtons(mode) {
+                ['epoch', 'daily', 'monthly'].forEach(m => {
+                    const b = document.getElementById('gran-' + m);
+                    if (b) b.className = (m === mode)
+                        ? 'px-3 py-1 text-xs rounded-md bg-cyan-600 text-white transition-colors'
+                        : 'px-3 py-1 text-xs rounded-md text-gray-400 hover:text-white transition-colors';
+                });
+            }
+
+            // Toggle handler — re-renders the current metric at the new granularity.
+            window.setChartGranularity = function(mode) {
+                window.chartGranularity = mode;
+                updateGranularityButtons(mode);
+                if (typeof currentChartMetric !== 'undefined' && currentChartMetric && window.switchChartMetric) {
+                    window.switchChartMetric(currentChartMetric);
+                }
+            };
+
             // Format an epoch label for chart points and table rows.
             // Cron daily snapshots (from backing-data_2026) have no epoch field, so display 'Daily'
             // instead of the broken 'Eundefined' that shows up when interpolating undefined into 'E${...}'.
