@@ -5196,8 +5196,8 @@
 
                         // not in the daily pipeline — kept null so chart lines simply omit them
                         floorPerNft_USD: null,
-                        unmintedTotalBacking_LUNA: null,
-                        unmintedTotalBacking_USD: null
+                        unmintedTotalBacking_LUNA: (vd && vd.unminted_count != null && backingLuna != null) ? vd.unminted_count * backingLuna : null,
+                        unmintedTotalBacking_USD: (vd && vd.unminted_count != null && backingLuna != null && lunaPrice != null) ? vd.unminted_count * backingLuna * lunaPrice : null
                     };
                 }));
 
@@ -5213,7 +5213,8 @@
                     if (i > 0) {
                         const p = valid[i - 1];
                         if (c.backingPerNft_LUNA != null && p.backingPerNft_LUNA != null) {
-                            c.avgDailyGainPerNft_LUNA = c.backingPerNft_LUNA - p.backingPerNft_LUNA;
+                            const gapDays = Math.max(1, Math.round((Date.parse(c.date) - Date.parse(p.date)) / 86400000));
+                            c.avgDailyGainPerNft_LUNA = (c.backingPerNft_LUNA - p.backingPerNft_LUNA) / gapDays;
                         }
                         const pv = p.unclaimedRewards_ampLUNA, cv = c.unclaimedRewards_ampLUNA;
                         if (pv != null && cv != null && pv > 0 && cv < pv * 0.5 && (pv - cv) > 50) {
