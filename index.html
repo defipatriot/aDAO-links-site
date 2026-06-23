@@ -4510,8 +4510,14 @@
             function vpPotentialDisplay(s) {
                 const disp = s.display_voting_power_human || s.voting_power_human || 0;
                 const curB = s.current_vp_human || s.voting_power_human || 0;
-                const potB = s.potential_vp_human || (curB + (s.vp_gap_human || 0));
-                return (curB > 0) ? disp * (potB / curB) : disp;
+                const gap  = s.vp_gap_human;
+                const potB = s.potential_vp_human;
+                // Only real if the cron actually captured a potential/gap this epoch.
+                // Older archives predate potential capture — return null there so the
+                // chart leaves an honest gap instead of faking potential = current.
+                if (!(curB > 0) || (potB == null && gap == null)) return null;
+                const potTotal = (potB != null) ? potB : (curB + (gap || 0));
+                return disp * (potTotal / curB);
             }
 
             async function fetchTlaVpHistoryFromCron(currentEpoch) {
@@ -5113,7 +5119,7 @@
                 voteRewardsTotal_USD: "Unclaimed vote rewards accruing to the DAO (USD). A sharp drop marks a claim/harvest — the rewards were collected, not lost.",
                 depositRewardsTotal_USD: "Unclaimed deposit rewards accruing to the DAO (USD). A sharp drop marks a claim/harvest.",
                 rebaseTotal_USD: "Unclaimed rebase rewards accruing to the DAO (USD). A sharp drop marks a claim/harvest.",
-                tlaVpTotal_LUNA: "The DAO's voting power. Current VP is fixed until the locks are adjusted; potential VP is what it would become if re-locked today, growing as the locked ampLUNA compounds.",
+                tlaVpTotal_LUNA: "The DAO's voting power. Current VP (solid) is fixed until the locks are adjusted; Potential VP (dashed) is what it would become if re-locked today. The amber line is the DAO's share of total TLA VP (right axis) — its influence across the whole gauge.",
                 daodaoStaked: "Number of NFTs staked in DAODAO governance. The overlay shows that count as a share of circulating supply.",
                 enterpriseStaked: "Number of NFTs staked via Enterprise.",
                 daoMembers: "Number of aDAO members tracked over time.",
@@ -5831,7 +5837,6 @@
                     backgroundColor: metric.color + '20',
                     fill: false,
                     tension: isVpMetric ? 0 : 0.3,
-                    borderDash: isVpMetric ? [2, 3] : undefined,   // dotted baseline for VP
                     spanGaps: isVpMetric ? true : undefined,        // continuous across capture-gap epochs
                     pointRadius: 6,
                     pointHoverRadius: 10,
@@ -5841,11 +5846,11 @@
                     yAxisID: 'y'
                 }];
                 
-                // For VP metrics, add the Potential VP line (Step 1: Current dotted +
-                // Potential solid, both real per-epoch history; USD line removed).
+                // VP chart: Current (solid) + Potential (dashed, real only) on the left;
+                // the relationship to Total TLA shown as the DAO's SHARE (%) on the right —
+                // a readable ~3% line, not a 30×-scale raw line that floats meaninglessly.
                 if (isVpMetric) {
                     const cron = window._vpCronByEpoch || {};
-                    const liveVp = (window.tlaVpData && window.tlaVpData.totalVp) || null;
                     const livePot = (window.tlaVpData && window.tlaVpData.potentialVp) || null;
                     const potentialValues = data.map((d, idx) => {
                         const c = cron[d.epoch];
@@ -5868,31 +5873,36 @@
                         fill: false,
                         tension: 0,
                         spanGaps: true,
+                        borderDash: [6, 4],   // dashed = the hypothetical "if re-locked" upside
                         pointRadius: 4,
                         pointHoverRadius: 8,
                         pointBackgroundColor: '#a855f7',
                         pointBorderColor: '#1a1a1a',
                         pointBorderWidth: 2,
-                        borderWidth: 2,       // solid line (the growth above the baseline)
+                        borderWidth: 2,
                         yAxisID: 'y'
                     });
 
-                    // Total TLA VP on the right axis (~24M, raw). The chart's `value` is
-                    // Total TLA VP ÷ 10, so ×10 recovers the raw figure. Lets the DAO's VP
-                    // be read against the whole pie; the share is in the tooltip.
-                    const totalTlaValues = data.map(d => (d.value != null ? d.value * 10 : null));
-                    if (totalTlaValues.some(v => v != null)) {
+                    // DAO % of Total TLA VP on the right axis. value = Total TLA VP ÷ 10,
+                    // so DAO share = currentVP / (value × 10). A ~3% line you can actually
+                    // read, replacing the unreadable raw 24M line.
+                    const pctValues = data.map((d, idx) => {
+                        const cur = values[idx];
+                        const tot = (d.value != null) ? d.value * 10 : null;
+                        return (cur > 0 && tot > 0) ? (cur / tot * 100) : null;
+                    });
+                    if (pctValues.some(v => v != null)) {
                         datasets.push({
-                            label: 'Total TLA VP',
-                            data: totalTlaValues,
-                            borderColor: '#64748b', // slate (context line)
-                            backgroundColor: '#64748b20',
+                            label: 'DAO % of Total TLA',
+                            data: pctValues,
+                            borderColor: '#f59e0b', // amber
+                            backgroundColor: '#f59e0b20',
                             fill: false,
                             tension: 0.2,
                             spanGaps: true,
                             pointRadius: 3,
                             pointHoverRadius: 7,
-                            pointBackgroundColor: '#64748b',
+                            pointBackgroundColor: '#f59e0b',
                             pointBorderColor: '#1a1a1a',
                             pointBorderWidth: 2,
                             borderWidth: 2,
@@ -6027,18 +6037,21 @@
                     }
                 };
                 
-                // Total TLA VP right axis (~24M, raw) — context scale for the DAO's VP.
+                // DAO % of Total TLA VP — right axis (a readable ~3% scale).
                 if (isVpMetric) {
-                    const totalVals = data.map(d => (d.value != null ? d.value * 10 : null));
-                    if (totalVals.some(v => v != null)) {
-                        const totalFmt = axisTickFmt(totalVals, { km: true });
+                    const pctVals = data.map((d, idx) => {
+                        const cur = values[idx];
+                        const tot = (d.value != null) ? d.value * 10 : null;
+                        return (cur > 0 && tot > 0) ? (cur / tot * 100) : null;
+                    });
+                    if (pctVals.some(v => v != null)) {
                         scales.y1 = {
                             type: 'linear',
                             display: true,
                             position: 'right',
                             grid: { drawOnChartArea: false },
-                            ticks: { color: '#94a3b8', callback: (value) => totalFmt(value) },
-                            title: { display: true, text: 'Total TLA VP', color: '#94a3b8' }
+                            ticks: { color: '#f59e0b', callback: (value) => value.toFixed(2) + '%' },
+                            title: { display: true, text: 'DAO % of Total TLA VP', color: '#f59e0b' }
                         };
                     }
                 }
@@ -6107,7 +6120,7 @@
                                         } else if (isVpMetric && context.datasetIndex === 1) {
                                             return 'Potential: ' + (context.raw / 1000).toFixed(1) + 'K VP';
                                         } else if (isVpMetric && context.datasetIndex === 2) {
-                                            return 'Total TLA: ' + (context.raw / 1000000).toFixed(2) + 'M VP';
+                                            return 'DAO share: ' + context.raw.toFixed(2) + '%';
                                         } else {
                                             return secondaryFormat(context.raw);
                                         }
@@ -6115,13 +6128,10 @@
                                     afterBody: (tooltipItems) => {
                                         const index = tooltipItems[0].dataIndex;
                                         const lines = [];
-                                        // VP chart: DAO's share of total TLA voting power.
+                                        // VP chart: raw Total TLA VP for reference (the % line is the share).
                                         if (isVpMetric) {
-                                            const cur = values[index];
                                             const tot = (data[index] && data[index].value != null) ? data[index].value * 10 : null;
-                                            if (cur > 0 && tot > 0) {
-                                                lines.push('', `DAO share: ${(cur / tot * 100).toFixed(2)}% of total TLA VP`);
-                                            }
+                                            if (tot > 0) lines.push('', 'Total TLA: ' + (tot / 1000000).toFixed(2) + 'M VP');
                                             return lines;
                                         }
                                         // Add LUNA price context if available
