@@ -4505,6 +4505,16 @@
             const CRON_FULL_TAKEOVER = false;   // flip true when cron coverage is sufficient
             let _tlaVpCronHistoryCache = { ts: 0, result: null };
 
+            // Potential VP on the DISPLAY basis (the 821.8K number shown in the UI/Eris).
+            // The cron's potential_vp_human is on the voting_power basis, so we scale the
+            // display VP by the same gain ratio: display × (potential / current).
+            function vpPotentialDisplay(s) {
+                const disp = s.display_voting_power_human || s.voting_power_human || 0;
+                const curB = s.current_vp_human || s.voting_power_human || 0;
+                const potB = s.potential_vp_human || (curB + (s.vp_gap_human || 0));
+                return (curB > 0) ? disp * (potB / curB) : disp;
+            }
+
             async function fetchTlaVpHistoryFromCron(currentEpoch) {
                 const now = Date.now();
                 if (_tlaVpCronHistoryCache.result && (now - _tlaVpCronHistoryCache.ts) < 5 * 60_000) {
@@ -4548,6 +4558,7 @@
                         underlyingLuna:    s.total_locked_luna_equivalent || 0,
                         usd:               s.total_locked_usd              || 0,
                         lockCount:         s.lock_count                    || 0,
+                        potentialVp:       vpPotentialDisplay(s),
                         capturedAt:        data.capturedAt,
                     };
                 }
@@ -4565,6 +4576,7 @@
                             underlyingLuna:    s.total_locked_luna_equivalent || 0,
                             usd:               s.total_locked_usd              || 0,
                             lockCount:         s.lock_count                    || 0,
+                            potentialVp:       vpPotentialDisplay(s),
                             capturedAt:        currentData.capturedAt,
                         };
                     }
@@ -5480,6 +5492,14 @@
                 // Store chart data globally for toggle functionality
                 window.currentChartData = chartData;
                 
+                // VP chart: load per-epoch Current + Potential VP from the cron archive so
+                // the lines plot real history (not a flat live value). Cached, so cheap.
+                if (metric.isVpMetric) {
+                    const _ce = (typeof tlaDataMeta !== 'undefined' && tlaDataMeta.currentEpoch) || null;
+                    const _ch = await fetchTlaVpHistoryFromCron(_ce).catch(() => null);
+                    window._vpCronByEpoch = (_ch && _ch.byEpoch) || {};
+                }
+                
                 canvas.style.display = 'block';
                 buildChart(chartData, metric);
                 await buildDataTable(chartData, metric);
@@ -5629,6 +5649,14 @@
                 
                 window.currentChartData = chartData;
                 
+                // VP chart: load per-epoch Current + Potential VP from the cron archive so
+                // the lines plot real history (not a flat live value). Cached, so cheap.
+                if (metric.isVpMetric) {
+                    const _ce = (typeof tlaDataMeta !== 'undefined' && tlaDataMeta.currentEpoch) || null;
+                    const _ch = await fetchTlaVpHistoryFromCron(_ce).catch(() => null);
+                    window._vpCronByEpoch = (_ch && _ch.byEpoch) || {};
+                }
+                
                 canvas.style.display = 'block';
                 buildChart(chartData, metric);
                 await buildDataTable(chartData, metric);
@@ -5734,11 +5762,18 @@
                 let values;
                 
                 if (isVpMetric) {
-                    // Get fixed VP from TLA data
-                    const tlaVpData = window.tlaVpData || null;
-                    const fixedTotalVp = tlaVpData?.totalVp || 638900;
-                    // All data points show the same fixed VP (since no adjustments were made)
-                    values = data.map(d => fixedTotalVp);
+                    // Current VP per epoch from the cron archive (real history, not a flat
+                    // live value). A 0 means a failed capture (the DAO always holds VP), so
+                    // we plot null there to leave an honest gap — e.g. the frozen 189/190.
+                    const cron = window._vpCronByEpoch || {};
+                    const liveVp = (window.tlaVpData && window.tlaVpData.totalVp) || null;
+                    values = data.map((d, idx) => {
+                        const c = cron[d.epoch];
+                        let vp = c && c.vp > 0 ? c.vp : null;
+                        // Latest point: fall back to the live VP if cron hasn't frozen yet.
+                        if (vp == null && idx === data.length - 1 && liveVp > 0) vp = liveVp;
+                        return vp;
+                    });
                 } else {
                     values = data.map(d => d.value);
                 }
@@ -5787,12 +5822,14 @@
                 
                 // Build datasets
                 const datasets = [{
-                    label: isVpMetric ? 'Current VP (fixed)' : metric.label,
+                    label: isVpMetric ? 'Current VP' : metric.label,
                     data: values,
                     borderColor: metric.color,
                     backgroundColor: metric.color + '20',
                     fill: false,
-                    tension: 0.3,
+                    tension: isVpMetric ? 0 : 0.3,
+                    borderDash: isVpMetric ? [2, 3] : undefined,   // dotted baseline for VP
+                    spanGaps: isVpMetric ? true : undefined,        // continuous across capture-gap epochs
                     pointRadius: 6,
                     pointHoverRadius: 10,
                     pointBackgroundColor: metric.color,
@@ -5801,55 +5838,41 @@
                     yAxisID: 'y'
                 }];
                 
-                // For VP metrics, add potential VP line and USD values on right axis
+                // For VP metrics, add the Potential VP line (Step 1: Current dotted +
+                // Potential solid, both real per-epoch history; USD line removed).
                 if (isVpMetric) {
-                    const tlaVpData = window.tlaVpData || null;
-                    const potentialVp = tlaVpData?.potentialVp || 651400;
-                    const currentVp = tlaVpData?.totalVp || 638900;
-                    const vpGain = potentialVp - currentVp;
-                    
-                    // Potential VP line (flat dotted line at top) - purple to differentiate from USD
+                    const cron = window._vpCronByEpoch || {};
+                    const liveVp = (window.tlaVpData && window.tlaVpData.totalVp) || null;
+                    const livePot = (window.tlaVpData && window.tlaVpData.potentialVp) || null;
+                    const potentialValues = data.map((d, idx) => {
+                        const c = cron[d.epoch];
+                        let pot = (c && c.vp > 0 && c.potentialVp > 0) ? c.potentialVp : null;
+                        if (pot == null && idx === data.length - 1 && livePot > 0) pot = livePot;
+                        return pot;
+                    });
+                    // Gain on the latest covered point, for the legend label.
+                    let lastCur = null, lastPot = null;
+                    for (let i = values.length - 1; i >= 0; i--) {
+                        if (values[i] != null && potentialValues[i] != null) { lastCur = values[i]; lastPot = potentialValues[i]; break; }
+                    }
+                    const vpGain = (lastCur != null && lastPot != null) ? (lastPot - lastCur) : 0;
+
                     datasets.push({
-                        label: `Potential VP (+${(vpGain/1000).toFixed(1)}K if adjusted)`,
-                        data: data.map(d => potentialVp),
+                        label: `Potential VP${vpGain ? ` (+${(vpGain/1000).toFixed(1)}K if adjusted)` : ''}`,
+                        data: potentialValues,
                         borderColor: '#a855f7', // purple
                         backgroundColor: '#a855f720',
                         fill: false,
                         tension: 0,
-                        pointRadius: 0,
-                        borderDash: [8, 4],
-                        borderWidth: 2,
+                        spanGaps: true,
+                        pointRadius: 4,
+                        pointHoverRadius: 8,
+                        pointBackgroundColor: '#a855f7',
+                        pointBorderColor: '#1a1a1a',
+                        pointBorderWidth: 2,
+                        borderWidth: 2,       // solid line (the growth above the baseline)
                         yAxisID: 'y'
                     });
-                    
-                    // USD Value on right axis - get from snapshot data
-                    const usdValues = data.map((d, idx) => {
-                        // For latest, use live USD
-                        if (idx === data.length - 1 && tlaVpData?.totalUsd) {
-                            return tlaVpData.totalUsd;
-                        }
-                        // For historical, use secondaryValue which should be tlaVpTotal_USD
-                        return d.secondaryValue || null;
-                    });
-                    
-                    const hasUsdData = usdValues.some(v => v !== null && v > 0);
-                    if (hasUsdData) {
-                        datasets.push({
-                            label: 'USD Value',
-                            data: usdValues,
-                            borderColor: '#22c55e', // green
-                            backgroundColor: '#22c55e20',
-                            fill: false,
-                            tension: 0.3,
-                            pointRadius: 4,
-                            pointHoverRadius: 8,
-                            pointBackgroundColor: '#22c55e',
-                            pointBorderColor: '#1a1a1a',
-                            pointBorderWidth: 2,
-                            borderDash: [3, 3],
-                            yAxisID: 'y1'
-                        });
-                    }
                 }
                 
                 // Add secondary dataset if available (but not for VP metrics - they have potential VP line instead)
@@ -5974,28 +5997,8 @@
                     }
                 };
                 
-                // Add USD axis for VP metrics
-                if (isVpMetric) {
-                    scales.y1 = {
-                        type: 'linear',
-                        display: true,
-                        position: 'right',
-                        grid: { drawOnChartArea: false },
-                        ticks: { 
-                            color: '#22c55e',
-                            callback: (value) => {
-                                if (value >= 1000000) return '$' + (value/1000000).toFixed(1) + 'M';
-                                if (value >= 1000) return '$' + (value/1000).toFixed(1) + 'K';
-                                return '$' + value.toFixed(0);
-                            }
-                        },
-                        title: {
-                            display: true,
-                            text: 'USD Value',
-                            color: '#22c55e'
-                        }
-                    };
-                }
+                // (VP USD axis removed — VP is shown as VP. Step 2 adds a Total TLA VP
+                // axis on the right; for now the VP chart uses the single left axis.)
                 
                 // Add second Y axis for secondary data (non-VP metrics)
                 if (hasActualSecondaryData && !isVpMetric) {
