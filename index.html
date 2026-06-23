@@ -3843,79 +3843,18 @@
             }
             // ─── End shared catalog ─────────────────────────────────────────────
 
-            // ─── Rev 3.46 — Cron fallback for TLA Deposits ──────────────────────
-            // Reads adao-positions/current.json. Used when live chain queries fail.
-            // Same composite-total rule (LPs + rewards + bribes + zLUNA).
-            async function fetchTlaDepositsFromCron() {
-                try {
-                    const r = await fetch('https://raw.githubusercontent.com/defipatriot/adao-positions-data_2026/main/data/current.json');
-                    if (!r.ok) return null;
-                    const data = await r.json();
-                    const t = data?.treasury;
-                    if (!t?.summary) return null;
-                    const s = t.summary;
-
-                    const walletBalances = Array.isArray(t.wallet_balances) ? t.wallet_balances : [];
-                    const zlunaBalances = walletBalances.filter(b => /zluna/i.test(b.symbol || b.denom || ''));
-                    const zlunaUsd  = zlunaBalances.reduce((sum, b) => sum + (b.usd_value || 0), 0);
-                    const zlunaLuna = zlunaBalances.reduce((sum, b) => sum + (b.luna_equivalent || 0), 0);
-
-                    const totalLpUsd        = s.total_lp_position_usd     || 0;
-                    const pendingRewardsUsd = s.total_pending_rewards_usd || 0;
-                    const pendingBribesUsd  = s.total_pending_bribes_usd  || 0;
-
-                    return {
-                        source:            'cron',
-                        capturedAt:        data.capturedAt,
-                        totalTlaUsd:       totalLpUsd + pendingRewardsUsd + pendingBribesUsd + zlunaUsd,
-                        totalLpUsd, pendingRewardsUsd, pendingBribesUsd, zlunaUsd, zlunaLuna,
-                        positions:         Array.isArray(t.lp_positions) ? t.lp_positions : [],
-                        positionCount:     (t.lp_positions || []).length,
-                    };
-                } catch (e) {
-                    console.warn('[tla-deposits-cron-fallback] failed:', e);
+            // ─── Rev 3.56 — LIVE TLA Deposits (delegated to aDAOLive) ───────────
+            // Rev 3.56 — DAO TLA Deposits come SOLELY from the shared aDAOLive library
+            // (lib/adao-live-data.js). The library does live-primary / cron-fallback
+            // internally and tags result.source ('live'|'cron'), so there is NO duplicate
+            // fallback here — a failure surfaces (the library logs why; the tile keeps its
+            // snapshot value) instead of a second inline path masking it with look-alike data.
+            async function fetchLiveTlaDeposits() {
+                if (!window.aDAOLive || typeof window.aDAOLive.getDaoTlaDeposits !== 'function') {
+                    console.error('[live-tla] aDAOLive library not loaded — TLA Deposits cannot render. Check the lib/adao-live-data.js include.');
                     return null;
                 }
-            }
-
-            // ─── Rev 3.46 — LIVE TLA Deposits from chain ────────────────────────
-            // Primary data path. Queries publicnode RPC directly for the DAO's
-            // current positions across all 4 buckets, both amp and non-amp.
-            //
-            // Strategy mirrors the adao-positions cron's per-member capture, but
-            // for just the DAO main wallet and running in the browser:
-            //   - parallel: 4× all_staked_balances + 4× user_infos = 8 chain queries
-            //   - pricing: pool catalog from tla-snapshot.json (depth_usd, lp_health)
-            //   - composite: LP USD + pending rewards + bribes + zLUNA wallet
-            //
-            // Falls back to cron's current.json if any step fails (returns null).
-            // Cached 5 minutes.
-            const DAO_MAIN_WALLET_ADDR_TLA = 'terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm';
-            const TLA_STAKING_BY_BUCKET = {
-                bluechip: 'terra14mmvqn0kthw6sre75vku263lafn5655mkjdejqjedjga4cw0qx2qlf4arv',
-                project:  'terra1awq6t7jfakg9wfjn40fk3wzwmd57mvrqtt3a39z9rmet7wdjj3ysgw3lpa',
-                single:   'terra1qdz5qgafx88kp5mf6m2tah8742g4u5g2cek0m3jrgssexexk7g4qw6e23k',
-                stable:   'terra1v399cx9drllm70wxfsgvfe694tdsd9x96p9ha36w7muffe4znlusqswspq',
-            };
-            const TLA_BUCKETS = ['bluechip', 'project', 'single', 'stable'];
-
-            // Rev 3.55 — DAO TLA Deposits now come from the shared aDAOLive library
-            // (lib/adao-live-data.js): single source of truth, sessionStorage-cached
-            // across pages, identical live-primary / cron-fallback semantics, and the
-            // exact same result shape this page already consumes. The previous inline
-            // chain-capture + compose logic (fetchLiveTlaDepositsFromChain) was a verbatim
-            // duplicate of the library's _captureLiveTlaDeposits and has been removed.
-            async function fetchLiveTlaDeposits() {
-                if (window.aDAOLive && typeof window.aDAOLive.getDaoTlaDeposits === 'function') {
-                    try {
-                        const r = await window.aDAOLive.getDaoTlaDeposits();
-                        if (r) return r;
-                    } catch (e) {
-                        console.warn('[live-tla] aDAOLive.getDaoTlaDeposits threw — falling back to cron:', e);
-                    }
-                }
-                // Safety net if the shared library is unavailable for any reason.
-                return await fetchTlaDepositsFromCron();
+                return await window.aDAOLive.getDaoTlaDeposits();
             }
 
             // Apply live TLA deposits data to the dashboard tile + DAO Total Value.

@@ -1466,132 +1466,33 @@
         }
         
         // Fetch LIVE treasury data from blockchain (like main dashboard does)
-        // Rev 3.55 — Treasury data now comes primarily from the shared aDAOLive
-        // library (lib/adao-live-data.js): single source of truth + retry/backoff +
-        // sessionStorage caching shared with the other dashboard pages. Verified
-        // safe to delegate: page and library denomMaps cover the identical 10 tokens,
-        // both query the same publicnode + CoinGecko endpoints, and getDaoTreasury
-        // accepts an explicit wallet (so both treasury + council resolve correctly).
-        // The original inline implementation is preserved below as a fallback and can
-        // be removed once the library path is confirmed in-browser.
+        // Rev 3.56 — Treasury data comes SOLELY from the shared aDAOLive library
+        // (lib/adao-live-data.js): single source of truth, retry/backoff, sessionStorage
+        // caching. NO inline fallback — if the library can't produce data the treasury
+        // renders EMPTY and logs a loud error, so a broken data path is VISIBLE rather
+        // than silently masked by a duplicate implementation.
         async function fetchLiveTreasuryData(walletAddress) {
-            if (window.aDAOLive && typeof window.aDAOLive.getDaoTreasury === 'function') {
-                try {
-                    const res = await window.aDAOLive.getDaoTreasury({ wallet: walletAddress });
-                    if (res && Array.isArray(res.assets) && res.assets.length > 0) {
-                        // Adapt library shape → this page's {token, amount, price, usd, geckoId}.
-                        const adapted = res.assets.map(a => ({
-                            token:   a.name,
-                            amount:  a.amount,
-                            price:   a.priceUsd  || 0,
-                            usd:     a.usdValue  || 0,
-                            geckoId: a.geckoId,
-                        }));
-                        // Keep the page's CoinGecko price cache populated for any other consumer.
-                        res.assets.forEach(a => {
-                            if (a.geckoId && a.priceUsd != null) {
-                                geckoIdPrices[a.geckoId] = { usd: a.priceUsd };
-                            }
-                        });
-                        console.log(`[treasury] via aDAOLive — ${adapted.length} assets, $${adapted.reduce((s,x)=>s+x.usd,0).toFixed(2)}`);
-                        return adapted;
-                    }
-                } catch (e) {
-                    console.warn('[treasury] aDAOLive.getDaoTreasury failed — using inline fallback:', e);
-                }
+            if (!window.aDAOLive || typeof window.aDAOLive.getDaoTreasury !== 'function') {
+                console.error('[treasury] aDAOLive library not loaded — treasury cannot render. Check the lib/adao-live-data.js include.');
+                return [];
             }
-            return await fetchLiveTreasuryDataInline(walletAddress);
-        }
-
-        async function fetchLiveTreasuryDataInline(walletAddress) {
-            console.log(`Fetching live treasury for ${walletAddress}...`);
-            const assets = [];
-            
-            try {
-                // 1. Get CoinGecko prices
-                const geckoIds = new Set(['terra-luna-2', 'eris-amplified-luna', 'backbone-labs-staked-luna']);
-                Object.values(denomMap).forEach(token => {
-                    if (token.geckoId) geckoIds.add(token.geckoId);
-                });
-                const priceUrl = `https://api.coingecko.com/api/v3/simple/price?ids=${Array.from(geckoIds).join(',')}&vs_currencies=usd`;
-                const priceResponse = await fetch(priceUrl);
-                if (priceResponse.ok) {
-                    geckoIdPrices = await priceResponse.json();
-                    console.log('Loaded CoinGecko prices:', Object.keys(geckoIdPrices));
-                }
-                
-                // 2. Fetch native token balances (LUNA, IBC tokens)
-                const nativeUrl = `https://terra.publicnode.com/cosmos/bank/v1beta1/balances/${walletAddress}`;
-                const nativeResponse = await fetch(nativeUrl);
-                if (nativeResponse.ok) {
-                    const nativeData = await nativeResponse.json();
-                    if (nativeData.balances) {
-                        nativeData.balances.forEach(balance => {
-                            const tokenInfo = denomMap[balance.denom];
-                            if (tokenInfo) {
-                                const amount = Number(balance.amount) / Math.pow(10, tokenInfo.decimals || 6);
-                                const price = geckoIdPrices[tokenInfo.geckoId]?.usd || 0;
-                                if (amount > 0) {
-                                    assets.push({
-                                        token: tokenInfo.name,
-                                        amount: amount,
-                                        price: price,
-                                        usd: amount * price,
-                                        geckoId: tokenInfo.geckoId
-                                    });
-                                    console.log(`Found native ${tokenInfo.name}: ${amount} @ $${price}`);
-                                }
-                            }
-                        });
-                    }
-                }
-                
-                // 3. Fetch CW20 token balances
-                const queryMsg = btoa(JSON.stringify({ balance: { address: walletAddress } }));
-                
-                for (const [denom, tokenInfo] of Object.entries(denomMap)) {
-                    if (denom.startsWith('terra1')) {
-                        try {
-                            const url = `https://terra.publicnode.com/cosmwasm/wasm/v1/contract/${denom}/smart/${queryMsg}`;
-                            const response = await fetch(url);
-                            if (response.ok) {
-                                const data = await response.json();
-                                // Handle different response formats
-                                let balanceStr = null;
-                                if (data?.data?.balance) {
-                                    balanceStr = data.data.balance;
-                                } else if (data?.balance) {
-                                    balanceStr = data.balance;
-                                }
-                                
-                                if (balanceStr && balanceStr !== '0') {
-                                    const amount = Number(balanceStr) / Math.pow(10, tokenInfo.decimals || 6);
-                                    const price = geckoIdPrices[tokenInfo.geckoId]?.usd || 0;
-                                    if (amount > 0) {
-                                        assets.push({
-                                            token: tokenInfo.name,
-                                            amount: amount,
-                                            price: price,
-                                            usd: amount * price,
-                                            geckoId: tokenInfo.geckoId
-                                        });
-                                        console.log(`Found CW20 ${tokenInfo.name}: ${amount} @ $${price}`);
-                                    }
-                                }
-                            }
-                        } catch (e) {
-                            console.warn(`Failed to fetch ${tokenInfo.name}:`, e.message);
-                        }
-                    }
-                }
-                
-                console.log(`Fetched ${assets.length} live treasury assets, total: $${assets.reduce((s,a) => s + a.usd, 0).toFixed(2)}`);
-                return assets;
-                
-            } catch (e) {
-                console.error('Error fetching live treasury:', e);
-                return assets;
+            const res = await window.aDAOLive.getDaoTreasury({ wallet: walletAddress });
+            const assets = (res && Array.isArray(res.assets)) ? res.assets : [];
+            if (assets.length === 0) {
+                console.warn(`[treasury] aDAOLive returned no assets for ${walletAddress} — treasury will show empty (likely a chain-query failure, not real emptiness).`);
             }
+            // Keep the page's CoinGecko price cache populated for any other consumer.
+            assets.forEach(a => {
+                if (a.geckoId && a.priceUsd != null) geckoIdPrices[a.geckoId] = { usd: a.priceUsd };
+            });
+            // Adapt library shape -> this page's {token, amount, price, usd, geckoId}.
+            return assets.map(a => ({
+                token:   a.name,
+                amount:  a.amount,
+                price:   a.priceUsd || 0,
+                usd:     a.usdValue || 0,
+                geckoId: a.geckoId,
+            }));
         }
         
         async function fetchHistoricalSnapshots() {
