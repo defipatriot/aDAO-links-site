@@ -2876,6 +2876,11 @@
                         <p class="text-xs text-gray-400">Potential VP</p>
                         <p id="chart-vp-potential" class="text-lg font-bold text-purple-400">--</p>
                     </div>
+                    <div class="h-8 w-px bg-gray-700 mx-1"></div>
+                    <div class="text-center">
+                        <p class="text-xs text-gray-400">Share of TLA</p>
+                        <p id="chart-vp-share" class="text-lg font-bold text-amber-400">--</p>
+                    </div>
                 </div>
             </div>
             
@@ -5119,7 +5124,7 @@
                 voteRewardsTotal_USD: "Unclaimed vote rewards accruing to the DAO (USD). A sharp drop marks a claim/harvest — the rewards were collected, not lost.",
                 depositRewardsTotal_USD: "Unclaimed deposit rewards accruing to the DAO (USD). A sharp drop marks a claim/harvest.",
                 rebaseTotal_USD: "Unclaimed rebase rewards accruing to the DAO (USD). A sharp drop marks a claim/harvest.",
-                tlaVpTotal_LUNA: "The DAO's voting power. Current VP (solid) is fixed until the locks are adjusted; Potential VP (dashed) is what it would become if re-locked today. The amber line is the DAO's share of total TLA VP (right axis) — its influence across the whole gauge.",
+                tlaVpTotal_LUNA: "The DAO's voting power over time. Current VP (solid) is fixed until the locks are adjusted; Potential VP (dashed) is what it would become if re-locked today — the shaded band between them is the claimable boost. The header shows the DAO's share of total TLA VP.",
                 daodaoStaked: "Number of NFTs staked in DAODAO governance. The overlay shows that count as a share of circulating supply.",
                 enterpriseStaked: "Number of NFTs staked via Enterprise.",
                 daoMembers: "Number of aDAO members tracked over time.",
@@ -5467,7 +5472,10 @@
                         const currentVp = tlaVpData.totalVp || 638900;
                         const potentialVp = tlaVpData.potentialVp || 651400;
                         const vpGain = potentialVp - currentVp;
-                        
+                        let totalTla = null;
+                        for (let i = chartData.length - 1; i >= 0; i--) { if (chartData[i] && chartData[i].value > 0) { totalTla = chartData[i].value * 10; break; } }
+                        const shareEl = document.getElementById('chart-vp-share');
+                        if (shareEl) shareEl.textContent = (totalTla && currentVp) ? (currentVp / totalTla * 100).toFixed(2) + '%' : '--';
                         document.getElementById('chart-vp-current').textContent = (currentVp/1000).toFixed(1) + 'K';
                         document.getElementById('chart-vp-gain').textContent = '+' + (vpGain/1000).toFixed(1) + 'K';
                         document.getElementById('chart-vp-potential').textContent = (potentialVp/1000).toFixed(1) + 'K';
@@ -5639,7 +5647,10 @@
                         const currentVp = tlaVpData.totalVp || 638900;
                         const potentialVp = tlaVpData.potentialVp || 651400;
                         const vpGain = potentialVp - currentVp;
-                        
+                        let totalTla = null;
+                        for (let i = chartData.length - 1; i >= 0; i--) { if (chartData[i] && chartData[i].value > 0) { totalTla = chartData[i].value * 10; break; } }
+                        const shareEl = document.getElementById('chart-vp-share');
+                        if (shareEl) shareEl.textContent = (totalTla && currentVp) ? (currentVp / totalTla * 100).toFixed(2) + '%' : '--';
                         document.getElementById('chart-vp-current').textContent = (currentVp/1000).toFixed(1) + 'K';
                         document.getElementById('chart-vp-gain').textContent = '+' + (vpGain/1000).toFixed(1) + 'K';
                         document.getElementById('chart-vp-potential').textContent = (potentialVp/1000).toFixed(1) + 'K';
@@ -5848,7 +5859,9 @@
                 
                 // VP chart: Current (solid) + Potential (dashed, real only) on the left;
                 // the relationship to Total TLA shown as the DAO's SHARE (%) on the right —
-                // a readable ~3% line, not a 30×-scale raw line that floats meaninglessly.
+                // VP chart: Current (solid) + Potential (dashed) on ONE axis, with the
+                // gap shaded — that band IS the claimable re-lock boost. The share-of-TLA
+                // moved to a header stat (a number, not a misleading cross-axis line).
                 if (isVpMetric) {
                     const cron = window._vpCronByEpoch || {};
                     const livePot = (window.tlaVpData && window.tlaVpData.potentialVp) || null;
@@ -5858,7 +5871,6 @@
                         if (pot == null && idx === data.length - 1 && livePot > 0) pot = livePot;
                         return pot;
                     });
-                    // Gain on the latest covered point, for the legend label.
                     let lastCur = null, lastPot = null;
                     for (let i = values.length - 1; i >= 0; i--) {
                         if (values[i] != null && potentialValues[i] != null) { lastCur = values[i]; lastPot = potentialValues[i]; break; }
@@ -5869,8 +5881,8 @@
                         label: `Potential VP${vpGain ? ` (+${(vpGain/1000).toFixed(1)}K if adjusted)` : ''}`,
                         data: potentialValues,
                         borderColor: '#a855f7', // purple
-                        backgroundColor: '#a855f720',
-                        fill: false,
+                        backgroundColor: 'rgba(168,85,247,0.15)', // shaded boost band
+                        fill: '-1',            // fill down to Current VP (dataset 0)
                         tension: 0,
                         spanGaps: true,
                         borderDash: [6, 4],   // dashed = the hypothetical "if re-locked" upside
@@ -5882,33 +5894,6 @@
                         borderWidth: 2,
                         yAxisID: 'y'
                     });
-
-                    // DAO % of Total TLA VP on the right axis. value = Total TLA VP ÷ 10,
-                    // so DAO share = currentVP / (value × 10). A ~3% line you can actually
-                    // read, replacing the unreadable raw 24M line.
-                    const pctValues = data.map((d, idx) => {
-                        const cur = values[idx];
-                        const tot = (d.value != null) ? d.value * 10 : null;
-                        return (cur > 0 && tot > 0) ? (cur / tot * 100) : null;
-                    });
-                    if (pctValues.some(v => v != null)) {
-                        datasets.push({
-                            label: 'DAO % of Total TLA',
-                            data: pctValues,
-                            borderColor: '#f59e0b', // amber
-                            backgroundColor: '#f59e0b20',
-                            fill: false,
-                            tension: 0.2,
-                            spanGaps: true,
-                            pointRadius: 3,
-                            pointHoverRadius: 7,
-                            pointBackgroundColor: '#f59e0b',
-                            pointBorderColor: '#1a1a1a',
-                            pointBorderWidth: 2,
-                            borderWidth: 2,
-                            yAxisID: 'y1'
-                        });
-                    }
                 }
                 
                 // Add secondary dataset if available (but not for VP metrics - they have potential VP line instead)
@@ -6037,24 +6022,8 @@
                     }
                 };
                 
-                // DAO % of Total TLA VP — right axis (a readable ~3% scale).
-                if (isVpMetric) {
-                    const pctVals = data.map((d, idx) => {
-                        const cur = values[idx];
-                        const tot = (d.value != null) ? d.value * 10 : null;
-                        return (cur > 0 && tot > 0) ? (cur / tot * 100) : null;
-                    });
-                    if (pctVals.some(v => v != null)) {
-                        scales.y1 = {
-                            type: 'linear',
-                            display: true,
-                            position: 'right',
-                            grid: { drawOnChartArea: false },
-                            ticks: { color: '#f59e0b', callback: (value) => value.toFixed(2) + '%' },
-                            title: { display: true, text: 'DAO % of Total TLA VP', color: '#f59e0b' }
-                        };
-                    }
-                }
+                // (VP chart is single-axis now — Current + Potential share one scale; the
+                // share-of-TLA is a header stat, not a second axis.)
                 
                 // Add second Y axis for secondary data (non-VP metrics)
                 if (hasActualSecondaryData && !isVpMetric) {
