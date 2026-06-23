@@ -5146,6 +5146,10 @@
                 const BK_BASE   = 'https://raw.githubusercontent.com/defipatriot/backing-data_2026/main/snapshots/daily';
                 const V2_BASE   = 'https://raw.githubusercontent.com/defipatriot/nft-inventory-data_2026/main/data/v2/daily';
                 const RATIO_URL = 'https://raw.githubusercontent.com/defipatriot/network-and-prices-data_2026/main/data/ratio-history.json';
+                // Backfilled daily LUNA price (luna_market.usd_price), covering the full
+                // chart range (since 2026-05-13) — fixes USD lines that previously started
+                // only at 2026-06-12 (when the dao-dashboard source begins).
+                const NP_BASE   = 'https://raw.githubusercontent.com/defipatriot/network-and-prices-data_2026/main/data/daily';
 
                 const epochReferenceDate = new Date('2025-12-01T00:00:00Z');
                 const epochReferenceNumber = 162;
@@ -5172,16 +5176,21 @@
                 };
 
                 const rows = await Promise.all(dates.map(async (date) => {
-                    const [dd, bk, vd, td] = await Promise.all([
+                    const [dd, bk, vd, td, np] = await Promise.all([
                         jget(SNAP_BASE + '/dao-dashboard-' + date + '.json'),
                         jget(BK_BASE + '/' + date + '.json'),
                         jget(V2_BASE + '/' + date + '.json'),
                         jget(SNAP_BASE + '/' + date + '.json'),
+                        jget(NP_BASE + '/' + date + '.json'),
                     ]);
                     if (!dd && !bk && !vd && !td) return null; // no data this day -> drop
 
                     const ddb = dd && dd.dashboard ? dd.dashboard : {};
-                    const lunaPrice = (dd && dd.token_prices && typeof dd.token_prices.LUNA === 'number') ? dd.token_prices.LUNA : null;
+                    // LUNA price: prefer the backfilled network-and-prices daily (full range),
+                    // fall back to the dao-dashboard's token_prices.LUNA (2026-06-12+ only).
+                    const npPrice = (np && np.luna_market && typeof np.luna_market.usd_price === 'number') ? np.luna_market.usd_price : null;
+                    const ddPrice = (dd && dd.token_prices && typeof dd.token_prices.LUNA === 'number') ? dd.token_prices.LUNA : null;
+                    const lunaPrice = (npPrice != null) ? npPrice : ddPrice;
                     const backingLuna = (bk && bk.backingInLuna != null) ? bk.backingInLuna : null;
                     const bucketVps = td ? Object.values(td.buckets || {}).map(b => (b && b.bucket_vp_human) || 0) : [];
                     const tlaVp = bucketVps.length ? Math.max.apply(null, bucketVps) : null; // canonical Total TLA VP
