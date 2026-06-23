@@ -202,7 +202,7 @@
                 <p id="total-amp" class="text-lg font-bold text-orange-400">--</p>
             </div>
             <div class="stat-card rounded-lg p-2">
-                <p class="text-[10px] text-gray-500">Avg APR</p>
+                <p class="text-[10px] text-gray-500" title="Swap-fee APR only (from the Astroport/SS pool crons). Excludes ASTRO incentives and amplified compounding, so true yield is higher.">Avg Fee APR <span class="text-gray-600">ⓘ</span></p>
                 <p id="avg-apr" class="text-lg font-bold text-green-400">--</p>
                 <p id="weekly-rate" class="text-[10px] text-gray-600">--</p>
             </div>
@@ -612,6 +612,76 @@
         const DD_URL = 'https://raw.githubusercontent.com/defipatriot/tla-snapshot-data_2026/main/data/dao-dashboard.json';
         const DD_DAILY = 'https://raw.githubusercontent.com/defipatriot/tla-snapshot-data_2026/main/data/daily/dao-dashboard-';
 
+        // ─── Per-pool FEE APR (from the astroport + SS pool crons) ──────────────
+        // The deposits shape carries no APR, so we join it client-side. NOTE: this is
+        // swap-FEE APR only (astroport `fee_apr`; SS `apr_7d` is mostly empty) — it does
+        // NOT include ASTRO/incentive rewards or amplified compounding, so it understates
+        // total yield. Surfaced as "Fee APR", never as a total-yield benchmark.
+        async function fetchPoolFeeApr(){
+            const CK = 'tla_fee_apr_' + new Date().toISOString().slice(0,10);
+            try { const c = sessionStorage.getItem(CK); if (c) return JSON.parse(c); } catch(_){}
+            const isoDay = d => (d.getUTCDay() === 0 ? 7 : d.getUTCDay());
+            const days = [...new Set([isoDay(new Date()), isoDay(new Date(Date.now() - 864e5))])];
+            const dexes = [
+                { norm: 'astroport',    repo: 'astroport-pool-data_2026' },
+                { norm: 'skeletonswap', repo: 'ss-pool-data_2026' },
+            ];
+            const map = {}; // `${norm}|${pool}` -> { apr, date }  (apr is a fraction)
+            await Promise.all(dexes.flatMap(dx => days.map(async n => {
+                try {
+                    const r = await fetch(`https://raw.githubusercontent.com/defipatriot/${dx.repo}/main/day-${n}.csv`);
+                    if (!r.ok) return;
+                    const lines = (await r.text()).trim().split('\n');
+                    if (lines.length < 2) return;
+                    const cols = lines[0].split(',');
+                    const iDate = cols.indexOf('date');
+                    const iPool = cols.indexOf('pool_name');
+                    const iApr  = cols.indexOf('fee_apr') >= 0 ? cols.indexOf('fee_apr') : cols.indexOf('apr_7d');
+                    if (iApr < 0 || iPool < 0) return;
+                    for (let i = 1; i < lines.length; i++) {
+                        // date / pool_name / fee_apr all precede the comma-bearing assets_json
+                        // column, so a plain split is safe for the fields we read.
+                        const f = lines[i].split(',');
+                        const pool = (f[iPool] || '').replace(/^"|"$/g, '').trim();
+                        const aprStr = (f[iApr] || '').trim();
+                        const date = (f[iDate] || '').trim();
+                        if (!pool || !aprStr) continue;
+                        const apr = parseFloat(aprStr);
+                        if (!isFinite(apr)) continue;
+                        const key = `${dx.norm}|${pool}`;
+                        if (!map[key] || date > map[key].date) map[key] = { apr, date };
+                    }
+                } catch (_) { /* one DEX/day missing is non-fatal */ }
+            })));
+            const flat = {};
+            for (const k in map) flat[k] = map[k].apr;
+            try { sessionStorage.setItem(CK, JSON.stringify(flat)); } catch(_){}
+            return flat;
+        }
+        function normDexForApr(dex){
+            const d = (dex || '').toLowerCase();
+            if (d.includes('astro')) return 'astroport';
+            if (d.includes('skeleton')) return 'skeletonswap';
+            return null; // single-asset / unknown -> no pool APR
+        }
+        // Returns the pool's fee APR as a fraction (e.g. 0.0054), or null if unknown.
+        function getPoolFeeApr(dex, name){
+            const m = window.feeAprMap || {};
+            const nd = normDexForApr(dex);
+            if (!nd) return null;
+            const v = m[`${nd}|${name}`];
+            return (typeof v === 'number' && isFinite(v)) ? v : null;
+        }
+        // Position-value-weighted average fee APR across positions that have one.
+        function computeAvgFeeApr(positions){
+            let wsum = 0, wval = 0, covered = 0;
+            for (const p of (positions || [])) {
+                const apr = getPoolFeeApr(p.dex, p.name);
+                if (apr != null && p.total > 0) { wsum += p.total * apr; wval += p.total; covered++; }
+            }
+            return wval > 0 ? { apr: wsum / wval, coveredUsd: wval, coveredCount: covered, total: (positions || []).length } : null;
+        }
+
         async function loadData(){
             // Step 0 (PRIMARY): dao-dashboard cron — hourly live chain aggregates.
             // Fresh-gated at 26h; on staleness fall through to the legacy walk.
@@ -725,22 +795,24 @@
             const c=document.getElementById('positions-table');
             if(!lpPositions.length){c.innerHTML='<div class="text-center py-4 text-gray-500">No positions</div>';return;}
             const oldPos=compareData?extractPos(compareData):[];
-            let html='<table class="w-full"><thead class="text-gray-500 border-b border-gray-800"><tr><th class="text-left py-1 pl-1">Pool</th><th class="text-right py-1">Non-Amp</th><th class="text-right py-1">Amp</th><th class="text-right py-1">Total</th><th class="text-right py-1 pr-1">Δ</th></tr></thead><tbody>';
+            let html='<table class="w-full"><thead class="text-gray-500 border-b border-gray-800"><tr><th class="text-left py-1 pl-1">Pool</th><th class="text-right py-1">Non-Amp</th><th class="text-right py-1">Amp</th><th class="text-right py-1">Total</th><th class="text-right py-1" title="Swap-fee APR only — excludes incentives &amp; compounding">Fee APR</th><th class="text-right py-1 pr-1">Δ</th></tr></thead><tbody>';
             let totalNa=0,totalAmp=0;
             lpPositions.forEach(p=>{
                 totalNa+=p.nonAmp;totalAmp+=p.amp;
                 const old=oldPos.find(x=>x.name===p.name);
                 const chg=old?(p.total-old.total):null;
                 const chgPct=old&&old.total>0?(chg/old.total*100):null;
+                const feeApr=getPoolFeeApr(p.dex,p.name);
                 html+=`<tr class="pool-row border-b border-gray-800/50">
                     <td class="py-1.5 pl-1"><span class="text-white">${p.name}</span>${p.type==='single'?'<span class="badge-single ml-1">S</span>':''}</td>
                     <td class="py-1.5 text-right font-mono ${p.nonAmp>0?'text-gray-300':'text-gray-700'}">${p.nonAmp>0?fmt(p.nonAmp,0):'--'}</td>
                     <td class="py-1.5 text-right font-mono ${p.amp>0?'text-orange-400':'text-gray-700'}">${p.amp>0?fmt(p.amp,0):'--'}</td>
                     <td class="py-1.5 text-right font-mono font-bold text-white">${fmt(p.total,0)}</td>
+                    <td class="py-1.5 text-right font-mono ${feeApr!=null?'text-teal-300':'text-gray-700'}">${feeApr!=null?(feeApr*100).toFixed(2)+'%':'--'}</td>
                     <td class="py-1.5 text-right pr-1 ${chg!==null?(chg>=0?'text-green-400':'text-red-400'):'text-gray-600'}">${chgPct!==null?fmtPct(chgPct):'--'}</td>
                 </tr>`;
             });
-            html+=`</tbody><tfoot class="border-t border-cyan-800"><tr class="font-bold"><td class="py-1.5 pl-1">Total</td><td class="py-1.5 text-right font-mono text-gray-300">${fmt(totalNa,0)}</td><td class="py-1.5 text-right font-mono text-orange-400">${fmt(totalAmp,0)}</td><td class="py-1.5 text-right font-mono text-cyan-400">${fmt(totalNa+totalAmp,0)}</td><td></td></tr></tfoot></table>`;
+            html+=`</tbody><tfoot class="border-t border-cyan-800"><tr class="font-bold"><td class="py-1.5 pl-1">Total</td><td class="py-1.5 text-right font-mono text-gray-300">${fmt(totalNa,0)}</td><td class="py-1.5 text-right font-mono text-orange-400">${fmt(totalAmp,0)}</td><td class="py-1.5 text-right font-mono text-cyan-400">${fmt(totalNa+totalAmp,0)}</td><td></td><td></td></tr></tfoot></table>`;
             c.innerHTML=html;
         }
         
@@ -843,9 +915,11 @@
                     (${actualVsExpected.toFixed(0)}% of expected weekly yield).
                 `;
             } else {
-                document.getElementById('context-apr').innerHTML = `
-                    <span class="text-gray-400">APR data isn't available for this snapshot, so expected weekly yield can't be computed.</span>
-                `;
+                const feeInfo = computeAvgFeeApr(lpPositions);
+                const feeWeekly = feeInfo ? (totalValue * (feeInfo.apr / 52)) : null;
+                document.getElementById('context-apr').innerHTML = feeInfo
+                    ? `Your pools earn ~<span class="text-teal-300">${(feeInfo.apr*100).toFixed(2)}% in swap fees</span>${feeWeekly!=null ? ` (≈<span class="text-green-400">${fmt(feeWeekly,2)}/week</span>)` : ''}. ASTRO incentives and amplified compounding are on top, so total yield is higher — there's no feed for those yet, so we can't show a total expected yield.`
+                    : `<span class="text-gray-400">APR data isn't available for this snapshot, so expected weekly yield can't be computed.</span>`;
                 document.getElementById('context-comparison').innerHTML = `
                     You got <span class="${breakdown.positionChange >= 0 ? 'text-green-400' : 'text-red-400'}">${fmtChg(breakdown.positionChange)}</span> in token growth this period.
                 `;
@@ -1220,17 +1294,18 @@
             tokenPrices=currentData.token_prices||{};
             lpPositions=extractPos(currentData);
             tokenBalances=currentData.liquidity?.adao_deposits?.tokens||[];
+            window.feeAprMap = await fetchPoolFeeApr();   // {dex|pool -> fee-apr fraction}
             
             const dep=currentData.liquidity?.adao_deposits||{};
             const na=lpPositions.reduce((s,p)=>s+p.nonAmp,0);
             const am=lpPositions.reduce((s,p)=>s+p.amp,0);
-            const avgApr = (typeof dep.avg_apr === 'number' && dep.avg_apr > 0) ? dep.avg_apr : null;
+            const feeAprInfo = computeAvgFeeApr(lpPositions);
             
             document.getElementById('total-value').textContent=fmt(dep.total_usd,0);
             document.getElementById('total-non-amp').textContent=fmt(na,0);
             document.getElementById('total-amp').textContent=fmt(am,0);
-            document.getElementById('avg-apr').textContent = (avgApr != null) ? avgApr.toFixed(1)+'%' : '—';
-            document.getElementById('weekly-rate').textContent = (avgApr != null) ? `~${(avgApr/52).toFixed(2)}%/wk` : 'no APR data';
+            document.getElementById('avg-apr').textContent = feeAprInfo ? (feeAprInfo.apr*100).toFixed(2)+'%' : '—';
+            document.getElementById('weekly-rate').textContent = feeAprInfo ? `fees only · ${feeAprInfo.coveredCount}/${lpPositions.length} pools` : 'no APR data';
             
             if(compareData){
                 const oldUsd=compareData.liquidity?.adao_deposits?.total_usd||0;
