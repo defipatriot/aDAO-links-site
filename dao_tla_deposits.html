@@ -785,10 +785,15 @@
             if(!breakdown) return;
             
             const dep = currentData.liquidity?.adao_deposits || {};
-            const avgApr = dep.avg_apr || 0;
+            // Treat a missing/zero APR as "unavailable" rather than a real 0%. A live LP
+            // position with thousands staked showing literally 0% APR is implausible, so a
+            // 0 here is almost certainly absent data. Guarding it kills the downstream
+            // NaN / "0% of expected" / false "on track" cascade.
+            const avgApr = (typeof dep.avg_apr === 'number' && dep.avg_apr > 0) ? dep.avg_apr : null;
+            const aprAvailable = avgApr != null;
             const totalValue = dep.total_usd || 0;
-            const weeklyRate = avgApr / 52;
-            const expectedWeekly = totalValue * (weeklyRate / 100);
+            const weeklyRate = aprAvailable ? avgApr / 52 : 0;
+            const expectedWeekly = aprAvailable ? totalValue * (weeklyRate / 100) : 0;
             
             document.getElementById('value-breakdown').classList.remove('hidden');
             
@@ -826,17 +831,25 @@
                 document.getElementById('net-explain').textContent = 'Both tokens and prices down';
             }
             
-            // Context section
-            document.getElementById('context-apr').innerHTML = `
-                <strong>Your APR is ${avgApr.toFixed(0)}%</strong> which equals ~${weeklyRate.toFixed(2)}% per week.
-                On $${(totalValue/1000).toFixed(1)}K, that's roughly <span class="text-green-400">${fmt(expectedWeekly,0)}/week</span> expected.
-            `;
-            
-            const actualVsExpected = breakdown.positionChange / expectedWeekly * 100;
-            document.getElementById('context-comparison').innerHTML = `
-                You got <span class="${breakdown.positionChange >= 0 ? 'text-green-400' : 'text-red-400'}">${fmtChg(breakdown.positionChange)}</span> token growth 
-                (${actualVsExpected.toFixed(0)}% of expected weekly yield).
-            `;
+            // Context section — only meaningful when APR data is present
+            if (aprAvailable) {
+                document.getElementById('context-apr').innerHTML = `
+                    <strong>Your APR is ${avgApr.toFixed(1)}%</strong> which equals ~${weeklyRate.toFixed(2)}% per week.
+                    On $${(totalValue/1000).toFixed(1)}K, that's roughly <span class="text-green-400">${fmt(expectedWeekly,0)}/week</span> expected.
+                `;
+                const actualVsExpected = breakdown.positionChange / expectedWeekly * 100;
+                document.getElementById('context-comparison').innerHTML = `
+                    You got <span class="${breakdown.positionChange >= 0 ? 'text-green-400' : 'text-red-400'}">${fmtChg(breakdown.positionChange)}</span> token growth 
+                    (${actualVsExpected.toFixed(0)}% of expected weekly yield).
+                `;
+            } else {
+                document.getElementById('context-apr').innerHTML = `
+                    <span class="text-gray-400">APR data isn't available for this snapshot, so expected weekly yield can't be computed.</span>
+                `;
+                document.getElementById('context-comparison').innerHTML = `
+                    You got <span class="${breakdown.positionChange >= 0 ? 'text-green-400' : 'text-red-400'}">${fmtChg(breakdown.positionChange)}</span> in token growth this period.
+                `;
+            }
             
             // Verdict
             const verdictEl = document.getElementById('context-verdict');
@@ -845,7 +858,12 @@
             const largeChangeThreshold = totalValue * 0.05; // 5% of total value
             const isLargeChange = Math.abs(breakdown.positionChange) > largeChangeThreshold;
             
-            if(isLargeChange && breakdown.positionChange > expectedWeekly * 2) {
+            if (!aprAvailable) {
+                // No APR baseline — judge on direction only, never claim "on/off track".
+                if (breakdown.positionChange > 0)      verdictEl.innerHTML = '<span class="text-green-400">✓ Tokens grew this period</span>';
+                else if (breakdown.positionChange < 0) verdictEl.innerHTML = '<span class="text-red-400">⚠ Token amounts decreased — check for IL or withdrawals</span>';
+                else                                   verdictEl.innerHTML = '<span class="text-gray-400">No change in token amounts this period</span>';
+            } else if(isLargeChange && breakdown.positionChange > expectedWeekly * 2) {
                 verdictEl.innerHTML = '<span class="text-blue-400">📋 Large increase - check for recent deposits or DAO actions</span>';
             } else if(isLargeChange && breakdown.positionChange < -expectedWeekly) {
                 verdictEl.innerHTML = '<span class="text-orange-400">📋 Large decrease - check for withdrawals or DAO actions</span>';
@@ -862,16 +880,29 @@
                 ? '<span class="text-green-400">✓</span> Tokens growing' 
                 : '<span class="text-red-400">✗</span> Tokens shrinking';
             
-            document.getElementById('check-expected').innerHTML = breakdown.positionChange >= expectedWeekly * 0.5 
-                ? '<span class="text-green-400">✓</span> Near expected yield' 
-                : '<span class="text-yellow-400">~</span> Below expected yield';
+            document.getElementById('check-expected').innerHTML = !aprAvailable
+                ? '<span class="text-gray-500">–</span> APR data unavailable'
+                : (breakdown.positionChange >= expectedWeekly * 0.5 
+                    ? '<span class="text-green-400">✓</span> Near expected yield' 
+                    : '<span class="text-yellow-400">~</span> Below expected yield');
             
             // Header position status
             const statusEl = document.getElementById('position-status');
             const noteEl = document.getElementById('position-note');
             const cardEl = document.getElementById('position-card');
             
-            if(breakdown.positionChange >= expectedWeekly * 0.8){
+            if (!aprAvailable) {
+                if (breakdown.positionChange > 0) {
+                    statusEl.textContent = 'Growing'; statusEl.className = 'text-lg font-bold text-green-400';
+                    noteEl.textContent = 'tokens up'; cardEl.className = 'stat-card rounded-lg p-2 border-l-2 border-green-500';
+                } else if (breakdown.positionChange < 0) {
+                    statusEl.textContent = 'Shrinking'; statusEl.className = 'text-lg font-bold text-red-400';
+                    noteEl.textContent = 'check positions'; cardEl.className = 'stat-card rounded-lg p-2 border-l-2 border-red-500';
+                } else {
+                    statusEl.textContent = 'Flat'; statusEl.className = 'text-lg font-bold text-gray-300';
+                    noteEl.textContent = 'no change'; cardEl.className = 'stat-card rounded-lg p-2 border-l-2 border-gray-600';
+                }
+            } else if(breakdown.positionChange >= expectedWeekly * 0.8){
                 statusEl.textContent = 'Growing';
                 statusEl.className = 'text-lg font-bold text-green-400';
                 noteEl.textContent = 'on track';
@@ -1193,13 +1224,13 @@
             const dep=currentData.liquidity?.adao_deposits||{};
             const na=lpPositions.reduce((s,p)=>s+p.nonAmp,0);
             const am=lpPositions.reduce((s,p)=>s+p.amp,0);
-            const avgApr = dep.avg_apr || 0;
+            const avgApr = (typeof dep.avg_apr === 'number' && dep.avg_apr > 0) ? dep.avg_apr : null;
             
             document.getElementById('total-value').textContent=fmt(dep.total_usd,0);
             document.getElementById('total-non-amp').textContent=fmt(na,0);
             document.getElementById('total-amp').textContent=fmt(am,0);
-            document.getElementById('avg-apr').textContent=avgApr.toFixed(0)+'%';
-            document.getElementById('weekly-rate').textContent=`~${(avgApr/52).toFixed(2)}%/wk`;
+            document.getElementById('avg-apr').textContent = (avgApr != null) ? avgApr.toFixed(1)+'%' : '—';
+            document.getElementById('weekly-rate').textContent = (avgApr != null) ? `~${(avgApr/52).toFixed(2)}%/wk` : 'no APR data';
             
             if(compareData){
                 const oldUsd=compareData.liquidity?.adao_deposits?.total_usd||0;
