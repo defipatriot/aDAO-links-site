@@ -1466,7 +1466,44 @@
         }
         
         // Fetch LIVE treasury data from blockchain (like main dashboard does)
+        // Rev 3.55 — Treasury data now comes primarily from the shared aDAOLive
+        // library (lib/adao-live-data.js): single source of truth + retry/backoff +
+        // sessionStorage caching shared with the other dashboard pages. Verified
+        // safe to delegate: page and library denomMaps cover the identical 10 tokens,
+        // both query the same publicnode + CoinGecko endpoints, and getDaoTreasury
+        // accepts an explicit wallet (so both treasury + council resolve correctly).
+        // The original inline implementation is preserved below as a fallback and can
+        // be removed once the library path is confirmed in-browser.
         async function fetchLiveTreasuryData(walletAddress) {
+            if (window.aDAOLive && typeof window.aDAOLive.getDaoTreasury === 'function') {
+                try {
+                    const res = await window.aDAOLive.getDaoTreasury({ wallet: walletAddress });
+                    if (res && Array.isArray(res.assets) && res.assets.length > 0) {
+                        // Adapt library shape → this page's {token, amount, price, usd, geckoId}.
+                        const adapted = res.assets.map(a => ({
+                            token:   a.name,
+                            amount:  a.amount,
+                            price:   a.priceUsd  || 0,
+                            usd:     a.usdValue  || 0,
+                            geckoId: a.geckoId,
+                        }));
+                        // Keep the page's CoinGecko price cache populated for any other consumer.
+                        res.assets.forEach(a => {
+                            if (a.geckoId && a.priceUsd != null) {
+                                geckoIdPrices[a.geckoId] = { usd: a.priceUsd };
+                            }
+                        });
+                        console.log(`[treasury] via aDAOLive — ${adapted.length} assets, $${adapted.reduce((s,x)=>s+x.usd,0).toFixed(2)}`);
+                        return adapted;
+                    }
+                } catch (e) {
+                    console.warn('[treasury] aDAOLive.getDaoTreasury failed — using inline fallback:', e);
+                }
+            }
+            return await fetchLiveTreasuryDataInline(walletAddress);
+        }
+
+        async function fetchLiveTreasuryDataInline(walletAddress) {
             console.log(`Fetching live treasury for ${walletAddress}...`);
             const assets = [];
             
