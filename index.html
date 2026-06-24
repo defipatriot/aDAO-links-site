@@ -70,6 +70,7 @@
          getDaoTreasury(), getDaoUnclaimedRewards() with consistent caching across
          all pages in the suite (index, dao_tla_deposits, dao_treasury). -->
     <script src="./lib/tla-decompose.js"></script>
+    <script src="./lib/tile-feed.js"></script>
     <script src="./lib/adao-live-data.js"></script>
 
     <script>
@@ -1509,6 +1510,8 @@
                     </h3>
                     <p id="dao-tla-total" class="text-3xl font-bold text-white mt-2"><i class="fas fa-spinner fa-spin text-cyan-400 text-2xl"></i></p>
                     <p id="dao-tla-apr" class="text-base font-semibold text-gray-300"><i class="fas fa-spinner fa-spin text-gray-300"></i></p>
+                    <p id="dao-tla-countdown" class="text-[11px] text-gray-500 mt-1"></p>
+                    <button id="dao-tla-update" type="button" class="text-[11px] text-cyan-400 hover:text-cyan-300 mt-1 underline">Update</button>
                 </div>
                 <p class="subtext text-xs font-semibold mt-1 text-gray-500 group-hover:text-cyan-400">View details <i class="fas fa-arrow-right text-[10px] ml-1"></i></p>
             </a>
@@ -3877,6 +3880,83 @@
                 'terra1h8psjgcsg9fef7w2yv0j6262sfcaszj8vs4tsy3uwla6zwtaspvqrp4l7v',   // enterprise treasury (898 broken)
             ];
             let _trappedNftsCache = { ts: 0, result: null };
+
+            // ─── TLA Deposits tile — ONE feed contract (cron → live → error + countdown) ───
+            // Replaces the snapshot/cron/live-overwrite tangle with a single TileFeed mount.
+            // Cron primary on load; Update runs live (rate-limited); explicit error if both fail.
+            let _tlaFeed = null;
+            function mountTlaDepositsTile() {
+                if (_tlaFeed) return _tlaFeed;
+                if (!window.TileFeed) { console.error('[tla-tile] tile-feed.js not loaded'); return null; }
+                const CRON_URL = 'https://raw.githubusercontent.com/defipatriot/tla-snapshot-data_2026/main/data/dao-dashboard.json';
+                const HB_URL   = 'https://raw.githubusercontent.com/defipatriot/tla-snapshot-data_2026/main/data/heartbeat.json';
+                const usd0 = n => '$' + Math.round(n).toLocaleString('en-US');
+                async function loadCron() {
+                    const j = await TileFeed.fetchJson(CRON_URL);
+                    const dep = j && (j.dashboard?.tla_deposits || j.tla_deposits);
+                    if (!dep || typeof dep.lp_usd !== 'number') return null;
+                    return { lpUsd: dep.lp_usd, zluna: dep.zluna_usd||0, total: dep.total_usd||0,
+                             rewards: null, bribes: null, version: dep.decompose_core_version, capturedAt: j.meta && j.meta.generated_at };
+                }
+                async function loadLive() {
+                    if (!window.aDAOLive) return null;
+                    let live=null; try { live = await window.aDAOLive.getDaoTlaDeposits({ skipCache:true }); } catch(e){ return null; }
+                    if (!live || typeof live.totalLpUsd !== 'number') return null;
+                    return { lpUsd: live.totalLpUsd, zluna: live.zlunaUsd||0, total: live.totalTlaUsd||0,
+                             rewards: live.pendingRewardsUsd||0, bribes: live.pendingBribesUsd||0,
+                             version: live.decomposeCoreVersion, capturedAt: live.capturedAt };
+                }
+                function setDot(source, v) {
+                    const titleEl = document.getElementById('dao-tla-title');
+                    if (!titleEl) return;
+                    const old = titleEl.querySelector('.pulse-dot, .static-dot-red, .static-dot-amber');
+                    if (old) old.remove();
+                    const dot = document.createElement('span');
+                    dot.className = (source === 'live' ? 'pulse-dot' : 'static-dot-amber') + ' ml-1';
+                    const t = v.capturedAt ? new Date(v.capturedAt).toLocaleTimeString() : '';
+                    const L = [ (source==='live'?'Live (chain)':'Cron') + (t?(' — '+t):''), '  LP positions:    ' + usd0(v.lpUsd) ];
+                    if (v.rewards != null) L.push('  Pending rewards: ' + usd0(v.rewards));
+                    if (v.bribes  != null) L.push('  Pending bribes:  ' + usd0(v.bribes));
+                    L.push('  zLUNA:           ' + usd0(v.zluna));
+                    L.push('  ─────────────'); L.push('  Total TLA:       ' + usd0(v.total));
+                    dot.title = L.join('\n');
+                    titleEl.appendChild(dot);
+                }
+                function render(v, source) {
+                    const tileEl = document.getElementById('dao-tla-total');
+                    if (tileEl) tileEl.textContent = usd0(v.lpUsd);      // LP-only headline
+                    setDot(source, v);
+                    window.liveTlaDepositsUsd = v.lpUsd;                 // LP-only feeds "TLA LPs"
+                    if (typeof updateDaoTotalValue === 'function') updateDaoTotalValue();
+                }
+                function renderError() {
+                    const tileEl = document.getElementById('dao-tla-total');
+                    if (tileEl) tileEl.textContent = '—';
+                    const titleEl = document.getElementById('dao-tla-title');
+                    if (titleEl) {
+                        const old = titleEl.querySelector('.pulse-dot, .static-dot-red, .static-dot-amber');
+                        if (old) old.remove();
+                        const dot = document.createElement('span'); dot.className='static-dot-red ml-1';
+                        dot.title='TLA deposits feed unavailable (cron + live both failed)';
+                        titleEl.appendChild(dot);
+                    }
+                }
+                function onCountdown(text, stale) {
+                    const el = document.getElementById('dao-tla-countdown');
+                    if (el) el.textContent = text ? ('next update in ' + text) : '';
+                }
+                _tlaFeed = TileFeed.mount({ loadCron, loadLive, render, renderError, heartbeatUrl: HB_URL, onCountdown, updateMinIntervalMs: 15*60*1000 });
+                const btn = document.getElementById('dao-tla-update');
+                if (btn) btn.addEventListener('click', async (e) => {
+                    e.preventDefault(); e.stopPropagation();             // tile is a link — don't navigate
+                    btn.disabled = true;
+                    const r = await _tlaFeed.runLive(false);
+                    const el = document.getElementById('dao-tla-countdown');
+                    if (!r.ok && r.reason==='rate_limited' && el) el.textContent = 'updated recently — try again shortly';
+                    setTimeout(()=>{ btn.disabled=false; }, 1500);
+                });
+                return _tlaFeed;
+            }
 
             async function fetchSupplyDistribution() {
                 const now = Date.now();
@@ -6982,6 +7062,7 @@
                 // page load instead of waiting 15s for fetchLiveOnChainData to finish.
                 // fetchTlaData is internally cached, so subsequent callers reuse the result.
                 fetchTlaData().then(() => applyTlaStaleness()).catch(() => {/* silent — UI handles missing data */});
+                mountTlaDepositsTile();   // own the TLA tile via the feed contract
 
                 // ── CRON-FIRST PAINT (Rev 3.53) ───────────────────────────────────
                 // The live path takes ~9s (dozens of LCD queries). The v2 pipeline +
@@ -9345,21 +9426,18 @@
                      // No valid TLA data at all — show consistent spinner state
                      var spinner3xl = '<i class="fas fa-spinner fa-spin text-cyan-400 text-2xl"></i>';
                      var spinnerBase = '<i class="fas fa-spinner fa-spin text-gray-300"></i>';
-                     if (totalValueTileEl) totalValueTileEl.innerHTML = spinner3xl;
+                    // (tile state owned by TileFeed; modal spinners below remain)
                      if (aprTileEl) aprTileEl.innerHTML = spinnerBase;
                      if (modalTotalUsdEl) modalTotalUsdEl.innerHTML = '<i class="fas fa-spinner fa-spin text-white text-2xl"></i>';
                      if (modalTotalAprEl) modalTotalAprEl.innerHTML = spinnerBase;
                      if (snapshotDateEl) snapshotDateEl.innerHTML = spinnerBase;
                      if (tokensContainer) tokensContainer.innerHTML = '<p class="text-center text-gray-500 p-4"><i class="fas fa-spinner fa-spin mr-2"></i>Loading TLA data...</p>';
-                     updateTile('dao-tla-total', null, false, { titleId: 'dao-tla-title' }); 
+                    // (updateTile removed — TileFeed owns the tile)
                      return;
                  }
                  // Stale data falls through and renders normally; applyTlaStaleness adds the red dot.
                  
-                 // Update tile values (always update, don't check for spinner)
-                 if (totalValueTileEl) { 
-                     totalValueTileEl.textContent = `$${tlaData.totalDeposit.toLocaleString('en-US', {minimumFractionDigits: 0})}`; 
-                 }
+                 // Tile number now owned by mountTlaDepositsTile() / TileFeed (cron→live→error).
                  if (aprTileEl) { 
                      aprTileEl.textContent = ''; aprTileEl.classList.add('hidden'); // APR hidden until an Eris-matching figure exists — no dangling dash.
                  }
@@ -9372,7 +9450,7 @@
 
                  // Rev 3.40 — overlay LIVE TLA Deposits from the adao-positions cron.
                  // Snapshot wrote first; live data wins on final paint.
-                 applyLiveTlaDeposits();
+                 // (live overlay now handled by mountTlaDepositsTile / TileFeed)
                  
                  // Update modal header
                  if (modalTotalUsdEl) modalTotalUsdEl.textContent = `$${tlaData.totalDeposit.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
