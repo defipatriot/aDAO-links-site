@@ -3823,10 +3823,10 @@
                 if (!live) return;
                 const tileEl = document.getElementById('dao-tla-total');
                 if (tileEl) {
-                    // Show composite TLA total (LPs + rewards + bribes + zLUNA),
-                    // matching user's rule that TLA Deposits includes "anything in TLA
-                    // aside from LOCKs".
-                    tileEl.textContent = '$' + live.totalTlaUsd.toLocaleString('en-US', { maximumFractionDigits: 0 });
+                    // Headline = LP deposits only (matches Eris "Your deposit").
+                    // The composite (LP + rewards + bribes + zLUNA) is in the hover
+                    // tooltip below, not summed into the headline.
+                    tileEl.textContent = '$' + live.totalLpUsd.toLocaleString('en-US', { maximumFractionDigits: 0 });
                 }
 
                 // Pulse-dot indicator on title with composition tooltip.
@@ -3850,8 +3850,10 @@
                     titleEl.appendChild(dot);
                 }
 
-                // Expose for DAO Total Value aggregation — use composite total
-                window.liveTlaDepositsUsd = live.totalTlaUsd;
+                // Expose for DAO Total Value aggregation — LP-only. "TLA LPs" means
+                // LP positions; claimable rewards/bribes appear in the Unclaimed Rewards
+                // tile and zLUNA is held separately — none of those are "LPs".
+                window.liveTlaDepositsUsd = live.totalLpUsd;
                 if (typeof updateDaoTotalValue === 'function') updateDaoTotalValue();
             }
             // ─── End live TLA deposits ────────────────────────────────────────
@@ -9359,7 +9361,7 @@
                      totalValueTileEl.textContent = `$${tlaData.totalDeposit.toLocaleString('en-US', {minimumFractionDigits: 0})}`; 
                  }
                  if (aprTileEl) { 
-                     aprTileEl.textContent = 'Est. APR —'; aprTileEl.title = 'Total-yield APR is shown on Eris. Our matching figure is being reconciled (Eris blends base per-pool rates incl. fees + LST yield) before we display a number, so it never conflicts with Eris.'; 
+                     aprTileEl.textContent = ''; aprTileEl.classList.add('hidden'); // APR hidden until an Eris-matching figure exists — no dangling dash.
                  }
                  // Rev 3.34 — feed DAO Total Value tile
                  if (typeof updateDaoTotalValue === 'function') updateDaoTotalValue();
@@ -9374,7 +9376,7 @@
                  
                  // Update modal header
                  if (modalTotalUsdEl) modalTotalUsdEl.textContent = `$${tlaData.totalDeposit.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-                 if (modalTotalAprEl) modalTotalAprEl.textContent = 'Est. APR —'; modalTotalAprEl.title = 'Total-yield APR is shown on Eris; our matching figure is being reconciled before display.';
+                 if (modalTotalAprEl) { modalTotalAprEl.textContent = ''; modalTotalAprEl.classList.add('hidden'); }
                  if (snapshotDateEl && tlaData.snapshotDate) snapshotDateEl.textContent = new Date(tlaData.snapshotDate).toLocaleDateString();
                  
                  // Build tokens table with Snap Value and Live Value columns
