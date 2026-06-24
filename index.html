@@ -9401,7 +9401,7 @@
                      totalValueTileEl.textContent = `$${tlaData.totalDeposit.toLocaleString('en-US', {minimumFractionDigits: 0})}`; 
                  }
                  if (aprTileEl) { 
-                     aprTileEl.textContent = `Est. APR ${tlaData.estApr.toFixed(2)}%`; 
+                     aprTileEl.textContent = 'Est. APR —'; aprTileEl.title = 'Total-yield APR is shown on Eris. Our matching figure is being reconciled (Eris blends base per-pool rates incl. fees + LST yield) before we display a number, so it never conflicts with Eris.'; 
                  }
                  // Rev 3.34 — feed DAO Total Value tile
                  if (typeof updateDaoTotalValue === 'function') updateDaoTotalValue();
@@ -9416,7 +9416,7 @@
                  
                  // Update modal header
                  if (modalTotalUsdEl) modalTotalUsdEl.textContent = `$${tlaData.totalDeposit.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-                 if (modalTotalAprEl) modalTotalAprEl.textContent = `Est. APR ${tlaData.estApr.toFixed(2)}%`;
+                 if (modalTotalAprEl) modalTotalAprEl.textContent = 'Est. APR —'; modalTotalAprEl.title = 'Total-yield APR is shown on Eris; our matching figure is being reconciled before display.';
                  if (snapshotDateEl && tlaData.snapshotDate) snapshotDateEl.textContent = new Date(tlaData.snapshotDate).toLocaleDateString();
                  
                  // Build tokens table with Snap Value and Live Value columns
@@ -9925,23 +9925,23 @@
             async function fetchTlaExtData() {
                 if (cachedTlaExtData) return cachedTlaExtData;
                 try {
-                    // Rev 3.55 — migrated off the retired `tla-ext_json_storage` epoch files
-                    // (last published epoch 185, ~3 weeks stale) to the live `network-and-prices`
-                    // cron output (hourly-fresh). That cron exposes ratios directly at
-                    // `lst_ratios.<symbol>`; the old ext format nested them under
-                    // `lst_ratios.tokens.<symbol>`. Re-wrap so the existing consumers
-                    // (getArbLunaRatio, loadLstRatiosFromExt) keep working unchanged.
-                    const r = await fetch('https://raw.githubusercontent.com/defipatriot/network-and-prices-data_2026/main/data/network-and-prices.json');
-                    if (!r.ok) throw new Error('HTTP ' + r.status);
-                    const nap = await r.json();
-                    let epoch = null;
-                    try { epoch = await getCurrentEpoch(); } catch (e) { /* cosmetic staleness only */ }
-                    cachedTlaExtData = {
-                        lst_ratios: { tokens: nap.lst_ratios || {} },
-                        meta: { epoch, source: 'network-and-prices', capturedAt: nap.capturedAt }
-                    };
-                    console.log('Loaded TLA ext data (network-and-prices):', cachedTlaExtData.meta.capturedAt);
-                    return cachedTlaExtData;
+                    // Use the real current epoch (the old hardcoded 163 fallback pointed at files
+                    // that never existed) and walk back: ext epoch files are published sparsely
+                    // (…177, 178, 181, 182, 185), so a deep walk-back finds the newest available.
+                    const currentEpoch = await getCurrentEpoch();
+                    for (let b = 0; b <= 14; b++) {
+                        const tryEpoch = currentEpoch - b;
+                        try {
+                            const r = await fetch(`https://raw.githubusercontent.com/defipatriot/tla-ext_json_storage/main/tla-ext-epoch-${tryEpoch}-end.json`);
+                            if (r.ok) {
+                                cachedTlaExtData = await r.json();
+                                console.log('Loaded TLA ext data:', cachedTlaExtData?.meta?.epoch, b > 1 ? `(walked back ${b} epochs)` : '');
+                                return cachedTlaExtData;
+                            }
+                        } catch (e) { /* try older */ }
+                    }
+                    console.warn('TLA ext data not found, using defaults');
+                    return null;
                 } catch (error) {
                     console.error('Failed to fetch TLA ext data:', error);
                     return null;
