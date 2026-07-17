@@ -1550,13 +1550,14 @@
                                 <th class="text-right" title="Percentage of DEX depth that is TLA staked">% Depth</th>
                                 <th class="text-right sortable" data-sort="tla_pct" title="Pool's share of total TLA. Click to sort.">% of TLA <i class="fas fa-sort text-gray-600 ml-1"></i></th>
                                 <th class="text-right sortable" data-sort="efficiency" title="Capital efficiency score. Hover for breakdown. Click to sort.">Efficiency <i class="fas fa-sort text-gray-600 ml-1"></i></th>
+                                <th class="text-right sortable" data-sort="slip" title="Price impact of a $1K worst-direction trade from live reserves (simulator math). A <0.5% · B <1% · C <3% · D <8% · F above. ≤ = concentrated/stable curve, true impact lower. LP pairs only. Click to sort.">Slip $1K <i class="fas fa-sort text-gray-600 ml-1"></i></th>
                                 <th class="text-right sortable" data-sort="apr" title="APR rates. Top: Amplified, Bottom: Non-amp. Click to sort.">APR <i class="fas fa-sort text-gray-600 ml-1"></i></th>
                                 <th class="text-right sortable" data-sort="rewards" title="Rewards. Top: Per epoch, Bottom: Per year. Click to sort.">Rewards <i class="fas fa-sort text-gray-600 ml-1"></i></th>
                                 <th class="text-right sortable" data-sort="adao" title="Alliance DAO deposit. Click to sort.">aDAO <i class="fas fa-sort text-gray-600 ml-1"></i></th>
                             </tr>
                         </thead>
                         <tbody id="tla-table-body">
-                            <tr><td colspan="10" class="text-center text-gray-500 py-8">Loading TLA pools...</td></tr>
+                            <tr><td colspan="11" class="text-center text-gray-500 py-8">Loading TLA pools...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -3710,6 +3711,53 @@
             const rawInactivePools = transformedData.liquidity?.inactive_pools || [];
             store.tlaPools = normalizeTlaPools(rawTlaPools);
             store.tlaInactivePools = normalizeTlaPools(rawInactivePools);
+            // Join vote-side historical (efficiency / 4-epoch vol+liq) and REAL
+            // treasury deposits onto the TLA table rows. buildTlaPool can't see
+            // either (raw snapshot rows lack them), which left the Efficiency and
+            // aDAO columns permanently '-'. Keyed name|dex; treasury falls back to
+            // bare name only when that name is unique across pools.
+            try {
+                const effBy = new Map((store.pools || []).map(v => [`${v.name}|${v.dex}`, v]));
+                const nameCount = {};
+                for (const t of store.tlaPools) nameCount[t.name] = (nameCount[t.name] || 0) + 1;
+                const treasNon = new Map(), treasAmp = new Map();
+                for (const lp of (store.adaoPositions?.treasury?.lp_positions || [])) {
+                    const key = `${lp.pool_name}|${lp.dex}`;
+                    const m = lp.is_amplified ? treasAmp : treasNon;
+                    m.set(key, (m.get(key) || 0) + (lp.estimated_position_usd || 0));
+                    if (nameCount[lp.pool_name] === 1) {
+                        m.set(lp.pool_name, (m.get(lp.pool_name) || 0) + (lp.estimated_position_usd || 0));
+                    }
+                }
+                // Slippage reference: worst-direction constant-product impact of a
+                // $1K trade from live reserves (same model as the simulator).
+                // Concentrated/stable pools carry the ≤ upper-bound flag.
+                const rawBy = new Map();
+                for (const rp of (store.tlaSnapshot?.pools || [])) rawBy.set(`${rp.name}|${rp.dex || 'Astroport'}`, rp);
+                const dupSeen = new Set();
+                for (const t of [...store.tlaPools, ...(store.tlaInactivePools || [])]) {
+                    const key = `${t.name}|${t.dex}`;
+                    const v = effBy.get(key);
+                    if (v) {
+                        t.efficiency = v.efficiency || 0;
+                        t.vol_4ep_avg = v.vol_4ep_avg || 0;
+                        t.liq_4ep_avg = v.liq_4ep_avg || 0;
+                    }
+                    t.adaoDeposit = treasNon.get(key) ?? (nameCount[t.name] === 1 ? treasNon.get(t.name) : 0) ?? 0;
+                    t.adaoDepositAmp = treasAmp.get(key) ?? (nameCount[t.name] === 1 ? treasAmp.get(t.name) : 0) ?? 0;
+                    const rp = rawBy.get(key);
+                    if (rp?.lp_health?.asset_0 && rp?.lp_health?.asset_1) {
+                        const s0 = rp.lp_health.asset_0.usd_value || 0, s1 = rp.lp_health.asset_1.usd_value || 0;
+                        const side = Math.min(s0, s1);
+                        if (side > 0) {
+                            t.slipPct = 1000 / (side + 1000) * 100;
+                            t.slipCurved = rp.dex_subtype === 'concentrated' || rp.dex_subtype === 'stable';
+                        }
+                    }
+                    const dk = `${key}|${Math.round(t.tla_staked || 0)}`;
+                    if (t.tla_staked > 0 && dupSeen.has(dk)) t._dupGauge = true; else dupSeen.add(dk);
+                }
+            } catch (err) { console.warn('tlaPools join:', err); }
 
             // === Build DAO object from TREASURY (not aggregated members) ===
             // The aDAO tab shows the aDAO Core treasury wallet — same as the old
@@ -5585,7 +5633,7 @@
             const why = view === 'all' ? '' : whyLine(g);
             const detailId = `grade-detail-${i}`;
             return `
-            <div class="rounded-lg ${mine ? 'bg-amber-500/[0.05] border border-amber-500/15' : 'bg-white/[0.02] hover:bg-white/[0.04]'} cursor-pointer" onclick="document.getElementById('${detailId}')?.classList.toggle('hidden')">
+            <div class="rounded-lg ${mine ? 'bg-amber-500/[0.05] border border-amber-500/15' : 'bg-white/[0.02] hover:bg-white/[0.04]'} cursor-pointer" data-gpool="${(g.p.name + '|' + (g.p.dex || '')).replace(/"/g, '&quot;')}" onclick="document.getElementById('${detailId}')?.classList.toggle('hidden')">
                 <div class="flex items-center gap-3 p-2">
                     <span class="w-9 h-7 rounded flex items-center justify-center text-sm font-bold shrink-0 ${gradeCls(g.grade)}">${g.grade}</span>
                     <div class="flex flex-col min-w-0 shrink-0" style="width:170px">
@@ -5610,6 +5658,23 @@
                 </div>
             </div>`;
         }).join('') || '<div class="text-gray-600 text-sm py-3">No pools match this view right now \u2014 that itself is a healthy sign.</div>';
+    }
+
+    // Click-through: any pool name opens that pool's grade card (expanded, scrolled,
+    // briefly highlighted). Falls back to name-only match when dex strings differ.
+    function openGradeFor(name, dex) {
+        store.gradesView = 'all';
+        switchToTab('grades');
+        setTimeout(() => {
+            const sel = `[data-gpool="${(name + '|' + (dex || '')).replace(/"/g, '\\"')}"]`;
+            let row = document.querySelector(sel) || document.querySelector(`[data-gpool^="${name.replace(/"/g, '\\"')}|"]`);
+            if (!row) return;
+            const detail = row.querySelector('[id^="grade-detail-"]');
+            if (detail) detail.classList.remove('hidden');
+            row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            row.style.outline = '1px solid rgba(34,211,238,0.6)';
+            setTimeout(() => { row.style.outline = ''; }, 2500);
+        }, 250);
     }
 
     function setGradesView(v) {
@@ -8569,7 +8634,7 @@
                                         <td colspan="5" class="font-bold uppercase ${colors.text}">${bucket} Totals</td>
                                         <td class="text-right mono">
                                             <div class="text-purple-400">${fmtNum(activePools.reduce((s, p) => s + (p.votion_now_vp || 0), 0))}</div>
-                                            <div class="text-[10px] text-gray-500">${fmtPct(totalVP > 0 ? (activePools.reduce((s, p) => s + (p.votion_now_vp || 0), 0) / totalVP) * 100 : 0)}</div>
+                                            <div class="text-[10px] text-gray-500" title="Votion's share of all votes in this bucket">${fmtPct(totalVP > 0 ? (activePools.reduce((s, p) => s + (p.votion_now_vp || 0), 0) / totalVP) * 100 : 0)} of bucket</div>
                                         </td>
                                         <td class="text-right">-</td>
                                         <td class="text-right mono">
@@ -8580,11 +8645,11 @@
                                         </td>
                                         <td class="text-right mono">
                                             <div class="text-orange-400">${fmtNum(totalVP)}</div>
-                                            <div class="text-[10px] text-gray-500">100%</div>
+                                            <div class="text-[10px] text-gray-500" title="All votes cast in this bucket — the denominator for every % in this table">100% · all bucket votes</div>
                                         </td>
                                         <td class="text-right mono">
                                             <div class="text-cyan-400">${fmtNum(totalAdaoVP)}</div>
-                                            <div class="text-[10px] text-gray-500">${fmtPct(totalVP > 0 ? (totalAdaoVP / totalVP) * 100 : 0)}</div>
+                                            <div class="text-[10px] text-gray-500" title="aDAO treasury's share of all votes in this bucket — not of TLA-wide VP">${fmtPct(totalVP > 0 ? (totalAdaoVP / totalVP) * 100 : 0)} of bucket</div>
                                         </td>
                                     </tr>
                                 </tfoot>
@@ -9038,7 +9103,7 @@
         
         return `
             <tr class="${!isActive ? 'opacity-60' : ''}">
-                <td>${nameCellHtml}</td>
+                <td class="cursor-pointer hover:bg-white/5 rounded transition-colors" title="Open this pool's grade card (LP Grades tab)" onclick="if (!event.target.closest('.copy-addr-btn')) openGradeFor('${safePoolName}', '${(p.dex || '').replace(/'/g, "\\'")}')">${nameCellHtml}</td>
                 <td class="text-center">
                     ${isActive 
                         ? '<span class="text-[10px] px-2 py-0.5 rounded bg-green-500/20 text-green-400">ACTIVE</span>' 
@@ -9206,19 +9271,24 @@
             const poolData = poolDataMap[normalizedName] || {};
             const tlaPct = totalTlaStaked > 0 ? ((p.tla_staked || 0) / totalTlaStaked) * 100 : 0;
             const depthPct = (p.depth || 0) > 0 ? ((p.tla_staked || 0) / p.depth) * 100 : 0;
-            const adaoDeposit = (p.adao_deposit_non_amp || 0) + (p.adao_deposit_amplified || 0);
+            // Row-level values come from the dex-aware join at load (name|dex keys);
+            // the name-only poolDataMap is a fallback and MUST NOT overwrite them —
+            // the two LUNA-USDC pools collide on name and Skeleton's zero used to
+            // clobber Astroport's real efficiency, blanking the whole column. The
+            // old snake_case adao_deposit_* fields never existed on normalized rows.
+            const adaoDeposit = (p.adaoDeposit || 0) + (p.adaoDepositAmp || 0) || (p.adao_deposit_non_amp || 0) + (p.adao_deposit_amplified || 0);
             
             return {
                 ...p,
                 tlaPct,
                 depthPct,
                 adaoDeposit,
-                efficiency: poolData.efficiency,
+                efficiency: (p.efficiency || poolData.efficiency || 0),
                 access_score: poolData.access_score,
                 performance_score: poolData.performance_score,
                 support_score: poolData.support_score,
-                vol_4ep_avg: poolData.vol_4ep_avg,
-                liq_4ep_avg: poolData.liq_4ep_avg
+                vol_4ep_avg: (p.vol_4ep_avg || poolData.vol_4ep_avg || 0),
+                liq_4ep_avg: (p.liq_4ep_avg || poolData.liq_4ep_avg || 0)
             };
         });
         
@@ -9245,6 +9315,8 @@
                     return dir * ((a.tlaPct || 0) - (b.tlaPct || 0));
                 case 'efficiency':
                     return dir * ((a.efficiency || 0) - (b.efficiency || 0));
+                case 'slip':
+                    return dir * ((a.slipPct ?? 999) - (b.slipPct ?? 999));
                 case 'apr':
                     return dir * ((a.apr_amplified || a.apr_non_amp || 0) - (b.apr_amplified || b.apr_non_amp || 0));
                 case 'rewards':
@@ -9259,7 +9331,7 @@
         const tbody = document.getElementById('tla-table-body');
         
         if (pools.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="10" class="text-center text-gray-500 py-8">No TLA pools found</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="11" class="text-center text-gray-500 py-8">No TLA pools found</td></tr>';
             return;
         }
         
@@ -9356,14 +9428,14 @@
             
             return `
             <tr class="${!isActive ? 'opacity-50' : ''}">
-                <td>
+                <td class="cursor-pointer hover:bg-white/5 rounded transition-colors" title="Open this pool's grade card (LP Grades tab)" onclick="if (!event.target.closest('.copy-addr-btn')) openGradeFor('${safePoolName}', '${(p.dex || '').replace(/'/g, "\\'")}')">
                     <div class="flex items-center gap-2">
                         <span class="active-dot ${isActive ? 'on' : 'off'}"></span>
                         <div>${tlaNameInner}</div>
                     </div>
                 </td>
                 <td class="text-center">
-                    <span class="text-[10px] px-2 py-0.5 rounded ${bucketClass}">${bucket}</span>
+                    <span class="text-[10px] px-2 py-0.5 rounded ${bucketClass}">${bucket}</span>${p._dupGauge ? '<div class="text-[8px] px-1 py-px mt-0.5 rounded bg-purple-500/15 text-purple-300 inline-block" title="A second gauge pointing at the same pool — same liquidity counted at the gauge level twice (known data issue). The pool itself appears once above.">duplicate gauge</div>' : ''}
                 </td>
                 <td class="text-right tla-metric-cell cursor-pointer hover:bg-white/5 rounded transition-colors" data-pool="${safePoolName}" data-metric="tla-depth" title="Click for trend">
                     <div class="mono text-green-400 flex items-center justify-end gap-1">
@@ -9381,6 +9453,13 @@
                 <td class="text-right mono text-gray-400">${p.tlaPct > 0 ? fmtPct(p.tlaPct) : '-'}</td>
                 <td class="text-right ${effColor}" title="${effTooltip}">
                     ${eff > 0 ? `<div class="mono">${effPct}%</div><div class="text-[10px]">${effLabel}</div>` : '-'}
+                </td>
+                <td class="text-right" title="${p.slipPct != null ? `Price impact of a $1K worst-direction trade.${p.slipCurved ? ' Concentrated/stable curve: true impact is lower than this bound.' : ''} See the Trade Impact Simulator on Overview for other sizes and directions.` : 'Single-asset pool — no swap curve to grade.'}">
+                    ${p.slipPct != null ? (() => {
+                        const sg = p.slipPct < 0.5 ? 'A' : p.slipPct < 1 ? 'B' : p.slipPct < 3 ? 'C' : p.slipPct < 8 ? 'D' : 'F';
+                        const sc = sg === 'A' ? 'bg-emerald-500/20 text-emerald-300' : sg === 'B' ? 'bg-cyan-500/20 text-cyan-300' : sg === 'C' ? 'bg-yellow-500/20 text-yellow-300' : sg === 'D' ? 'bg-orange-500/20 text-orange-300' : 'bg-red-500/20 text-red-300';
+                        return `<span class="text-[10px] px-1.5 py-0.5 rounded font-bold ${sc}">${sg}</span><div class="mono text-[10px] text-gray-500">${p.slipCurved ? '≤' : ''}${p.slipPct < 0.05 ? '<0.05' : p.slipPct.toFixed(2)}%</div>`;
+                    })() : '<span class="text-gray-600">-</span>'}
                 </td>
                 <td class="text-right tla-metric-cell cursor-pointer hover:bg-white/5 rounded transition-colors" data-pool="${safePoolName}" data-metric="tla-apr" title="Click for trend">
                     <div class="mono flex items-center justify-end gap-1 ${p.apr_amplified > 0 ? 'text-green-400' : 'text-gray-500'}">
