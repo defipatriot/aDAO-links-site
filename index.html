@@ -1353,6 +1353,7 @@
                      </div>
                      <p id="deposit-usd-value" class="text-xl font-bold text-white">--</p>
                      <p id="deposit-ampluna-value" class="text-sm text-gray-400">-- ampLUNA</p>
+                     <div class="mt-2 h-8 relative"><canvas id="deposit-sparkline"></canvas></div>
                  </div>
                  
                  <!-- Vote Rewards -->
@@ -1371,6 +1372,7 @@
                          <i class="fas fa-chevron-down text-[10px] mr-0.5"></i>Show tokens
                      </button>
                      <div id="vote-tokens-list" class="hidden mt-1 text-[10px] text-gray-300 space-y-0.5 max-h-24 overflow-y-auto pr-1"></div>
+                     <div class="mt-2 h-8 relative"><canvas id="vote-sparkline"></canvas></div>
                  </div>
                  
                  <!-- Rebase -->
@@ -1383,6 +1385,7 @@
                      </div>
                      <p id="rebase-usd-value" class="text-xl font-bold text-white">--</p>
                      <p id="rebase-ampluna-value" class="text-sm text-gray-400">-- ampLUNA</p>
+                     <div class="mt-2 h-8 relative"><canvas id="rebase-sparkline"></canvas></div>
                  </div>
              </div>
              
@@ -4283,9 +4286,11 @@
                     } catch { return null; }
                 };
 
-                // Probe a window: current epoch + last 15 epochs. Stop early when we
-                // hit 3 consecutive misses (likely older than cron-start date).
-                const startEp = Math.max(1, (currentEpoch || 186) - 15);
+                // Probe a window: current epoch + last 15 epochs.
+                // Rev 3.51 — floored at 186: the adao-positions weekly archive begins at
+                // epoch-186.json (verified), so probing 179–185 was guaranteed 404s.
+                const CRON_FIRST_EPOCH = 186;
+                const startEp = Math.max(CRON_FIRST_EPOCH, (currentEpoch || 186) - 15);
                 const endEp   = currentEpoch || 186;
                 const epochsToProbe = [];
                 for (let e = endEp; e >= startEp; e--) epochsToProbe.push(e);
@@ -4883,15 +4888,27 @@
             }
             
             // --- Fetch all historical snapshots ---
+            // Rev 3.51 — in-flight promise memo: renderUnclaimedSparklines and the chart
+            // modal both call this on load; without it, both kicked off a full ~200-request
+            // daily-archive pass in parallel (every 404 duplicated in the console).
+            let _snapshotsPromise = null;
             async function fetchAllSnapshots(forceRefresh = false) {
                 if (historicalSnapshots.length > 0 && !forceRefresh) {
                     return historicalSnapshots; // Return cached data
                 }
-                
-                // Clear cache if forcing refresh
                 if (forceRefresh) {
                     historicalSnapshots = [];
+                    _snapshotsPromise = null;
                 }
+                if (!_snapshotsPromise) {
+                    _snapshotsPromise = _fetchAllSnapshotsInner().catch(err => {
+                        _snapshotsPromise = null; // allow retry after a failure
+                        throw err;
+                    });
+                }
+                return _snapshotsPromise;
+            }
+            async function _fetchAllSnapshotsInner() {
                 
                 // ─────────────────────────────────────────────────────────────────
                 // NEW-PIPELINE-ONLY, DAILY history (rebuilt 2026-06). The legacy
@@ -4941,10 +4958,14 @@
                 };
 
                 const rows = await Promise.all(dates.map(async (date) => {
+                    // Rev 3.51 — per-source start floors (documented above; now enforced).
+                    // Probing dates before a source exists guaranteed 404s on every load.
+                    const DD_EARLIEST = '2026-06-12'; // dao-dashboard daily begins
+                    const V2_EARLIEST = '2026-06-07'; // nft-inventory v2 daily begins
                     const [dd, bk, vd, td, np] = await Promise.all([
-                        jget(SNAP_BASE + '/dao-dashboard-' + date + '.json'),
+                        date >= DD_EARLIEST ? jget(SNAP_BASE + '/dao-dashboard-' + date + '.json') : Promise.resolve(null),
                         jget(BK_BASE + '/' + date + '.json'),
-                        jget(V2_BASE + '/' + date + '.json'),
+                        date >= V2_EARLIEST ? jget(V2_BASE + '/' + date + '.json') : Promise.resolve(null),
                         jget(SNAP_BASE + '/' + date + '.json'),
                         jget(NP_BASE + '/' + date + '.json'),
                     ]);
@@ -6544,7 +6565,10 @@
                     { tileSelector: '#dao-tla-vp', metric: 'tlaVpTotal_LUNA', parentSelector: '.stat-card' },
                     { tileSelector: '#daodao-staked', metric: 'daodaoStaked', parentSelector: '.stat-card' },
                     { tileSelector: '#enterprise-staked-holder', metric: 'enterpriseStaked', parentSelector: '.stat-card' },
-                    { tileSelector: '#dao-members', metric: 'daoMembers', parentSelector: '.stat-card' },
+                    // Rev 3.51 — '#dao-members' icon removed: the daily pipeline has no member-count
+                    // source (daoMembers is always null — see fetchAllSnapshots "honest gap"), so the
+                    // modal always showed "No historical data available yet". Restore the mapping
+                    // { tileSelector: '#dao-members', metric: 'daoMembers' } once a daily capture exists.
                     { tileSelector: '#dao-broken-total', metric: 'daoHeldNfts', parentSelector: '.stat-card' },
                     { tileSelector: '#unminted-nft-backing-luna', metric: 'unmintedTotalBacking_LUNA', parentSelector: '.stat-card' }
                 ];
@@ -9966,14 +9990,26 @@
                     // Use the real current epoch (the old hardcoded 163 fallback pointed at files
                     // that never existed) and walk back: ext epoch files are published sparsely
                     // (…177, 178, 181, 182, 185), so a deep walk-back finds the newest available.
+                    // Rev 3.51 — the ext cron has been stalled at epoch 185, so a naive walkback
+                    // from the current epoch burned ~9 404s on every page load. We now remember
+                    // the last epoch that worked (sessionStorage) and probe: current epoch first
+                    // (catches cron resumption), then the last-known-good, then the full walk.
                     const currentEpoch = await getCurrentEpoch();
-                    for (let b = 0; b <= 14; b++) {
-                        const tryEpoch = currentEpoch - b;
+                    let lastGood = null;
+                    try { lastGood = parseInt(sessionStorage.getItem('adao_live:tla_ext_last_epoch') || '', 10) || null; } catch (_) {}
+                    const walk = [];
+                    for (let b = 0; b <= 14; b++) walk.push(currentEpoch - b);
+                    const ordered = (lastGood && lastGood < currentEpoch && walk.includes(lastGood))
+                        ? [currentEpoch, lastGood, ...walk.filter(e => e !== currentEpoch && e !== lastGood)]
+                        : walk;
+                    for (const tryEpoch of ordered) {
                         try {
                             const r = await fetch(`https://raw.githubusercontent.com/defipatriot/tla-ext_json_storage/main/tla-ext-epoch-${tryEpoch}-end.json`);
                             if (r.ok) {
                                 cachedTlaExtData = await r.json();
-                                console.log('Loaded TLA ext data:', cachedTlaExtData?.meta?.epoch, b > 1 ? `(walked back ${b} epochs)` : '');
+                                try { sessionStorage.setItem('adao_live:tla_ext_last_epoch', String(tryEpoch)); } catch (_) {}
+                                const behind = currentEpoch - tryEpoch;
+                                console.log('Loaded TLA ext data:', cachedTlaExtData?.meta?.epoch, behind > 1 ? `(${behind} epochs behind current — ext cron stalled?)` : '');
                                 return cachedTlaExtData;
                             }
                         } catch (e) { /* try older */ }
@@ -10977,6 +11013,7 @@
             // Track the chart instances so re-renders don't accumulate
             let depositSparkChart = null;
             let rebaseSparkChart = null;
+            let voteSparkChart = null;
             
             // Draw mini sparklines on Deposit Rewards and Rebase tiles using snapshot history.
             // Uses LIVE prices to compute USD per epoch (consistent with how the tile face shows
@@ -10985,7 +11022,13 @@
             async function renderUnclaimedSparklines() {
                 const depositCanvas = document.getElementById('deposit-sparkline');
                 const rebaseCanvas = document.getElementById('rebase-sparkline');
-                if (!depositCanvas && !rebaseCanvas) return;
+                const voteCanvas = document.getElementById('vote-sparkline');
+                if (!depositCanvas && !rebaseCanvas && !voteCanvas) {
+                    // Rev 3.51 — this silent return is how the sparklines died unnoticed
+                    // when a tile restructure removed the canvases. Warn loudly instead.
+                    console.warn('renderUnclaimedSparklines: no sparkline canvases found in DOM — tiles restructured?');
+                    return;
+                }
                 if (typeof Chart === 'undefined') return; // Chart.js not loaded yet
                 
                 // Pull snapshot history (cached after first fetch by fetchAllSnapshots)
@@ -11080,6 +11123,45 @@
                         },
                         options: sparkOptions
                     });
+                }
+
+                // Vote Rewards sparkline (Rev 3.51): per-day stored total_usd from the daily
+                // dao-dashboard archive. Unlike deposit/rebase (amount × live price), vote
+                // rewards are a multi-token basket, so the capture-day USD is the honest series.
+                // Filtered separately — days without vote_rewards data are omitted, not zeroed.
+                if (voteCanvas) {
+                    const voteValid = snapshots.filter(s => !s.missing && s.dashboard && s.dashboard.vote_rewards && s.dashboard.vote_rewards.total_usd != null).slice(-SPARK_EPOCHS);
+                    if (voteValid.length >= 2) {
+                        const voteValues = voteValid.map(s => s.dashboard.vote_rewards.total_usd);
+                        if (voteSparkChart) voteSparkChart.destroy();
+                        voteSparkChart = new Chart(voteCanvas.getContext('2d'), {
+                            type: 'line',
+                            data: {
+                                labels: voteValid.map(s => s.epoch),
+                                datasets: [{
+                                    data: voteValues,
+                                    borderColor: '#fb923c',
+                                    backgroundColor: 'rgba(251, 146, 60, 0.15)',
+                                    fill: true,
+                                    tension: 0.3,
+                                    borderWidth: 1.5
+                                }]
+                            },
+                            options: {
+                                ...sparkOptions,
+                                plugins: {
+                                    ...sparkOptions.plugins,
+                                    tooltip: {
+                                        ...sparkOptions.plugins.tooltip,
+                                        callbacks: {
+                                            title: (items) => `E${voteValid[items[0].dataIndex]?.epoch ?? '?'}`,
+                                            label: (ctx) => '$' + Number(ctx.raw).toLocaleString('en-US', { maximumFractionDigits: 2 })
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                    }
                 }
             }
             
