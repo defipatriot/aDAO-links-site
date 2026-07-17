@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Member Portfolio — The Alliance DAO</title>
+<meta name="description" content="Your personal Terra position companion — TLA locks, LP, votes and alerts for any wallet. Read-only, no wallet connect.">
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+    body { font-family: 'Space Grotesk', sans-serif; background: #0a0e14; color: #e5e7eb;
+        background-image: radial-gradient(ellipse at 20% -10%, rgba(34,211,238,0.07), transparent 55%),
+                          radial-gradient(ellipse at 90% 10%, rgba(168,85,247,0.05), transparent 50%); 
+        background-attachment: fixed; min-height: 100vh; }
+    .mono { font-family: 'JetBrains Mono', monospace; }
+    .glass-card { background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; backdrop-filter: blur(8px); }
+    .alert-danger  { background: rgba(239,68,68,0.07);  border: 1px solid rgba(239,68,68,0.25); }
+    .alert-warn    { background: rgba(245,158,11,0.07); border: 1px solid rgba(245,158,11,0.25); }
+    .alert-info    { background: rgba(34,211,238,0.06); border: 1px solid rgba(34,211,238,0.22); }
+    .alert-success { background: rgba(16,185,129,0.06); border: 1px solid rgba(16,185,129,0.22); }
+    .loading-pulse { animation: pulse 1.6s ease-in-out infinite; }
+    @keyframes pulse { 0%,100% { opacity: .5; } 50% { opacity: 1; } }
+    input:focus { outline: none; }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 4px; }
+    .data-table { width: 100%; font-size: 0.8rem; }
+    .data-table th { text-align: left; padding: 6px 8px; color: #9ca3af; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid rgba(255,255,255,0.07); }
+    .data-table td { padding: 7px 8px; border-bottom: 1px solid rgba(255,255,255,0.035); }
+    .data-table tr:last-child td { border-bottom: none; }
+</style>
+</head>
+<body>
+<nav class="border-b border-white/5 bg-black/20 backdrop-blur-md sticky top-0 z-40">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+            <span class="text-lg font-bold"><i class="fas fa-user-astronaut text-cyan-400 mr-2"></i>Member Portfolio</span>
+            <span class="text-[9px] px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 font-semibold tracking-wide">BETA</span>
+        </div>
+        <div class="flex items-center gap-4 text-sm">
+            <span id="nav-epoch" class="text-[11px] text-gray-500 mono hidden sm:inline"></span>
+            <a href="test.html" class="text-gray-400 hover:text-cyan-300 transition-colors"><i class="fas fa-chart-pie mr-1"></i>TLA Stats</a>
+        </div>
+    </div>
+</nav>
+
+<main class="max-w-6xl mx-auto px-4 py-6">
+
+    <!-- ============ ADDRESS BAR ============ -->
+    <div class="glass-card p-5 mb-6">
+        <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
+            <h1 class="font-semibold text-lg">Your Terra position, in one place</h1>
+            <span class="text-[10px] text-gray-500"><i class="fas fa-lock text-emerald-400/70 mr-1"></i>Read-only — no wallet connect, nothing to sign. The address is saved on this device only.</span>
+        </div>
+        <div class="flex items-stretch gap-2 flex-wrap">
+            <input id="wallet-input" list="known-wallets" placeholder="Paste a terra1… address or type a registered name"
+                class="flex-1 min-w-[260px] bg-white/5 border border-white/10 focus:border-cyan-500/50 rounded-lg px-3 py-2 text-sm mono text-gray-200 placeholder:text-gray-600 placeholder:font-sans">
+            <datalist id="known-wallets"></datalist>
+            <button id="btn-view" class="px-4 py-2 rounded-lg bg-cyan-500/20 text-cyan-300 text-sm font-semibold hover:bg-cyan-500/30 transition-colors">View</button>
+            <button id="btn-save" class="px-3 py-2 rounded-lg bg-white/5 text-gray-400 text-sm font-medium hover:text-emerald-300 transition-colors" title="Remember this wallet on this device"><i class="fas fa-bookmark mr-1"></i>Save</button>
+            <button id="btn-clear" class="px-3 py-2 rounded-lg bg-white/5 text-gray-500 text-sm font-medium hover:text-red-300 transition-colors hidden" title="Forget the saved wallet"><i class="fas fa-xmark"></i></button>
+        </div>
+        <div id="addr-msg" class="text-[11px] text-gray-500 mt-2"></div>
+    </div>
+
+    <!-- ============ EMPTY / LOADING STATES ============ -->
+    <div id="state-loading" class="glass-card p-8 text-center">
+        <div class="loading-pulse text-gray-500"><i class="fas fa-satellite-dish mr-2"></i>Loading the electorate…</div>
+    </div>
+    <div id="state-welcome" class="glass-card p-8 text-center hidden">
+        <i class="fas fa-user-astronaut text-4xl text-cyan-400/40 mb-3"></i>
+        <div class="text-gray-300 font-medium mb-1">Enter any wallet above to see its full TLA position</div>
+        <div class="text-[12px] text-gray-500 max-w-xl mx-auto">Locks, LP positions, votes, pending rewards — plus alerts when something needs attention: stale voting power, deposits being eaten by the take rate, locks about to expire. Save your address once and this page opens straight to your position.</div>
+    </div>
+    <div id="state-notfound" class="glass-card p-8 text-center hidden">
+        <i class="fas fa-ghost text-4xl text-gray-600 mb-3"></i>
+        <div class="text-gray-300 font-medium mb-1">No TLA activity found for <span id="nf-addr" class="mono text-sm text-gray-400"></span></div>
+        <div class="text-[12px] text-gray-500 max-w-xl mx-auto">This wallet has no tracked locks, LP positions, or votes in the Terra Liquidity Alliance. If it just entered TLA, the tracker picks it up within about an hour. (Coverage: all 200+ TLA participants, aDAO members, and registered allies.)</div>
+    </div>
+
+    <!-- ============ PORTFOLIO ============ -->
+    <div id="portfolio" class="hidden">
+
+        <!-- identity -->
+        <div class="glass-card p-5 mb-4">
+            <div class="flex items-center gap-4 flex-wrap">
+                <img id="id-pfp" class="w-14 h-14 rounded-xl border border-white/10 hidden" alt="">
+                <div class="min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <span id="id-name" class="text-xl font-bold"></span>
+                        <span id="id-badges" class="flex items-center gap-1.5"></span>
+                    </div>
+                    <div class="flex items-center gap-2 mt-0.5">
+                        <span id="id-addr" class="mono text-[11px] text-gray-500"></span>
+                        <button id="id-copy" class="text-gray-600 hover:text-gray-300 transition-colors" title="Copy address"><i class="fas fa-copy text-[10px]"></i></button>
+                    </div>
+                </div>
+                <div class="ml-auto text-right">
+                    <div id="id-rank" class="text-sm text-gray-300"></div>
+                    <div id="id-since" class="text-[11px] text-gray-500"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- alerts: the companion's brain -->
+        <div id="alerts-wrap" class="mb-4">
+            <div class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-2"><i class="fas fa-bell text-amber-400 mr-1"></i>What needs your attention</div>
+            <div id="alerts" class="grid grid-cols-1 md:grid-cols-2 gap-2"></div>
+        </div>
+
+        <!-- snapshot tiles -->
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-5" id="tiles"></div>
+
+        <!-- positions + locks -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+            <div class="glass-card p-5">
+                <h3 class="font-semibold mb-1 flex items-center gap-2"><i class="fas fa-water text-cyan-400"></i> LP Positions</h3>
+                <p class="text-[11px] text-gray-500 mb-3">Staked liquidity, live-valued via pool share — inactive pools flagged with what the take rate is costing.</p>
+                <div id="lp-table" class="overflow-x-auto"></div>
+            </div>
+            <div class="glass-card p-5">
+                <h3 class="font-semibold mb-1 flex items-center gap-2"><i class="fas fa-lock text-purple-400"></i> Locks &amp; Voting Power</h3>
+                <p class="text-[11px] text-gray-500 mb-3">Each vAMP lock, its live VP, and the power waiting to be reclaimed by adjusting.</p>
+                <div id="locks-table" class="overflow-x-auto"></div>
+            </div>
+        </div>
+
+        <!-- votes -->
+        <div class="glass-card p-5 mb-4">
+            <h3 class="font-semibold mb-1 flex items-center gap-2"><i class="fas fa-check-to-slot text-emerald-400"></i> Vote Allocations</h3>
+            <p class="text-[11px] text-gray-500 mb-3">Where this wallet's VP is pointed, per bucket. The period stamp is the last time each bucket's votes were touched — old stamps mean the allocation is coasting.</p>
+            <div id="votes-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3"></div>
+        </div>
+
+        <!-- balances + votion -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+            <div class="glass-card p-5">
+                <h3 class="font-semibold mb-1 flex items-center gap-2"><i class="fas fa-wallet text-amber-400"></i> Wallet Balances</h3>
+                <p class="text-[11px] text-gray-500 mb-3">Liquid TLA-relevant tokens sitting in the wallet (not locked, not LP'd).</p>
+                <div id="balances-table"></div>
+            </div>
+            <div class="glass-card p-5">
+                <h3 class="font-semibold mb-1 flex items-center gap-2"><i class="fas fa-vault text-purple-300"></i> Votion Positions</h3>
+                <div class="alert-info rounded-lg p-3 text-[12px] text-gray-400">
+                    <i class="fas fa-hourglass-half text-cyan-400 mr-1"></i>
+                    Per-wallet Votion holdings aren't captured yet — today's Votion feed tracks the vaults, not the holders. The per-holder capture (and its daily archive) is queued on the data roadmap; when it lands, this card shows your vtokens, underlying LSTs, and Votion-implied VP spliced into the totals above. Until then those totals honestly exclude Votion.
+                </div>
+            </div>
+        </div>
+
+        <!-- trends honesty -->
+        <div class="glass-card p-5 mb-4">
+            <h3 class="font-semibold mb-1 flex items-center gap-2"><i class="fas fa-chart-line text-cyan-400"></i> Trends</h3>
+            <div class="text-[12px] text-gray-400">
+                Growth charts appear here as history accumulates — shown honestly from the date tracking began, never a fake full curve.
+                Daily archives for aDAO member positions have been accumulating since <span class="mono text-gray-300">2026-06-13</span>;
+                electorate-wide and Votion daily archives are queued (every day before they start is a permanently missing point).
+                Past <i>flows</i> (deposits, votes, lock events) are recoverable from chain history and will backfill; past <i>USD valuations</i> are not.
+            </div>
+        </div>
+
+        <!-- data trust footer -->
+        <div class="glass-card p-4">
+            <div class="text-[10px] text-gray-600 leading-relaxed">
+                <i class="fas fa-shield-halved text-emerald-400/70 mr-1"></i>
+                <span class="text-gray-500 font-semibold">Data:</span>
+                <span id="src-times"></span>
+                · SkeletonSwap-derived figures are unverified upstream and never used for judgments here
+                · This page is read-only and stores nothing but your saved address, locally on this device
+                · Feeds refresh hourly; "pending" amounts settle at epoch close.
+            </div>
+        </div>
+
+    </div>
+</main>
+
+<script>
+(() => {
+    'use strict';
+
+    const CONFIG = {
+        participantsUrl: 'https://raw.githubusercontent.com/defipatriot/tla-participants-data_2026/main/data/current.json',
+        adaoPositionsUrl: 'https://raw.githubusercontent.com/defipatriot/adao-positions-data_2026/main/data/current.json',
+        alliesUrl: 'https://raw.githubusercontent.com/defipatriot/adao-allies-data_2026/main/data/current.json',
+        orgNftSummaryUrl: 'https://raw.githubusercontent.com/thealliancedao/tla-core/main/nfts/adao/snapshots/summary.json',
+        snapshotUrl: 'https://raw.githubusercontent.com/defipatriot/tla-snapshot-data_2026/main/data/tla-snapshot.json',
+        storageKey: 'tla_portfolio_wallet',
+    };
+
+    const store = { members: new Map(), names: new Map(), stakers: new Set(), allySet: new Set(),
+                    feeds: {}, epoch: null, poolStatus: new Map(), wallet: null };
+
+    // ---------- utils ----------
+    const $ = (id) => document.getElementById(id);
+    const fmt$ = (v) => {
+        if (v == null || isNaN(v)) return '—';
+        const a = Math.abs(v);
+        if (a >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M';
+        if (a >= 1e3) return '$' + (v / 1e3).toFixed(1) + 'K';
+        return '$' + v.toFixed(2);
+    };
+    const fmtNum = (v) => {
+        if (v == null || isNaN(v)) return '—';
+        const a = Math.abs(v);
+        if (a >= 1e6) return (v / 1e6).toFixed(2) + 'M';
+        if (a >= 1e3) return (v / 1e3).toFixed(1) + 'K';
+        return v.toFixed(a < 10 && a > 0 ? 2 : 0);
+    };
+    const shortAddr = (w) => w ? w.slice(0, 10) + '…' + w.slice(-6) : '—';
+    const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const isTerraAddr = (s) => /^terra1[a-z0-9]{38}([a-z0-9]{20})?$/.test(s || '');
+    const lsGet = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+    const lsSet = (k, v) => { try { v === null ? localStorage.removeItem(k) : localStorage.setItem(k, v); return true; } catch { return false; } };
+    const timeAgo = (iso) => {
+        if (!iso) return '—';
+        const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+        return m < 90 ? `${m}m ago` : m < 60 * 36 ? `${Math.round(m / 60)}h ago` : `${Math.round(m / 1440)}d ago`;
+    };
+
+    // ---------- load ----------
+    async function loadAll() {
+        const j = (u) => fetch(u).then(r => r.ok ? r.json() : null).catch(() => null);
+        const [parts, adao, allies, orgNft, snap] = await Promise.all([
+            j(CONFIG.participantsUrl), j(CONFIG.adaoPositionsUrl), j(CONFIG.alliesUrl), j(CONFIG.orgNftSummaryUrl), j(CONFIG.snapshotUrl),
+        ]);
+        store.feeds = { parts, adao, allies, orgNft, snap };
+        // Epoch arrives as an object ({number, ends_at, progress_pct}) — extract
+        // the number, and keep the end-time for the countdown chip.
+        const epObj = parts?.epoch || adao?.epoch || null;
+        store.epoch = epObj?.number ?? snap?.epoch?.currentEpoch ?? null;
+        store.epochEndsAt = epObj?.ends_at || snap?.epoch?.epochEndsAt || null;
+
+        // member registry — aDAO objects first (richer NFT fields), then the full
+        // electorate, then ally rosters. All share the capture-engine shape.
+        const put = (m) => { if (m?.wallet && !store.members.has(m.wallet)) store.members.set(m.wallet, m); };
+        (adao?.members || []).forEach(put);
+        (parts?.members || []).forEach(put);
+        for (const ally of (allies?.allies || [])) (ally.members || []).forEach(put);
+
+        for (const [w, m] of store.members) if (m.name) store.names.set(w, m.name);
+        for (const ally of (allies?.allies || [])) for (const m of (ally.members || [])) if (m.wallet && m.name && !store.names.has(m.wallet)) store.names.set(m.wallet, m.name);
+
+        const daoContracts = new Set(Object.values(orgNft?.contracts || {}));
+        if (adao?.treasury?.wallet) daoContracts.add(adao.treasury.wallet);
+        for (const s of (orgNft?.daodao_stakers || [])) if (s?.address && !daoContracts.has(s.address)) store.stakers.add(s.address);
+        for (const ally of (allies?.allies || [])) for (const m of (ally.members || [])) if (m.wallet && !store.stakers.has(m.wallet)) store.allySet.add(m.wallet);
+
+        // pool status map (active/inactive) for enrichment
+        for (const p of (snap?.pools || [])) store.poolStatus.set(`${p.name}|${p.dex || ''}`, p.status);
+
+        // datalist — named wallets, VP-heavy first
+        const dl = $('known-wallets');
+        if (dl) {
+            const named = [...store.members.values()].filter(m => m.name)
+                .sort((a, b) => (b.summary?.display_voting_power_human || 0) - (a.summary?.display_voting_power_human || 0));
+            dl.innerHTML = named.map(m => `<option value="${esc(m.wallet)}">${esc(m.name)}</option>`).join('');
+        }
+        if (store.epoch) {
+            let left = '';
+            if (store.epochEndsAt) {
+                const h = Math.max(0, Math.round((new Date(store.epochEndsAt) - Date.now()) / 36e5));
+                left = h >= 48 ? ` · ${Math.round(h / 24)}d left` : ` · ${h}h left`;
+            }
+            $('nav-epoch').textContent = `Epoch ${store.epoch}${left}`;
+        }
+        const times = [];
+        if (parts?.capturedAt) times.push(`electorate ${timeAgo(parts.capturedAt)}`);
+        if (adao?.capturedAt || adao?.captured_at) times.push(`aDAO positions ${timeAgo(adao.capturedAt || adao.captured_at)}`);
+        if (snap?.captured_at || snap?.capturedAt) times.push(`pools ${timeAgo(snap.captured_at || snap.capturedAt)}`);
+        $('src-times').textContent = times.join(' · ') || 'feed timestamps unavailable';
+    }
+
+    // resolve typed input → wallet (address, exact name, or unique name prefix)
+    function resolveInput(v) {
+        v = (v || '').trim();
+        if (!v) return null;
+        if (isTerraAddr(v)) return v;
+        const lower = v.toLowerCase();
+        const exact = [...store.names.entries()].filter(([, n]) => n.toLowerCase() === lower);
+        if (exact.length === 1) return exact[0][0];
+        const pre = [...store.names.entries()].filter(([, n]) => n.toLowerCase().startsWith(lower));
+        if (pre.length === 1) return pre[0][0];
+        return null;
+    }
+
+    // ---------- alerts: the companion's brain ----------
+    function buildAlerts(m) {
+        const s = m.summary || {};
+        const alerts = [];
+        const A = (sev, icon, title, body) => alerts.push({ sev, icon, title, body });
+
+        if ((s.inactive_lp_usd || 0) > 1) {
+            A('danger', 'fa-triangle-exclamation', `${fmt$(s.inactive_lp_usd)} sitting in inactive pools`,
+              `These deposits stopped earning but keep paying the take rate — ${fmt$(s.inactive_take_exposure_usd || 0)} is being taken. Pull them or restake into an active pool.`);
+        }
+        const atRisk = (m.lp_positions || []).filter(lp => lp.status === 'active' && lp.distance_from_threshold_pp != null && lp.distance_from_threshold_pp < 0.5);
+        for (const lp of atRisk.slice(0, 2)) {
+            A('warn', 'fa-wave-square', `${esc(lp.pool_name)} is ${lp.distance_from_threshold_pp.toFixed(1)}pp from the threshold`,
+              `Your ${fmt$(lp.estimated_position_usd || 0)} position stops earning if the pool slips below 1% of bucket votes. Watch it — or vote for it.`);
+        }
+        const gap = s.vp_gap_human || 0;
+        if (gap > Math.max(500, 0.01 * (s.potential_vp_human || 0))) {
+            A('warn', 'fa-battery-half', `${fmtNum(gap)} VP waiting to be reclaimed`,
+              `Voting power decays until a lock is adjusted. Re-touching your locks (extend / re-commit on Eris) snaps you from ${fmtNum(s.current_vp_human || 0)} back to ${fmtNum(s.potential_vp_human || 0)} VP — free power, one transaction.`);
+        }
+        const expiring = (m.locks || []).filter(l => !l.is_auto_max_locked && l.weeks_to_unlock != null && l.weeks_to_unlock <= 4);
+        for (const l of expiring.slice(0, 2)) {
+            A('warn', 'fa-hourglass-end', `Lock #${esc(l.token_id)} unlocks in ${l.weeks_to_unlock} week${l.weeks_to_unlock === 1 ? '' : 's'}`,
+              `${fmtNum(l.amount_human || 0)} ${esc(l.asset_symbol || '')} — its ${fmtNum(l.voting_power_human || 0)} VP disappears at unlock unless extended or set to auto-max.`);
+        }
+        const claimable = (s.total_pending_rewards_usd || 0) + (s.total_pending_bribes_usd || 0);
+        if (claimable > 1) {
+            A('info', 'fa-gift', `${fmt$(claimable)} waiting to claim`,
+              `${fmt$(s.total_pending_rewards_usd || 0)} rewards${(s.total_pending_bribes_usd || 0) > 0.01 ? ` + ${fmt$(s.total_pending_bribes_usd)} bribes` : ''} accrued. Bribes settle at epoch close.`);
+        }
+        if (!alerts.length) {
+            A('success', 'fa-circle-check', 'Position healthy', 'No stale VP, nothing inactive, no locks expiring, nothing at the threshold. Nothing needs doing.');
+        }
+        return alerts;
+    }
+
+    // ---------- render ----------
+    function showState(id) {
+        ['state-loading', 'state-welcome', 'state-notfound', 'portfolio'].forEach(x => $(x).classList.toggle('hidden', x !== id));
+    }
+
+    function renderPortfolio(wallet) {
+        const m = store.members.get(wallet);
+        if (!m) { $('nf-addr').textContent = shortAddr(wallet); showState('state-notfound'); return; }
+        store.wallet = wallet;
+        showState('portfolio');
+        const s = m.summary || {};
+
+        // identity
+        $('id-name').textContent = m.name || shortAddr(wallet);
+        $('id-addr').textContent = wallet;
+        $('id-copy').onclick = () => { try { navigator.clipboard.writeText(wallet); } catch {} };
+        const badges = [];
+        if (store.stakers.has(wallet)) badges.push('<span class="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300" title="Stakes aDAO NFTs in the DAO">aDAO member</span>');
+        else if (store.allySet.has(wallet)) badges.push('<span class="text-[9px] px-1.5 py-0.5 rounded bg-pink-500/20 text-pink-300" title="Pixel Lions / Lion DAO ally">ally</span>');
+        if ((m.nft_count || 0) > 0) badges.push(`<span class="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300">${m.nft_count} aDAO NFT${m.nft_count == 1 ? '' : 's'}</span>`);
+        if (m.first_participation?.period != null && m.first_participation.period <= 96) badges.push('<span class="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/25 text-amber-300 font-semibold" title="In TLA since the Aug/Sep 2024 launch window">DAY ONE</span>');
+        $('id-badges').innerHTML = badges.join('');
+        const pfp = $('id-pfp');
+        if (m.nft_image_url) { pfp.src = m.nft_image_url.replace('ipfs://', 'https://ipfs.io/ipfs/'); pfp.classList.remove('hidden'); pfp.onerror = () => pfp.classList.add('hidden'); }
+        else pfp.classList.add('hidden');
+        $('id-rank').innerHTML = m.rank_by_vp ? `<span class="text-gray-500">VP rank</span> <span class="mono font-semibold text-cyan-300">#${m.rank_by_vp}</span>` : '';
+        $('id-since').textContent = m.first_participation?.period != null
+            ? `in TLA since period ${m.first_participation.period}${m.first_participation.approx_date ? ` · ${m.first_participation.approx_date}` : ''}` : '';
+
+        // alerts
+        const sevCls = { danger: 'alert-danger', warn: 'alert-warn', info: 'alert-info', success: 'alert-success' };
+        const sevIcon = { danger: 'text-red-400', warn: 'text-amber-300', info: 'text-cyan-300', success: 'text-emerald-400' };
+        $('alerts').innerHTML = buildAlerts(m).map(a => `
+            <div class="${sevCls[a.sev]} rounded-lg p-3">
+                <div class="flex items-center gap-2 text-sm font-semibold ${sevIcon[a.sev]}"><i class="fas ${a.icon}"></i>${a.title}</div>
+                <div class="text-[11px] text-gray-400 mt-1">${a.body}</div>
+            </div>`).join('');
+
+        // tiles
+        const tile = (label, val, sub, cls) => `
+            <div class="glass-card p-3">
+                <div class="text-[9px] uppercase tracking-wider text-gray-500">${label}</div>
+                <div class="mono text-base font-bold ${cls || 'text-gray-100'}">${val}</div>
+                <div class="text-[9px] text-gray-600">${sub || ''}</div>
+            </div>`;
+        const claimable = (s.total_pending_rewards_usd || 0) + (s.total_pending_bribes_usd || 0);
+        $('tiles').innerHTML =
+            tile('Portfolio value', fmt$(s.total_portfolio_value_usd), 'locks + LP + wallet · excludes Votion &amp; NFTs', 'text-cyan-300') +
+            tile('Voting power', fmtNum(s.display_voting_power_human || 0), (s.vp_gap_human || 0) > 500 ? `+${fmtNum(s.vp_gap_human)} reclaimable` : 'fully fresh', 'text-purple-300') +
+            tile('Locked value', fmt$(s.total_locked_usd), `${fmtNum(s.total_locked_luna_equivalent || 0)} LUNA-equiv · ${s.lock_count || 0} locks`) +
+            tile('LP positions', fmt$(s.total_lp_position_usd), `${s.active_lp_position_count || 0} active${(s.inactive_lp_position_count || 0) ? ` · <span class="text-red-400">${s.inactive_lp_position_count} inactive</span>` : ''}`) +
+            tile('Claimable', fmt$(claimable), `${fmt$(s.total_pending_rewards_usd || 0)} rewards · ${fmt$(s.total_pending_bribes_usd || 0)} bribes`, claimable > 1 ? 'text-amber-300' : 'text-gray-100') +
+            tile('Wallet', fmt$(s.total_wallet_balances_usd), 'liquid TLA tokens');
+
+        // LP table
+        const lps = (m.lp_positions || []).slice().sort((a, b) => (b.estimated_position_usd || 0) - (a.estimated_position_usd || 0));
+        $('lp-table').innerHTML = lps.length ? `
+            <table class="data-table"><thead><tr><th>Pool</th><th class="text-right">Value</th><th class="text-right">Pool share</th><th class="text-right">APR</th><th class="text-right">Threshold</th></tr></thead><tbody>
+            ${lps.map(lp => {
+                const inactive = lp.status !== 'active';
+                const thr = lp.distance_from_threshold_pp;
+                return `<tr class="${inactive ? 'opacity-90' : ''}">
+                    <td><div class="font-medium ${inactive ? 'text-red-300' : ''}">${esc(lp.pool_name)} ${lp.is_amplified ? '<span class="text-[8px] px-1 py-px rounded bg-purple-500/20 text-purple-300" title="Amplified (ampLP) position">amp</span>' : ''}</div>
+                        <div class="text-[9px] text-gray-600">${esc(lp.dex || '')} · ${esc(lp.bucket || '')}${inactive ? ' · <span class="text-red-400 font-semibold">INACTIVE — paying take rate, earning nothing</span>' : ''}</div></td>
+                    <td class="text-right mono text-cyan-300">${fmt$(lp.estimated_position_usd)}</td>
+                    <td class="text-right mono text-gray-400">${lp.user_pct_of_pool != null ? lp.user_pct_of_pool.toFixed(2) + '%' : '—'}</td>
+                    <td class="text-right mono ${inactive ? 'text-gray-600' : 'text-emerald-400'}">${!inactive && lp.pool_apr_pct != null ? lp.pool_apr_pct.toFixed(0) + '%' : '—'}</td>
+                    <td class="text-right mono ${thr != null && thr < 0.5 ? 'text-amber-300' : 'text-gray-500'}" title="Distance above the 1% bucket-vote threshold the pool needs to keep earning">${thr != null ? (thr >= 0 ? '+' : '') + thr.toFixed(1) + 'pp' : '—'}</td>
+                </tr>`;
+            }).join('')}
+            </tbody></table>` : '<div class="text-gray-600 text-sm py-2">No LP positions.</div>';
+
+        // locks table
+        const locks = (m.locks || []).slice().sort((a, b) => (b.voting_power_human || 0) - (a.voting_power_human || 0));
+        const totReclaim = locks.reduce((x, l) => x + (l.projection?.potential_vp_gain_human || 0), 0);
+        $('locks-table').innerHTML = locks.length ? `
+            <table class="data-table"><thead><tr><th>Lock</th><th class="text-right">Amount</th><th class="text-right">VP now</th><th class="text-right">Reclaimable</th><th class="text-right">Ends</th></tr></thead><tbody>
+            ${locks.map(l => {
+                const gain = l.projection?.potential_vp_gain_human || 0;
+                return `<tr>
+                    <td><span class="mono text-[11px] text-gray-500">#${esc(l.token_id)}</span> <span class="font-medium">${esc(l.asset_symbol || '')}</span></td>
+                    <td class="text-right mono text-gray-300">${fmtNum(l.amount_human)}</td>
+                    <td class="text-right mono text-purple-300">${fmtNum(l.voting_power_human)}</td>
+                    <td class="text-right mono ${gain > 1 ? 'text-amber-300' : 'text-gray-600'}" title="VP recovered the moment this lock is adjusted">${gain > 1 ? '+' + fmtNum(gain) : '—'}</td>
+                    <td class="text-right mono text-[11px] ${l.is_auto_max_locked ? 'text-emerald-400' : (l.weeks_to_unlock != null && l.weeks_to_unlock <= 4 ? 'text-amber-300' : 'text-gray-400')}">${l.is_auto_max_locked ? '<i class="fas fa-infinity" title="Auto-max locked — never decays to unlock"></i> auto-max' : (l.weeks_to_unlock != null ? l.weeks_to_unlock + 'w' : esc(String(l.end || '—')))}</td>
+                </tr>`;
+            }).join('')}
+            </tbody></table>
+            ${totReclaim > 1 ? `<div class="text-[10px] text-amber-300/80 mt-2"><i class="fas fa-bolt mr-1"></i>Adjusting all locks reclaims <span class="mono font-semibold">+${fmtNum(totReclaim)} VP</span> total.</div>` : ''}`
+            : '<div class="text-gray-600 text-sm py-2">No vAMP locks.</div>';
+
+        // votes per bucket
+        const vpb = m.voting?.votes_per_bucket || {};
+        const bucketOrder = ['bluechip', 'stable', 'project', 'single'];
+        const bucketNames = { bluechip: 'Bluechip', stable: 'Stable', project: 'Project', single: 'Single' };
+        const cur = store.epoch;
+        $('votes-grid').innerHTML = bucketOrder.map(b => {
+            const bv = vpb[b];
+            const votes = bv?.votes || [];
+            const stale = cur && bv?.period && (cur - bv.period) >= 4;
+            return `
+            <div class="rounded-lg bg-white/[0.02] border border-white/5 p-3">
+                <div class="flex items-center justify-between mb-1.5">
+                    <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-400">${bucketNames[b]}</span>
+                    ${bv?.period ? `<span class="text-[9px] mono ${stale ? 'text-amber-300' : 'text-gray-600'}" title="${stale ? 'This allocation hasn\u2019t been touched in ' + (cur - bv.period) + ' epochs — it\u2019s coasting.' : 'Last touched period'}">${stale ? '<i class=\"fas fa-clock mr-0.5\"></i>' : ''}p${bv.period}</span>` : ''}
+                </div>
+                ${votes.length ? votes.map(v => `
+                    <div class="flex items-center justify-between text-[11px] py-0.5">
+                        <span class="truncate">${esc(v.pool_name || v.pool_gauge_id?.slice(0, 14) + '…')} <span class="text-[8px] text-gray-600">${esc(v.dex || '')}</span></span>
+                        <span class="mono text-gray-400">${((v.weight_bps || 0) / 100).toFixed(0)}%</span>
+                    </div>`).join('')
+                : '<div class="text-[11px] text-gray-600">No votes cast — this bucket\u2019s VP sits idle.</div>'}
+            </div>`;
+        }).join('');
+
+        // balances
+        const bals = (m.wallet_balances || []).filter(b => (b.usd_value || 0) > 0.01).sort((a, b) => (b.usd_value || 0) - (a.usd_value || 0));
+        $('balances-table').innerHTML = bals.length ? `
+            <table class="data-table"><thead><tr><th>Token</th><th class="text-right">Amount</th><th class="text-right">Value</th></tr></thead><tbody>
+            ${bals.map(b => `<tr><td class="font-medium">${esc(b.symbol || b.denom?.split('/').pop() || '?')}</td><td class="text-right mono text-gray-300">${fmtNum(b.amount_human)}</td><td class="text-right mono text-amber-300/90">${fmt$(b.usd_value)}</td></tr>`).join('')}
+            </tbody></table>` : '<div class="text-gray-600 text-sm py-2">No meaningful liquid balances.</div>';
+    }
+
+    // ---------- wiring ----------
+    function viewFromInput() {
+        const w = resolveInput($('wallet-input').value);
+        if (!w) { $('addr-msg').innerHTML = '<span class="text-amber-300">Not a terra1… address or a known registered name.</span>'; return; }
+        $('wallet-input').value = w;
+        $('addr-msg').textContent = '';
+        renderPortfolio(w);
+        try { history.replaceState(null, '', '?wallet=' + w); } catch {}
+    }
+
+    function init() {
+        $('btn-view').addEventListener('click', viewFromInput);
+        $('wallet-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') viewFromInput(); });
+        $('wallet-input').addEventListener('change', () => { if (isTerraAddr($('wallet-input').value.trim())) viewFromInput(); });
+        $('btn-save').addEventListener('click', () => {
+            const w = resolveInput($('wallet-input').value) || store.wallet;
+            if (!w) { $('addr-msg').innerHTML = '<span class="text-amber-300">Enter a valid wallet first.</span>'; return; }
+            const ok = lsSet(CONFIG.storageKey, w);
+            $('addr-msg').innerHTML = ok
+                ? '<span class="text-emerald-400"><i class="fas fa-check mr-1"></i>Saved on this device — this page now opens straight to your position.</span>'
+                : '<span class="text-amber-300">Couldn\u2019t save (private browsing?) — bookmark the URL instead, it carries the wallet.</span>';
+            $('btn-clear').classList.remove('hidden');
+            if (!store.wallet) renderPortfolio(w);
+        });
+        $('btn-clear').addEventListener('click', () => {
+            lsSet(CONFIG.storageKey, null);
+            $('btn-clear').classList.add('hidden');
+            $('addr-msg').innerHTML = '<span class="text-gray-500">Saved wallet forgotten.</span>';
+        });
+
+        loadAll().then(() => {
+            const urlW = new URLSearchParams(location.search).get('wallet');
+            const saved = lsGet(CONFIG.storageKey);
+            if (saved) $('btn-clear').classList.remove('hidden');
+            const target = (isTerraAddr(urlW) && urlW) || (isTerraAddr(saved) && saved) || null;
+            if (target) { $('wallet-input').value = target; renderPortfolio(target); }
+            else showState('state-welcome');
+        }).catch(err => {
+            console.error(err);
+            $('state-loading').innerHTML = '<div class="text-red-400 text-sm">Failed to load the data feeds — refresh to retry.</div>';
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', init);
+})();
+</script>
+<script defer src="/_vercel/insights/script.js"></script>
+</body>
+</html>
