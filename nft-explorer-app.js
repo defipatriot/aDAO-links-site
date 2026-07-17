@@ -140,8 +140,20 @@ const EXPECTED_TOTAL_NFTS = 10000; // Fixed collection size — used to hard-fai
 const SYSTEM_WALLET_LABELS = {
     "terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm": "DAO Unminted",
     "terra1h8psjgcsg9fef7w2yv0j6262sfcaszj8vs4tsy3uwla6zwtaspvqrp4l7v": "DAO Broken",
-    "terra1e54tcdyulrtslvf79htx4zntqntd4r550cg22sj24r6gfm0anrvq0y8tdv": "DAO Broken Enterprise"
+    "terra1e54tcdyulrtslvf79htx4zntqntd4r550cg22sj24r6gfm0anrvq0y8tdv": "DAO Broken Enterprise",
+    "terra1yqv0af22675wlcmgflxk4ve07vt8qlm999gk0cuw5l64r5xxgadsyg8ywv": "DAO Multisig Vetoer"
 };
+
+// DAO custody wallets shown as pinned informational rows on the Holder Leaderboard.
+// They stay EXCLUDED from the numbered ranks (only real users rank) but their holdings
+// are displayed for data precision. Marketplace escrows / staking contracts stay hidden.
+const DAO_DISPLAY_WALLETS = [
+    "terra1h8psjgcsg9fef7w2yv0j6262sfcaszj8vs4tsy3uwla6zwtaspvqrp4l7v", // DAO treasury (broken)
+    "terra1e54tcdyulrtslvf79htx4zntqntd4r550cg22sj24r6gfm0anrvq0y8tdv", // old Enterprise staking (DAO broken)
+    "terra1yqv0af22675wlcmgflxk4ve07vt8qlm999gk0cuw5l64r5xxgadsyg8ywv", // multisig vetoer
+    "terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm"  // DAO main wallet (unminted)
+];
+const isDaoDisplayWallet = (address) => DAO_DISPLAY_WALLETS.includes(address);
 
 const getSystemWalletLabel = (address) => SYSTEM_WALLET_LABELS[address] || null;
 
@@ -235,6 +247,7 @@ let inhabitantCounts = {};
 let planetCounts = {};
 let ownerAddresses = [];
 let allHolderStats = [];
+let daoPinnedStats = []; // DAO custody wallets — pinned informational leaderboard rows (unranked)
 let holderCurrentPage = 1;
 const holdersPerPage = 10;
 let holderSort = { column: 'total', direction: 'desc' };
@@ -3360,25 +3373,33 @@ const calculateAndDisplayLeaderboard = () => {
     if (allNfts.length === 0) return;
 
     const ownerStats = {};
+    const daoOwnerStats = {}; // DAO custody wallets — pinned informational rows, never ranked
     allNfts.forEach(nft => {
-        if (nft.owner && !isSystemAddress(nft.owner)) {
-            if (!ownerStats[nft.owner]) {
-                 ownerStats[nft.owner] = { address: nft.owner, total: 0, liquid: 0, daodaoStaked: 0, enterpriseStaked: 0, broken: 0, unbroken: 0, bblListed: 0, boostListed: 0, atriumListed: 0 };
-            }
-            const stats = ownerStats[nft.owner];
-            stats.total++;
-            if (nft.liquid) stats.liquid++; // Use pre-calculated liquid status
-            if (nft.staked_daodao) stats.daodaoStaked++;
-            if (nft.staked_enterprise_legacy) stats.enterpriseStaked++;
-            if (nft.bbl_market) stats.bblListed++;
-            if (nft.boost_market) stats.boostListed++;
-            if (nft.atrium_market) stats.atriumListed++;
-            if (nft.broken) stats.broken++;
-            else stats.unbroken++; // Count unbroken
+        if (!nft.owner) return;
+        let isDaoRow = isDaoDisplayWallet(nft.owner);
+        // The old Enterprise contract also custodies ~81 user stakes the cron cannot attribute
+        // to a real owner (enterprise_unattributed). Those are NOT DAO-owned — keep them
+        // excluded from the board entirely (status quo) rather than mislabel them as DAO.
+        if (isDaoRow && nft.owner === "terra1e54tcdyulrtslvf79htx4zntqntd4r550cg22sj24r6gfm0anrvq0y8tdv" && !nft.enterprise_dao_broken) return;
+        if (isSystemAddress(nft.owner) && !isDaoRow) return; // escrow/staking contracts stay hidden
+        const bucket = isDaoRow ? daoOwnerStats : ownerStats;
+        if (!bucket[nft.owner]) {
+             bucket[nft.owner] = { address: nft.owner, total: 0, liquid: 0, daodaoStaked: 0, enterpriseStaked: 0, broken: 0, unbroken: 0, bblListed: 0, boostListed: 0, atriumListed: 0 };
         }
+        const stats = bucket[nft.owner];
+        stats.total++;
+        if (nft.liquid) stats.liquid++; // Use pre-calculated liquid status
+        if (nft.staked_daodao) stats.daodaoStaked++;
+        if (nft.staked_enterprise_legacy) stats.enterpriseStaked++;
+        if (nft.bbl_market) stats.bblListed++;
+        if (nft.boost_market) stats.boostListed++;
+        if (nft.atrium_market) stats.atriumListed++;
+        if (nft.broken) stats.broken++;
+        else stats.unbroken++; // Count unbroken
     });
 
     allHolderStats = Object.values(ownerStats); // No need to map, liquid is already counted
+    daoPinnedStats = Object.values(daoOwnerStats).sort((a, b) => b.total - a.total);
     sortAndDisplayHolders();
 };
 
@@ -3431,17 +3452,17 @@ const displayHolderPage = (page) => {
 
     leaderboardTable.appendChild(header);
 
-    const pageItems = allHolderStats.slice((page - 1) * holdersPerPage, page * holdersPerPage);
-
-    pageItems.forEach(({ address, ...stats }, index) => {
-        const rank = (page - 1) * holdersPerPage + index + 1;
+    // Shared row builder — used by both the ranked list and the pinned DAO informational rows.
+    const buildHolderRow = ({ address, ...stats }, rankCellHtml, isPinned) => {
         const item = document.createElement('div');
-        item.className = 'leaderboard-row';
+        item.className = 'leaderboard-row' + (isPinned ? ' dao-pinned-row' : '');
         item.style.gridTemplateColumns = 'minmax(60px, 1fr) 2.5fr repeat(9, 1fr)';
+        if (isPinned) item.style.background = 'rgba(34,211,238,.06)';
         item.dataset.address = address;
         const shortAddress = address ? `terra...${address.substring(address.length - 4)}` : 'N/A';
-        const memberName = getMemberName(address);
-        const displayName = memberName ? `<span class="text-yellow-400">${memberName}</span> <span class="text-gray-500">(${shortAddress})</span>` : shortAddress;
+        const daoLabel = isPinned ? (getSystemWalletLabel(address) || 'DAO Wallet') : null;
+        const memberName = daoLabel || getMemberName(address);
+        const displayName = memberName ? `<span class="${isPinned ? 'text-cyan-400' : 'text-yellow-400'}">${memberName}</span> <span class="text-gray-500">(${shortAddress})</span>` : shortAddress;
         
         // Stats summary for mobile view
         const statsSummary = `Liq: ${stats.liquid || 0} | DAO: ${stats.daodaoStaked || 0} | Brk: ${stats.broken || 0}`;
@@ -3459,7 +3480,7 @@ const displayHolderPage = (page) => {
         item.dataset.total = stats.total || 0;
 
         item.innerHTML = `
-            <span class="text-center font-bold">#${rank}</span>
+            ${rankCellHtml}
             <span class="text-sm truncate leaderboard-address" title="${address || ''}">${displayName}</span>
             <span class="text-center">${stats.liquid || 0}</span>
             <span class="text-center ${stats.daodaoStaked > 0 ? 'text-cyan-400' : ''}">${stats.daodaoStaked || 0}</span>
@@ -3499,7 +3520,24 @@ const displayHolderPage = (page) => {
                 searchWallet();
             }
         });
-        leaderboardTable.appendChild(item);
+        return item;
+    };
+
+    // Pinned aDAO custody rows (informational, unranked) — page 1 only, above the ranked list.
+    if (page === 1 && daoPinnedStats.length) {
+        const note = document.createElement('div');
+        note.className = 'text-[11px] text-gray-500 px-2 pt-2 pb-1';
+        note.textContent = 'aDAO-owned wallets — informational, excluded from ranks';
+        leaderboardTable.appendChild(note);
+        daoPinnedStats.forEach(s => {
+            leaderboardTable.appendChild(buildHolderRow(s, `<span class="text-center font-bold text-cyan-400">DAO</span>`, true));
+        });
+    }
+
+    const pageItems = allHolderStats.slice((page - 1) * holdersPerPage, page * holdersPerPage);
+    pageItems.forEach((row, index) => {
+        const rank = (page - 1) * holdersPerPage + index + 1;
+        leaderboardTable.appendChild(buildHolderRow(row, `<span class="text-center font-bold">#${rank}</span>`, false));
     });
     updateHolderPaginationControls();
 };
