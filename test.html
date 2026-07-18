@@ -1223,8 +1223,14 @@
                     <div id="top-board-new" class="space-y-3"><div class="loading-pulse text-gray-500 text-sm">Loading...</div></div>
                 </div>
                 <div class="glass-card p-6">
-                    <h3 class="font-semibold mb-4 flex items-center gap-2"><i class="fas fa-hand-holding-dollar text-amber-300"></i> Bribe Earners</h3>
-                    <p class="text-[11px] text-gray-500 -mt-2 mb-3" title="Pending bribe rewards accrued this epoch (USD), per wallet. Claimable after the epoch closes.">pending bribe rewards · this epoch</p>
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="font-semibold flex items-center gap-2"><i class="fas fa-hand-holding-dollar text-amber-300"></i> Top Bribers</h3>
+                        <div class="flex gap-1 text-[10px]">
+                            <button id="bribe-mode-alltime" onclick="setBribeBoardMode('alltime')" class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300" title="All-time bribe providers — who funds the vote incentives, valued at placement">All-time</button>
+                            <button id="bribe-mode-earners" onclick="setBribeBoardMode('earners')" class="px-2 py-0.5 rounded bg-white/5 text-gray-400" title="Pending bribe rewards accrued this epoch, per voting wallet">Earners</button>
+                        </div>
+                    </div>
+                    <p id="top-bribers-banner" class="text-[11px] text-gray-500 -mt-2 mb-3">all-time bribe providers · valued at placement</p>
                     <div id="top-board-bribes" class="space-y-3"><div class="loading-pulse text-gray-500 text-sm">Loading...</div></div>
                 </div>
             </div>
@@ -2554,6 +2560,8 @@
         adaoAlliesUrl:      'https://raw.githubusercontent.com/defipatriot/adao-allies-data_2026/main/data/current.json',
         orgNftSummaryUrl:   'https://raw.githubusercontent.com/thealliancedao/tla-core/main/nfts/adao/snapshots/summary.json',
         orgMemberDataUrl:   'https://raw.githubusercontent.com/thealliancedao/tla-core/main/member-data/snapshots/current.json',
+        // Schema-6 briber leaderboard (org tla-voting rollups) — powers the Top Bribers board.
+        orgVotingRollupsUrl:'https://raw.githubusercontent.com/thealliancedao/tla-core/main/tla-voting/events/rollups.json',
         bribesCurrentUrl:  'https://raw.githubusercontent.com/defipatriot/bribes-data_2026/main/data/current-state.json',
         votionBaseUrl:     'https://raw.githubusercontent.com/defipatriot/votion-data_2026/main/votion',  // append /votion-epoch-{N}.json
 
@@ -6067,40 +6075,138 @@
             return;
         }
         const vpOf = (m) => m.summary?.display_voting_power_human || 0;
+        // Same-period tiebreak: lock token ids mint sequentially, so the smallest
+        // lock # a wallet holds is its earliest surviving lock — a real join-order
+        // ordinal within the launch window (first_participation is period-granular,
+        // so period 96 alone ties the whole Day One crowd). Upgrade path: rollups
+        // voters carry first_lock_ts (exact canonical-create time) when non-null.
+        const minLockId = (m) => {
+            const ids = (m.locks || []).map(l => Number(l.token_id)).filter(Number.isFinite);
+            return ids.length ? Math.min(...ids) : Infinity;
+        };
         const og = [...members].sort((a, b) =>
-            a.first_participation.period - b.first_participation.period || vpOf(b) - vpOf(a)).slice(0, 5);
+            a.first_participation.period - b.first_participation.period ||
+            minLockId(a) - minLockId(b) || vpOf(b) - vpOf(a)).slice(0, 5);
         ogEl.innerHTML = og.map((m, i) => personRow(
             i,
             `${displayName(m.wallet)} ${walletBadges(m.wallet)}${m.first_participation.period <= 96 ? ' <span class="text-[8px] px-1 py-px rounded bg-amber-500/25 text-amber-300 font-semibold" title="Here since the launch window">DAY ONE</span>' : ''}`,
-            m.first_participation.approx_date || '',
+            `${m.first_participation.approx_date || ''}${Number.isFinite(minLockId(m)) ? ` · lock #${minLockId(m)}` : ''}`,
             `<span class="mono text-xs text-gray-300">period ${m.first_participation.period}</span>`,
             m.wallet
         )).join('');
         if (newEl) {
             const fresh = [...members].sort((a, b) =>
-                b.first_participation.period - a.first_participation.period || vpOf(b) - vpOf(a)).slice(0, 5);
+                b.first_participation.period - a.first_participation.period ||
+                minLockId(b) - minLockId(a) || vpOf(b) - vpOf(a)).slice(0, 5);
             newEl.innerHTML = fresh.map((m, i) => personRow(
                 i,
                 `${displayName(m.wallet)} ${walletBadges(m.wallet)}`,
-                m.first_participation.approx_date || '',
+                `${m.first_participation.approx_date || ''}${Number.isFinite(minLockId(m)) ? ` · lock #${minLockId(m)}` : ''}`,
                 `<span class="mono text-xs text-gray-300">period ${m.first_participation.period}</span>`,
                 m.wallet
             )).join('');
         }
-        if (bribeEl) {
+        if (bribeEl) renderBribeBoardCard();
+    }
+
+    // ---------------- Top Bribers board (schema-6 rollups consumer) ----------------
+    // Rev 5: the Bribe Earners card is "Top Bribers" by default — all-time bribe
+    // providers from the live tla-voting rollups (SPEC-tla-voting-briber-board).
+    // Naming rule (settled): registry-first — roster members via displayName +
+    // walletBadges; curated protocol labels (rollup `label`) in purple second;
+    // short address last. Unpriced honesty: no historical price record → the
+    // row says "unpriced" with chain-exact counts, USD is never guessed.
+    // The old pending-rewards view is preserved behind the Earners toggle.
+    function setBribeBoardMode(mode) {
+        store.bribeBoardMode = mode;
+        const on = 'bg-amber-500/20 text-amber-300', off = 'bg-white/5 text-gray-400';
+        const a = document.getElementById('bribe-mode-alltime'), e = document.getElementById('bribe-mode-earners');
+        if (a) a.className = `px-2 py-0.5 rounded ${mode === 'alltime' ? on : off}`;
+        if (e) e.className = `px-2 py-0.5 rounded ${mode === 'earners' ? on : off}`;
+        renderBribeBoardCard();
+    }
+    function renderBribeBoardCard() {
+        const el = document.getElementById('top-board-bribes');
+        const banner = document.getElementById('top-bribers-banner');
+        if (!el) return;
+        if ((store.bribeBoardMode || 'alltime') === 'earners') {
+            if (banner) { banner.textContent = 'pending bribe rewards · this epoch'; banner.title = 'Pending bribe rewards accrued this epoch (USD), per wallet. Claimable after the epoch closes.'; }
             const rows = getAllSelectableMembers()
                 .map(m => ({ m, usd: m.summary?.total_pending_bribes_usd || 0 }))
                 .filter(x => x.usd > 0.005)
                 .sort((a, b) => b.usd - a.usd)
                 .slice(0, 5);
-            bribeEl.innerHTML = rows.length ? rows.map((x, i) => personRow(
+            el.innerHTML = rows.length ? rows.map((x, i) => personRow(
                 i,
                 `${displayName(x.m.wallet)} ${walletBadges(x.m.wallet)}`,
                 `${fmtNum(x.m.summary?.display_voting_power_human || 0)} VP`,
                 `<span class="mono text-sm text-amber-300 font-semibold">${fmt$(x.usd)}</span>`,
                 x.m.wallet
             )).join('') : '<div class="text-gray-600 text-sm">No pending bribe rewards right now.</div>';
+            return;
         }
+        renderTopBribersAllTime(el, banner);
+    }
+    async function fetchVotingRollups() {
+        if (store.votingRollups) return store.votingRollups;
+        if (store._votingRollupsPromise) return store._votingRollupsPromise;
+        store._votingRollupsPromise = fetch(CONFIG.orgVotingRollupsUrl + '?t=' + Date.now())
+            .then(r => r.ok ? r.json() : null)
+            .then(j => { store.votingRollups = j; return j; })
+            .catch(() => null);
+        return store._votingRollupsPromise;
+    }
+    function briberNameHtml(addr, label) {
+        const rosterName = store.nameByWallet?.get(addr);
+        if (rosterName) return `${displayName(addr)} ${walletBadges(addr)}`;
+        if (label) return `<span class="text-purple-300" title="${addr}">${label}</span>`;
+        return `<span class="mono" title="${addr}">${addr.slice(0, 8)}\u2026${addr.slice(-4)}</span> ${walletBadges(addr)}`;
+    }
+    function briberRowHtml(b, i, builtAtDate) {
+        const t = b.totals || {};
+        const placed = t.usd_at_placement || 0;
+        const unpricedTokens = Object.keys(t.unpriced || {}).length +
+            Object.values(t.by_token || {}).filter(x => x.unpriced_events > 0 && !x.usd_at_placement).length;
+        let valueHtml;
+        if (placed > 0) {
+            const hover = `USD at bribe placement (immutable). At rollup build (${builtAtDate}): ${fmt$(t.usd_at_build || 0)}.`;
+            valueHtml = `<span class="mono text-sm text-amber-300 font-semibold" title="${hover}">${fmt$(placed)}</span>`;
+        } else {
+            valueHtml = `<span class="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-gray-400" title="No historical price record for the bribe token(s) (${unpricedTokens || 'all'} unpriced) — amounts are chain-exact, USD is never guessed.">unpriced</span>`;
+        }
+        const sub = `${b.event_count} bribe${b.event_count === 1 ? '' : 's'} · ${b.first_bribe || '?'} → ${b.last_bribe || '?'}`;
+        const isMember = !!store.nameByWallet?.get(b.briber);
+        return personRow(i, briberNameHtml(b.briber, b.label), sub, valueHtml, isMember ? b.briber : null);
+    }
+    async function renderTopBribersAllTime(el, banner) {
+        const roll = await fetchVotingRollups();
+        if ((store.bribeBoardMode || 'alltime') !== 'alltime') return; // user toggled away mid-fetch
+        if (!roll || !Array.isArray(roll.bribers)) {
+            el.innerHTML = '<div class="text-gray-600 text-sm">Briber rollup unavailable.</div>';
+            return;
+        }
+        const byAddr = new Map(roll.bribers.map(b => [b.briber, b]));
+        const order = (roll.bribers_order || []).map(a => byAddr.get(a)).filter(Boolean);
+        const builtAtDate = (roll.builtAt || '').slice(0, 10);
+        if (banner) {
+            const totalEvents = roll.bribers.reduce((s, b) => s + (b.event_count || 0), 0);
+            const firstEver = roll.bribers.map(b => b.first_bribe).filter(Boolean).sort()[0] || '';
+            let cov = '';
+            const luna = roll.bribe_ledger?.lifetime?.['native:uluna'];
+            if (luna && Number(luna.state) > 0) {
+                const pct = (Number(luna.attributed_exact || 0) + Number(luna.attributed_spanning || 0)) / Number(luna.state) * 100;
+                cov = ` · ${pct >= 99.5 ? Math.floor(pct) : pct.toFixed(1)}% of lifetime LUNA bribe flow attributed`;
+            }
+            banner.textContent = `${order.length} bribers · ${totalEvents} attributed bribes since ${firstEver}${cov}`;
+            banner.title = 'All-time bribe providers, valued in USD at the moment each bribe was placed. Attribution is measured, never assumed: bribe flow the ledger counts but no on-chain event names a payer for stays out of every row — most of it sits in the Feb 2025 – Jun 2026 capture window, queued for the registry backfill.';
+        }
+        const top = order.slice(0, 5), rest = order.slice(5);
+        let html = top.map((b, i) => briberRowHtml(b, i, builtAtDate)).join('');
+        if (rest.length) {
+            html += `<div id="top-bribers-rest" class="hidden space-y-3">${rest.map((b, i) => briberRowHtml(b, i + 5, builtAtDate)).join('')}</div>` +
+                `<button onclick="const r=document.getElementById('top-bribers-rest');const open=r.classList.toggle('hidden');this.textContent=open?'show all ${order.length} ▾':'show top 5 ▴';" class="text-[10px] text-cyan-400 hover:text-cyan-300 w-full text-center pt-1">show all ${order.length} ▾</button>`;
+        }
+        el.innerHTML = html || '<div class="text-gray-600 text-sm">No attributed bribers yet.</div>';
     }
 
     function wireTopsTabs() {

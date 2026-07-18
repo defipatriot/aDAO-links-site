@@ -1763,6 +1763,21 @@
             <div class="space-y-4" id="bribes-bucket-breakdown">
                 <!-- Populated by JS -->
             </div>
+
+            <!-- All-Time Top Bribers (schema-6 rollups deep-dive — self-contained
+                 for easy re-homing into the restructured Rankings tab) -->
+            <div class="mt-6 pt-4 border-t border-white/10">
+                <div class="flex items-center justify-between mb-1">
+                    <h4 class="text-sm font-bold text-amber-300"><i class="fas fa-hand-holding-dollar mr-1"></i>All-Time Top Bribers</h4>
+                    <select id="alltime-bribers-sort" onchange="renderAllTimeBribers()" class="bg-gray-800 border border-white/10 rounded text-[11px] px-2 py-1 text-gray-300">
+                        <option value="placement">at placement $</option>
+                        <option value="build">today value $</option>
+                        <option value="count">most active</option>
+                    </select>
+                </div>
+                <p id="alltime-bribers-banner" class="text-[10px] text-gray-500 mb-3">loading…</p>
+                <div id="alltime-bribers-board" class="space-y-2"><div class="text-gray-600 text-sm">Loading…</div></div>
+            </div>
         </div>
     </div>
     
@@ -9699,9 +9714,108 @@
         
         document.getElementById('bribes-bucket-breakdown').innerHTML = breakdownHtml;
         
+        // All-time deep-dive (schema-6 rollups) — async, renders into its own section
+        renderAllTimeBribers();
+
         // Show modal
         modal.classList.remove('hidden');
         modal.classList.add('flex');
+    }
+
+    // ============================================================
+    // ALL-TIME TOP BRIBERS (schema-6 rollups deep-dive)
+    // Self-contained (own fetch, own naming) for easy re-homing into
+    // the restructured Rankings tab. Naming: curated rollup label in
+    // purple, else short address. Unpriced honesty: amounts chain-exact,
+    // USD never guessed. Sortable; per-briber rows expand to per-pool /
+    // per-token detail via native <details> (no wiring).
+    // ============================================================
+    const ALLTIME_ROLLUPS_URL = 'https://raw.githubusercontent.com/thealliancedao/tla-core/main/tla-voting/events/rollups.json';
+    let _allTimeRollups = null, _allTimeRollupsP = null;
+    function fetchAllTimeRollups() {
+        if (_allTimeRollups) return Promise.resolve(_allTimeRollups);
+        if (_allTimeRollupsP) return _allTimeRollupsP;
+        _allTimeRollupsP = fetch(ALLTIME_ROLLUPS_URL + '?t=' + Date.now())
+            .then(r => r.ok ? r.json() : null)
+            .then(j => (_allTimeRollups = j))
+            .catch(() => null);
+        return _allTimeRollupsP;
+    }
+    function allTimePoolName(key) {
+        if (!allTimePoolName._map) {
+            const m = new Map();
+            (store.pools || []).forEach(p => { if (p.gauge_pool_id) m.set(p.gauge_pool_id, p.name + (p.dex ? ` (${p.dex})` : '')); });
+            allTimePoolName._map = m;
+        }
+        if (allTimePoolName._map.has(key)) return allTimePoolName._map.get(key);
+        const tail = String(key).split(/[:/]/).pop() || key;
+        return tail.length > 16 ? tail.slice(0, 8) + '\u2026' + tail.slice(-4) : tail;
+    }
+    async function renderAllTimeBribers() {
+        const board = document.getElementById('alltime-bribers-board');
+        const banner = document.getElementById('alltime-bribers-banner');
+        if (!board) return;
+        const roll = await fetchAllTimeRollups();
+        if (!roll || !Array.isArray(roll.bribers)) {
+            board.innerHTML = '<div class="text-gray-600 text-sm">Briber rollup unavailable.</div>';
+            if (banner) banner.textContent = '';
+            return;
+        }
+        const mode = document.getElementById('alltime-bribers-sort')?.value || 'placement';
+        const byAddr = new Map(roll.bribers.map(b => [b.briber, b]));
+        let list = (roll.bribers_order || []).map(a => byAddr.get(a)).filter(Boolean);
+        if (mode === 'build') list = [...list].sort((a, b) => (b.totals?.usd_at_build || 0) - (a.totals?.usd_at_build || 0));
+        else if (mode === 'count') list = [...list].sort((a, b) => (b.event_count || 0) - (a.event_count || 0));
+        // 'placement' keeps bribers_order: usd_at_placement desc, all-unpriced last — never ranked by invented USD
+        if (banner) {
+            const totalEvents = roll.bribers.reduce((s, b) => s + (b.event_count || 0), 0);
+            const first = roll.bribers.map(b => b.first_bribe).filter(Boolean).sort()[0] || '';
+            let cov = '';
+            const luna = roll.bribe_ledger?.lifetime?.['native:uluna'];
+            if (luna && Number(luna.state) > 0) {
+                const pct = (Number(luna.attributed_exact || 0) + Number(luna.attributed_spanning || 0)) / Number(luna.state) * 100;
+                cov = ` \u00b7 ${pct >= 99.5 ? Math.floor(pct) : pct.toFixed(1)}% of lifetime LUNA bribe flow attributed \u2014 the remainder is counted in the ledger but its payer is not yet identified`;
+            }
+            banner.textContent = `${list.length} bribers \u00b7 ${totalEvents} attributed bribes since ${first}${cov} \u00b7 valued at placement \u00b7 rollup ${String(roll.builtAt || '').slice(0, 10)}`;
+        }
+        const rowHtml = (b, i) => {
+            const t = b.totals || {};
+            const name = b.label
+                ? `<span class="text-purple-300" title="${b.briber}">${b.label}</span>`
+                : `<span class="mono text-gray-300" title="${b.briber}">${b.briber.slice(0, 10)}\u2026${b.briber.slice(-4)}</span>`;
+            const placed = t.usd_at_placement || 0;
+            const val = placed > 0
+                ? `<span class="mono text-amber-300 font-semibold" title="At rollup build: ${fmt$(t.usd_at_build || 0)}">${fmt$(placed)}</span>`
+                : `<span class="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-gray-400" title="No historical price record \u2014 amounts chain-exact, USD never guessed">unpriced</span>`;
+            const tokenRows = Object.entries(t.by_token || {}).sort((x, y) => (y[1].usd_at_placement || 0) - (x[1].usd_at_placement || 0))
+                .map(([sym, v]) => `<div class="flex justify-between py-0.5"><span class="text-gray-400">${Number(v.amount_display || 0).toLocaleString()} ${sym}${v.unpriced_events ? ' <span class="text-amber-500">(' + v.unpriced_events + ' unpriced)</span>' : ''}</span><span class="mono text-gray-300">${v.usd_at_placement ? fmt$(v.usd_at_placement) : '\u2014'}</span></div>`).join('');
+            const unpricedRows = Object.entries(t.unpriced || {}).map(([denom, v]) =>
+                `<div class="flex justify-between py-0.5"><span class="text-gray-500 mono" title="${denom}">${denom.slice(0, 18)}\u2026</span><span class="text-amber-500">${v.bribe_count || v.event_count || ''} unpriced</span></div>`).join('');
+            const poolRows = Object.entries(b.by_pool || {}).sort((x, y) => (y[1].bribe_count || 0) - (x[1].bribe_count || 0))
+                .map(([k, v]) => {
+                    const toks = Object.entries(v.by_token || {}).map(([sym, tv]) =>
+                        `${Number(tv.amount_display || 0).toLocaleString()} ${sym}${tv.usd_at_placement ? ' (' + fmt$(tv.usd_at_placement) + ')' : ''}`).join(', ');
+                    return `<div class="flex justify-between gap-3 py-0.5"><span class="text-gray-400">${allTimePoolName(k)} <span class="text-gray-600">\u00d7${v.bribe_count}</span></span><span class="text-gray-300 text-right">${toks || '\u2014'}</span></div>`;
+                }).join('');
+            return `
+                <details class="rounded-lg bg-white/[0.02] hover:bg-white/[0.04] px-3 py-2">
+                    <summary class="flex items-center justify-between cursor-pointer list-none">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <span class="w-5 h-5 rounded flex items-center justify-center text-[11px] font-bold shrink-0 bg-white/10">${i + 1}</span>
+                            <div class="flex flex-col min-w-0">
+                                <span class="text-sm truncate">${name}</span>
+                                <span class="text-[9px] text-gray-600">${b.event_count} bribe${b.event_count === 1 ? '' : 's'} \u00b7 ${b.first_bribe || '?'} \u2192 ${b.last_bribe || '?'}${b.withdraw_event_count ? ` \u00b7 ${b.withdraw_event_count} withdraw events` : ''}</span>
+                            </div>
+                        </div>
+                        <div class="shrink-0 text-right text-sm">${val} <i class="fas fa-chevron-down text-[8px] text-gray-600 ml-1"></i></div>
+                    </summary>
+                    <div class="mt-2 pt-2 border-t border-white/5 text-[11px] space-y-2">
+                        ${tokenRows ? `<div><div class="text-[9px] text-gray-600 uppercase mb-0.5">By token</div>${tokenRows}${unpricedRows}</div>` : unpricedRows}
+                        ${poolRows ? `<div><div class="text-[9px] text-gray-600 uppercase mb-0.5">By pool</div>${poolRows}</div>` : ''}
+                    </div>
+                </details>`;
+        };
+        board.innerHTML = list.map(rowHtml).join('') || '<div class="text-gray-600 text-sm">No attributed bribers yet.</div>';
     }
     
     function closeBribesModal(event) {
