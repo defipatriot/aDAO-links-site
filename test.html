@@ -5961,6 +5961,19 @@
             <div class="text-right shrink-0">${valueHtml}</div>
         </div>`;
 
+    // Rev 5.1: every leaderboard shows top 5 with a show-all expander — full
+    // depth on demand, same pattern on all boards.
+    function boardExpander(el, rows, uid, emptyMsg) {
+        if (!rows.length) { el.innerHTML = emptyMsg || '<div class="text-gray-600 text-sm">No data.</div>'; return; }
+        let html = rows.slice(0, 5).join('');
+        const rest = rows.slice(5);
+        if (rest.length) {
+            html += `<div id="bx-${uid}" class="hidden space-y-3">${rest.join('')}</div>` +
+                `<button onclick="const r=document.getElementById('bx-${uid}');const open=!r.classList.toggle('hidden');this.textContent=open?'show top 5 \u25b4':'show all ${rows.length} \u25be';" class="text-[10px] text-cyan-400 hover:text-cyan-300 w-full text-center pt-1">show all ${rows.length} \u25be</button>`;
+        }
+        el.innerHTML = html;
+    }
+
     // Board rows drive the same member lens as the header dropdown.
     function selectMemberFromBoard(wallet) {
         const sel = document.getElementById('member-selector');
@@ -5996,15 +6009,14 @@
         const byVp = [...members]
             .map(m => ({ m, vp: m.summary?.display_voting_power_human || 0 }))
             .filter(x => x.vp > 0)
-            .sort((a, b) => b.vp - a.vp)
-            .slice(0, 5);
-        vpEl.innerHTML = byVp.map((x, i) => personRow(
+            .sort((a, b) => b.vp - a.vp);
+        boardExpander(vpEl, byVp.map((x, i) => personRow(
             i,
             `${displayName(x.m.wallet)} ${walletBadges(x.m.wallet)}`,
             null,
             `<span class="mono text-sm text-cyan-300 font-semibold">${fmtNum(x.vp)} VP</span>`,
             x.m.wallet
-        )).join('') || '<div class="text-gray-600 text-sm">No data.</div>';
+        )), 'vp');
 
         // Utilization Leaders — org member-data avg_utilization_pct, 10K+ VP floor
         if (utilEl) {
@@ -6012,15 +6024,14 @@
                 .filter(w => (w.total_vp_held_human || 0) >= 10000)
                 .map(w => ({ w, u: w.avg_utilization_pct ?? null }))
                 .filter(x => x.u !== null)
-                .sort((a, b) => b.u - a.u || (b.w.total_vp_held_human - a.w.total_vp_held_human))
-                .slice(0, 5);
-            utilEl.innerHTML = rows.length ? rows.map((x, i) => personRow(
+                .sort((a, b) => b.u - a.u || (b.w.total_vp_held_human - a.w.total_vp_held_human));
+            boardExpander(utilEl, rows.map((x, i) => personRow(
                 i,
                 `${displayName(x.w.address)} ${walletBadges(x.w.address)}`,
                 `${fmtNum(x.w.total_vp_held_human || 0)} VP held`,
                 `<span class="mono text-sm text-emerald-400 font-semibold">${x.u.toFixed(1)}%</span>`,
                 x.w.address
-            )).join('') : '<div class="text-gray-600 text-sm">Org member-data feed unavailable.</div>';
+            )), 'util', '<div class="text-gray-600 text-sm">Org member-data feed unavailable.</div>');
         }
 
         // Recently Adjusted — max period across bucket votes, desc; THIS EPOCH badge
@@ -6037,9 +6048,8 @@
                     return { m, last, touched };
                 })
                 .filter(x => x.last > 0)
-                .sort((a, b) => b.last - a.last || ((b.m.summary?.display_voting_power_human || 0) - (a.m.summary?.display_voting_power_human || 0)))
-                .slice(0, 5);
-            adjEl.innerHTML = rows.length ? rows.map((x, i) => personRow(
+                .sort((a, b) => b.last - a.last || ((b.m.summary?.display_voting_power_human || 0) - (a.m.summary?.display_voting_power_human || 0)));
+            boardExpander(adjEl, rows.map((x, i) => personRow(
                 i,
                 `${displayName(x.m.wallet)} ${walletBadges(x.m.wallet)}`,
                 `${x.touched} bucket${x.touched === 1 ? '' : 's'} voted`,
@@ -6047,7 +6057,7 @@
                     ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-semibold">THIS EPOCH</span>'
                     : `<span class="mono text-xs text-gray-400">period ${x.last}</span>`,
                 x.m.wallet
-            )).join('') : '<div class="text-gray-600 text-sm">No vote data.</div>';
+            )), 'adj', '<div class="text-gray-600 text-sm">No vote data.</div>');
         }
     }
 
@@ -6086,25 +6096,25 @@
         };
         const og = [...members].sort((a, b) =>
             a.first_participation.period - b.first_participation.period ||
-            minLockId(a) - minLockId(b) || vpOf(b) - vpOf(a)).slice(0, 5);
-        ogEl.innerHTML = og.map((m, i) => personRow(
+            minLockId(a) - minLockId(b) || vpOf(b) - vpOf(a));
+        boardExpander(ogEl, og.map((m, i) => personRow(
             i,
             `${displayName(m.wallet)} ${walletBadges(m.wallet)}${m.first_participation.period <= 96 ? ' <span class="text-[8px] px-1 py-px rounded bg-amber-500/25 text-amber-300 font-semibold" title="Here since the launch window">DAY ONE</span>' : ''}`,
             `${m.first_participation.approx_date || ''}${Number.isFinite(minLockId(m)) ? ` · lock #${minLockId(m)}` : ''}`,
             `<span class="mono text-xs text-gray-300">period ${m.first_participation.period}</span>`,
             m.wallet
-        )).join('');
+        )), 'og');
         if (newEl) {
             const fresh = [...members].sort((a, b) =>
                 b.first_participation.period - a.first_participation.period ||
-                minLockId(b) - minLockId(a) || vpOf(b) - vpOf(a)).slice(0, 5);
-            newEl.innerHTML = fresh.map((m, i) => personRow(
+                minLockId(b) - minLockId(a) || vpOf(b) - vpOf(a));
+            boardExpander(newEl, fresh.map((m, i) => personRow(
                 i,
                 `${displayName(m.wallet)} ${walletBadges(m.wallet)}`,
                 `${m.first_participation.approx_date || ''}${Number.isFinite(minLockId(m)) ? ` · lock #${minLockId(m)}` : ''}`,
                 `<span class="mono text-xs text-gray-300">period ${m.first_participation.period}</span>`,
                 m.wallet
-            )).join('');
+            )), 'new');
         }
         if (bribeEl) renderBribeBoardCard();
     }
@@ -6134,15 +6144,14 @@
             const rows = getAllSelectableMembers()
                 .map(m => ({ m, usd: m.summary?.total_pending_bribes_usd || 0 }))
                 .filter(x => x.usd > 0.005)
-                .sort((a, b) => b.usd - a.usd)
-                .slice(0, 5);
-            el.innerHTML = rows.length ? rows.map((x, i) => personRow(
+                .sort((a, b) => b.usd - a.usd);
+            boardExpander(el, rows.map((x, i) => personRow(
                 i,
                 `${displayName(x.m.wallet)} ${walletBadges(x.m.wallet)}`,
                 `${fmtNum(x.m.summary?.display_voting_power_human || 0)} VP`,
                 `<span class="mono text-sm text-amber-300 font-semibold">${fmt$(x.usd)}</span>`,
                 x.m.wallet
-            )).join('') : '<div class="text-gray-600 text-sm">No pending bribe rewards right now.</div>';
+            )), 'earn', '<div class="text-gray-600 text-sm">No pending bribe rewards right now.</div>');
             return;
         }
         renderTopBribersAllTime(el, banner);
