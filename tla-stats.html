@@ -3350,9 +3350,17 @@
                 fetch(CONFIG.pdBribesUrl).then(r => r.ok ? r.json() : null).catch(() => null),
                 fetch(CONFIG.historicalUrls[2026]).then(r => r.ok ? r.json() : null).catch(() => null),
                 fetch(`${CONFIG.votionBaseUrl}/votion-epoch-${currentEpoch}.json`).then(r => r.ok ? r.json() : null).catch(() => null),
-                // Astroport: live file for current epoch — carries epochs[N-1] inside
+                // Astroport: live file for current epoch — carries epochs[N-1] inside.
+                // Fallback to the previous epoch's file: the nightly roller creates
+                // epoch-N.json on its FIRST run inside epoch N, so for the first day
+                // of every epoch the current file 404s — the N-1 file (which carries
+                // the trailing epochs map) keeps the volume/liquidity boards live.
                 fetch(`${CONFIG.astroportEpochBaseUrl}/astroport-epoch-${currentEpoch}.json`)
-                    .then(r => r.ok ? r.json() : null)
+                    .then(r => {
+                        if (r.ok) return r.json();
+                        return fetch(`${CONFIG.astroportEpochBaseUrl}/astroport-epoch-${currentEpoch - 1}.json`)
+                            .then(r2 => r2.ok ? r2.json() : null);
+                    })
                     .catch(e => { console.warn('astroport-epoch fetch:', e.message); return null; }),
                 // SS weekly-avg for the last completed epoch.
                 // Fallback to epoch-2 ago if it's not written yet (cron writes Mon 00:05 UTC).
