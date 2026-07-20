@@ -1037,19 +1037,22 @@
             <div class="tab-btn active" data-tab="overview">
                 <i class="fas fa-chart-pie mr-2"></i>Overview
             </div>
-            <a href="member-portfolio.html" class="tab-btn" style="text-decoration: none; display: inline-flex; align-items: center;" title="Your full Terra position — locks, LP, votes, balances — with alerts: stale VP, inactive LP, expiring locks, unclaimed rewards.">
-                <i class="fas fa-user-astronaut mr-2"></i>Member Portfolio
-                <span class="ml-2 text-[8px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-semibold tracking-wide">NEW</span>
-            </a>
-            <div class="tab-btn" data-tab="grades">
-                <i class="fas fa-graduation-cap mr-2"></i>LP Grades
-            </div>
             <div class="tab-btn" data-tab="pools">
-                <i class="fas fa-water mr-2"></i>LP Stats
+                <i class="fas fa-water mr-2"></i>Pools
             </div>
             <div class="tab-btn" data-tab="tla">
-                <i class="fas fa-coins mr-2"></i>TLA Stats
+                <i class="fas fa-coins mr-2"></i>TLA Liquidity
             </div>
+            <div class="tab-btn" data-tab="rankings">
+                <i class="fas fa-trophy mr-2"></i>Rankings
+            </div>
+            <div class="tab-btn" data-tab="dao">
+                <i class="fas fa-landmark mr-2"></i>aDAO
+            </div>
+            <a href="dao-tla.html" class="tab-btn" style="text-decoration: none; display: inline-flex; align-items: center;">
+                <i class="fas fa-users mr-2"></i>Member Stats
+                <i class="fas fa-external-link-alt ml-2 text-[10px] opacity-60"></i>
+            </a>
             <div class="tab-btn" data-tab="docs">
                 <i class="fas fa-book mr-2"></i>Docs
             </div>
@@ -1068,20 +1071,13 @@
                 <!-- TLA Total VP Chart -->
                 <div class="glass-card p-6">
                     <div class="flex items-center justify-between mb-4">
-                        <div class="flex items-center gap-3 flex-wrap">
-                            <h3 class="font-semibold text-lg">TLA Total VP</h3>
-                            <div class="flex items-center gap-1" id="pie-mode-toggle">
-                                <button type="button" data-piemode="standard" class="pie-mode-btn text-[10px] px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-medium" title="Votion / aDAO Treasury / Other — the classic view">Standard</button>
-                                <button type="button" data-piemode="groups" class="pie-mode-btn text-[10px] px-2 py-0.5 rounded bg-white/5 text-gray-400 font-medium" title="Who really steers TLA: aDAO NFT stakers combined, registered Allies (Pixel Lions, Lion DAO, named TLA lockers), Votion, everyone else. Select a wallet to carve out its personal slice.">Community</button>
-                            </div>
-                        </div>
+                        <h3 class="font-semibold text-lg">TLA Total VP</h3>
                         <div class="text-right">
                             <div class="text-xs text-gray-500">Total VP</div>
                             <div class="flex items-center justify-end gap-2">
                                 <span id="chart-total-vp" class="text-lg font-bold mono text-cyan-400">-</span>
                                 <span id="trend-total-vp" class="chart-trend" onclick="showHistoryModal('total-vp')"></span>
                             </div>
-                            <div id="chart-vp-potential" class="text-[9px] text-amber-400/80 cursor-pointer hover:text-amber-300 hidden" title="Stale VP — decayed power the electorate can reclaim by adjusting locks. Click to see who." onclick="document.getElementById('stale-vp-card')?.scrollIntoView({behavior:'smooth', block:'center'})"></div>
                         </div>
                     </div>
                     <div class="chart-container">
@@ -1107,58 +1103,8 @@
                 </div>
             </div>
             
-            <!-- ==================== BOUNTY BOARD + EPOCH MOVERS ==================== -->
+            <!-- Top Pools -->
             <div class="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div class="glass-card p-6 lg:col-span-2" id="bounty-board-card" data-cron-source="tla-snapshot,bribes-history">
-                    <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
-                        <h3 class="font-semibold text-lg flex items-center gap-2"><i class="fas fa-sack-dollar text-amber-400"></i> Bounty Board <span id="bounty-epoch-chip" class="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 font-medium"></span></h3>
-                        <div id="bounty-summary" class="flex items-center gap-3 text-xs mono text-gray-400"></div>
-                    </div>
-                    <p class="text-xs text-gray-500 mb-1">What pools are paying for votes right now. <span class="text-amber-300/80 font-medium">$ / 1M VP</span> is the price of support — high means your vote is underpaid elsewhere. <span class="desc-toggle" onclick="toggleDesc('bounty-full', this)">learn more</span></p>
-                    <div id="bounty-full" class="desc-full"><span class="ex-lead">What this means:</span> Projects put up rewards ("bribes") to attract votes to their pool this epoch. Every voter on that pool shares the pot in proportion to their votes. Dividing the pot by the pool's current votes gives the going rate — dollars paid per 1M VP of support. A high rate means few voters are competing for that pot: moving votes there pays more. A pool with a pot but almost no votes is the loudest signal on the board. Rates shift as votes move, right up to the epoch close.</div>
-                    <div id="bounty-board-rows" class="space-y-1.5 mt-3">
-                        <div class="loading-pulse text-gray-500 text-sm">Loading...</div>
-                    </div>
-                </div>
-                <div class="glass-card p-6" id="epoch-movers-card" data-cron-source="tla-snapshot">
-                    <h3 class="font-semibold text-lg flex items-center gap-2 mb-1"><i class="fas fa-arrow-trend-up text-cyan-400"></i> Movers This Epoch</h3>
-                    <p class="text-xs text-gray-500 mb-3">Biggest vote shifts since the epoch locked in — where support is flowing live.</p>
-                    <div id="epoch-movers" class="space-y-1.5">
-                        <div class="loading-pulse text-gray-500 text-sm">Loading...</div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- ==================== COMMUNITY WATCH (Stage C1) ==================== -->
-            <div class="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div class="glass-card p-6 lg:col-span-2" id="stale-vp-card" data-cron-source="tla-participants,adao-positions">
-                    <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
-                        <h3 class="font-semibold text-lg flex items-center gap-2"><i class="fas fa-battery-half text-amber-400"></i> Stale VP — power left on the table</h3>
-                        <span id="stale-vp-chip" class="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 font-medium mono"></span>
-                    </div>
-                    <p class="text-xs text-gray-500 mb-1">VP decays until a lock is re-touched. This is the whole electorate's VP today vs what it would be if every lock were adjusted — and who's sitting on the biggest recoverable gap. <span class="desc-toggle" onclick="toggleDesc('stale-full', this)">learn more</span></p>
-                    <div id="stale-full" class="desc-full"><span class="ex-lead">What this means:</span> vAMP voting power decays over time and snaps back to full strength when the lock is adjusted (extended or re-committed). A wallet that hasn't touched its locks in months is voting with less power than it owns — stale VP. The gap is free power: adjusting costs nothing but a transaction. The wallets below have the most to reclaim; if one is yours, go adjust. Group VP in the pie and boards uses displayed (current) VP, so reclaiming stale VP literally grows your slice.</div>
-                    <div id="stale-vp-meter" class="mt-3 mb-3"></div>
-                    <div id="stale-vp-rows" class="space-y-1.5"><div class="loading-pulse text-gray-500 text-sm">Loading...</div></div>
-                </div>
-                <div class="glass-card p-6" id="take-rate-card" data-cron-source="tla-participants,adao-positions">
-                    <h3 class="font-semibold text-lg flex items-center gap-2 mb-1"><i class="fas fa-triangle-exclamation text-red-400"></i> Take-Rate Watch</h3>
-                    <p class="text-xs text-gray-500 mb-1">Deposits sitting in INACTIVE pools keep paying the take rate while earning nothing — slowly eaten. <span class="desc-toggle" onclick="toggleDesc('take-full', this)">learn more</span></p>
-                    <div id="take-full" class="desc-full"><span class="ex-lead">Why this board exists:</span> When a pool falls below the 1% vote threshold it stops earning rewards, but deposits left in it still pay the take rate — value quietly draining every epoch. The wallets below have money in that state. If a name is shown, that's a registered handle — anyone in the community can reach out and say "pull your deposit, it's being eaten." That's the point: this is a care board, not a shame board.</div>
-                    <div id="take-rate-summary" class="mt-3 mb-2"></div>
-                    <div id="take-rate-rows" class="space-y-1.5"><div class="loading-pulse text-gray-500 text-sm">Loading...</div></div>
-                </div>
-            </div>
-
-            <!-- ==================== LEADERBOARDS (tabbed) ==================== -->
-            <div class="mt-6">
-                <div class="flex items-center gap-2 mb-3 flex-wrap">
-                    <span class="text-xs text-gray-500 uppercase tracking-wider font-semibold mr-1"><i class="fas fa-trophy text-amber-400 mr-1"></i>Leaderboards</span>
-                    <button type="button" data-topstab="pools" class="tops-tab-btn text-[11px] px-3 py-1 rounded-full bg-cyan-500/20 text-cyan-300 font-medium">Pool Tops</button>
-                    <button type="button" data-topstab="voters" class="tops-tab-btn text-[11px] px-3 py-1 rounded-full bg-white/5 text-gray-400 font-medium">Voters</button>
-                    <button type="button" data-topstab="community" class="tops-tab-btn text-[11px] px-3 py-1 rounded-full bg-white/5 text-gray-400 font-medium">Community</button>
-                </div>
-            <div id="tops-grid-pools" class="tops-grid grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div class="glass-card p-6">
                     <h3 class="font-semibold mb-4 flex items-center gap-2 cursor-pointer hover:text-cyan-400 transition-colors" onclick="showRankingModal('volume')">
                         <i class="fas fa-chart-line text-orange-400"></i> Top Avg Volume
@@ -1193,47 +1139,6 @@
                         <div class="loading-pulse text-gray-500 text-sm">Loading...</div>
                     </div>
                 </div>
-            </div>
-            <div id="tops-grid-voters" class="tops-grid hidden grid-cols-1 lg:grid-cols-3 gap-6">
-                <div class="glass-card p-6">
-                    <h3 class="font-semibold mb-4 flex items-center gap-2"><i class="fas fa-crown text-amber-400"></i> Voting Leaders</h3>
-                    <p class="text-[11px] text-gray-500 -mt-2 mb-3" title="Total voting power held (locks VP + fixed), matching the Eris UI display value. Named wallets show their registered name.">by VP held · registered names shown</p>
-                    <div id="top-board-vp" class="space-y-3"><div class="loading-pulse text-gray-500 text-sm">Loading...</div></div>
-                </div>
-                <div class="glass-card p-6">
-                    <h3 class="font-semibold mb-4 flex items-center gap-2"><i class="fas fa-bullseye text-emerald-400"></i> Utilization Leaders</h3>
-                    <p class="text-[11px] text-gray-500 -mt-2 mb-3" title="Average % of held VP actually cast across the four buckets. Only wallets holding 10K+ VP are ranked so tiny wallets at 100% don't crowd out meaningful voters.">% of VP put to work · 10K+ VP wallets</p>
-                    <div id="top-board-util" class="space-y-3"><div class="loading-pulse text-gray-500 text-sm">Loading...</div></div>
-                </div>
-                <div class="glass-card p-6">
-                    <h3 class="font-semibold mb-4 flex items-center gap-2"><i class="fas fa-clock-rotate-left text-cyan-400"></i> Recently Adjusted</h3>
-                    <p class="text-[11px] text-gray-500 -mt-2 mb-3" title="Wallets whose vote allocations were most recently touched, by the period stamped on their latest bucket vote. THIS EPOCH badge = adjusted during the live epoch.">latest vote changes · by period touched</p>
-                    <div id="top-board-adjusted" class="space-y-3"><div class="loading-pulse text-gray-500 text-sm">Loading...</div></div>
-                </div>
-            </div>
-            <div id="tops-grid-community" class="tops-grid hidden grid-cols-1 lg:grid-cols-3 gap-6">
-                <div class="glass-card p-6">
-                    <h3 class="font-semibold mb-4 flex items-center gap-2"><i class="fas fa-medal text-amber-400"></i> OG Board</h3>
-                    <p class="text-[11px] text-gray-500 -mt-2 mb-3" title="Earliest first participation in TLA, from each wallet's first recorded escrow activity. Period 96 = the Aug/Sep 2024 launch window — the Day One crowd.">longest in the game · since period 96</p>
-                    <div id="top-board-og" class="space-y-3"><div class="loading-pulse text-gray-500 text-sm">Loading...</div></div>
-                </div>
-                <div class="glass-card p-6">
-                    <h3 class="font-semibold mb-4 flex items-center gap-2"><i class="fas fa-seedling text-emerald-400"></i> Newcomers</h3>
-                    <p class="text-[11px] text-gray-500 -mt-2 mb-3" title="Most recent first-time participants — fresh wallets joining the alliance.">latest wallets to join TLA</p>
-                    <div id="top-board-new" class="space-y-3"><div class="loading-pulse text-gray-500 text-sm">Loading...</div></div>
-                </div>
-                <div class="glass-card p-6">
-                    <div class="flex items-center justify-between mb-4">
-                        <h3 class="font-semibold flex items-center gap-2"><i class="fas fa-hand-holding-dollar text-amber-300"></i> Top Bribers</h3>
-                        <div class="flex gap-1 text-[10px]">
-                            <button id="bribe-mode-alltime" onclick="setBribeBoardMode('alltime')" class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300" title="All-time bribe providers — who funds the vote incentives, valued at placement">All-time</button>
-                            <button id="bribe-mode-earners" onclick="setBribeBoardMode('earners')" class="px-2 py-0.5 rounded bg-white/5 text-gray-400" title="Pending bribe rewards accrued this epoch, per voting wallet">Earners</button>
-                        </div>
-                    </div>
-                    <p id="top-bribers-banner" class="text-[11px] text-gray-500 -mt-2 mb-3">all-time bribe providers · valued at placement</p>
-                    <div id="top-board-bribes" class="space-y-3"><div class="loading-pulse text-gray-500 text-sm">Loading...</div></div>
-                </div>
-            </div>
             </div>
             
             <!-- Vote Breakdown Waterfall -->
@@ -1357,7 +1262,7 @@
                             <span>Is TLA Liquidity Growing?</span>
                         </h3>
                         <p class="text-xs text-gray-500 mt-1">Is the liquidity base expanding or shrinking — measured with price noise stripped out. <span class="desc-toggle" onclick="toggleDesc('liq-growth-full', this)">learn more</span></p>
-                        <div id="liq-growth-full" class="desc-full"><span class="ex-lead">What this means:</span> Think of TLA as a big shared pot of crypto. This asks whether the pot is getting bigger or smaller. The catch: if LUNA's price drops, the pot looks smaller in dollars even if no one withdrew anything. So we also measure it a second way that ignores price changes — the "real" trend, the same reserves valued at today's prices. The chart shows both lines per epoch (indexed to 100 at the window start) so a one-week event reads as a step, not a permanent trend — and when one week explains most of the move, the verdict says exactly that. If real liquidity is flat or rising, the pot is healthy and money isn't fleeing; a falling dollar figure alongside a flat real line just means the market moved.</div>
+                        <div id="liq-growth-full" class="desc-full"><span class="ex-lead">What this means:</span> Think of TLA as a big shared pot of crypto. This asks whether the pot is getting bigger or smaller. The catch: if LUNA's price drops, the pot looks smaller in dollars even if no one withdrew anything. So we also measure it a second way that ignores price changes — the "real" trend, the same reserves valued at today's prices. If real liquidity is flat or rising, the pot is healthy and money isn't fleeing; a falling dollar figure alongside flat real liquidity just means the market moved. A rising real base means the system's auto-compounding rewards are adding liquidity faster than it leaves.</div>
                     </div>
                 </div>
                 <div id="liq-growth-panel">
@@ -1378,25 +1283,6 @@
                     </div>
                 </div>
                 <div id="exit-risk-summary" class="mb-4"></div>
-                <!-- Slippage simulator (Stage B3) -->
-                <div class="rounded-lg bg-white/[0.02] p-3 mb-4" id="slippage-sim-card">
-                    <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
-                        <div class="text-sm font-semibold flex items-center gap-2"><i class="fas fa-arrows-turn-to-dots text-cyan-400"></i> Trade Impact Simulator <span id="slip-member-chip" class="hidden text-[9px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300"></span></div>
-                        <div class="flex items-center gap-1.5 flex-wrap">
-                            <button type="button" data-slipdir="toLuna" class="slip-dir-btn text-[10px] px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-medium" title="Selling the paired asset INTO the pool for LUNA (e.g. $100 of USDC sold for LUNA)">Asset → LUNA</button>
-                            <button type="button" data-slipdir="fromLuna" class="slip-dir-btn text-[10px] px-2 py-0.5 rounded bg-white/5 text-gray-400 font-medium" title="Selling LUNA INTO the pool for the paired asset (e.g. $100 of LUNA sold for USDC)">LUNA → Asset</button>
-                            <span class="text-gray-700 text-[10px]">·</span>
-                            <button type="button" data-slipamt="100" class="slip-amt-btn text-[10px] px-2 py-0.5 rounded bg-white/5 text-gray-400 font-medium mono">$100</button>
-                            <button type="button" data-slipamt="1000" class="slip-amt-btn text-[10px] px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-medium mono">$1K</button>
-                            <button type="button" data-slipamt="10000" class="slip-amt-btn text-[10px] px-2 py-0.5 rounded bg-white/5 text-gray-400 font-medium mono">$10K</button>
-                            <button type="button" data-slipamt="50000" class="slip-amt-btn text-[10px] px-2 py-0.5 rounded bg-white/5 text-gray-400 font-medium mono">$50K</button>
-                            <input type="number" id="slip-custom" placeholder="custom $" class="w-20 text-[10px] px-2 py-0.5 rounded bg-white/5 text-gray-300 mono border border-white/10 focus:border-cyan-500/50 outline-none">
-                        </div>
-                    </div>
-                    <p class="text-[10px] text-gray-500 mb-2">What a one-sided trade of this size costs in price impact, per pool, from live reserves. <span class="desc-toggle" onclick="toggleDesc('slip-full', this)">how it's estimated</span></p>
-                    <div id="slip-full" class="desc-full"><span class="ex-lead">The model:</span> For standard (xyk) pools, impact = trade ÷ (input-side reserve + trade) — the exact constant-product execution-price formula, using the pool's real per-side balances, worst direction shown. Concentrated and stable pools bunch their liquidity near the current price, so their true impact is LOWER than this figure — those rows show "≤" and grade on the bound. This ignores fees, routing through other pools, and same-block competition; treat it as a planning number, not a quote. Grades: A under 0.5% · B under 1% · C under 3% · D under 8% · F above.</div>
-                    <div id="slip-rows" class="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1"></div>
-                </div>
                 <div id="exit-risk-panel" class="space-y-2">
                     <div class="text-gray-500 text-sm">Loading...</div>
                 </div>
@@ -1556,14 +1442,13 @@
                                 <th class="text-right" title="Percentage of DEX depth that is TLA staked">% Depth</th>
                                 <th class="text-right sortable" data-sort="tla_pct" title="Pool's share of total TLA. Click to sort.">% of TLA <i class="fas fa-sort text-gray-600 ml-1"></i></th>
                                 <th class="text-right sortable" data-sort="efficiency" title="Capital efficiency score. Hover for breakdown. Click to sort.">Efficiency <i class="fas fa-sort text-gray-600 ml-1"></i></th>
-                                <th class="text-right sortable" data-sort="slip" title="Price impact of a $1K worst-direction trade from live reserves (simulator math). A <0.5% · B <1% · C <3% · D <8% · F above. ≤ = concentrated/stable curve, true impact lower. LP pairs only. Click to sort.">Slip $1K <i class="fas fa-sort text-gray-600 ml-1"></i></th>
                                 <th class="text-right sortable" data-sort="apr" title="APR rates. Top: Amplified, Bottom: Non-amp. Click to sort.">APR <i class="fas fa-sort text-gray-600 ml-1"></i></th>
                                 <th class="text-right sortable" data-sort="rewards" title="Rewards. Top: Per epoch, Bottom: Per year. Click to sort.">Rewards <i class="fas fa-sort text-gray-600 ml-1"></i></th>
                                 <th class="text-right sortable" data-sort="adao" title="Alliance DAO deposit. Click to sort.">aDAO <i class="fas fa-sort text-gray-600 ml-1"></i></th>
                             </tr>
                         </thead>
                         <tbody id="tla-table-body">
-                            <tr><td colspan="11" class="text-center text-gray-500 py-8">Loading TLA pools...</td></tr>
+                            <tr><td colspan="10" class="text-center text-gray-500 py-8">Loading TLA pools...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -1802,34 +1687,6 @@
         </div>
         
         <!-- DOCS TAB -->
-        <div id="tab-grades" class="tab-content" data-cron-source="tla-snapshot">
-            <div class="glass-card p-6 mb-6">
-                <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
-                    <h3 class="font-semibold text-lg flex items-center gap-2"><i class="fas fa-graduation-cap text-cyan-400"></i> LP Grades — where votes keep the system healthy</h3>
-                    <span class="text-[9px] px-2 py-0.5 rounded bg-white/5 text-gray-500" title="The old Rankings tab (access/performance/support opportunity score) is retired; its job moves here under the new grading doctrine.">Rankings merged here</span>
-                    <span id="grades-count-chip" class="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 font-medium"></span>
-                </div>
-                <p class="text-xs text-gray-500 mb-1">Every vote is a resource. This grades each active pool on how much a vote there strengthens TLA — not how much it pays you (that's the Bounty Board) and not deposit opportunity (that's Rankings). <span class="desc-toggle" onclick="toggleDesc('grades-method', this)">methodology</span></p>
-                <div id="grades-method" class="desc-full"><span class="ex-lead">The doctrine (SPEC-grading-and-dex-data):</span> a pool's grade answers three questions — <b>A. Is the pair intrinsically good?</b> (depth, real volume, utilization) · <b>B. Are the assets valuable to Terra?</b> (fact-based asset rubric with a DAO-governed override layer — <span class="text-amber-300">in build, not yet part of this grade</span>) · <b>C. Is it under-served?</b> (support vs what it deserves — the "vote here" signal). What you see today is the interim grade from components A + C, computed page-side from live data with published weights; the full facts-only system replaces these inputs as its un-gameable sample accrues. Trust rule honored now: <b>SkeletonSwap volume has no trustworthy source</b>, so SS pools skip Utilization entirely (reweighted) rather than grade on suspect numbers.
-                    <br><br><span class="ex-lead">Current interim weights (all live data):</span>
-                    <b>Depth 25%</b> — DEX pool size, log-scaled ($500K+ = full marks). Deep pools make trading cheap, which is the whole point of directing liquidity.
-                    <b>Utilization 25%</b> — weekly volume ÷ liquidity over the last 4 completed epochs. A pool that turns its liquidity over is doing real work; an idle pool is decoration.
-                    <b>Support balance 25%</b> — the $ of TLA-staked liquidity behind each 1M VP of votes, vs the system median. A pool with far MORE liquidity per vote than typical is underpaid (LPs are carrying it — votes there strengthen the system); far LESS is overweighted (emissions flow with little liquidity behind them). Scored highest at balance, with the underpaid side penalized more gently than the overpaid side.
-                    <b>Threshold safety 15%</b> — headroom above the 1% bucket threshold a pool needs to keep earning.
-                    <b>Trend 10%</b> — the pool's real (price-neutral) liquidity direction across tracked epochs, duplicates removed.
-                    Grades: A+ ≥90 · A ≥80 · B ≥70 · C ≥55 · D ≥40 · F below. Single-asset pools skip Depth/Utilization (reweighted). This is an opinionated v1 — the weights are shown so you can argue with them.</div>
-                <div id="grades-callouts" class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3"></div>
-            </div>
-            <div class="glass-card p-6">
-                <div id="grades-filters" class="flex items-center gap-2 flex-wrap mb-2"></div>
-                <div id="grades-view-desc" class="text-[11px] text-gray-500 mb-3"></div>
-                <div class="text-[9px] text-gray-600 mb-2">score bars: <span class="text-gray-500">D</span> depth · <span class="text-gray-500">U</span> utilization · <span class="text-gray-500">B</span> support balance · <span class="text-gray-500">T</span> threshold safety · <span class="text-gray-500">Tr</span> trend — green good, yellow middling, red weak. Click any row for the full breakdown.</div>
-                <div id="grades-table" class="space-y-1.5">
-                    <div class="loading-pulse text-gray-500 text-sm">Loading...</div>
-                </div>
-            </div>
-        </div>
-
         <div id="tab-docs" class="tab-content">
             <div class="flex flex-col items-center justify-center py-12">
                 <div class="w-20 h-20 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-purple-500/20 flex items-center justify-center mb-6">
@@ -1905,6 +1762,21 @@
             <!-- Bucket Breakdown -->
             <div class="space-y-4" id="bribes-bucket-breakdown">
                 <!-- Populated by JS -->
+            </div>
+
+            <!-- All-Time Top Bribers (schema-6 rollups deep-dive — self-contained
+                 for easy re-homing into the restructured Rankings tab) -->
+            <div class="mt-6 pt-4 border-t border-white/10">
+                <div class="flex items-center justify-between mb-1">
+                    <h4 class="text-sm font-bold text-amber-300"><i class="fas fa-hand-holding-dollar mr-1"></i>All-Time Top Bribers</h4>
+                    <select id="alltime-bribers-sort" onchange="renderAllTimeBribers()" class="bg-gray-800 border border-white/10 rounded text-[11px] px-2 py-1 text-gray-300">
+                        <option value="placement">at placement $</option>
+                        <option value="build">today value $</option>
+                        <option value="count">most active</option>
+                    </select>
+                </div>
+                <p id="alltime-bribers-banner" class="text-[10px] text-gray-500 mb-3">loading…</p>
+                <div id="alltime-bribers-board" class="space-y-2"><div class="text-gray-600 text-sm">Loading…</div></div>
             </div>
         </div>
     </div>
@@ -2554,14 +2426,6 @@
         networkPricesUrl:  'https://raw.githubusercontent.com/defipatriot/network-and-prices-data_2026/main/data/network-and-prices.json',
         adaoPositionsUrl:  'https://raw.githubusercontent.com/defipatriot/adao-positions-data_2026/main/data/current.json',
         adaoMembersUrl:    'https://raw.githubusercontent.com/defipatriot/adao-positions-data_2026/main/data/members.json',
-        // Community layer (Stage A, 2026-07): all TLA lockers w/ names + first participation,
-        // registered allies (Pixel Lions / Lion DAO), and the org-side aDAO staker roster.
-        tlaParticipantsUrl: 'https://raw.githubusercontent.com/defipatriot/tla-participants-data_2026/main/data/current.json',
-        adaoAlliesUrl:      'https://raw.githubusercontent.com/defipatriot/adao-allies-data_2026/main/data/current.json',
-        orgNftSummaryUrl:   'https://raw.githubusercontent.com/thealliancedao/tla-core/main/nfts/adao/snapshots/summary.json',
-        orgMemberDataUrl:   'https://raw.githubusercontent.com/thealliancedao/tla-core/main/member-data/snapshots/current.json',
-        // Schema-6 briber leaderboard (org tla-voting rollups) — powers the Top Bribers board.
-        orgVotingRollupsUrl:'https://raw.githubusercontent.com/thealliancedao/tla-core/main/tla-voting/events/rollups.json',
         bribesCurrentUrl:  'https://raw.githubusercontent.com/defipatriot/bribes-data_2026/main/data/current-state.json',
         votionBaseUrl:     'https://raw.githubusercontent.com/defipatriot/votion-data_2026/main/votion',  // append /votion-epoch-{N}.json
 
@@ -2660,24 +2524,6 @@
             staleMs: 2 * 60 * 60 * 1000, // 2h
             sourceUrl: 'https://raw.githubusercontent.com/defipatriot/tla-snapshot-data_2026/main/data/heartbeat.json',
             description: 'Unified aggregator — powers pools, pie, VP totals',
-        },
-        'tla-participants': {
-            label: 'TLA Participants',
-            cadence: 'hourly',
-            cadenceMs: 60 * 60 * 1000,
-            warningMs: 75 * 60 * 1000,
-            staleMs: 3 * 60 * 60 * 1000,
-            sourceUrl: 'https://raw.githubusercontent.com/defipatriot/tla-participants-data_2026/main/data/heartbeat.json',
-            description: 'All TLA lockers — names, VP, first participation',
-        },
-        'adao-allies': {
-            label: 'aDAO Allies',
-            cadence: 'hourly',
-            cadenceMs: 60 * 60 * 1000,
-            warningMs: 75 * 60 * 1000,
-            staleMs: 3 * 60 * 60 * 1000,
-            sourceUrl: 'https://raw.githubusercontent.com/defipatriot/adao-allies-data_2026/main/data/heartbeat.json',
-            description: 'Registered Pixel Lions + Lion DAO members',
         },
         'network-and-prices': {
             label: 'Network & Prices',
@@ -3496,10 +3342,6 @@
                 aprHistResp,
                 poolStatusResp,
                 fuelIndexResp,
-                tlaParticipantsResp,
-                adaoAlliesResp,
-                orgNftSummaryResp,
-                orgMemberDataResp,
             ] = await Promise.all([
                 fetch(CONFIG.tlaSnapshotUrl).then(r => r.ok ? r.json() : null).catch(e => { console.warn('tla-snapshot fetch:', e.message); return null; }),
                 fetch(CONFIG.networkPricesUrl).then(r => r.ok ? r.json() : null).catch(e => { console.warn('network-prices fetch:', e.message); return null; }),
@@ -3510,8 +3352,9 @@
                 fetch(`${CONFIG.votionBaseUrl}/votion-epoch-${currentEpoch}.json`).then(r => r.ok ? r.json() : null).catch(() => null),
                 // Astroport: live file for current epoch — carries epochs[N-1] inside.
                 // Fallback to the previous epoch's file: the nightly roller creates
-                // epoch-N.json on its FIRST run inside epoch N, so on day 1 of every
-                // epoch the current file 404s — the N-1 file keeps volume/liquidity live.
+                // epoch-N.json on its FIRST run inside epoch N, so for the first day
+                // of every epoch the current file 404s — the N-1 file (which carries
+                // the trailing epochs map) keeps the volume/liquidity boards live.
                 fetch(`${CONFIG.astroportEpochBaseUrl}/astroport-epoch-${currentEpoch}.json`)
                     .then(r => {
                         if (r.ok) return r.json();
@@ -3538,12 +3381,6 @@
                 fetch(CONFIG.poolStatusHistoryUrl).then(r => r.ok ? r.json() : null).catch(() => null),
                 // FUEL price index (FUEL not in network-and-prices feed). Graceful null.
                 fetch(CONFIG.fuelIndexUrl).then(r => r.ok ? r.json() : null).catch(() => null),
-                // Community layer — all fail-soft: page renders fully without them,
-                // the community pie mode / people boards just show their empty states.
-                fetch(CONFIG.tlaParticipantsUrl).then(r => r.ok ? r.json() : null).catch(() => null),
-                fetch(CONFIG.adaoAlliesUrl).then(r => r.ok ? r.json() : null).catch(() => null),
-                fetch(CONFIG.orgNftSummaryUrl).then(r => r.ok ? r.json() : null).catch(() => null),
-                fetch(CONFIG.orgMemberDataUrl).then(r => r.ok ? r.json() : null).catch(() => null),
             ]);
 
             // Populate the runtime token-names map. Underscore-prefixed keys
@@ -3603,12 +3440,6 @@
             })();
             store.historicalData = historicalResp;
             store.votionData = votionResp;
-            // Community layer sources
-            store.tlaParticipants = tlaParticipantsResp;
-            store.adaoAllies = adaoAlliesResp;
-            store.orgNftSummary = orgNftSummaryResp;
-            store.orgMemberData = orgMemberDataResp;
-            try { buildIdentityRegistry(); } catch (err) { console.warn('buildIdentityRegistry:', err); }
 
             // Populate the member-data dropdown now that adaoPositions is loaded.
             // Members are sorted alphabetically by display name for easy scanning.
@@ -3631,8 +3462,6 @@
                 fetchCronCapturedAt('tla-snapshot'),
                 fetchCronCapturedAt('network-and-prices'),
                 fetchCronCapturedAt('adao-positions'),
-                fetchCronCapturedAt('tla-participants'),
-                fetchCronCapturedAt('adao-allies'),
                 fetchCronCapturedAt('bribes-history'),
                 fetchCronCapturedAt('votion'),
                 fetchCronCapturedAt('astroport'),
@@ -3726,53 +3555,6 @@
             const rawInactivePools = transformedData.liquidity?.inactive_pools || [];
             store.tlaPools = normalizeTlaPools(rawTlaPools);
             store.tlaInactivePools = normalizeTlaPools(rawInactivePools);
-            // Join vote-side historical (efficiency / 4-epoch vol+liq) and REAL
-            // treasury deposits onto the TLA table rows. buildTlaPool can't see
-            // either (raw snapshot rows lack them), which left the Efficiency and
-            // aDAO columns permanently '-'. Keyed name|dex; treasury falls back to
-            // bare name only when that name is unique across pools.
-            try {
-                const effBy = new Map((store.pools || []).map(v => [`${v.name}|${v.dex}`, v]));
-                const nameCount = {};
-                for (const t of store.tlaPools) nameCount[t.name] = (nameCount[t.name] || 0) + 1;
-                const treasNon = new Map(), treasAmp = new Map();
-                for (const lp of (store.adaoPositions?.treasury?.lp_positions || [])) {
-                    const key = `${lp.pool_name}|${lp.dex}`;
-                    const m = lp.is_amplified ? treasAmp : treasNon;
-                    m.set(key, (m.get(key) || 0) + (lp.estimated_position_usd || 0));
-                    if (nameCount[lp.pool_name] === 1) {
-                        m.set(lp.pool_name, (m.get(lp.pool_name) || 0) + (lp.estimated_position_usd || 0));
-                    }
-                }
-                // Slippage reference: worst-direction constant-product impact of a
-                // $1K trade from live reserves (same model as the simulator).
-                // Concentrated/stable pools carry the ≤ upper-bound flag.
-                const rawBy = new Map();
-                for (const rp of (store.tlaSnapshot?.pools || [])) rawBy.set(`${rp.name}|${rp.dex || 'Astroport'}`, rp);
-                const dupSeen = new Set();
-                for (const t of [...store.tlaPools, ...(store.tlaInactivePools || [])]) {
-                    const key = `${t.name}|${t.dex}`;
-                    const v = effBy.get(key);
-                    if (v) {
-                        t.efficiency = v.efficiency || 0;
-                        t.vol_4ep_avg = v.vol_4ep_avg || 0;
-                        t.liq_4ep_avg = v.liq_4ep_avg || 0;
-                    }
-                    t.adaoDeposit = treasNon.get(key) ?? (nameCount[t.name] === 1 ? treasNon.get(t.name) : 0) ?? 0;
-                    t.adaoDepositAmp = treasAmp.get(key) ?? (nameCount[t.name] === 1 ? treasAmp.get(t.name) : 0) ?? 0;
-                    const rp = rawBy.get(key);
-                    if (rp?.lp_health?.asset_0 && rp?.lp_health?.asset_1) {
-                        const s0 = rp.lp_health.asset_0.usd_value || 0, s1 = rp.lp_health.asset_1.usd_value || 0;
-                        const side = Math.min(s0, s1);
-                        if (side > 0) {
-                            t.slipPct = 1000 / (side + 1000) * 100;
-                            t.slipCurved = rp.dex_subtype === 'concentrated' || rp.dex_subtype === 'stable';
-                        }
-                    }
-                    const dk = `${key}|${Math.round(t.tla_staked || 0)}`;
-                    if (t.tla_staked > 0 && dupSeen.has(dk)) t._dupGauge = true; else dupSeen.add(dk);
-                }
-            } catch (err) { console.warn('tlaPools join:', err); }
 
             // === Build DAO object from TREASURY (not aggregated members) ===
             // The aDAO tab shows the aDAO Core treasury wallet — same as the old
@@ -5148,1125 +4930,10 @@
         return false;
     }
 
-
-    // ============================================================
-    // COMMUNITY WATCH (Stage C1, 2026-07) — stale VP + take-rate care boards
-    // ============================================================
-    function renderCommunityWatch() {
-        const staleRows = document.getElementById('stale-vp-rows');
-        if (!staleRows) return;
-        const members = getAllSelectableMembers();
-        if (!members.length) {
-            staleRows.innerHTML = '<div class="text-gray-600 text-sm">Participants feed unavailable.</div>';
-            const tr = document.getElementById('take-rate-rows');
-            if (tr) tr.innerHTML = '<div class="text-gray-600 text-sm">Participants feed unavailable.</div>';
-            return;
-        }
-        const s = (m) => m.summary || {};
-        const shortAddr = (w) => w.slice(0, 8) + '\u2026' + w.slice(-4);
-        // Registered handle AND address together — a handle is only contactable if
-        // you can also verify which wallet it is.
-        const who = (w) => {
-            const n = store.nameByWallet?.get(w);
-            return n
-                ? `${n} <span class="text-[9px] text-gray-600 mono">${shortAddr(w)}</span> ${walletBadges(w)}`
-                : `<span class="mono">${shortAddr(w)}</span> ${walletBadges(w)}`;
-        };
-        const selected = store.selectedMemberWallet || null;
-
-        // ---- system stale-VP meter + pie header chip
-        let cur = 0, pot = 0;
-        for (const m of members) { cur += s(m).current_vp_human || 0; pot += s(m).potential_vp_human || 0; }
-        const gap = Math.max(0, pot - cur);
-        const gapPct = pot > 0 ? gap / pot * 100 : 0;
-        const chip = document.getElementById('stale-vp-chip');
-        if (chip) chip.textContent = `${fmtNum(gap)} VP recoverable \u00b7 ${gapPct.toFixed(1)}% of potential`;
-        const pieChip = document.getElementById('chart-vp-potential');
-        if (pieChip && gap > 1000) {
-            pieChip.textContent = `+${fmtNum(gap)} recoverable if locks adjusted`;
-            pieChip.classList.remove('hidden');
-        }
-        const meter = document.getElementById('stale-vp-meter');
-        if (meter) {
-            const curPct = pot > 0 ? cur / pot * 100 : 0;
-            meter.innerHTML = `
-                <div class="flex items-end justify-between text-[10px] mono mb-1">
-                    <span class="text-cyan-300">${fmtNum(cur)} VP live today</span>
-                    <span class="text-gray-500">${fmtNum(pot)} VP if all locks adjusted</span>
-                </div>
-                <div class="h-3 rounded-full bg-white/5 overflow-hidden flex">
-                    <div class="h-full bg-gradient-to-r from-cyan-500/70 to-cyan-300/80" style="width:${curPct.toFixed(1)}%" title="Live VP: ${fmtNum(cur)}"></div>
-                    <div class="h-full bg-amber-500/40" style="width:${(100 - curPct).toFixed(1)}%" title="Stale (recoverable by adjusting locks): ${fmtNum(gap)}"></div>
-                </div>
-                <div class="text-[9px] text-gray-600 mt-1">amber = decayed power that snaps back the moment a lock is adjusted \u00b7 electorate-wide, ${members.length} tracked wallets</div>`;
-        }
-
-        // ---- stale wallets: full expandable list, selected wallet highlighted + located
-        const stale = members
-            .map(m => ({ m, gap: s(m).vp_gap_human || 0, cur: s(m).current_vp_human || 0, pot: s(m).potential_vp_human || 0 }))
-            .filter(x => x.gap > 1000)
-            .sort((a, b) => b.gap - a.gap);
-        const staleShowAll = !!store.staleExpanded;
-        const staleShown = staleShowAll ? stale : stale.slice(0, 6);
-        const staleRowHtml = (x, i) => {
-            const isYou = selected && x.m.wallet === selected;
-            const pctOfPot = x.pot > 0 ? (x.gap / x.pot * 100) : 0;
-            return `
-            <div class="flex items-center justify-between p-2 rounded-lg ${isYou ? 'bg-amber-500/[0.07] border border-amber-500/25' : 'bg-white/[0.02] hover:bg-white/[0.04]'} cursor-pointer" onclick="selectMemberFromBoard('${x.m.wallet}')" title="Click to view this wallet across the page">
-                <div class="flex items-center gap-2 min-w-0">
-                    <span class="w-6 h-6 rounded flex items-center justify-center text-xs font-bold shrink-0 ${i < 3 ? `rank-${i + 1}` : 'bg-white/10'}">${i + 1}</span>
-                    <div class="flex flex-col min-w-0">
-                        <span class="text-sm font-medium truncate">${who(x.m.wallet)}${isYou ? ' <span class="text-[8px] px-1 py-px rounded bg-amber-500/25 text-amber-300 font-semibold">SELECTED</span>' : ''}</span>
-                        <span class="text-[9px] text-gray-600">${fmtNum(x.cur)} \u2192 ${fmtNum(x.pot)} VP if adjusted</span>
-                    </div>
-                </div>
-                <div class="text-right shrink-0"><span class="mono text-sm text-amber-300 font-semibold">+${fmtNum(x.gap)}</span><div class="text-[9px] text-gray-600">${pctOfPot.toFixed(0)}% stale</div></div>
-            </div>`;
-        };
-        let staleFooter = '';
-        if (selected) {
-            const idx = stale.findIndex(x => x.m.wallet === selected);
-            staleFooter = idx >= 0
-                ? `<div class="text-[10px] text-amber-300/80 pt-1">${displayName(selected)} is #${idx + 1} of ${stale.length} \u2014 ${fmtNum(stale[idx].gap)} VP waiting to be reclaimed.</div>`
-                : `<div class="text-[10px] text-emerald-400/80 pt-1">${displayName(selected)} has no meaningful stale VP \u2014 locks are fresh. <i class="fas fa-check text-[9px]"></i></div>`;
-        }
-        staleRows.innerHTML = (staleShown.length ? staleShown.map(staleRowHtml).join('') : '<div class="text-gray-600 text-sm">No meaningful stale VP right now \u2014 the electorate is fresh.</div>')
-            + (stale.length > 6 ? `<div class="text-center pt-1"><button type="button" class="text-[10px] px-3 py-1 rounded-full bg-white/5 text-gray-400 hover:text-amber-300 font-medium" onclick="toggleStaleExpand()">${staleShowAll ? 'show top 6 only' : `show all ${stale.length} wallets`} <i class="fas fa-chevron-${staleShowAll ? 'up' : 'down'} text-[8px] ml-1"></i></button></div>` : '')
-            + staleFooter;
-
-        // ---- take-rate watch: full expandable list, same treatment
-        const trSummary = document.getElementById('take-rate-summary');
-        const trRows = document.getElementById('take-rate-rows');
-        if (!trRows) return;
-        let totInactive = 0, totExposure = 0;
-        for (const m of members) { totInactive += s(m).inactive_lp_usd || 0; totExposure += s(m).inactive_take_exposure_usd || 0; }
-        if (trSummary) trSummary.innerHTML = totInactive > 0.5
-            ? `<div class="text-xs mono"><span class="text-red-400 font-semibold">${fmt$(totInactive)}</span><span class="text-gray-500"> parked in inactive pools \u00b7 </span><span class="text-red-300">${fmt$(totExposure)}</span><span class="text-gray-500"> take-rate exposure</span></div>`
-            : `<div class="text-xs text-gray-500">Nothing parked in inactive pools right now.</div>`;
-        const victims = members
-            .map(m => ({ m, usd: s(m).inactive_lp_usd || 0, exp: s(m).inactive_take_exposure_usd || 0 }))
-            .filter(x => x.usd > 1)
-            .sort((a, b) => b.usd - a.usd);
-        const named = victims.filter(v => store.nameByWallet?.get(v.m.wallet));
-        const takeShowAll = !!store.takeExpanded;
-        const takeShown = takeShowAll ? victims : victims.slice(0, 5);
-        const takeRowHtml = (x, i) => {
-            const isYou = selected && x.m.wallet === selected;
-            return `
-            <div class="flex items-center justify-between p-2 rounded-lg ${isYou ? 'bg-amber-500/[0.07] border border-amber-500/25' : 'bg-white/[0.02] hover:bg-white/[0.04]'} cursor-pointer" onclick="selectMemberFromBoard('${x.m.wallet}')" title="Click to view this wallet across the page">
-                <div class="flex items-center gap-2 min-w-0">
-                    <span class="w-6 h-6 rounded flex items-center justify-center text-xs font-bold shrink-0 ${i < 3 ? `rank-${i + 1}` : 'bg-white/10'}">${i + 1}</span>
-                    <div class="flex flex-col min-w-0">
-                        <span class="text-sm font-medium truncate">${who(x.m.wallet)}${isYou ? ' <span class="text-[8px] px-1 py-px rounded bg-amber-500/25 text-amber-300 font-semibold">SELECTED</span>' : ''}</span>
-                        <span class="text-[9px] text-gray-600">${fmt$(x.exp)} being taken</span>
-                    </div>
-                </div>
-                <span class="mono text-sm text-red-300 font-semibold shrink-0">${fmt$(x.usd)}</span>
-            </div>`;
-        };
-        let takeFooter = '';
-        if (victims.length) {
-            takeFooter = named.length
-                ? `<div class="text-[10px] text-gray-600 pt-1">${named.length} wallet${named.length === 1 ? ' has' : 's have'} a registered handle \u2014 reachable for a friendly heads-up.</div>`
-                : '<div class="text-[10px] text-gray-600 pt-1">None of these wallets have a registered handle yet \u2014 nothing to contact. Registering a name (PFPK) is how the community can reach you if this ever shows your wallet.</div>';
-            if (selected) {
-                const idx = victims.findIndex(x => x.m.wallet === selected);
-                takeFooter += idx >= 0
-                    ? `<div class="text-[10px] text-red-300/90 pt-1">${displayName(selected)} is #${idx + 1} \u2014 ${fmt$(victims[idx].usd)} parked in inactive pools. Worth pulling.</div>`
-                    : `<div class="text-[10px] text-emerald-400/80 pt-1">${displayName(selected)} has nothing being eaten by the take rate. <i class="fas fa-check text-[9px]"></i></div>`;
-            }
-        }
-        trRows.innerHTML = (takeShown.length ? takeShown.map(takeRowHtml).join('') : '<div class="text-gray-600 text-sm">No wallets losing to the take rate right now \u2014 exactly how it should look.</div>')
-            + (victims.length > 5 ? `<div class="text-center pt-1"><button type="button" class="text-[10px] px-3 py-1 rounded-full bg-white/5 text-gray-400 hover:text-red-300 font-medium" onclick="toggleTakeExpand()">${takeShowAll ? 'show top 5 only' : `show all ${victims.length} wallets`} <i class="fas fa-chevron-${takeShowAll ? 'up' : 'down'} text-[8px] ml-1"></i></button></div>` : '')
-            + takeFooter;
-    }
-
-    function toggleStaleExpand() { store.staleExpanded = !store.staleExpanded; renderCommunityWatch(); }
-    function toggleTakeExpand() { store.takeExpanded = !store.takeExpanded; renderCommunityWatch(); }
-
-    // ============================================================
-    // SLIPPAGE SIMULATOR (Stage B3, 2026-07)
-    // ============================================================
-    function renderSlippageSim() {
-        const rowsEl = document.getElementById('slip-rows');
-        if (!rowsEl) return;
-        if (!store.slipAmount) store.slipAmount = 100;
-        if (!store.slipDir) store.slipDir = 'toLuna';
-        const amt = store.slipAmount;
-        const raw = (store.tlaSnapshot?.pools || []).filter(p =>
-            p.status === 'active' && p.is_lp_pair && p.lp_health?.asset_0 && p.lp_health?.asset_1);
-        if (!raw.length) { rowsEl.innerHTML = '<div class="text-gray-600 text-sm">Reserve data unavailable.</div>'; return; }
-
-        const member = getSelectedMember();
-        const chipEl = document.getElementById('slip-member-chip');
-        const myPools = new Map();
-        if (member) {
-            for (const lp of (member.lp_positions || [])) {
-                myPools.set(lp.pool_name, (myPools.get(lp.pool_name) || 0) + (lp.estimated_position_usd || 0));
-            }
-            if (chipEl) { chipEl.textContent = `${displayName(member.wallet)}'s pools shown first`; chipEl.classList.remove('hidden'); }
-        } else if (chipEl) chipEl.classList.add('hidden');
-
-        // Direction-aware constant-product impact. Selling X INTO a pool adds X to
-        // the reserve of the asset being sold: impact = trade / (sold-side reserve + trade).
-        //   toLuna   → selling the paired asset (input side = non-LUNA reserve)
-        //   fromLuna → selling LUNA            (input side = LUNA reserve)
-        // Pools with no LUNA leg can't map to the toggle — they show the WORST
-        // direction and carry a flag, never a silently wrong number.
-        const calc = (p, tradeUsd) => {
-            const a0 = p.lp_health.asset_0, a1 = p.lp_health.asset_1;
-            const s0 = a0.usd_value || 0, s1 = a1.usd_value || 0;
-            if (s0 <= 0 || s1 <= 0) return null;
-            const lunaIs0 = a0.symbol === 'LUNA', lunaIs1 = a1.symbol === 'LUNA';
-            let side, noLuna = false, sellSym;
-            if (lunaIs0 || lunaIs1) {
-                const lunaSide = lunaIs0 ? s0 : s1;
-                const otherSide = lunaIs0 ? s1 : s0;
-                if (store.slipDir === 'fromLuna') { side = lunaSide; sellSym = 'LUNA'; }
-                else { side = otherSide; sellSym = lunaIs0 ? a1.symbol : a0.symbol; }
-            } else {
-                side = Math.min(s0, s1); noLuna = true;
-                sellSym = (s0 <= s1 ? a0.symbol : a1.symbol);
-            }
-            return { impact: tradeUsd / (side + tradeUsd) * 100, noLuna, sellSym };
-        };
-        const gradeOf = (pct) => pct < 0.5 ? 'A' : pct < 1 ? 'B' : pct < 3 ? 'C' : pct < 8 ? 'D' : 'F';
-        const gradeCls = (g) => g === 'A' ? 'bg-emerald-500/20 text-emerald-300' : g === 'B' ? 'bg-cyan-500/20 text-cyan-300' : g === 'C' ? 'bg-yellow-500/20 text-yellow-300' : g === 'D' ? 'bg-orange-500/20 text-orange-300' : 'bg-red-500/20 text-red-300';
-
-        const rows = raw.map(p => {
-            const c = calc(p, amt);
-            if (!c) return null;
-            const curved = p.dex_subtype === 'concentrated' || p.dex_subtype === 'stable';
-            const myUsd = myPools.get(p.name) || 0;
-            const exit = myUsd > 1 ? calc(p, myUsd / 2) : null;   // convert position ≈ swap half
-            return { p, ...c, curved, myUsd, exit };
-        }).filter(Boolean).sort((a, b) => a.impact - b.impact);
-
-        const rowHtml = (r) => {
-            const g = gradeOf(r.impact);
-            const dexTag = r.p.dex?.includes('Astro') ? 'Astro' : r.p.dex?.includes('Skeleton') ? 'Skel' : r.p.dex || '';
-            const exitHtml = r.exit
-                ? `<span class="text-[9px] text-amber-300/90 mono" title="Approx. cost of converting your ${fmt$(r.myUsd)} position to a single asset (half swapped through this pool)">exit ${r.curved ? '\u2264' : ''}${r.exit.impact < 0.05 ? '<0.05' : r.exit.impact.toFixed(2)}%</span>`
-                : '';
-            const dirNote = r.noLuna
-                ? `<span class="text-[8px] text-purple-300/80" title="No LUNA leg in this pool — the direction toggle doesn't apply; worst direction shown (selling ${r.sellSym}).">\u00b1 no LUNA leg</span>`
-                : '';
-            return `
-            <div class="flex items-center gap-2 py-1 border-b border-white/[0.03]">
-                <span class="w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold shrink-0 ${gradeCls(g)}">${g}</span>
-                <span class="text-xs font-medium truncate" style="min-width:110px">${r.p.name}</span>
-                <span class="text-[8px] text-gray-600 shrink-0">${dexTag}${r.curved ? ' \u00b7 ' + r.p.dex_subtype : ''}</span>
-                ${dirNote}
-                <span class="ml-auto mono text-xs ${r.impact < 1 ? 'text-gray-300' : r.impact < 3 ? 'text-yellow-300' : 'text-red-400'}" title="${r.curved ? 'Concentrated/stable curve: true impact is lower than this xyk bound. ' : 'Constant-product impact from live reserves. '}Selling ${fmt$(amt)} of ${r.sellSym} into this pool.">${r.curved ? '\u2264' : ''}${r.impact < 0.05 ? '<0.05' : r.impact.toFixed(2)}%</span>
-                ${exitHtml}
-            </div>`;
-        };
-        const sectionHead = (icon, label, note) => `
-            <div class="flex items-center gap-2 pt-1 md:col-span-2">
-                <span class="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">${icon}${label}</span>
-                <div class="flex-1 border-t border-white/5"></div>
-                ${note ? `<span class="text-[9px] text-gray-600">${note}</span>` : ''}
-            </div>`;
-
-        const mine = rows.filter(r => r.myUsd > 1);
-        const rest = rows.filter(r => !(r.myUsd > 1));
-        const showAll = !!store.slipExpanded;
-        const restShown = showAll ? rest : rest.slice(0, 5);
-        let html = '';
-        if (mine.length) {
-            html += sectionHead('<i class="fas fa-star text-amber-400 text-[9px] mr-1"></i>', `${displayName(member.wallet)}'s pools (${mine.length})`, 'with personal exit cost');
-            html += mine.map(rowHtml).join('');
-            html += sectionHead('', `All pools \u2014 best rates first`, '');
-        }
-        html += restShown.map(rowHtml).join('');
-        if (rest.length > 5) {
-            html += `<div class="md:col-span-2 text-center pt-1">
-                <button type="button" class="text-[10px] px-3 py-1 rounded-full bg-white/5 text-gray-400 hover:text-cyan-300 font-medium" onclick="toggleSlipExpand()">
-                    ${showAll ? 'show top 5 only' : `show all ${rest.length} pools`} <i class="fas fa-chevron-${showAll ? 'up' : 'down'} text-[8px] ml-1"></i>
-                </button></div>`;
-        }
-        rowsEl.innerHTML = html;
-    }
-
-    function toggleSlipExpand() {
-        store.slipExpanded = !store.slipExpanded;
-        renderSlippageSim();
-    }
-
-    function wireSlippageSim() {
-        const card = document.getElementById('slippage-sim-card');
-        if (!card || card.dataset.wired) return;
-        card.dataset.wired = '1';
-        const setOn = (btns, on) => btns.forEach(b => {
-            const isOn = b === on;
-            b.classList.toggle('bg-cyan-500/20', isOn); b.classList.toggle('text-cyan-300', isOn);
-            b.classList.toggle('bg-white/5', !isOn); b.classList.toggle('text-gray-400', !isOn);
-        });
-        const amtBtns = [...card.querySelectorAll('.slip-amt-btn')];
-        amtBtns.forEach(btn => btn.addEventListener('click', () => {
-            store.slipAmount = parseFloat(btn.dataset.slipamt);
-            setOn(amtBtns, btn);
-            const inp = document.getElementById('slip-custom'); if (inp) inp.value = '';
-            renderSlippageSim();
-        }));
-        // default highlight: $100
-        const def = amtBtns.find(b => b.dataset.slipamt === '100');
-        if (def) setOn(amtBtns, def);
-        const dirBtns = [...card.querySelectorAll('.slip-dir-btn')];
-        dirBtns.forEach(btn => btn.addEventListener('click', () => {
-            store.slipDir = btn.dataset.slipdir;
-            setOn(dirBtns, btn);
-            renderSlippageSim();
-        }));
-        const inp = document.getElementById('slip-custom');
-        if (inp) inp.addEventListener('input', () => {
-            const v = parseFloat(inp.value);
-            if (v > 0) {
-                store.slipAmount = v;
-                setOn(amtBtns, null);
-                renderSlippageSim();
-            }
-        });
-    }
-
-    // ============================================================
-    // LP GRADES (Stage B2, 2026-07) — vote-worthiness for system health
-    // ============================================================
-    function renderLpGrades() {
-        const tableEl = document.getElementById('grades-table');
-        if (!tableEl) return;
-        const pools = (store.data?.vote?.pools || []).filter(p => p.is_active);
-        if (!pools.length) {
-            tableEl.innerHTML = '<div class="text-gray-600 text-sm">Pool data unavailable.</div>';
-            return;
-        }
-
-        // ---- per-pool real trend from pool-status-history (deduped, same rule as
-        // the liquidity-growth panel: one row per pool_address)
-        const trendByGauge = new Map();
-        (() => {
-            const hist = store.poolStatusHistory;
-            const heps = (hist?.epochs || []).slice().sort((a, b) => a - b);
-            if (heps.length < 2) return;
-            const first = String(heps[0]), latest = String(heps[heps.length - 1]);
-            const seen = new Set(); const dp = [];
-            for (const p of (hist.pools || [])) {
-                const k = p.pool_address || `${p.name}|${p.dex || ''}|${p.gauge_pool_id || ''}`;
-                if (seen.has(k)) continue; seen.add(k); dp.push(p);
-            }
-            const px = {};
-            for (const p of dp) {
-                const ed = p.epochs?.[latest]; if (!ed) continue;
-                if (ed.a0_sym && ed.a0_px) px[ed.a0_sym] = ed.a0_px;
-                if (ed.a1_sym && ed.a1_px) px[ed.a1_sym] = ed.a1_px;
-            }
-            const realOf = (ed) => !ed ? 0 : ['a0', 'a1'].reduce((s, k) => s + ((ed[k + '_amt'] || 0) * (px[ed[k + '_sym']] || 0)), 0);
-            for (const p of dp) {
-                const f = realOf(p.epochs?.[first]), l = realOf(p.epochs?.[latest]);
-                if (p.gauge_pool_id && f > 1000) trendByGauge.set(p.gauge_pool_id, (l - f) / f * 100);
-            }
-        })();
-
-        // ---- support-balance baseline: median $ staked per 1M VP across scored pools
-        const ratios = pools.filter(p => (p.vp || 0) > 1000 && (p.tla_staked || 0) > 0)
-            .map(p => p.tla_staked / (p.vp / 1e6)).sort((a, b) => a - b);
-        const medianRatio = ratios.length ? ratios[Math.floor(ratios.length / 2)] : 0;
-
-        const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-        const logScore = (v, lo, hi) => v <= lo ? 0 : v >= hi ? 100 : (Math.log10(v / lo) / Math.log10(hi / lo)) * 100;
-
-        const dispName = (n) => {
-            if (!n) return '—';
-            if (n.startsWith('cw20:') || n.startsWith('native:')) {
-                const addr = n.split(':')[1] || n;
-                return `<span title="Unresolved pool name — raw gauge id ${n}">${addr.slice(0, 10)}…${addr.slice(-4)}</span>`;
-            }
-            return n;
-        };
-        // Duplicate-gauge detection: two gauges, same name+dex, same staked value =
-        // one pool counted twice at the gauge level (a known snapshot-side issue).
-        // Keep the higher-VP row as the real one; tag the rest.
-        const dupSeen = new Map();
-        const graded = pools.map(p => {
-            const isSingle = !p.dex || p.dex === 'Single' || (p.bucket === 'SINGLE');
-            const depthScore = isSingle ? null : logScore(p.depth || 0, 5000, 500000);
-            const util = p.historical?.efficiency || 0;      // weekly turnover ratio
-            // Trust rule (SPEC-grading-and-dex-data §6): SkeletonSwap has NO trustworthy
-            // volume source — SS pools must not be graded on a fabricated utilization.
-            // They skip the component entirely (weights renormalize), same as singles.
-            const isSS = (p.dex || '').includes('Skeleton');
-            const utilScore = (isSingle || isSS) ? null : clamp((util / 0.5) * 100, 0, 100);  // 50%/wk turnover = full marks
-            // support balance
-            let balScore = 50, balTag = 'balanced', ratio = null;
-            if ((p.vp || 0) > 1000 && medianRatio > 0) {
-                ratio = (p.tla_staked || 0) / (p.vp / 1e6);
-                const x = ratio / medianRatio;               // >1 = underpaid, <1 = overweighted
-                if (x >= 1) { const over = Math.min(x, 6); balScore = 100 - clamp((over - 1) * 12, 0, 45); balTag = x > 1.8 ? 'underpaid' : 'balanced'; }
-                else { balScore = 100 - clamp((1 / Math.max(x, 0.05) - 1) * 22, 0, 80); balTag = x < 0.55 ? 'overweighted' : 'balanced'; }
-            } else if ((p.vp || 0) <= 1000) { balScore = 30; balTag = 'no support'; }
-            const votePct = p.vote_pct || 0;
-            const thrScore = votePct >= 3 ? 100 : votePct >= 1 ? ((votePct - 1) / 2) * 100 : 0;
-            const trend = trendByGauge.has(p.gauge_pool_id) ? trendByGauge.get(p.gauge_pool_id) : null;
-            const trendScore = trend === null ? null : clamp(60 + trend * 2, 0, 100);   // flat=60, +20%→100, −30%→0
-
-            // reweight around missing components
-            const parts = [
-                ['Depth', depthScore, 0.25], ['Utilization', utilScore, 0.25],
-                ['Support balance', balScore, 0.25], ['Threshold safety', thrScore, 0.15],
-                ['Trend', trendScore, 0.10],
-            ].filter(([, v]) => v !== null);
-            const wSum = parts.reduce((s, [, , w]) => s + w, 0);
-            let score = parts.reduce((s, [, v, w]) => s + v * (w / wSum), 0);
-            // Single-asset pools can't demonstrate depth or utilization, so their
-            // composite is capped below A+ — an unproven component shouldn't outrank
-            // pools that earn full marks on all five.
-            if (isSingle) score = Math.min(score, 88);
-            const grade = score >= 90 ? 'A+' : score >= 80 ? 'A' : score >= 70 ? 'B' : score >= 55 ? 'C' : score >= 40 ? 'D' : 'F';
-            let verdict = balTag;
-            if (votePct < 1.4 && votePct > 0) verdict = 'at risk';
-            else if (!isSingle && (p.depth || 0) < 20000) verdict = 'thin';
-            return { p, parts, score, grade, verdict, ratio, trend, isSingle };
-        }).sort((a, b) => b.score - a.score);
-        // second pass: flag lower-VP duplicates (same name|dex|staked)
-        for (const g of graded) {
-            const k = `${g.p.name}|${g.p.dex}|${Math.round(g.p.tla_staked || 0)}`;
-            if (dupSeen.has(k)) { g.verdict = 'duplicate gauge'; }
-            else dupSeen.set(k, g);
-        }
-
-        const chip = document.getElementById('grades-count-chip');
-        if (chip) chip.textContent = `${graded.length} active pools · Epoch ${store.epoch || '—'}`;
-
-        // member-lens markers
-        const alloc = getSelectedMemberAllocations();
-        const myVotes = alloc?.votesByPool || new Map();
-
-        // ---- decision metrics per row (from components already computed)
-        const medVp = (() => { const v = graded.map(g => g.p.vp || 0).filter(x => x > 1000).sort((a, b) => a - b); return v.length ? v[Math.floor(v.length / 2)] : 0; })();
-        for (const g of graded) {
-            const part = (l) => { const p = g.parts.find(x => x[0] === l); return p ? p[1] : null; };
-            const dep = part('Depth'), utl = part('Utilization'), tr = part('Trend');
-            const qParts = [dep, utl, tr].filter(v => v !== null);
-            g.quality = qParts.length ? qParts.reduce((a, b) => a + b, 0) / qParts.length : 50;   // intrinsic pool quality
-            g.ratioX = (g.ratio && medianRatio > 0) ? g.ratio / medianRatio : null;               // liquidity per vote vs median (>1 = underpaid)
-            g.bribeUsd = g.p.bribes?.total || 0;
-            g.votePct = g.p.vote_pct || 0;
-            g.needScore = (g.ratioX && g.ratioX > 1) ? g.quality * Math.min(g.ratioX, 4) : 0;     // deserving × underpaid
-            g.isUnderdog = (utl !== null && utl >= 50 || (g.trend !== null && g.trend > 10)) && (g.p.vp || 0) < medVp && (g.p.tla_staked || 0) >= 5000 && g.verdict !== 'duplicate gauge';
-            g.isBribeTarget = g.bribeUsd < 5 && g.verdict !== 'duplicate gauge' && ((g.votePct > 0 && g.votePct < 2 && (g.p.tla_staked || 0) >= 10000) || (g.ratioX && g.ratioX > 1.6));
-        }
-
-        // plain-language "why" line — the sentence a voter/briber actually needs
-        const whyLine = (g) => {
-            const bits = [];
-            if (g.ratioX && g.ratioX > 1.4) bits.push(`carrying ${g.ratioX.toFixed(1)}\u00d7 the median liquidity per vote \u2014 votes here are underpaid`);
-            if (g.ratioX && g.ratioX < 0.6) bits.push(`only ${g.ratioX.toFixed(1)}\u00d7 median liquidity per vote \u2014 support outruns the pool`);
-            if (g.votePct > 0 && g.votePct < 1.6) bits.push(`${(g.votePct - 1).toFixed(1)}pp above the 1% threshold \u2014 ${fmt$(g.p.tla_staked || 0)} of stake stops earning if it slips`);
-            if (g.isUnderdog) bits.push('small pool doing real work \u2014 an underdog');
-            if (g.bribeUsd < 5 && g.isBribeTarget) bits.push('no bribe pot \u2014 first pot here has zero competition');
-            else if (g.bribeUsd >= 5) bits.push(`${fmt$(g.bribeUsd)} pot live${(g.p.vp || 0) > 1 ? ` at ${fmt$(g.bribeUsd / ((g.p.vp) / 1e6))}/1M VP` : ''}`);
-            if (g.trend !== null && Math.abs(g.trend) >= 15) bits.push(`real liquidity ${g.trend > 0 ? 'up' : 'down'} ${Math.abs(g.trend).toFixed(0)}% over the window`);
-            return bits.slice(0, 2).join(' \u00b7 ');
-        };
-
-        // ---- callouts (unchanged logic, driven from the same rows)
-        const callEl = document.getElementById('grades-callouts');
-        if (callEl) {
-            const underpaid = graded.filter(g => g.verdict === 'underpaid' && g.score >= 55).slice(0, 3);
-            const over = graded.filter(g => g.verdict === 'overweighted').sort((a, b) => (b.p.vp || 0) - (a.p.vp || 0)).slice(0, 3);
-            const li = (g, cls) => `<div class="flex items-center justify-between text-xs py-1"><span class="font-medium">${g.p.name} <span class="text-[9px] text-gray-600">${g.p.dex || ''}</span></span><span class="mono ${cls}">${g.ratio ? fmt$(g.ratio) + '/1M VP' : '\u2014'}</span></div>`;
-            callEl.innerHTML = `
-                <div class="rounded-lg bg-emerald-500/[0.06] border border-emerald-500/20 p-3">
-                    <div class="text-xs font-semibold text-emerald-400 mb-1"><i class="fas fa-hand-point-right mr-1"></i>Votes help most here — underpaid workhorses</div>
-                    <div class="text-[10px] text-gray-500 mb-1">Deep, well-used pools carrying more liquidity per vote than the system median. Support keeps their LPs from leaving.</div>
-                    ${underpaid.length ? underpaid.map(g => li(g, 'text-emerald-400')).join('') : '<div class="text-[11px] text-gray-600">None right now — support looks balanced.</div>'}
-                </div>
-                <div class="rounded-lg bg-amber-500/[0.06] border border-amber-500/20 p-3">
-                    <div class="text-xs font-semibold text-amber-300 mb-1"><i class="fas fa-scale-unbalanced mr-1"></i>Overweighted — votes outrunning liquidity</div>
-                    <div class="text-[10px] text-gray-500 mb-1">Heavy vote support with comparatively little staked liquidity behind it — emissions working below capacity.</div>
-                    ${over.length ? over.map(g => li(g, 'text-amber-300')).join('') : '<div class="text-[11px] text-gray-600">None right now.</div>'}
-                </div>`;
-        }
-
-        // ---- decision views
-        const view = store.gradesView || 'all';
-        const views = {
-            all: {
-                label: 'All pools', icon: 'fa-list',
-                desc: 'Every active pool, best overall grade first.',
-                rows: graded,
-            },
-            needs: {
-                label: 'Needs votes', icon: 'fa-hand-point-right',
-                desc: 'Pools that DESERVE support and aren\u2019t getting it: high intrinsic quality carrying more liquidity per vote than the median. Sorted by how hard your vote works here.',
-                rows: graded.filter(g => g.needScore > 0 && g.verdict !== 'duplicate gauge').sort((a, b) => b.needScore - a.needScore),
-            },
-            underdogs: {
-                label: 'Underdogs', icon: 'fa-seedling',
-                desc: 'Small pools punching above their weight \u2014 real utilization or growth with below-median votes. The discovery list.',
-                rows: graded.filter(g => g.isUnderdog).sort((a, b) => b.quality - a.quality),
-            },
-            bribes: {
-                label: 'Bribe targets', icon: 'fa-sack-dollar',
-                desc: 'For projects and bribers: pools where a pot buys the most \u2014 no current bribe AND either defending real stake near the threshold, or underpaid so votes come cheap. Sorted by the stake a pot protects.',
-                rows: graded.filter(g => g.isBribeTarget).sort((a, b) => (b.p.tla_staked || 0) - (a.p.tla_staked || 0)),
-            },
-            risk: {
-                label: 'At risk', icon: 'fa-triangle-exclamation',
-                desc: 'Near or below the 1% threshold \u2014 the staked money shown stops earning if these slip. Defensive votes belong here.',
-                rows: graded.filter(g => g.votePct > 0 && g.votePct < 2 && g.verdict !== 'duplicate gauge').sort((a, b) => (b.p.tla_staked || 0) - (a.p.tla_staked || 0)),
-            },
-        };
-        const filtersEl = document.getElementById('grades-filters');
-        if (filtersEl) filtersEl.innerHTML = Object.entries(views).map(([k, v]) =>
-            `<button type="button" onclick="setGradesView('${k}')" class="text-[11px] px-3 py-1 rounded-full font-medium ${view === k ? 'bg-cyan-500/20 text-cyan-300' : 'bg-white/5 text-gray-400 hover:text-gray-300'}"><i class="fas ${v.icon} text-[9px] mr-1"></i>${v.label} <span class="text-[9px] opacity-60">${v.rows.length}</span></button>`).join('');
-        const descEl = document.getElementById('grades-view-desc');
-        if (descEl) descEl.textContent = views[view].desc;
-
-        // ---- table
-        const gradeCls = (g) => g.startsWith('A') ? 'bg-emerald-500/20 text-emerald-300' : g === 'B' ? 'bg-cyan-500/20 text-cyan-300' : g === 'C' ? 'bg-yellow-500/20 text-yellow-300' : g === 'D' ? 'bg-orange-500/20 text-orange-300' : 'bg-red-500/20 text-red-300';
-        const verdictChip = (v) => ({
-            'underpaid': '<span class="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400">underpaid — votes help</span>',
-            'overweighted': '<span class="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300">overweighted</span>',
-            'at risk': '<span class="text-[9px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-400">near threshold</span>',
-            'thin': '<span class="text-[9px] px-1.5 py-0.5 rounded bg-gray-500/15 text-gray-400">thin depth</span>',
-            'no support': '<span class="text-[9px] px-1.5 py-0.5 rounded bg-gray-500/15 text-gray-400">no votes</span>',
-            'balanced': '<span class="text-[9px] px-1.5 py-0.5 rounded bg-white/5 text-gray-500">balanced</span>',
-            'duplicate gauge': '<span class="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-300" title="A second gauge pointing at the same pool — the pool is already graded above; this row is the gauge-level shadow (known data issue).">duplicate gauge</span>',
-        }[v] || '');
-        const barLabel = { 'Depth': 'D', 'Utilization': 'U', 'Support balance': 'B', 'Threshold safety': 'T', 'Trend': 'Tr' };
-        const weights = { 'Depth': 0.25, 'Utilization': 0.25, 'Support balance': 0.25, 'Threshold safety': 0.15, 'Trend': 0.10 };
-        const bar = (label, v) => v === null ? '' : `<div class="flex items-center gap-1" title="${label}: ${Math.round(v)}/100 (weight ${Math.round(weights[label] * 100)}%)"><span class="text-[8px] text-gray-600 w-3.5">${barLabel[label]}</span><div class="w-10 h-1 rounded-full bg-white/10 overflow-hidden"><div class="h-full rounded-full ${v >= 70 ? 'bg-emerald-400/70' : v >= 40 ? 'bg-yellow-400/70' : 'bg-red-400/70'}" style="width:${clamp(v, 2, 100)}%"></div></div></div>`;
-        const dexTag = (dex) => dex?.includes('Astro')
-            ? '<span class="text-[9px] px-1 py-0.5 rounded bg-blue-500/20 text-blue-400">Astro</span>'
-            : dex?.includes('Skeleton')
-                ? '<span class="text-[9px] px-1 py-0.5 rounded bg-emerald-500/20 text-emerald-400">Skeleton</span>'
-                : '<span class="text-[9px] px-1 py-0.5 rounded bg-purple-500/20 text-purple-300">Single</span>';
-
-        tableEl.innerHTML = views[view].rows.map((g, i) => {
-            const mine = g.p.gauge_pool_id && myVotes.has(g.p.gauge_pool_id);
-            const why = view === 'all' ? '' : whyLine(g);
-            const detailId = `grade-detail-${i}`;
-            return `
-            <div class="rounded-lg ${mine ? 'bg-amber-500/[0.05] border border-amber-500/15' : 'bg-white/[0.02] hover:bg-white/[0.04]'} cursor-pointer" data-gpool="${(g.p.name + '|' + (g.p.dex || '')).replace(/"/g, '&quot;')}" onclick="document.getElementById('${detailId}')?.classList.toggle('hidden')">
-                <div class="flex items-center gap-3 p-2">
-                    <span class="w-9 h-7 rounded flex items-center justify-center text-sm font-bold shrink-0 ${gradeCls(g.grade)}">${g.grade}</span>
-                    <div class="flex flex-col min-w-0 shrink-0" style="width:170px">
-                        <span class="text-sm font-medium truncate">${mine ? '<i class="fas fa-star text-amber-400 text-[10px] mr-1" title="Your selected wallet votes here"></i>' : ''}${dispName(g.p.name)}</span>
-                        <div class="flex items-center gap-1">${dexTag(g.p.dex)}<span class="text-[9px] text-gray-600 uppercase">${g.p.bucket || ''}</span></div>
-                    </div>
-                    <div class="hidden md:flex items-center gap-2 shrink-0">${g.parts.map(([l, v]) => bar(l, v)).join('')}</div>
-                    <div class="flex-1 hidden sm:block text-right">${verdictChip(g.verdict)}</div>
-                    <div class="text-right shrink-0" style="min-width:118px">
-                        <div class="mono text-xs text-gray-300">${fmt$(g.p.tla_staked || 0)} staked</div>
-                        <div class="text-[9px] text-gray-600">${fmtNum(g.p.vp || 0)} VP${g.trend !== null ? ` \u00b7 <span class="${g.trend >= 0 ? 'text-emerald-500/80' : 'text-red-500/80'}">${g.trend >= 0 ? '+' : ''}${g.trend.toFixed(0)}% real</span>` : ''}</div>
-                    </div>
-                </div>
-                ${why ? `<div class="px-3 pb-2 -mt-1 text-[10px] text-cyan-300/80"><i class="fas fa-angles-right text-[8px] mr-1"></i>${why}</div>` : ''}
-                <div id="${detailId}" class="hidden px-3 pb-2 pt-1 border-t border-white/5 grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-1 text-[10px]">
-                    <div><span class="text-gray-600">Composite:</span> <span class="mono text-gray-300">${Math.round(g.score)}/100</span></div>
-                    <div><span class="text-gray-600">Liquidity per vote:</span> <span class="mono text-gray-300">${g.ratio ? fmt$(g.ratio) + '/1M VP' : '\u2014'}</span>${g.ratioX ? ` <span class="${g.ratioX > 1 ? 'text-emerald-400/80' : 'text-amber-300/80'}">(${g.ratioX.toFixed(1)}\u00d7 median)</span>` : ''}</div>
-                    <div><span class="text-gray-600">Bucket share:</span> <span class="mono text-gray-300">${g.votePct ? g.votePct.toFixed(2) + '%' : '\u2014'}</span> <span class="text-gray-600">(1% = threshold)</span></div>
-                    <div><span class="text-gray-600">Bribe pot:</span> <span class="mono ${g.bribeUsd >= 5 ? 'text-amber-300' : 'text-gray-500'}">${g.bribeUsd >= 5 ? fmt$(g.bribeUsd) : 'none'}</span></div>
-                    ${g.parts.map(([l, v]) => `<div><span class="text-gray-600">${l}:</span> <span class="mono ${v >= 70 ? 'text-emerald-400/90' : v >= 40 ? 'text-yellow-300/90' : 'text-red-400/90'}">${Math.round(v)}</span><span class="text-gray-700">/100 \u00b7 w${Math.round(weights[l] * 100)}%</span></div>`).join('')}
-                    <div class="col-span-2"><span class="text-gray-600">DEX depth:</span> <span class="mono text-gray-300">${fmt$(g.p.depth || 0)}</span></div>
-                </div>
-            </div>`;
-        }).join('') || '<div class="text-gray-600 text-sm py-3">No pools match this view right now \u2014 that itself is a healthy sign.</div>';
-    }
-
-    // Click-through: any pool name opens that pool's grade card (expanded, scrolled,
-    // briefly highlighted). Falls back to name-only match when dex strings differ.
-    function openGradeFor(name, dex) {
-        store.gradesView = 'all';
-        switchToTab('grades');
-        setTimeout(() => {
-            const sel = `[data-gpool="${(name + '|' + (dex || '')).replace(/"/g, '\\"')}"]`;
-            let row = document.querySelector(sel) || document.querySelector(`[data-gpool^="${name.replace(/"/g, '\\"')}|"]`);
-            if (!row) return;
-            const detail = row.querySelector('[id^="grade-detail-"]');
-            if (detail) detail.classList.remove('hidden');
-            row.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            row.style.outline = '1px solid rgba(34,211,238,0.6)';
-            setTimeout(() => { row.style.outline = ''; }, 2500);
-        }, 250);
-    }
-
-    function setGradesView(v) {
-        store.gradesView = v;
-        renderLpGrades();
-    }
-
-    // ============================================================
-    // COMMUNITY LAYER (Stage A, 2026-07)
-    // Identity registry (names across aDAO / allies / TLA lockers),
-    // community pie mode, bounty board, epoch movers, people boards.
-    // ============================================================
-
-    // Merged selectable roster: aDAO members (rich objects w/ NFT fields) first,
-    // then every remaining TLA participant. Deduped by wallet, aDAO object wins.
-    // Both feeds share the capture-engine shape (summary/voting/lp_positions/...).
-    function getAllSelectableMembers() {
-        if (store._allMembersCache) return store._allMembersCache;
-        const byWallet = new Map();
-        for (const m of (store.adaoPositions?.members || [])) {
-            if (m?.wallet) byWallet.set(m.wallet, m);
-        }
-        for (const m of (store.tlaParticipants?.members || [])) {
-            if (m?.wallet && !byWallet.has(m.wallet)) byWallet.set(m.wallet, m);
-        }
-        store._allMembersCache = [...byWallet.values()];
-        return store._allMembersCache;
-    }
-
-    // Wallet → registered display name, from every source that carries names:
-    // aDAO members, TLA participants, ally rosters. First writer wins per wallet
-    // (sources agree in practice — they all resolve via the same name services).
-    function buildIdentityRegistry() {
-        store._allMembersCache = null;    // invalidate roster cache on data reload
-        const names = new Map();
-        const put = (w, n) => { if (w && n && !names.has(w)) names.set(w, n); };
-        for (const m of (store.adaoPositions?.members || [])) put(m.wallet, m.name);
-        for (const m of (store.tlaParticipants?.members || [])) put(m.wallet, m.name);
-        for (const ally of (store.adaoAllies?.allies || [])) {
-            for (const m of (ally.members || [])) put(m.wallet, m.name);
-        }
-        store.nameByWallet = names;
-
-        // aDAO staker roster (org tla-core). DAO-owned wallets are the DAO itself,
-        // not "members" — exclude them from member-group math.
-        const daoContracts = new Set(Object.values(store.orgNftSummary?.contracts || {}));
-        const treasuryWallet = store.adaoPositions?.treasury?.wallet;
-        if (treasuryWallet) daoContracts.add(treasuryWallet);
-        const stakers = new Set();
-        for (const s of (store.orgNftSummary?.daodao_stakers || [])) {
-            if (s?.address && !daoContracts.has(s.address)) stakers.add(s.address);
-        }
-        store.adaoStakerSet = stakers;
-
-        // Registered allies: named members of Pixel Lions / Lion DAO plus named
-        // TLA lockers who aren't aDAO stakers. "Registered" = has a resolvable name.
-        const allySet = new Set();
-        for (const ally of (store.adaoAllies?.allies || [])) {
-            for (const m of (ally.members || [])) {
-                if (m?.wallet && m.name && !stakers.has(m.wallet)) allySet.add(m.wallet);
-            }
-        }
-        for (const m of (store.tlaParticipants?.members || [])) {
-            if (m?.wallet && m.name && !stakers.has(m.wallet) && !daoContracts.has(m.wallet)) allySet.add(m.wallet);
-        }
-        store.allyRegisteredSet = allySet;
-        console.log(`Identity registry: ${names.size} names, ${stakers.size} aDAO stakers, ${allySet.size} registered allies`);
-    }
-
-    function displayName(wallet) {
-        if (!wallet) return '—';
-        const n = store.nameByWallet?.get(wallet);
-        return n || (wallet.slice(0, 10) + '…' + wallet.slice(-4));
-    }
-
-    // Per-wallet VP (locks VP + fixed = the Eris UI display value). Participants
-    // feed first; org member-data as fallback for wallets it alone carries.
-    function getWalletVpHeld(wallet) {
-        const m = getAllSelectableMembers().find(x => x.wallet === wallet);
-        const v = m?.summary?.display_voting_power_human;
-        if (v > 0) return v;
-        if (!store._orgVpByWallet) {
-            const map = new Map();
-            for (const w of (store.orgMemberData?.wallets || [])) {
-                if (w?.address) map.set(w.address, w.total_vp_held_human || 0);
-            }
-            store._orgVpByWallet = map;
-        }
-        return store._orgVpByWallet.get(wallet) || 0;
-    }
-
-    // Community pie slices. Scale note: group sums are escrow-held VP while the pie
-    // total is the voted-VP scale — same accepted approximation as the single-member
-    // slice in Standard mode, and each group is capped so "Other" can never go
-    // negative. Cap order: members first, then allies.
-    function computeCommunitySlices(totalVP, votionVP, adaoTreasuryVP) {
-        if (!store.adaoStakerSet && !store.allyRegisteredSet) return null;
-        const selected = store.selectedMemberWallet || null;
-        const selectedVp = selected ? Math.max(0, getWalletVpHeld(selected)) : 0;
-
-        let membersVp = 0;
-        for (const w of (store.adaoStakerSet || [])) {
-            if (w === selected) continue;
-            membersVp += getWalletVpHeld(w);
-        }
-        let alliesVp = 0;
-        for (const w of (store.allyRegisteredSet || [])) {
-            if (w === selected) continue;
-            alliesVp += getWalletVpHeld(w);
-        }
-
-        let remainder = Math.max(0, totalVP - votionVP - adaoTreasuryVP);
-        let selSlice = 0;
-        if (selected && selectedVp > 0) { selSlice = Math.min(selectedVp, remainder); remainder -= selSlice; }
-        membersVp = Math.min(membersVp, remainder); remainder -= membersVp;
-        alliesVp = Math.min(alliesVp, remainder); remainder -= alliesVp;
-
-        const labels = ['Votion VP', 'aDAO Treasury', `aDAO Members (${(store.adaoStakerSet || new Set()).size})`, `Allies · registered (${(store.allyRegisteredSet || new Set()).size})`];
-        const data = [votionVP, adaoTreasuryVP, membersVp, alliesVp];
-        const colors = ['#a855f7', '#06b6d4', '#10b981', '#f472b6'];
-        if (selSlice > 0) {
-            const inMembers = store.adaoStakerSet?.has(selected);
-            const inAllies = store.allyRegisteredSet?.has(selected);
-            const tag = inMembers ? ' · aDAO member' : (inAllies ? ' · ally' : '');
-            labels.push(displayName(selected) + tag);
-            data.push(selSlice);
-            colors.push('#f59e0b');
-        }
-        labels.push('Other');
-        data.push(remainder);
-        colors.push('#64748b');
-        return { labels, data, colors };
-    }
-
-    function wirePieModeToggle() {
-        const wrap = document.getElementById('pie-mode-toggle');
-        if (!wrap || wrap.dataset.wired) return;
-        wrap.dataset.wired = '1';
-        if (!store.pieMode) store.pieMode = 'standard';
-        wrap.querySelectorAll('.pie-mode-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                store.pieMode = btn.dataset.piemode;
-                wrap.querySelectorAll('.pie-mode-btn').forEach(b => {
-                    const on = b.dataset.piemode === store.pieMode;
-                    b.classList.toggle('bg-cyan-500/20', on);
-                    b.classList.toggle('text-cyan-300', on);
-                    b.classList.toggle('bg-white/5', !on);
-                    b.classList.toggle('text-gray-400', !on);
-                });
-                try { renderBucketCharts(); } catch (err) { console.warn('pie mode re-render:', err); }
-            });
-        });
-    }
-
-    // ---------------- Bounty Board ----------------
-    // Active-bribe pools ranked by $/1M VP (the price of a vote right now).
-    // Data: store.data.vote.pools — per-pool bribes.total (USD, priced upstream)
-    // and live VP. A bribed pool with ~no votes is flagged as the open-bounty case.
-    function renderBountyBoard() {
-        const el = document.getElementById('bounty-board-rows');
-        if (!el) return;
-        const pools = store.data?.vote?.pools || [];
-        const bribed = pools.filter(p => (p.bribes?.total || 0) > 0.005);
-        const chip = document.getElementById('bounty-epoch-chip');
-        if (chip) chip.textContent = `Epoch ${store.epoch || '—'} · live`;
-        if (!bribed.length) {
-            el.innerHTML = '<div class="text-gray-600 text-sm">No active bribes this epoch — the board is quiet.</div>';
-            const s0 = document.getElementById('bounty-summary');
-            if (s0) s0.innerHTML = '';
-            return;
-        }
-        const rows = bribed.map(p => {
-            const vp = p.vp || 0;
-            const usd = p.bribes.total;
-            const per1m = vp > 1 ? usd / (vp / 1e6) : null;   // null = open bounty
-            return { p, vp, usd, per1m };
-        }).sort((a, b) => {
-            const av = a.per1m === null ? Infinity : a.per1m;
-            const bv = b.per1m === null ? Infinity : b.per1m;
-            return bv - av;
-        });
-        const totalPot = rows.reduce((s, r) => s + r.usd, 0);
-        const summary = document.getElementById('bounty-summary');
-        if (summary) summary.innerHTML =
-            `<span><span class="text-amber-300 font-semibold">${fmt$(totalPot)}</span> pot</span>` +
-            `<span class="text-gray-600">·</span><span>${rows.length} pools paying</span>`;
-        const maxPer = Math.max(...rows.map(r => r.per1m === null ? 0 : r.per1m), 1);
-        const dexTag = (dex) => dex?.includes('Astro')
-            ? '<span class="text-[9px] px-1 py-0.5 rounded bg-blue-500/20 text-blue-400">Astro</span>'
-            : dex?.includes('Skeleton')
-                ? '<span class="text-[9px] px-1 py-0.5 rounded bg-emerald-500/20 text-emerald-400">Skeleton</span>' : '';
-        el.innerHTML = rows.slice(0, store.bountyExpanded ? rows.length : 8).map((r, i) => {
-            const barPct = r.per1m === null ? 100 : Math.max(3, (r.per1m / maxPer) * 100);
-            const rateHtml = r.per1m === null
-                ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/25 text-amber-300 font-semibold animate-pulse" title="This pool has a reward pot but almost no votes — the first voters take the whole pot.">OPEN BOUNTY</span>'
-                : `<span class="mono text-amber-300 font-semibold">${fmt$(r.per1m)}</span><span class="text-[9px] text-gray-500"> /1M VP</span>`;
-            return `
-            <div class="flex items-center gap-3 p-2 rounded-lg bg-white/[0.02] hover:bg-white/[0.04]">
-                <span class="w-6 h-6 rounded flex items-center justify-center text-xs font-bold shrink-0 ${i < 3 ? `rank-${i + 1}` : 'bg-white/10'}">${i + 1}</span>
-                <div class="flex flex-col min-w-0 shrink-0" style="width:150px">
-                    <span class="text-sm font-medium truncate">${r.p.name}</span>
-                    <div class="flex items-center gap-1">${dexTag(r.p.dex)}<span class="text-[9px] text-gray-600 uppercase">${r.p.bucket || ''}</span></div>
-                </div>
-                <div class="flex-1 h-2 rounded-full bg-white/5 overflow-hidden hidden sm:block" title="Relative $/1M VP vs the top-paying pool">
-                    <div class="h-full rounded-full bg-gradient-to-r from-amber-500/60 to-amber-300/80" style="width:${barPct}%"></div>
-                </div>
-                <div class="text-right shrink-0" style="min-width:100px">${rateHtml}</div>
-                <div class="text-right shrink-0 hidden md:block" style="min-width:90px">
-                    <div class="mono text-xs text-gray-300">${fmt$(r.usd)}</div>
-                    <div class="text-[9px] text-gray-600">${fmtNum(r.vp)} VP</div>
-                </div>
-            </div>`;
-        }).join('') + (rows.length > 8 ? `<div class="text-center pt-1">
-            <button type="button" class="text-[10px] px-3 py-1 rounded-full bg-white/5 text-gray-400 hover:text-amber-300 font-medium" onclick="toggleBountyExpand()">
-                ${store.bountyExpanded ? 'show top 8 only' : `show all ${rows.length} bribed pools`} <i class="fas fa-chevron-${store.bountyExpanded ? 'up' : 'down'} text-[8px] ml-1"></i>
-            </button></div>` : '');
-    }
-
-    function toggleBountyExpand() {
-        store.bountyExpanded = !store.bountyExpanded;
-        renderBountyBoard();
-    }
-
-    // ---------------- Epoch Movers ----------------
-    // Per-pool live VP vs the locked-in (epoch start) baseline — the same baseline
-    // the waterfall's "Locked-in" view uses. Top gainers and losers by ΔVP.
-    function renderEpochMovers() {
-        const el = document.getElementById('epoch-movers');
-        if (!el) return;
-        const locked = store.lockedInByPool;
-        const pools = store.data?.vote?.pools || [];
-        if (!locked || !locked.size || !pools.length) {
-            el.innerHTML = '<div class="text-gray-600 text-sm">Waiting for the epoch-start baseline snapshot…</div>';
-            return;
-        }
-        const keyOf = (p) => `${p.name}|${(p.dex || '').includes('Astro') ? 'Astro' : (p.dex || '').includes('Skeleton') ? 'Skeleton' : 'Single'}`;
-        const deltas = [];
-        for (const p of pools) {
-            const base = locked.get(keyOf(p));
-            if (!base) continue;                       // new pools have no baseline
-            const d = (p.vp || 0) - (base.total || 0);
-            if (Math.abs(d) < 1000) continue;          // ignore dust moves
-            deltas.push({ p, d });
-        }
-        if (!deltas.length) {
-            el.innerHTML = '<div class="text-gray-600 text-sm">No meaningful vote movement since epoch start yet.</div>';
-            return;
-        }
-        deltas.sort((a, b) => b.d - a.d);
-        const gainers = deltas.filter(x => x.d > 0).slice(0, 3);
-        const losers = deltas.filter(x => x.d < 0).slice(-3).reverse();
-        const row = (x) => `
-            <div class="flex items-center justify-between p-2 rounded-lg bg-white/[0.02]">
-                <div class="flex flex-col min-w-0">
-                    <span class="text-sm font-medium truncate">${x.p.name}</span>
-                    <span class="text-[9px] text-gray-600 uppercase">${x.p.bucket || ''}</span>
-                </div>
-                <span class="mono text-sm font-semibold ${x.d > 0 ? 'text-emerald-400' : 'text-red-400'}">${x.d > 0 ? '+' : ''}${fmtNum(x.d)} VP</span>
-            </div>`;
-        el.innerHTML =
-            (gainers.length ? `<div class="text-[10px] text-emerald-400/80 uppercase tracking-wider font-semibold">Gaining support</div>` + gainers.map(row).join('') : '') +
-            (losers.length ? `<div class="text-[10px] text-red-400/80 uppercase tracking-wider font-semibold mt-2">Losing support</div>` + losers.map(row).join('') : '') +
-            `<div class="text-[9px] text-gray-600 pt-1">vs locked-in baseline${store.lockedInDate ? ` · ${store.lockedInDate}` : ''}</div>`;
-    }
-
-    // ---------------- People boards ----------------
-    const personRow = (i, title, sub, valueHtml, wallet) => `
-        <div class="flex items-center justify-between p-2 rounded-lg bg-white/[0.02] hover:bg-white/[0.04] ${wallet ? 'cursor-pointer' : ''}" ${wallet ? `onclick="selectMemberFromBoard('${wallet}')" title="Click to view this wallet across the page"` : ''}>
-            <div class="flex items-center gap-2 min-w-0">
-                <span class="w-6 h-6 rounded flex items-center justify-center text-xs font-bold shrink-0 ${i < 3 ? `rank-${i + 1}` : 'bg-white/10'}">${i + 1}</span>
-                <div class="flex flex-col min-w-0">
-                    <span class="text-sm font-medium truncate">${title}</span>
-                    ${sub ? `<span class="text-[9px] text-gray-600">${sub}</span>` : ''}
-                </div>
-            </div>
-            <div class="text-right shrink-0">${valueHtml}</div>
-        </div>`;
-
-    // Rev 5.1: every leaderboard shows top 5 with a show-all expander — full
-    // depth on demand, same pattern on all boards.
-    function boardExpander(el, rows, uid, emptyMsg) {
-        if (!rows.length) { el.innerHTML = emptyMsg || '<div class="text-gray-600 text-sm">No data.</div>'; return; }
-        // Rev 5.2: chunked reveal — top 5, then +10 per click (some boards run
-        // 200+ deep; dumping them all at once was a wall of rows).
-        let html = rows.map((r, i) => i < 5 ? r : `<div class="bx-${uid}-x hidden">${r}</div>`).join('');
-        if (rows.length > 5) {
-            html += `<button id="bx-${uid}-btn" onclick="bxMore('${uid}')" class="text-[10px] text-cyan-400 hover:text-cyan-300 w-full text-center pt-1">show 10 more (${rows.length - 5} hidden) \u25be</button>`;
-        }
-        el.innerHTML = html;
-    }
-    // Lightweight custom events into Vercel Web Analytics (page views are
-    // already tracked site-wide by /_vercel/insights). Custom events surface
-    // on Pro plans; on Hobby they no-op harmlessly.
-    function track(name, data) {
-        try { window.va && window.va('event', data ? { name, data } : { name }); } catch (e) {}
-    }
-    function bxMore(uid) {
-        track('board_expand', { board: uid });
-        const all = Array.from(document.querySelectorAll('.bx-' + uid + '-x'));
-        const hidden = all.filter(d => d.classList.contains('hidden'));
-        const btn = document.getElementById('bx-' + uid + '-btn');
-        if (!hidden.length) { // fully expanded -> collapse back to top 5
-            all.forEach(d => d.classList.add('hidden'));
-            if (btn) btn.textContent = `show 10 more (${all.length} hidden) \u25be`;
-            return;
-        }
-        hidden.slice(0, 10).forEach(d => d.classList.remove('hidden'));
-        const left = Math.max(hidden.length - 10, 0);
-        if (btn) btn.textContent = left > 0 ? `show 10 more (${left} hidden) \u25be` : 'collapse to top 5 \u25b4';
-    }
-
-    // Board rows drive the same member lens as the header dropdown.
-    function selectMemberFromBoard(wallet) {
-        const sel = document.getElementById('member-selector');
-        if (sel && [...sel.options].some(o => o.value === wallet)) {
-            sel.value = wallet;
-            sel.dispatchEvent(new Event('change'));
-        } else {
-            store.selectedMemberWallet = wallet;
-            onMemberSelectorChange({ target: { value: wallet } });
-        }
-        document.getElementById('member-selector-wrap')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-
-    function walletBadges(wallet) {
-        const b = [];
-        if (store.adaoStakerSet?.has(wallet)) b.push('<span class="text-[8px] px-1 py-px rounded bg-cyan-500/20 text-cyan-300" title="Stakes aDAO NFTs in the DAO">aDAO</span>');
-        else if (store.allyRegisteredSet?.has(wallet)) b.push('<span class="text-[8px] px-1 py-px rounded bg-pink-500/20 text-pink-300" title="Registered ally (Pixel Lions / Lion DAO / named TLA locker)">ally</span>');
-        return b.join('');
-    }
-
-    function renderVoterBoards() {
-        const members = getAllSelectableMembers();
-        const vpEl = document.getElementById('top-board-vp');
-        const utilEl = document.getElementById('top-board-util');
-        const adjEl = document.getElementById('top-board-adjusted');
-        if (!vpEl) return;
-        if (!members.length) {
-            const msg = '<div class="text-gray-600 text-sm">Participants feed unavailable.</div>';
-            vpEl.innerHTML = msg; if (utilEl) utilEl.innerHTML = msg; if (adjEl) adjEl.innerHTML = msg;
-            return;
-        }
-        // Voting Leaders — VP held desc
-        const byVp = [...members]
-            .map(m => ({ m, vp: m.summary?.display_voting_power_human || 0 }))
-            .filter(x => x.vp > 0)
-            .sort((a, b) => b.vp - a.vp);
-        boardExpander(vpEl, byVp.map((x, i) => personRow(
-            i,
-            `${displayName(x.m.wallet)} ${walletBadges(x.m.wallet)}`,
-            null,
-            `<span class="mono text-sm text-cyan-300 font-semibold">${fmtNum(x.vp)} VP</span>`,
-            x.m.wallet
-        )), 'vp');
-
-        // Utilization Leaders — org member-data avg_utilization_pct, 10K+ VP floor
-        if (utilEl) {
-            const rows = (store.orgMemberData?.wallets || [])
-                .filter(w => (w.total_vp_held_human || 0) >= 10000)
-                .map(w => ({ w, u: w.avg_utilization_pct ?? null }))
-                .filter(x => x.u !== null)
-                .sort((a, b) => b.u - a.u || (b.w.total_vp_held_human - a.w.total_vp_held_human));
-            boardExpander(utilEl, rows.map((x, i) => personRow(
-                i,
-                `${displayName(x.w.address)} ${walletBadges(x.w.address)}`,
-                `${fmtNum(x.w.total_vp_held_human || 0)} VP held`,
-                `<span class="mono text-sm text-emerald-400 font-semibold">${x.u.toFixed(1)}%</span>`,
-                x.w.address
-            )), 'util', '<div class="text-gray-600 text-sm">Org member-data feed unavailable.</div>');
-        }
-
-        // Recently Adjusted — max period across bucket votes, desc; THIS EPOCH badge
-        if (adjEl) {
-            const cur = currentVotePeriod();
-            const rows = members
-                .map(m => {
-                    let last = 0, touched = 0;
-                    const vpb = m.voting?.votes_per_bucket || {};
-                    for (const b of Object.values(vpb)) {
-                        if (b?.period > last) last = b.period;
-                        if ((b?.votes || []).length) touched++;
-                    }
-                    return { m, last, touched };
-                })
-                .filter(x => x.last > 0)
-                .sort((a, b) => b.last - a.last || ((b.m.summary?.display_voting_power_human || 0) - (a.m.summary?.display_voting_power_human || 0)));
-            boardExpander(adjEl, rows.map((x, i) => personRow(
-                i,
-                `${displayName(x.m.wallet)} ${walletBadges(x.m.wallet)}`,
-                `${x.touched} bucket${x.touched === 1 ? '' : 's'} voted`,
-                cur && x.last >= cur
-                    ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-semibold">THIS EPOCH</span>'
-                    : `<span class="mono text-xs text-gray-400">period ${x.last}</span>`,
-                x.m.wallet
-            )), 'adj', '<div class="text-gray-600 text-sm">No vote data.</div>');
-        }
-    }
-
-    // Gauge-controller period that maps to the live epoch: the max period seen
-    // across all members' bucket votes is the freshest touch and can't exceed
-    // the live period.
-    function currentVotePeriod() {
-        let max = 0;
-        for (const m of getAllSelectableMembers()) {
-            const vpb = m.voting?.votes_per_bucket || {};
-            for (const b of Object.values(vpb)) if (b?.period > max) max = b.period;
-        }
-        return max || null;
-    }
-
-    function renderCommunityBoards() {
-        const ogEl = document.getElementById('top-board-og');
-        const newEl = document.getElementById('top-board-new');
-        const bribeEl = document.getElementById('top-board-bribes');
-        if (!ogEl) return;
-        const members = getAllSelectableMembers().filter(m => m.first_participation?.period);
-        if (!members.length) {
-            const msg = '<div class="text-gray-600 text-sm">Participants feed unavailable.</div>';
-            ogEl.innerHTML = msg; if (newEl) newEl.innerHTML = msg; if (bribeEl) bribeEl.innerHTML = msg;
-            return;
-        }
-        const vpOf = (m) => m.summary?.display_voting_power_human || 0;
-        // Same-period tiebreak: lock token ids mint sequentially, so the smallest
-        // lock # a wallet holds is its earliest surviving lock — a real join-order
-        // ordinal within the launch window (first_participation is period-granular,
-        // so period 96 alone ties the whole Day One crowd). Upgrade path: rollups
-        // voters carry first_lock_ts (exact canonical-create time) when non-null.
-        const minLockId = (m) => {
-            const ids = (m.locks || []).map(l => Number(l.token_id)).filter(Number.isFinite);
-            return ids.length ? Math.min(...ids) : Infinity;
-        };
-        const og = [...members].sort((a, b) =>
-            a.first_participation.period - b.first_participation.period ||
-            minLockId(a) - minLockId(b) || vpOf(b) - vpOf(a));
-        boardExpander(ogEl, og.map((m, i) => personRow(
-            i,
-            `${displayName(m.wallet)} ${walletBadges(m.wallet)}${m.first_participation.period <= 96 ? ' <span class="text-[8px] px-1 py-px rounded bg-amber-500/25 text-amber-300 font-semibold" title="Here since the launch window">DAY ONE</span>' : ''}`,
-            `${m.first_participation.approx_date || ''}${Number.isFinite(minLockId(m)) ? ` · lock #${minLockId(m)}` : ''}`,
-            `<span class="mono text-xs text-gray-300">period ${m.first_participation.period}</span>`,
-            m.wallet
-        )), 'og');
-        if (newEl) {
-            const fresh = [...members].sort((a, b) =>
-                b.first_participation.period - a.first_participation.period ||
-                minLockId(b) - minLockId(a) || vpOf(b) - vpOf(a));
-            boardExpander(newEl, fresh.map((m, i) => personRow(
-                i,
-                `${displayName(m.wallet)} ${walletBadges(m.wallet)}`,
-                `${m.first_participation.approx_date || ''}${Number.isFinite(minLockId(m)) ? ` · lock #${minLockId(m)}` : ''}`,
-                `<span class="mono text-xs text-gray-300">period ${m.first_participation.period}</span>`,
-                m.wallet
-            )), 'new');
-        }
-        if (bribeEl) renderBribeBoardCard();
-    }
-
-    // ---------------- Top Bribers board (schema-6 rollups consumer) ----------------
-    // Rev 5: the Bribe Earners card is "Top Bribers" by default — all-time bribe
-    // providers from the live tla-voting rollups (SPEC-tla-voting-briber-board).
-    // Naming rule (settled): registry-first — roster members via displayName +
-    // walletBadges; curated protocol labels (rollup `label`) in purple second;
-    // short address last. Unpriced honesty: no historical price record → the
-    // row says "unpriced" with chain-exact counts, USD is never guessed.
-    // The old pending-rewards view is preserved behind the Earners toggle.
-    function setBribeBoardMode(mode) {
-        track('bribe_board_mode', { mode });
-        store.bribeBoardMode = mode;
-        const on = 'bg-amber-500/20 text-amber-300', off = 'bg-white/5 text-gray-400';
-        const a = document.getElementById('bribe-mode-alltime'), e = document.getElementById('bribe-mode-earners');
-        if (a) a.className = `px-2 py-0.5 rounded ${mode === 'alltime' ? on : off}`;
-        if (e) e.className = `px-2 py-0.5 rounded ${mode === 'earners' ? on : off}`;
-        renderBribeBoardCard();
-    }
-    function renderBribeBoardCard() {
-        const el = document.getElementById('top-board-bribes');
-        const banner = document.getElementById('top-bribers-banner');
-        if (!el) return;
-        if ((store.bribeBoardMode || 'alltime') === 'earners') {
-            if (banner) { banner.textContent = 'pending bribe rewards · this epoch'; banner.title = 'Pending bribe rewards accrued this epoch (USD), per wallet. Claimable after the epoch closes.'; }
-            const rows = getAllSelectableMembers()
-                .map(m => ({ m, usd: m.summary?.total_pending_bribes_usd || 0 }))
-                .filter(x => x.usd > 0.005)
-                .sort((a, b) => b.usd - a.usd);
-            boardExpander(el, rows.map((x, i) => personRow(
-                i,
-                `${displayName(x.m.wallet)} ${walletBadges(x.m.wallet)}`,
-                `${fmtNum(x.m.summary?.display_voting_power_human || 0)} VP`,
-                `<span class="mono text-sm text-amber-300 font-semibold">${fmt$(x.usd)}</span>`,
-                x.m.wallet
-            )), 'earn', '<div class="text-gray-600 text-sm">No pending bribe rewards right now.</div>');
-            return;
-        }
-        renderTopBribersAllTime(el, banner);
-    }
-    async function fetchVotingRollups() {
-        if (store.votingRollups) return store.votingRollups;
-        if (store._votingRollupsPromise) return store._votingRollupsPromise;
-        store._votingRollupsPromise = fetch(CONFIG.orgVotingRollupsUrl + '?t=' + Date.now())
-            .then(r => r.ok ? r.json() : null)
-            .then(j => { store.votingRollups = j; return j; })
-            .catch(() => null);
-        return store._votingRollupsPromise;
-    }
-    function briberNameHtml(addr, label) {
-        const rosterName = store.nameByWallet?.get(addr);
-        if (rosterName) return `${displayName(addr)} ${walletBadges(addr)}`;
-        if (label) return `<span class="text-purple-300" title="${addr}">${label}</span>`;
-        return `<span class="mono" title="${addr}">${addr.slice(0, 8)}\u2026${addr.slice(-4)}</span> ${walletBadges(addr)}`;
-    }
-    function briberRowHtml(b, i, builtAtDate) {
-        const t = b.totals || {};
-        const placed = t.usd_at_placement || 0;
-        const unpricedTokens = Object.keys(t.unpriced || {}).length +
-            Object.values(t.by_token || {}).filter(x => x.unpriced_events > 0 && !x.usd_at_placement).length;
-        let valueHtml;
-        if (placed > 0) {
-            const hover = `USD at bribe placement (immutable). At rollup build (${builtAtDate}): ${fmt$(t.usd_at_build || 0)}.`;
-            valueHtml = `<span class="mono text-sm text-amber-300 font-semibold" title="${hover}">${fmt$(placed)}</span>`;
-        } else {
-            valueHtml = `<span class="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-gray-400" title="No historical price record for the bribe token(s) (${unpricedTokens || 'all'} unpriced) — amounts are chain-exact, USD is never guessed.">unpriced</span>`;
-        }
-        const sub = `${b.event_count} bribe${b.event_count === 1 ? '' : 's'} · ${b.first_bribe || '?'} → ${b.last_bribe || '?'}`;
-        const isMember = !!store.nameByWallet?.get(b.briber);
-        return personRow(i, briberNameHtml(b.briber, b.label), sub, valueHtml, isMember ? b.briber : null);
-    }
-    async function renderTopBribersAllTime(el, banner) {
-        const roll = await fetchVotingRollups();
-        if ((store.bribeBoardMode || 'alltime') !== 'alltime') return; // user toggled away mid-fetch
-        if (!roll || !Array.isArray(roll.bribers)) {
-            el.innerHTML = '<div class="text-gray-600 text-sm">Briber rollup unavailable.</div>';
-            return;
-        }
-        const byAddr = new Map(roll.bribers.map(b => [b.briber, b]));
-        const order = (roll.bribers_order || []).map(a => byAddr.get(a)).filter(Boolean);
-        const builtAtDate = (roll.builtAt || '').slice(0, 10);
-        if (banner) {
-            const totalEvents = roll.bribers.reduce((s, b) => s + (b.event_count || 0), 0);
-            const firstEver = roll.bribers.map(b => b.first_bribe).filter(Boolean).sort()[0] || '';
-            let cov = '';
-            const luna = roll.bribe_ledger?.lifetime?.['native:uluna'];
-            if (luna && Number(luna.state) > 0) {
-                const pct = (Number(luna.attributed_exact || 0) + Number(luna.attributed_spanning || 0)) / Number(luna.state) * 100;
-                cov = ` · ${pct >= 99.5 ? Math.floor(pct) : pct.toFixed(1)}% of lifetime LUNA bribe flow attributed`;
-            }
-            banner.textContent = `${order.length} bribers · ${totalEvents} attributed bribes since ${firstEver}${cov}`;
-            banner.title = 'All-time bribe providers, valued in USD at the moment each bribe was placed. Attribution is measured, never assumed: bribe flow the ledger counts but no on-chain event names a payer for stays out of every row — most of it sits in the Feb 2025 – Jun 2026 capture window, queued for the registry backfill.';
-        }
-        boardExpander(el, order.map((b, i) => briberRowHtml(b, i, builtAtDate)), 'briball',
-            '<div class="text-gray-600 text-sm">No attributed bribers yet.</div>');
-    }
-
-    function wireTopsTabs() {
-        const btns = document.querySelectorAll('.tops-tab-btn');
-        if (!btns.length || btns[0].dataset.wired) return;
-        btns.forEach(btn => {
-            btn.dataset.wired = '1';
-            btn.addEventListener('click', () => {
-                btns.forEach(b => {
-                    const on = b === btn;
-                    b.classList.toggle('bg-cyan-500/20', on);
-                    b.classList.toggle('text-cyan-300', on);
-                    b.classList.toggle('bg-white/5', !on);
-                    b.classList.toggle('text-gray-400', !on);
-                });
-                document.querySelectorAll('.tops-grid').forEach(g => {
-                    const show = g.id === `tops-grid-${btn.dataset.topstab}`;
-                    g.classList.toggle('hidden', !show);
-                    g.classList.toggle('grid', show);
-                });
-            });
-        });
-    }
-
     function populateMemberSelector() {
         const sel = document.getElementById('member-selector');
         if (!sel) return;
-        const members = getAllSelectableMembers();
+        const members = store.adaoPositions?.members || [];
         if (members.length === 0) {
             sel.disabled = true;
             return;
@@ -6328,11 +4995,6 @@
         try { renderExitRisk(); } catch (err) { console.warn('renderExitRisk after member change:', err); }
         try { renderMemberStatsRow(); } catch (err) { console.warn('renderMemberStatsRow after member change:', err); }
         try { renderMemberStatusChip(); } catch (err) { console.warn('renderMemberStatusChip after member change:', err); }
-        try { renderSlippageSim(); } catch (err) { console.warn('renderSlippageSim after member change:', err); }
-        try { renderCommunityWatch(); } catch (err) { console.warn('renderCommunityWatch after member change:', err); }
-        if (document.getElementById('tab-grades')?.classList.contains('active')) {
-            try { renderLpGrades(); } catch (err) { console.warn('renderLpGrades after member change:', err); }
-        }
     }
 
     // Renders the live status chip beside the member dropdown: total VP, total LP $, and a
@@ -6406,7 +5068,8 @@
     function getSelectedMember() {
         const wallet = store.selectedMemberWallet;
         if (!wallet) return null;
-        return getAllSelectableMembers().find(m => m.wallet === wallet) || null;
+        const members = store.adaoPositions?.members || [];
+        return members.find(m => m.wallet === wallet) || null;
     }
 
     // Returns { totalVp, votesByPool } for the selected member, or null.
@@ -6621,16 +5284,6 @@
         try { renderExitRisk(); } catch (err) { console.warn('renderExitRisk:', err); }
         try { renderLiquidityGrowth(); } catch (err) { console.warn('renderLiquidityGrowth:', err); }
         setupVotionFilters();
-        // Stage A additions — bounty board, movers, people leaderboards, control wiring.
-        try { renderBountyBoard(); } catch (err) { console.warn('renderBountyBoard:', err); }
-        try { renderEpochMovers(); } catch (err) { console.warn('renderEpochMovers:', err); }
-        try { renderVoterBoards(); } catch (err) { console.warn('renderVoterBoards:', err); }
-        try { renderCommunityBoards(); } catch (err) { console.warn('renderCommunityBoards:', err); }
-        try { wireTopsTabs(); } catch (err) { console.warn('wireTopsTabs:', err); }
-        try { wirePieModeToggle(); } catch (err) { console.warn('wirePieModeToggle:', err); }
-        try { renderSlippageSim(); } catch (err) { console.warn('renderSlippageSim:', err); }
-        try { wireSlippageSim(); } catch (err) { console.warn('wireSlippageSim:', err); }
-        try { renderCommunityWatch(); } catch (err) { console.warn('renderCommunityWatch:', err); }
     }
     
     function renderBucketCharts() {
@@ -6667,19 +5320,13 @@
         }
         const adjustedOtherVP = Math.max(0, otherVP - memberSliceVp);
 
-        let vpLabels = ['Votion VP', 'aDAO VP', 'Other'];
-        let vpData = [votionVP, adaoVP, adjustedOtherVP];
-        let vpColors = ['#a855f7', '#06b6d4', '#64748b'];
+        const vpLabels = ['Votion VP', 'aDAO VP', 'Other'];
+        const vpData = [votionVP, adaoVP, adjustedOtherVP];
+        const vpColors = ['#a855f7', '#06b6d4', '#64748b'];
         if (memberSliceVp > 0) {
             vpLabels.push(memberSliceLabel);
             vpData.push(memberSliceVp);
             vpColors.push('#f59e0b');   // amber — distinct from existing 3 colors
-        }
-        // Community mode: split "Other" into aDAO Members (staked NFT wallets combined),
-        // registered Allies, and the true remainder. Slice math in computeCommunitySlices().
-        if (store.pieMode === 'groups') {
-            const g = computeCommunitySlices(totalVP, votionVP, adaoVP);
-            if (g) { vpLabels = g.labels; vpData = g.data; vpColors = g.colors; }
         }
         
         const ctx1 = document.getElementById('vpBreakdownChart').getContext('2d');
@@ -7129,7 +5776,7 @@
         const memberName = member.name || (member.wallet ? member.wallet.slice(0, 10) + '\u2026' : 'Member');
         const titleEl = document.getElementById('exit-risk-title');
         const descEl = document.getElementById('exit-risk-desc');
-        if (titleEl) titleEl.textContent = `Positions & flow — ${memberName}`;
+        if (titleEl) titleEl.textContent = 'Your positions & flow';
         if (descEl) descEl.textContent = `${memberName}'s positions vs last epoch. Stake = change in your real LP units (deposits/withdrawals + auto-compounding); Value = USD, which also moves with token price.`;
 
         const prior = store.prevMemberPositions?.[member.wallet] || null;
@@ -7239,12 +5886,7 @@
         };
         const pctStr = (v) => `${v >= 0 ? '+' : '\u2212'}${Math.abs(v).toFixed(1)}%`;
         const dollarStr = (v) => `${v >= 0 ? '+' : '\u2212'}${fmt$(Math.abs(v))}`;
-        panel.innerHTML = `
-            <div class="flex items-center gap-2 pt-1 pb-1">
-                <span class="text-[10px] uppercase tracking-wide text-amber-400/80 font-semibold"><i class="fas fa-user text-[9px] mr-1"></i>${memberName}'s LP positions (${recs.length})</span>
-                <div class="flex-1 border-t border-amber-500/15"></div>
-                <span class="text-[9px] text-gray-600">only pools this wallet is in — clear the selector for the TLA-wide watchlist</span>
-            </div>` + recs.map(r => {
+        panel.innerHTML = recs.map(r => {
             const reduced = r.exited || (r.unitPct != null && r.unitPct < -0.5);   // genuine withdrawal
             const sev = (r.exited || (r.status && r.status !== 'active')) ? 'red' : (reduced || (r.dist != null && r.dist < 1) ? 'amber' : 'none');
             const border = sev === 'red' ? 'border-l-red-500/60 bg-red-500/[0.04]' : (sev === 'amber' ? 'border-l-amber-500/50 bg-amber-500/[0.03]' : 'border-l-white/5 bg-white/[0.02]');
@@ -7698,45 +6340,17 @@
             return;
         }
         const latest = String(heps[heps.length - 1]);
-
-        // ---- DEDUPE (audit fix 2026-07-17): some gauges resolve to the SAME
-        // pool_address with byte-identical epoch data (active + legacy gauge on one
-        // pool). Counting both double-counts the pool. Keep one row per
-        // pool_address; rows with distinct addresses (e.g. the two real LUNA-WBTC
-        // pools) are all kept. Fallback key for rows without an address.
-        const seen = new Set();
-        const dpools = [];
-        for (const p of (hist.pools || [])) {
-            const k = p.pool_address || `${p.name}|${p.dex || ''}|${p.gauge_pool_id || ''}`;
-            if (seen.has(k)) continue;
-            seen.add(k);
-            dpools.push(p);
-        }
-        const dedupedCount = (hist.pools || []).length - dpools.length;
-
         // latest price per token (for the price-neutral revaluation)
         const latestPx = {};
-        for (const p of dpools) {
+        for (const p of hist.pools) {
             const ed = p.epochs?.[latest]; if (!ed) continue;
             if (ed.a0_sym && ed.a0_px) latestPx[ed.a0_sym] = ed.a0_px;
             if (ed.a1_sym && ed.a1_px) latestPx[ed.a1_sym] = ed.a1_px;
         }
-        // Unpriced legs (no latest price anywhere) — excluded from the real series.
-        // In practice these are dust pools; we disclose rather than hide.
-        const unpricedSyms = new Set();
-        let unpricedUsd = 0;
-        for (const p of dpools) {
-            const ed = p.epochs?.[latest]; if (!ed) continue;
-            for (const s of ['a0', 'a1']) {
-                const sym = ed[s + '_sym'];
-                if (sym && !latestPx[sym]) { unpricedSyms.add(sym); unpricedUsd += ed.staked_usd || 0; }
-            }
-        }
-
-        // per-epoch series: headline $ (with price) and $ at constant latest prices
+        // per-epoch: actual $ (with price) and $ at constant (latest) prices (price-neutral)
         const series = heps.map(e => {
             const es = String(e); let actual = 0, real = 0;
-            for (const p of dpools) {
+            for (const p of hist.pools) {
                 const ed = p.epochs?.[es]; if (!ed) continue;
                 actual += ed.staked_usd || 0;
                 for (const s of ['a0', 'a1']) {
@@ -7750,42 +6364,10 @@
         const realPct = first.real > 0 ? (last.real - first.real) / first.real * 100 : 0;
         const usdPct = first.actual > 0 ? (last.actual - first.actual) / first.actual * 100 : 0;
 
-        // ---- Event detection: find the largest single-epoch REAL step. If that one
-        // step is most of the whole window's change, the story is "an event, then
-        // steady" — not a continuous trend.
-        let biggestStep = null;
-        for (let i = 1; i < series.length; i++) {
-            const d = series[i].real - series[i - 1].real;
-            if (!biggestStep || Math.abs(d) > Math.abs(biggestStep.d)) biggestStep = { d, at: series[i].e, from: series[i - 1].e };
-        }
-        const totalD = last.real - first.real;
-        const isEvent = biggestStep && Math.abs(totalD) > 0 && (Math.abs(biggestStep.d) / Math.abs(totalD)) > 0.6 && Math.abs(realPct) > 5;
-        // Recent trend: last up-to-4 epochs, for the "since then" read.
-        const recent = series.slice(-Math.min(4, series.length));
-        const recentPct = recent[0].real > 0 ? (recent[recent.length - 1].real - recent[0].real) / recent[0].real * 100 : 0;
-
-        // Verdict — from the real trend; an event window gets its own verdict style.
-        let verdict, story;
-        if (isEvent) {
-            const dir = biggestStep.d < 0 ? 'outflow' : 'inflow';
-            const since = Math.abs(recentPct) <= 3 ? 'the base has held steady since' : (recentPct > 0 ? 'and it has been rebuilding since' : 'and it has kept drifting down since');
-            verdict = biggestStep.d < 0
-                ? { txt: 'One-week outflow, then steady', cls: 'text-amber-300', icon: 'fa-wave-square' }
-                : { txt: 'Step up, holding', cls: 'text-emerald-400', icon: 'fa-arrow-trend-up' };
-            story = `Most of the window's move was a single ${dir} of <span class="mono ${biggestStep.d < 0 ? 'text-red-400' : 'text-emerald-400'}">${fmt$(Math.abs(biggestStep.d))}</span> going into E${biggestStep.at} — ${since}.`;
-        } else {
-            verdict = realPct > 5 ? { txt: 'Growing', cls: 'text-emerald-400', icon: 'fa-arrow-trend-up' }
-                : realPct < -5 ? { txt: 'Shrinking', cls: 'text-red-400', icon: 'fa-arrow-trend-down' }
-                : { txt: 'Holding steady', cls: 'text-gray-200', icon: 'fa-arrows-left-right' };
-            story = Math.abs(realPct) <= 5
-                ? 'No meaningful drift in the real base across the window — normal wiggle at this size.'
-                : `The real base has ${realPct > 0 ? 'grown' : 'declined'} <span class="mono">${Math.abs(realPct).toFixed(1)}%</span> across the window, spread over multiple epochs.`;
-        }
-
-        // ---- token drivers (price-neutral, DEDUPED): Δ amount × latest price
-        const amtF = {}, amtL = {};
+        // token drivers (price-neutral): Δ token amount × latest price, first→last epoch
         const firstE = String(heps[0]);
-        for (const p of dpools) {
+        const amtF = {}, amtL = {};
+        for (const p of hist.pools) {
             for (const [es, acc] of [[firstE, amtF], [latest, amtL]]) {
                 const ed = p.epochs?.[es]; if (!ed) continue;
                 for (const s of ['a0', 'a1']) { const sym = ed[s + '_sym']; if (sym) acc[sym] = (acc[sym] || 0) + (ed[s + '_amt'] || 0); }
@@ -7801,76 +6383,49 @@
         const gainers = drivers.filter(d => d.dVal > 0).slice(0, 4);
         const losers = drivers.filter(d => d.dVal < 0).slice(-4).reverse();
 
-        // ---- The chart: real vs headline, indexed to 100 at window start, with
-        // epoch ticks. SVG, no library, hover titles per point.
-        const chart = (() => {
-            const W = 640, H = 150, padL = 34, padR = 10, padT = 12, padB = 22;
-            const iw = W - padL - padR, ih = H - padT - padB;
-            const idx = (v, base) => base > 0 ? (v / base) * 100 : 100;
-            const realIdx = series.map(s => idx(s.real, first.real));
-            const usdIdx = series.map(s => idx(s.actual, first.actual));
-            const all = [...realIdx, ...usdIdx];
-            const lo = Math.min(...all, 98), hi = Math.max(...all, 102);
-            const sx = i => padL + (series.length === 1 ? iw / 2 : i / (series.length - 1) * iw);
-            const sy = v => padT + (hi - v) / (hi - lo) * ih;
-            const line = (vals) => vals.map((v, i) => `${sx(i).toFixed(1)},${sy(v).toFixed(1)}`).join(' ');
-            const dots = (vals, color, label, usdVals) => vals.map((v, i) =>
-                `<circle cx="${sx(i).toFixed(1)}" cy="${sy(v).toFixed(1)}" r="3" fill="${color}" opacity="0.9"><title>E${series[i].e} · ${label} ${fmt$(usdVals[i])} (index ${v.toFixed(1)})</title></circle>`).join('');
-            const grid = [100].concat(hi - lo > 18 ? [Math.round(lo + 2), Math.round(hi - 2)] : []);
-            const gridHtml = grid.map(g => `<line x1="${padL}" y1="${sy(g).toFixed(1)}" x2="${W - padR}" y2="${sy(g).toFixed(1)}" stroke="rgba(255,255,255,0.07)" stroke-dasharray="3 4"/><text x="${padL - 6}" y="${(sy(g) + 3).toFixed(1)}" fill="#6b7280" font-size="9" text-anchor="end">${g}</text>`).join('');
-            const ticks = series.map((s, i) => (i === 0 || i === series.length - 1 || series.length <= 6 || i % 2 === 0)
-                ? `<text x="${sx(i).toFixed(1)}" y="${H - 6}" fill="#6b7280" font-size="9" text-anchor="middle">E${s.e}</text>` : '').join('');
-            const eventMark = isEvent
-                ? (() => { const i = series.findIndex(s => s.e === biggestStep.at); return i > 0 ? `<line x1="${sx(i).toFixed(1)}" y1="${padT}" x2="${sx(i).toFixed(1)}" y2="${H - padB}" stroke="${biggestStep.d < 0 ? '#f59e0b' : '#10b981'}" stroke-width="1" stroke-dasharray="2 3" opacity="0.7"/><text x="${sx(i).toFixed(1)}" y="${padT - 2}" fill="${biggestStep.d < 0 ? '#f59e0b' : '#10b981'}" font-size="8.5" text-anchor="middle">event</text>` : ''; })()
-                : '';
-            return `<svg viewBox="0 0 ${W} ${H}" class="w-full" style="max-height:170px" preserveAspectRatio="xMidYMid meet">
-                ${gridHtml}${eventMark}
-                <polyline points="${line(usdIdx)}" fill="none" stroke="#64748b" stroke-width="1.5" stroke-linejoin="round" opacity="0.75"/>
-                <polyline points="${line(realIdx)}" fill="none" stroke="#22d3ee" stroke-width="2.25" stroke-linejoin="round"/>
-                ${dots(usdIdx, '#64748b', 'headline', series.map(s => s.actual))}
-                ${dots(realIdx, '#22d3ee', 'real', series.map(s => s.real))}
-                ${ticks}
-            </svg>
-            <div class="flex items-center gap-4 text-[10px] text-gray-500 -mt-1">
-                <span class="flex items-center gap-1.5"><span class="inline-block w-4 h-0.5" style="background:#22d3ee"></span>Real (price-neutral) — the honest signal</span>
-                <span class="flex items-center gap-1.5"><span class="inline-block w-4 h-0.5" style="background:#64748b"></span>Headline $ — moves with token prices</span>
-                <span class="ml-auto hidden sm:inline">indexed · window start = 100</span>
-            </div>`;
-        })();
-
+        // Headline verdict from the REAL trend. Band is intentionally WIDE (±5% over the
+        // window): TLA holds only a few $M, so a couple-percent wiggle over 4 epochs is noise,
+        // not a trend — calling it "drawing down" would be a false alarm. Only a sustained,
+        // sizeable real move earns a directional verdict.
+        const verdict = realPct > 5 ? { txt: 'Growing', cls: 'text-emerald-400', icon: 'fa-arrow-trend-up' }
+            : realPct < -5 ? { txt: 'Shrinking', cls: 'text-red-400', icon: 'fa-arrow-trend-down' }
+            : { txt: 'Holding steady', cls: 'text-gray-200', icon: 'fa-arrows-left-right' };
+        const sparkColor = realPct < -5 ? '#E24B4A' : (realPct > 5 ? '#1D9E75' : '#9b9b9b');
+        // mini sparkline of the REAL series
+        const spark = (vals, color) => {
+            const pts = vals.filter(v => v != null);
+            if (pts.length < 2) return '';
+            const lo = Math.min(...pts), hi = Math.max(...pts), W = 120, H = 32, pad = 3;
+            const sx = (i) => pad + i / (pts.length - 1) * (W - 2 * pad);
+            const sy = (v) => hi === lo ? H / 2 : (H - pad) - (v - lo) / (hi - lo) * (H - 2 * pad);
+            const poly = pts.map((v, i) => `${sx(i).toFixed(1)},${sy(v).toFixed(1)}`).join(' ');
+            return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><polyline points="${poly}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/><circle cx="${sx(pts.length - 1).toFixed(1)}" cy="${sy(pts[pts.length - 1]).toFixed(1)}" r="2.5" fill="${color}"/></svg>`;
+        };
         const card = (label, val, sub, cls) => `<div class="rounded-lg bg-white/[0.03] px-3 py-2"><div class="text-[10px] text-gray-500">${label}</div><div class="mono text-sm font-bold ${cls}">${val}</div><div class="text-[9px] text-gray-600">${sub}</div></div>`;
         const sign = (v) => (v >= 0 ? '+' : '') + v.toFixed(1) + '%';
-        const driverChip = (d) => `<span class="text-[10px] px-2 py-0.5 rounded ${d.dVal >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}" title="${d.sym}: ${d.dAmt >= 0 ? '+' : ''}${fmtNum(d.dAmt)} tokens moved ${d.dVal >= 0 ? 'in' : 'out'} across the window (valued at today's price)">${d.sym} ${d.dVal >= 0 ? '+' : '\u2212'}${fmt$(Math.abs(d.dVal))}</span>`;
 
-        // Coverage disclosure — the panel says what it can't see. Credia gauges are
-        // a known capture gap; unpriced legs are excluded dust; the dedupe count is
-        // shown so the fix is visible, not silent.
-        const disclosures = [];
-        disclosures.push('covers Astroport + Skeleton Swap gauges — the Credia market is not captured yet (known gap)');
-        if (dedupedCount > 0) disclosures.push(`${dedupedCount} duplicate gauge row${dedupedCount === 1 ? '' : 's'} (same pool, two gauges) deduplicated`);
-        if (unpricedSyms.size) disclosures.push(`${[...unpricedSyms].join('/')} legs unpriced — ${fmt$(unpricedUsd)} of dust excluded from the real series`);
+        const driverChip = (d) => `<span class="text-[10px] px-2 py-0.5 rounded ${d.dVal >= 0 ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}">${d.sym} ${d.dVal >= 0 ? '+' : '\u2212'}${fmt$(Math.abs(d.dVal))}</span>`;
+        const curStaked = last.actual;
 
         panel.innerHTML = `
-          <div class="flex items-center gap-3 mb-1 flex-wrap">
+          <div class="flex items-center gap-3 mb-1">
             <div class="flex items-center gap-2 text-lg font-bold ${verdict.cls}"><i class="fas ${verdict.icon}"></i>${verdict.txt}</div>
+            ${spark(series.map(s => s.real), sparkColor)}
             <div class="text-[11px] text-gray-500">real liquidity over ${heps.length} epochs (E${heps[0]}\u2013E${heps[heps.length - 1]})</div>
-            <div class="ml-auto text-[11px] text-gray-500">TLA holds <span class="text-cyan-400 font-semibold mono">${fmt$(last.actual)}</span> staked</div>
           </div>
-          <div class="text-xs text-gray-400 mb-3">${story}</div>
-          <div class="rounded-lg bg-white/[0.02] p-3 mb-3">${chart}</div>
-          <div class="grid grid-cols-2 md:grid-cols-3 gap-2 mb-3">
-            ${card('Real (price-neutral)', sign(realPct), 'reserves revalued at today\u2019s prices', Math.abs(realPct) <= 5 ? 'text-gray-200' : (realPct > 0 ? 'text-emerald-400' : 'text-red-400'))}
-            ${card('Headline $ (with price)', sign(usdPct), 'includes token price moves', Math.abs(usdPct) <= 5 ? 'text-gray-200' : (usdPct > 0 ? 'text-emerald-400' : 'text-red-400'))}
-            ${card(`Last ${recent.length} epochs (real)`, sign(recentPct), isEvent ? 'the \u201csince the event\u201d read' : 'recent momentum', Math.abs(recentPct) <= 3 ? 'text-gray-200' : (recentPct > 0 ? 'text-emerald-400' : 'text-red-400'))}
+          <div class="text-[11px] text-gray-500 mb-3">TLA currently holds <span class="text-cyan-400 font-semibold">${fmt$(curStaked)}</span> staked across all pools. A few percent of movement over a handful of epochs is normal at this size.</div>
+          <div class="grid grid-cols-2 gap-2 mb-3">
+            ${card('Real liquidity (price-neutral)', sign(realPct), 'reserves at today\u2019s prices \u2014 the honest signal', Math.abs(realPct) <= 5 ? 'text-gray-200' : (realPct > 0 ? 'text-emerald-400' : 'text-red-400'))}
+            ${card('Headline $ (with price)', sign(usdPct), 'moves with token prices too', Math.abs(usdPct) <= 5 ? 'text-gray-200' : (usdPct > 0 ? 'text-emerald-400' : 'text-red-400'))}
           </div>
-          <div class="text-[11px] text-gray-400 mb-2">What moved (price-neutral, E${heps[0]}\u2192E${heps[heps.length - 1]}):</div>
+          <div class="text-[11px] text-gray-400 mb-2">What's driving the real change (price-neutral, E${heps[0]}\u2192E${heps[heps.length - 1]}):</div>
           <div class="flex flex-wrap gap-1.5 mb-1">
             ${gainers.length ? gainers.map(driverChip).join('') : '<span class="text-[10px] text-gray-600">no notable gains</span>'}
           </div>
           <div class="flex flex-wrap gap-1.5">
             ${losers.length ? losers.map(driverChip).join('') : '<span class="text-[10px] text-gray-600">no notable outflows</span>'}
           </div>
-          <div class="text-[10px] text-gray-600 mt-3 pt-2 border-t border-white/5"><i class="fas fa-circle-info mr-1"></i>${disclosures.join(' · ')}. LUNA growing here is the auto-compounding rewards buying back in; stablecoin moves are LPs rebalancing. Pools also migrate between curve types (xyk \u2192 concentrated), which shifts where liquidity sits without leaving TLA.</div>
+          <div class="text-[10px] text-gray-600 mt-3 pt-2 border-t border-white/5"><i class="fas fa-circle-info mr-1"></i>Only ${heps.length} epochs of history so far \u2014 read the direction, not the precise number. LUNA growing here is the auto-compounding rewards buying back in; stablecoin moves are LPs rebalancing. Pools also migrate between curve types (e.g. xyk \u2192 concentrated), which shifts where liquidity sits without leaving TLA.</div>
         `;
     }
 
@@ -8207,9 +6762,6 @@
                 }
                 store.lockedInByPool = byName;
                 store.lockedInDate = ymd;
-                // The Movers card depends on this baseline and usually renders before
-                // it lands — re-render now that it's here.
-                try { renderEpochMovers(); } catch (err) { console.warn('renderEpochMovers (baseline):', err); }
                 // Re-render the waterfall now that the baseline is available.
                 const activeBtn = document.querySelector('.votion-bucket-btn.active');
                 if (activeBtn) renderWaterfallChart(activeBtn.dataset.bucket);
@@ -8396,7 +6948,7 @@
                     <!-- Fixed label gutter -->
                     <div class="shrink-0 flex flex-col justify-center pr-2 overflow-hidden" style="width: 150px;">
                         <span class="text-xs text-gray-200 font-medium truncate leading-tight">${pool.name}</span>
-                        <span class="text-[9px] truncate leading-tight"><span class="${dexCls}">${dexShort}</span>${(pool.bribes_total || 0) > 0.5 ? ` <span class="text-amber-300/90" title="Active bribe pot on this pool this epoch — ${(pool.vp || 0) > 1 ? fmt$((pool.bribes_total) / ((pool.vp) / 1e6)) + ' per 1M VP at current votes' : 'no votes yet'} (see Bounty Board)"><i class="fas fa-sack-dollar text-[8px]"></i> ${fmt$(pool.bribes_total)}</span>` : ''}</span>
+                        <span class="text-[9px] ${dexCls} truncate leading-tight">${dexShort}</span>
                     </div>
                     <!-- Plot area (own positioning context) -->
                     <div class="relative flex-1">
@@ -8415,7 +6967,6 @@
                             ${adaoVP > 0 ? `<div class="text-sky-400">aDAO: ${fmtNum(adaoVP)} (${aP.toFixed(1)}%)</div>` : ''}
                             ${memberVP > 0 ? `<div class="text-amber-400">${memberAlloc ? (memberAlloc.member.name || memberAlloc.member.wallet.slice(0, 12) + '…') : 'Member'}: ${fmtNum(memberVP)} (${mP.toFixed(1)}%)</div>` : ''}
                             ${otherVP > 0 ? `<div class="text-slate-400">Other: ${fmtNum(otherVP)} (${oP.toFixed(1)}%)</div>` : ''}
-                            ${(pool.bribes_total || 0) > 0.5 ? `<div class="text-amber-300 mt-1 pt-1 border-t border-white/10">Bribes: ${fmt$(pool.bribes_total)}${(pool.vp || 0) > 1 ? ` · ${fmt$(pool.bribes_total / (pool.vp / 1e6))}/1M VP` : ' · no votes yet'}</div>` : ''}
                         </div>
                     </div>
                 </div>`;
@@ -8772,7 +7323,7 @@
                                         <td colspan="5" class="font-bold uppercase ${colors.text}">${bucket} Totals</td>
                                         <td class="text-right mono">
                                             <div class="text-purple-400">${fmtNum(activePools.reduce((s, p) => s + (p.votion_now_vp || 0), 0))}</div>
-                                            <div class="text-[10px] text-gray-500" title="Votion's share of all votes in this bucket">${fmtPct(totalVP > 0 ? (activePools.reduce((s, p) => s + (p.votion_now_vp || 0), 0) / totalVP) * 100 : 0)} of bucket</div>
+                                            <div class="text-[10px] text-gray-500">${fmtPct(totalVP > 0 ? (activePools.reduce((s, p) => s + (p.votion_now_vp || 0), 0) / totalVP) * 100 : 0)}</div>
                                         </td>
                                         <td class="text-right">-</td>
                                         <td class="text-right mono">
@@ -8783,11 +7334,11 @@
                                         </td>
                                         <td class="text-right mono">
                                             <div class="text-orange-400">${fmtNum(totalVP)}</div>
-                                            <div class="text-[10px] text-gray-500" title="All votes cast in this bucket — the denominator for every % in this table">100% · all bucket votes</div>
+                                            <div class="text-[10px] text-gray-500">100%</div>
                                         </td>
                                         <td class="text-right mono">
                                             <div class="text-cyan-400">${fmtNum(totalAdaoVP)}</div>
-                                            <div class="text-[10px] text-gray-500" title="aDAO treasury's share of all votes in this bucket — not of TLA-wide VP">${fmtPct(totalVP > 0 ? (totalAdaoVP / totalVP) * 100 : 0)} of bucket</div>
+                                            <div class="text-[10px] text-gray-500">${fmtPct(totalVP > 0 ? (totalAdaoVP / totalVP) * 100 : 0)}</div>
                                         </td>
                                     </tr>
                                 </tfoot>
@@ -9241,7 +7792,7 @@
         
         return `
             <tr class="${!isActive ? 'opacity-60' : ''}">
-                <td class="cursor-pointer hover:bg-white/5 rounded transition-colors" title="Open this pool's grade card (LP Grades tab)" onclick="if (!event.target.closest('.copy-addr-btn')) openGradeFor('${safePoolName}', '${(p.dex || '').replace(/'/g, "\\'")}')">${nameCellHtml}</td>
+                <td>${nameCellHtml}</td>
                 <td class="text-center">
                     ${isActive 
                         ? '<span class="text-[10px] px-2 py-0.5 rounded bg-green-500/20 text-green-400">ACTIVE</span>' 
@@ -9409,24 +7960,19 @@
             const poolData = poolDataMap[normalizedName] || {};
             const tlaPct = totalTlaStaked > 0 ? ((p.tla_staked || 0) / totalTlaStaked) * 100 : 0;
             const depthPct = (p.depth || 0) > 0 ? ((p.tla_staked || 0) / p.depth) * 100 : 0;
-            // Row-level values come from the dex-aware join at load (name|dex keys);
-            // the name-only poolDataMap is a fallback and MUST NOT overwrite them —
-            // the two LUNA-USDC pools collide on name and Skeleton's zero used to
-            // clobber Astroport's real efficiency, blanking the whole column. The
-            // old snake_case adao_deposit_* fields never existed on normalized rows.
-            const adaoDeposit = (p.adaoDeposit || 0) + (p.adaoDepositAmp || 0) || (p.adao_deposit_non_amp || 0) + (p.adao_deposit_amplified || 0);
+            const adaoDeposit = (p.adao_deposit_non_amp || 0) + (p.adao_deposit_amplified || 0);
             
             return {
                 ...p,
                 tlaPct,
                 depthPct,
                 adaoDeposit,
-                efficiency: (p.efficiency || poolData.efficiency || 0),
+                efficiency: poolData.efficiency,
                 access_score: poolData.access_score,
                 performance_score: poolData.performance_score,
                 support_score: poolData.support_score,
-                vol_4ep_avg: (p.vol_4ep_avg || poolData.vol_4ep_avg || 0),
-                liq_4ep_avg: (p.liq_4ep_avg || poolData.liq_4ep_avg || 0)
+                vol_4ep_avg: poolData.vol_4ep_avg,
+                liq_4ep_avg: poolData.liq_4ep_avg
             };
         });
         
@@ -9453,8 +7999,6 @@
                     return dir * ((a.tlaPct || 0) - (b.tlaPct || 0));
                 case 'efficiency':
                     return dir * ((a.efficiency || 0) - (b.efficiency || 0));
-                case 'slip':
-                    return dir * ((a.slipPct ?? 999) - (b.slipPct ?? 999));
                 case 'apr':
                     return dir * ((a.apr_amplified || a.apr_non_amp || 0) - (b.apr_amplified || b.apr_non_amp || 0));
                 case 'rewards':
@@ -9469,7 +8013,7 @@
         const tbody = document.getElementById('tla-table-body');
         
         if (pools.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="11" class="text-center text-gray-500 py-8">No TLA pools found</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="10" class="text-center text-gray-500 py-8">No TLA pools found</td></tr>';
             return;
         }
         
@@ -9566,14 +8110,14 @@
             
             return `
             <tr class="${!isActive ? 'opacity-50' : ''}">
-                <td class="cursor-pointer hover:bg-white/5 rounded transition-colors" title="Open this pool's grade card (LP Grades tab)" onclick="if (!event.target.closest('.copy-addr-btn')) openGradeFor('${safePoolName}', '${(p.dex || '').replace(/'/g, "\\'")}')">
+                <td>
                     <div class="flex items-center gap-2">
                         <span class="active-dot ${isActive ? 'on' : 'off'}"></span>
                         <div>${tlaNameInner}</div>
                     </div>
                 </td>
                 <td class="text-center">
-                    <span class="text-[10px] px-2 py-0.5 rounded ${bucketClass}">${bucket}</span>${p._dupGauge ? '<div class="text-[8px] px-1 py-px mt-0.5 rounded bg-purple-500/15 text-purple-300 inline-block" title="A second gauge pointing at the same pool — same liquidity counted at the gauge level twice (known data issue). The pool itself appears once above.">duplicate gauge</div>' : ''}
+                    <span class="text-[10px] px-2 py-0.5 rounded ${bucketClass}">${bucket}</span>
                 </td>
                 <td class="text-right tla-metric-cell cursor-pointer hover:bg-white/5 rounded transition-colors" data-pool="${safePoolName}" data-metric="tla-depth" title="Click for trend">
                     <div class="mono text-green-400 flex items-center justify-end gap-1">
@@ -9591,13 +8135,6 @@
                 <td class="text-right mono text-gray-400">${p.tlaPct > 0 ? fmtPct(p.tlaPct) : '-'}</td>
                 <td class="text-right ${effColor}" title="${effTooltip}">
                     ${eff > 0 ? `<div class="mono">${effPct}%</div><div class="text-[10px]">${effLabel}</div>` : '-'}
-                </td>
-                <td class="text-right" title="${p.slipPct != null ? `Price impact of a $1K worst-direction trade.${p.slipCurved ? ' Concentrated/stable curve: true impact is lower than this bound.' : ''} See the Trade Impact Simulator on Overview for other sizes and directions.` : 'Single-asset pool — no swap curve to grade.'}">
-                    ${p.slipPct != null ? (() => {
-                        const sg = p.slipPct < 0.5 ? 'A' : p.slipPct < 1 ? 'B' : p.slipPct < 3 ? 'C' : p.slipPct < 8 ? 'D' : 'F';
-                        const sc = sg === 'A' ? 'bg-emerald-500/20 text-emerald-300' : sg === 'B' ? 'bg-cyan-500/20 text-cyan-300' : sg === 'C' ? 'bg-yellow-500/20 text-yellow-300' : sg === 'D' ? 'bg-orange-500/20 text-orange-300' : 'bg-red-500/20 text-red-300';
-                        return `<span class="text-[10px] px-1.5 py-0.5 rounded font-bold ${sc}">${sg}</span><div class="mono text-[10px] text-gray-500">${p.slipCurved ? '≤' : ''}${p.slipPct < 0.05 ? '<0.05' : p.slipPct.toFixed(2)}%</div>`;
-                    })() : '<span class="text-gray-600">-</span>'}
                 </td>
                 <td class="text-right tla-metric-cell cursor-pointer hover:bg-white/5 rounded transition-colors" data-pool="${safePoolName}" data-metric="tla-apr" title="Click for trend">
                     <div class="mono flex items-center justify-end gap-1 ${p.apr_amplified > 0 ? 'text-green-400' : 'text-gray-500'}">
@@ -10971,7 +9508,7 @@
     
     // Switch to a specific tab
     function switchToTab(tabName) {
-        const validTabs = ['overview', 'pools', 'tla', 'grades', 'docs'];  // rankings + dao retired 2026-07 (rankings merged into LP Grades; aDAO has dedicated pages)
+        const validTabs = ['overview', 'pools', 'tla', 'rankings', 'dao', 'docs'];
         if (!validTabs.includes(tabName)) tabName = 'overview';
         
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -10982,11 +9519,6 @@
         
         if (tabBtn) tabBtn.classList.add('active');
         if (tabContent) tabContent.classList.add('active');
-        // LP Grades renders lazily on first visit (and re-renders on later visits so
-        // the member-lens star column stays in sync with the header dropdown).
-        if (tabName === 'grades') {
-            try { renderLpGrades(); } catch (err) { console.warn('renderLpGrades:', err); }
-        }
     }
     
     // Check URL hash on page load
@@ -11190,9 +9722,108 @@
         
         document.getElementById('bribes-bucket-breakdown').innerHTML = breakdownHtml;
         
+        // All-time deep-dive (schema-6 rollups) — async, renders into its own section
+        renderAllTimeBribers();
+
         // Show modal
         modal.classList.remove('hidden');
         modal.classList.add('flex');
+    }
+
+    // ============================================================
+    // ALL-TIME TOP BRIBERS (schema-6 rollups deep-dive)
+    // Self-contained (own fetch, own naming) for easy re-homing into
+    // the restructured Rankings tab. Naming: curated rollup label in
+    // purple, else short address. Unpriced honesty: amounts chain-exact,
+    // USD never guessed. Sortable; per-briber rows expand to per-pool /
+    // per-token detail via native <details> (no wiring).
+    // ============================================================
+    const ALLTIME_ROLLUPS_URL = 'https://raw.githubusercontent.com/thealliancedao/tla-core/main/tla-voting/events/rollups.json';
+    let _allTimeRollups = null, _allTimeRollupsP = null;
+    function fetchAllTimeRollups() {
+        if (_allTimeRollups) return Promise.resolve(_allTimeRollups);
+        if (_allTimeRollupsP) return _allTimeRollupsP;
+        _allTimeRollupsP = fetch(ALLTIME_ROLLUPS_URL + '?t=' + Date.now())
+            .then(r => r.ok ? r.json() : null)
+            .then(j => (_allTimeRollups = j))
+            .catch(() => null);
+        return _allTimeRollupsP;
+    }
+    function allTimePoolName(key) {
+        if (!allTimePoolName._map) {
+            const m = new Map();
+            (store.pools || []).forEach(p => { if (p.gauge_pool_id) m.set(p.gauge_pool_id, p.name + (p.dex ? ` (${p.dex})` : '')); });
+            allTimePoolName._map = m;
+        }
+        if (allTimePoolName._map.has(key)) return allTimePoolName._map.get(key);
+        const tail = String(key).split(/[:/]/).pop() || key;
+        return tail.length > 16 ? tail.slice(0, 8) + '\u2026' + tail.slice(-4) : tail;
+    }
+    async function renderAllTimeBribers() {
+        const board = document.getElementById('alltime-bribers-board');
+        const banner = document.getElementById('alltime-bribers-banner');
+        if (!board) return;
+        const roll = await fetchAllTimeRollups();
+        if (!roll || !Array.isArray(roll.bribers)) {
+            board.innerHTML = '<div class="text-gray-600 text-sm">Briber rollup unavailable.</div>';
+            if (banner) banner.textContent = '';
+            return;
+        }
+        const mode = document.getElementById('alltime-bribers-sort')?.value || 'placement';
+        const byAddr = new Map(roll.bribers.map(b => [b.briber, b]));
+        let list = (roll.bribers_order || []).map(a => byAddr.get(a)).filter(Boolean);
+        if (mode === 'build') list = [...list].sort((a, b) => (b.totals?.usd_at_build || 0) - (a.totals?.usd_at_build || 0));
+        else if (mode === 'count') list = [...list].sort((a, b) => (b.event_count || 0) - (a.event_count || 0));
+        // 'placement' keeps bribers_order: usd_at_placement desc, all-unpriced last — never ranked by invented USD
+        if (banner) {
+            const totalEvents = roll.bribers.reduce((s, b) => s + (b.event_count || 0), 0);
+            const first = roll.bribers.map(b => b.first_bribe).filter(Boolean).sort()[0] || '';
+            let cov = '';
+            const luna = roll.bribe_ledger?.lifetime?.['native:uluna'];
+            if (luna && Number(luna.state) > 0) {
+                const pct = (Number(luna.attributed_exact || 0) + Number(luna.attributed_spanning || 0)) / Number(luna.state) * 100;
+                cov = ` \u00b7 ${pct >= 99.5 ? Math.floor(pct) : pct.toFixed(1)}% of lifetime LUNA bribe flow attributed \u2014 the remainder is counted in the ledger but its payer is not yet identified`;
+            }
+            banner.textContent = `${list.length} bribers \u00b7 ${totalEvents} attributed bribes since ${first}${cov} \u00b7 valued at placement \u00b7 rollup ${String(roll.builtAt || '').slice(0, 10)}`;
+        }
+        const rowHtml = (b, i) => {
+            const t = b.totals || {};
+            const name = b.label
+                ? `<span class="text-purple-300" title="${b.briber}">${b.label}</span>`
+                : `<span class="mono text-gray-300" title="${b.briber}">${b.briber.slice(0, 10)}\u2026${b.briber.slice(-4)}</span>`;
+            const placed = t.usd_at_placement || 0;
+            const val = placed > 0
+                ? `<span class="mono text-amber-300 font-semibold" title="At rollup build: ${fmt$(t.usd_at_build || 0)}">${fmt$(placed)}</span>`
+                : `<span class="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-gray-400" title="No historical price record \u2014 amounts chain-exact, USD never guessed">unpriced</span>`;
+            const tokenRows = Object.entries(t.by_token || {}).sort((x, y) => (y[1].usd_at_placement || 0) - (x[1].usd_at_placement || 0))
+                .map(([sym, v]) => `<div class="flex justify-between py-0.5"><span class="text-gray-400">${Number(v.amount_display || 0).toLocaleString()} ${sym}${v.unpriced_events ? ' <span class="text-amber-500">(' + v.unpriced_events + ' unpriced)</span>' : ''}</span><span class="mono text-gray-300">${v.usd_at_placement ? fmt$(v.usd_at_placement) : '\u2014'}</span></div>`).join('');
+            const unpricedRows = Object.entries(t.unpriced || {}).map(([denom, v]) =>
+                `<div class="flex justify-between py-0.5"><span class="text-gray-500 mono" title="${denom}">${denom.slice(0, 18)}\u2026</span><span class="text-amber-500">${v.bribe_count || v.event_count || ''} unpriced</span></div>`).join('');
+            const poolRows = Object.entries(b.by_pool || {}).sort((x, y) => (y[1].bribe_count || 0) - (x[1].bribe_count || 0))
+                .map(([k, v]) => {
+                    const toks = Object.entries(v.by_token || {}).map(([sym, tv]) =>
+                        `${Number(tv.amount_display || 0).toLocaleString()} ${sym}${tv.usd_at_placement ? ' (' + fmt$(tv.usd_at_placement) + ')' : ''}`).join(', ');
+                    return `<div class="flex justify-between gap-3 py-0.5"><span class="text-gray-400">${allTimePoolName(k)} <span class="text-gray-600">\u00d7${v.bribe_count}</span></span><span class="text-gray-300 text-right">${toks || '\u2014'}</span></div>`;
+                }).join('');
+            return `
+                <details class="rounded-lg bg-white/[0.02] hover:bg-white/[0.04] px-3 py-2">
+                    <summary class="flex items-center justify-between cursor-pointer list-none">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <span class="w-5 h-5 rounded flex items-center justify-center text-[11px] font-bold shrink-0 bg-white/10">${i + 1}</span>
+                            <div class="flex flex-col min-w-0">
+                                <span class="text-sm truncate">${name}</span>
+                                <span class="text-[9px] text-gray-600">${b.event_count} bribe${b.event_count === 1 ? '' : 's'} \u00b7 ${b.first_bribe || '?'} \u2192 ${b.last_bribe || '?'}${b.withdraw_event_count ? ` \u00b7 ${b.withdraw_event_count} withdraw events` : ''}</span>
+                            </div>
+                        </div>
+                        <div class="shrink-0 text-right text-sm">${val} <i class="fas fa-chevron-down text-[8px] text-gray-600 ml-1"></i></div>
+                    </summary>
+                    <div class="mt-2 pt-2 border-t border-white/5 text-[11px] space-y-2">
+                        ${tokenRows ? `<div><div class="text-[9px] text-gray-600 uppercase mb-0.5">By token</div>${tokenRows}${unpricedRows}</div>` : unpricedRows}
+                        ${poolRows ? `<div><div class="text-[9px] text-gray-600 uppercase mb-0.5">By pool</div>${poolRows}</div>` : ''}
+                    </div>
+                </details>`;
+        };
+        board.innerHTML = list.map(rowHtml).join('') || '<div class="text-gray-600 text-sm">No attributed bribers yet.</div>';
     }
     
     function closeBribesModal(event) {
