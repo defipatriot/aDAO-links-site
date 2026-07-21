@@ -686,9 +686,21 @@
             }
         }
         const cap = String(d.capturedAt || '').slice(0, 10);
+        // Honesty guard: the feed's discovered-holder balances vs actual vtoken
+        // supply. If discovery covers only a fraction of supply, an empty result
+        // means "can't see", not "you have nothing" — and we say so.
+        let supply = 0, found = 0;
+        for (const v of d.vaults) {
+            supply += Number(v.vdenom_supply_human) || 0;
+            for (const h of (v.holders || [])) found += Number(h.vtoken_balance) || 0;
+        }
+        const covPct = supply > 0 ? (found / supply * 100) : 100;
         if (!rows.length) {
-            el.innerHTML = `<div class="text-gray-600 text-sm">No Votion positions for this address.</div>
-                <div class="text-[10px] text-gray-600 mt-2">Feed live: ${d.vault_count ?? d.vaults.length} vaults · ${fmtUsd(d.total_tvl_usd)} TVL · ${d.unique_holders ?? '?'} holders · captured ${cap}</div>`;
+            const partial = covPct < 90;
+            el.innerHTML = `<div class="text-gray-600 text-sm">${partial
+                ? 'No Votion position <span class="text-amber-400">found</span> for this address — but holder discovery currently sees only <span class="mono text-amber-400">' + covPct.toFixed(1) + '%</span> of vault tokens, so absence here isn\'t proof of absence. A discovery fix is queued on the capture side.'
+                : 'No Votion positions for this address.'}</div>
+                <div class="text-[10px] text-gray-600 mt-2">Feed live: ${d.vault_count ?? d.vaults.length} vaults · ${fmtUsd(d.total_tvl_usd)} TVL · ${d.unique_holders ?? '?'} holders discovered · captured ${cap}</div>`;
             return;
         }
         rows.sort((a, b) => (b.usd || 0) - (a.usd || 0));
@@ -708,7 +720,7 @@
                 </div>`).join('')}
             </div>
             <div class="flex justify-between text-[11px] text-gray-400 mt-2 pt-2 border-t border-white/10">
-                <span>${rows.length} position${rows.length === 1 ? '' : 's'} · captured ${cap}</span>
+                <span>${rows.length} position${rows.length === 1 ? '' : 's'} · captured ${cap}${covPct < 90 ? ` · <span class="text-amber-500" title="Discovered holder balances vs vtoken supply — the feed cannot yet see all holders">discovery ${covPct.toFixed(0)}%</span>` : ''}</span>
                 <span class="mono">${fmtUsd(totUsd)} · ${fmtNum(totVp)} implied VP</span>
             </div>`;
     }
