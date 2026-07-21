@@ -165,10 +165,8 @@
             </div>
             <div class="glass-card p-5">
                 <h3 class="font-semibold mb-1 flex items-center gap-2"><i class="fas fa-vault text-purple-300"></i> Votion Positions</h3>
-                <div class="alert-info rounded-lg p-3 text-[12px] text-gray-400">
-                    <i class="fas fa-hourglass-half text-cyan-400 mr-1"></i>
-                    Per-wallet Votion holdings aren't captured yet — today's Votion feed tracks the vaults, not the holders. The per-holder capture (and its daily archive) is queued on the data roadmap; when it lands, this card shows your vtokens, underlying LSTs, and Votion-implied VP spliced into the totals above. Until then those totals honestly exclude Votion.
-                </div>
+                <p class="text-[11px] text-gray-500 mb-3">Per-vault holdings from the live Votion feed — vtokens, underlying LST, and the VP your share implies. Implied VP is shown here, not merged into the VP tile (that splice lands with the daily archive).</p>
+                <div id="votion-table"><div class="text-gray-600 text-sm">Loading…</div></div>
             </div>
         </div>
 
@@ -232,6 +230,7 @@
 
     const CONFIG = {
         participantsUrl: 'https://raw.githubusercontent.com/defipatriot/tla-participants-data_2026/main/data/current.json',
+        votionPositionsUrl: 'https://raw.githubusercontent.com/defipatriot/votion-positions-data_2026/main/data/current.json',
         adaoPositionsUrl: 'https://raw.githubusercontent.com/defipatriot/adao-positions-data_2026/main/data/current.json',
         alliesUrl: 'https://raw.githubusercontent.com/defipatriot/adao-allies-data_2026/main/data/current.json',
         orgNftSummaryUrl: 'https://raw.githubusercontent.com/thealliancedao/tla-core/main/nfts/adao/snapshots/summary.json',
@@ -651,6 +650,7 @@
         // balances
         const bals = (m.wallet_balances || []).filter(b => (b.usd_value || 0) > 0.01).sort((a, b) => (b.usd_value || 0) - (a.usd_value || 0));
         renderLadder(m).catch(err => console.warn('ladder:', err));
+        renderVotion(wallet).catch(err => console.warn('votion:', err));
         $('balances-table').innerHTML = bals.length ? `
             <table class="data-table"><thead><tr><th>Token</th><th class="text-right">Amount</th><th class="text-right">Value</th></tr></thead><tbody>
             ${bals.map(b => `<tr><td class="font-medium">${esc(b.symbol || b.denom?.split('/').pop() || '?')}</td><td class="text-right mono text-gray-300">${fmtNum(b.amount_human)}</td><td class="text-right mono text-amber-300/90">${fmt$(b.usd_value)}</td></tr>`).join('')}
@@ -658,6 +658,61 @@
     }
 
     // ---------- wiring ----------
+    // ---------------- Votion positions (per-holder feed) ----------------
+    async function fetchVotionPositions() {
+        if (store.votionData !== undefined && store.votionData !== null) return store.votionData;
+        if (store._votionP) return store._votionP;
+        store._votionP = fetch(CONFIG.votionPositionsUrl + '?t=' + Date.now())
+            .then(r => r.ok ? r.json() : null)
+            .then(j => (store.votionData = j))
+            .catch(() => (store.votionData = null));
+        return store._votionP;
+    }
+    const fmtUsd = (v) => (v == null || isNaN(v)) ? '—' : '$' + Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    async function renderVotion(wallet) {
+        const el = $('votion-table');
+        if (!el) return;
+        const d = await fetchVotionPositions();
+        if (store.wallet !== wallet) return; // user moved on mid-fetch
+        if (!d || !Array.isArray(d.vaults)) {
+            el.innerHTML = '<div class="text-gray-600 text-sm">Votion feed unavailable right now.</div>';
+            return;
+        }
+        const rows = [];
+        for (const v of d.vaults) {
+            for (const h of (v.holders || [])) {
+                if (h.address !== wallet) continue;
+                rows.push({ label: v.label || v.lst_symbol || shortAddr(v.address), lst: v.lst_symbol || '', vtok: h.vtoken_balance, und: h.underlying_lst, usd: h.underlying_usd, share: h.share_of_vault_pct, vp: h.implied_vp });
+            }
+        }
+        const cap = String(d.capturedAt || '').slice(0, 10);
+        if (!rows.length) {
+            el.innerHTML = `<div class="text-gray-600 text-sm">No Votion positions for this address.</div>
+                <div class="text-[10px] text-gray-600 mt-2">Feed live: ${d.vault_count ?? d.vaults.length} vaults · ${fmtUsd(d.total_tvl_usd)} TVL · ${d.unique_holders ?? '?'} holders · captured ${cap}</div>`;
+            return;
+        }
+        rows.sort((a, b) => (b.usd || 0) - (a.usd || 0));
+        const totUsd = rows.reduce((s, r) => s + (r.usd || 0), 0);
+        const totVp = rows.reduce((s, r) => s + (r.vp || 0), 0);
+        el.innerHTML = `
+            <div class="space-y-1.5">${rows.map(r => `
+                <div class="flex items-center justify-between p-2 rounded-lg bg-white/[0.02]">
+                    <div class="flex flex-col min-w-0">
+                        <span class="text-sm text-purple-300">${esc(r.label)}</span>
+                        <span class="text-[9px] text-gray-600 mono">${fmtNum(r.vtok)} vtokens → ${fmtNum(r.und)} ${esc(r.lst)} · ${(r.share || 0).toFixed(1)}% of vault</span>
+                    </div>
+                    <div class="text-right shrink-0">
+                        <div class="mono text-sm text-cyan-300 font-semibold">${fmtUsd(r.usd)}</div>
+                        <div class="text-[9px] text-gray-500 mono" title="VP your vault share implies from the vault's TLA lock — shown separately from the VP tile">${fmtNum(r.vp)} implied VP</div>
+                    </div>
+                </div>`).join('')}
+            </div>
+            <div class="flex justify-between text-[11px] text-gray-400 mt-2 pt-2 border-t border-white/10">
+                <span>${rows.length} position${rows.length === 1 ? '' : 's'} · captured ${cap}</span>
+                <span class="mono">${fmtUsd(totUsd)} · ${fmtNum(totVp)} implied VP</span>
+            </div>`;
+    }
+
     function viewFromInput() {
         const w = resolveInput($('wallet-input').value);
         if (!w) { $('addr-msg').innerHTML = '<span class="text-amber-300">Not a terra1… address or a known registered name.</span>'; return; }
