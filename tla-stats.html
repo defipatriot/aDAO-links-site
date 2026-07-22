@@ -6198,22 +6198,37 @@
     function briberNameHtml(addr, label) {
         const rosterName = store.nameByWallet?.get(addr);
         if (rosterName) return `${displayName(addr)} ${walletBadges(addr)}`;
-        if (label) return `<span class="text-purple-300" title="${addr}">${label}</span>`;
+        if (label) {
+            // Rev 5.5: the four gauge tribute contracts top the board on event count and
+            // read like mystery whales — explain in place that they're protocol plumbing.
+            if (/gauge tribute/i.test(label)) {
+                return `<span class="text-purple-300" title="${addr}">${label}</span> <i class="fas fa-gears text-[9px] text-gray-500 cursor-help" title="Protocol plumbing, not a person. This contract automatically sweeps the take-rate fees on its gauge pools and recycles the accumulated ASTRO back into the incentive manager as bribes — it fires every epoch, which is why its bribe count is so high."></i>`;
+            }
+            return `<span class="text-purple-300" title="${addr}">${label}</span>`;
+        }
         return `<span class="mono" title="${addr}">${addr.slice(0, 8)}\u2026${addr.slice(-4)}</span> ${walletBadges(addr)}`;
     }
     function briberRowHtml(b, i, builtAtDate) {
         const t = b.totals || {};
         const placed = t.usd_at_placement || 0;
+        const atBuild = t.usd_at_build || 0;
         const unpricedTokens = Object.keys(t.unpriced || {}).length +
             Object.values(t.by_token || {}).filter(x => x.unpriced_events > 0 && !x.usd_at_placement).length;
         let valueHtml;
         if (placed > 0) {
-            const hover = `USD at bribe placement (immutable). At rollup build (${builtAtDate}): ${fmt$(t.usd_at_build || 0)}.`;
+            const hover = `USD at bribe placement (immutable). At rollup build (${builtAtDate}): ${fmt$(atBuild)}.`;
             valueHtml = `<span class="mono text-sm text-amber-300 font-semibold" title="${hover}">${fmt$(placed)}</span>`;
+        } else if (atBuild > 0) {
+            // Rev 5.5: today's-price fallback — no historical price record exists for
+            // these tokens on their placement dates (the 2024–25 CAPA CoinGecko hole
+            // class), so instead of a bare "unpriced" chip we show what the chain-exact
+            // amounts are worth at CURRENT prices, clearly marked. Never presented as
+            // a historical figure; sort order stays placement-based (honest).
+            valueHtml = `<span class="mono text-sm text-gray-300" title="No price record existed for the bribe token(s) on the day these bribes were placed (${unpricedTokens || 'all'} token(s) in a historical price gap, e.g. CoinGecko stopped tracking CAPA May 2024–Aug 2025). This is the chain-exact amounts valued at TODAY'S prices, from the ${builtAtDate} rollup build — not a historical figure.">${fmt$(atBuild)}</span> <span class="text-[8px] px-1 py-px rounded bg-white/10 text-gray-500 align-middle">today's $</span>`;
         } else {
             valueHtml = `<span class="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-gray-400" title="No historical price record for the bribe token(s) (${unpricedTokens || 'all'} unpriced) — amounts are chain-exact, USD is never guessed.">unpriced</span>`;
         }
-        const sub = `${b.event_count} bribe${b.event_count === 1 ? '' : 's'} · ${b.first_bribe || '?'} → ${b.last_bribe || '?'}`;
+        const sub = `${b.event_count} bribe${b.event_count === 1 ? '' : 's'} · ${b.first_bribe || '?'} → ${b.last_bribe || '?'} · <span class="text-cyan-500 hover:text-cyan-300 cursor-pointer" onclick="event.stopPropagation();openBriberModal('${b.briber}')" title="Bribe history: per-epoch timeline, pools, and tokens for this briber"><i class="fas fa-chart-column text-[8px]"></i> history</span>`;
         const isMember = !!store.nameByWallet?.get(b.briber);
         return personRow(i, briberNameHtml(b.briber, b.label), sub, valueHtml, isMember ? b.briber : null);
     }
@@ -6242,6 +6257,97 @@
         boardExpander(el, order.map((b, i) => briberRowHtml(b, i, builtAtDate)), 'briball',
             '<div class="text-gray-600 text-sm">No attributed bribers yet.</div>');
     }
+
+    // ---------------- Per-briber deep-dive modal (Rev 5.5) ----------------
+    // Click "history" on any Top Bribers row → popup with the briber's full
+    // record from the rollup: bribes-per-epoch chart (counts — per-epoch USD
+    // would need per-epoch historical prices we don't hold, so we don't fake
+    // it), per-pool totals with placement USD where priced, per-token totals.
+    let _briberChart = null;
+    function _briberPoolName(gid) {
+        if (!store._gaugeNameMap) {
+            store._gaugeNameMap = new Map();
+            for (const p of (store.pools || [])) if (p.gauge_pool_id) store._gaugeNameMap.set(p.gauge_pool_id, p.name);
+            for (const p of (store.votePools || [])) if (p.gauge_pool_id && !store._gaugeNameMap.has(p.gauge_pool_id)) store._gaugeNameMap.set(p.gauge_pool_id, p.name);
+        }
+        return store._gaugeNameMap.get(gid) || (gid.split(':').pop() || gid).slice(0, 10) + '\u2026';
+    }
+    async function openBriberModal(addr) {
+        const roll = await fetchVotingRollups();
+        const b = (roll?.bribers || []).find(x => x.briber === addr);
+        if (!b) return;
+        let modal = document.getElementById('briber-modal');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'briber-modal';
+            modal.className = 'fixed inset-0 z-50 hidden items-center justify-center p-4';
+            modal.innerHTML = '<div class="absolute inset-0 bg-black/75" onclick="closeBriberModal()"></div><div id="briber-modal-body" class="relative glass-card p-5 w-full max-w-2xl max-h-[85vh] overflow-y-auto"></div>';
+            document.body.appendChild(modal);
+            document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeBriberModal(); });
+        }
+        const t = b.totals || {};
+        const ep = b.by_epoch || {};
+        const epochs = Object.keys(ep).sort((a, c) => Number(a) - Number(c));
+        const counts = epochs.map(k => Object.values(ep[k].pools || {}).reduce((s, n) => s + n, 0));
+        const pools = Object.entries(b.by_pool || {}).map(([gid, p]) => ({
+            name: _briberPoolName(gid), count: p.bribe_count || 0,
+            toks: Object.entries(p.by_token || {}).map(([sym, x]) => `${fmtNum(x.amount_display)} ${sym}`).join(' · '),
+            usd: Object.values(p.by_token || {}).reduce((s, x) => s + (x.usd_at_placement || 0), 0),
+        })).sort((a, c) => c.usd - a.usd || c.count - a.count);
+        const toks = Object.entries(t.by_token || {}).sort((a, c) => (c[1].usd_at_placement || 0) - (a[1].usd_at_placement || 0));
+        document.getElementById('briber-modal-body').innerHTML = `
+            <div class="flex items-start justify-between gap-3 mb-1">
+                <div class="min-w-0">
+                    <div class="text-lg font-semibold">${briberNameHtml(b.briber, b.label)}</div>
+                    <div class="text-[10px] text-gray-600 mono truncate">${b.briber}</div>
+                </div>
+                <button onclick="closeBriberModal()" class="text-gray-500 hover:text-gray-200 shrink-0 text-lg px-1" title="Close">\u2715</button>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 my-3">
+                <div class="rounded-lg bg-white/[0.03] p-2.5"><div class="text-[9px] uppercase tracking-wider text-gray-500">Bribes</div><div class="mono font-bold">${b.event_count}</div></div>
+                <div class="rounded-lg bg-white/[0.03] p-2.5"><div class="text-[9px] uppercase tracking-wider text-gray-500">Active span</div><div class="mono font-bold text-[13px]">${(b.first_bribe || '?').slice(0, 10)} \u2192 ${(b.last_bribe || '?').slice(0, 10)}</div></div>
+                <div class="rounded-lg bg-white/[0.03] p-2.5"><div class="text-[9px] uppercase tracking-wider text-gray-500">USD at placement</div><div class="mono font-bold ${(t.usd_at_placement || 0) > 0 ? 'text-amber-300' : 'text-gray-500'}">${(t.usd_at_placement || 0) > 0 ? fmt$(t.usd_at_placement) : 'unpriced'}</div></div>
+                <div class="rounded-lg bg-white/[0.03] p-2.5"><div class="text-[9px] uppercase tracking-wider text-gray-500">At today's prices</div><div class="mono font-bold text-gray-300">${fmt$(t.usd_at_build || 0)}</div></div>
+            </div>
+            <div class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-1">Bribes per epoch <span class="normal-case font-normal text-gray-600">— counts, not USD: per-epoch dollar values would need historical prices we don't hold for every token, so we chart what's chain-exact</span></div>
+            <div class="rounded-lg bg-white/[0.02] p-2 mb-3" style="height:150px"><canvas id="briber-epoch-chart"></canvas></div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <div class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-1">By pool</div>
+                    ${pools.length ? pools.map(p => `<div class="flex items-center justify-between text-[11px] py-1 border-b border-white/[0.04]"><div class="min-w-0"><div class="font-medium truncate">${p.name}</div><div class="text-[9px] text-gray-600 truncate">${p.toks || ''}</div></div><span class="mono shrink-0 ml-2 ${p.usd > 0 ? 'text-amber-300/90' : 'text-gray-600'}">${p.count}\u00d7${p.usd > 0 ? ' \u00b7 ' + fmt$(p.usd) : ''}</span></div>`).join('') : '<div class="text-gray-600 text-[11px]">No per-pool detail.</div>'}
+                </div>
+                <div>
+                    <div class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-1">By token</div>
+                    ${toks.length ? toks.map(([sym, x]) => `<div class="flex items-center justify-between text-[11px] py-1 border-b border-white/[0.04]"><span class="font-medium">${sym}${x.unpriced_events > 0 ? ` <span class="text-[8px] px-1 py-px rounded bg-amber-500/15 text-amber-400" title="${x.unpriced_events} event(s) had no price record on their placement date — chain-exact amounts, USD never guessed.">${x.unpriced_events} unpriced</span>` : ''}</span><span class="mono text-gray-300">${fmtNum(x.amount_display)}<span class="text-gray-600"> \u00b7 </span>${(x.usd_at_placement || 0) > 0 ? fmt$(x.usd_at_placement) : '<span class="text-gray-600">\u2014</span>'}</span></div>`).join('') : '<div class="text-gray-600 text-[11px]">No token detail.</div>'}
+                </div>
+            </div>
+            <div class="text-[9px] text-gray-600 mt-3 pt-2 border-t border-white/5">Attribution is measured from on-chain events, never assumed — bribes in the Feb 2025 \u2013 Jun 2026 capture window aren't shown yet (registry backfill queued), so this history can be a lower bound. Rollup built ${(roll.builtAt || '').slice(0, 10)}.</div>`;
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        try {
+            if (_briberChart) { _briberChart.destroy(); _briberChart = null; }
+            const ctx = document.getElementById('briber-epoch-chart');
+            if (ctx && window.Chart) {
+                _briberChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: { labels: epochs.map(e => 'e' + e), datasets: [{ data: counts, backgroundColor: 'rgba(251,191,36,0.55)', borderColor: 'rgba(251,191,36,0.9)', borderWidth: 1, borderRadius: 3 }] },
+                    options: {
+                        responsive: true, maintainAspectRatio: false,
+                        plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => `${c.parsed.y} bribe${c.parsed.y === 1 ? '' : 's'}` } } },
+                        scales: { x: { ticks: { color: '#6b7280', font: { size: 9 } }, grid: { display: false } }, y: { ticks: { color: '#6b7280', font: { size: 9 }, precision: 0 }, grid: { color: 'rgba(255,255,255,0.04)' } } },
+                    },
+                });
+            }
+        } catch (e) { console.warn('briber chart:', e); }
+        track('briber_modal', { addr });
+    }
+    function closeBriberModal() {
+        const m = document.getElementById('briber-modal');
+        if (m) { m.classList.add('hidden'); m.classList.remove('flex'); }
+        if (_briberChart) { _briberChart.destroy(); _briberChart = null; }
+    }
+    window.openBriberModal = openBriberModal;
+    window.closeBriberModal = closeBriberModal;
 
     function wireTopsTabs() {
         const btns = document.querySelectorAll('.tops-tab-btn');
