@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trade Cost Simulator | Alliance DAO</title>
+    <meta name="description" content="How much will your trade really cost? Live price-impact simulator for every Terra pool TLA tracks — pick a token, slide an amount, see the cheapest place to trade.">
+    <link rel="icon" type="image/x-icon" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/favicon.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/favicon-16x16.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        body { font-family: 'Space Grotesk', sans-serif; background: #0a0b0f; color: #EAEAEA; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .bg-mesh { position: fixed; inset: 0; z-index: -1; background: radial-gradient(ellipse 80% 50% at 20% 40%, rgba(6,182,212,0.08), transparent), radial-gradient(ellipse 60% 40% at 80% 60%, rgba(45,212,191,0.05), transparent); pointer-events: none; }
+        .glass-card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 1rem; backdrop-filter: blur(12px); }
+        .tok-chip { transition: all .15s ease; cursor: pointer; }
+        .tok-chip:hover { transform: translateY(-1px); }
+        .tok-chip.active { background: rgba(34,211,238,0.2); color: #22d3ee; border-color: rgba(34,211,238,0.5); }
+        .impact-bar { height: 6px; border-radius: 999px; background: rgba(255,255,255,0.06); overflow: hidden; }
+        .impact-fill { height: 100%; border-radius: 999px; transition: width .35s cubic-bezier(.22,1,.36,1), background-color .35s; }
+        .pool-row { transition: transform .15s ease, background .15s ease; }
+        .pool-row:hover { transform: translateX(3px); background: rgba(255,255,255,0.04); }
+        .grade-badge { width: 2.25rem; height: 2.25rem; border-radius: .6rem; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1rem; flex-shrink: 0; }
+        .crown { animation: bob 2.4s ease-in-out infinite; display: inline-block; }
+        @keyframes bob { 0%,100% { transform: translateY(0) rotate(-8deg); } 50% { transform: translateY(-3px) rotate(-8deg); } }
+        input[type=range] { -webkit-appearance: none; width: 100%; height: 8px; border-radius: 999px; background: linear-gradient(90deg, rgba(34,211,238,.5), rgba(168,85,247,.5)); outline: none; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; border-radius: 50%; background: #22d3ee; border: 3px solid #0a0b0f; box-shadow: 0 0 0 2px rgba(34,211,238,.5), 0 2px 10px rgba(34,211,238,.4); cursor: grab; }
+        input[type=range]::-moz-range-thumb { width: 22px; height: 22px; border-radius: 50%; background: #22d3ee; border: 3px solid #0a0b0f; box-shadow: 0 0 0 2px rgba(34,211,238,.5); cursor: grab; }
+        .desc-full { display: none; font-size: 11px; color: #9ca3af; background: rgba(255,255,255,0.03); border-left: 2px solid rgba(34,211,238,0.4); padding: 8px 10px; border-radius: 0 8px 8px 0; margin-top: 6px; line-height: 1.5; }
+        .desc-full.open { display: block; }
+        .loading-pulse { animation: pulse 1.5s ease-in-out infinite; }
+        @keyframes pulse { 0%,100% { opacity: .5; } 50% { opacity: 1; } }
+    </style>
+</head>
+<body>
+<div class="bg-mesh"></div>
+
+<header class="max-w-4xl mx-auto px-4 pt-6 pb-2">
+    <div class="flex items-center justify-between flex-wrap gap-3">
+        <a href="index.html"><img src="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/Alliance%20DAO%20Logo.png" alt="Alliance DAO Logo" class="h-12 md:h-14 w-auto" onerror="this.src='https://placehold.co/128x64/0D0D0D/EAEAEA?text=Logo'; this.onerror=null;"></a>
+        <nav class="flex items-center gap-2 text-sm">
+            <a href="tools.html" class="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300"><i class="fas fa-toolbox mr-1.5 text-cyan-400"></i>Tools</a>
+            <a href="tla-stats.html" class="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300"><i class="fas fa-chart-pie mr-1.5 text-cyan-400"></i>TLA Stats</a>
+            <a href="member-portfolio.html" class="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-300"><i class="fas fa-user mr-1.5 text-cyan-400"></i>My Portfolio</a>
+        </nav>
+    </div>
+</header>
+
+<main class="max-w-4xl mx-auto px-4 pb-10">
+    <div class="text-center mt-6 mb-6">
+        <h1 class="text-3xl md:text-4xl font-bold"><i class="fas fa-water text-cyan-400 mr-2"></i>How much will your trade cost?</h1>
+        <p class="text-gray-500 text-sm mt-2 max-w-xl mx-auto">Every trade moves the price against you a little — bigger trade, thinner pool, bigger cost. Pick a token, slide the amount, and see the cheapest place on Terra to make the trade. Live reserves, no wallet needed.</p>
+    </div>
+
+    <!-- controls -->
+    <div class="glass-card p-5 mb-5">
+        <div class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-2">I want to trade…</div>
+        <div id="tok-chips" class="flex flex-wrap gap-1.5 mb-5"><span class="loading-pulse text-gray-500 text-sm">Loading live pools…</span></div>
+
+        <div class="flex items-end justify-between gap-3 flex-wrap mb-2">
+            <div>
+                <div class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Trade size</div>
+                <div class="mono text-3xl font-bold text-cyan-300" id="amt-display">$1,000</div>
+            </div>
+            <div class="flex items-center gap-1.5 flex-wrap">
+                <button data-amt="100" class="amt-btn text-[11px] px-2.5 py-1 rounded-full bg-white/5 text-gray-400 hover:text-cyan-300 mono">$100</button>
+                <button data-amt="1000" class="amt-btn text-[11px] px-2.5 py-1 rounded-full bg-white/5 text-gray-400 hover:text-cyan-300 mono">$1K</button>
+                <button data-amt="10000" class="amt-btn text-[11px] px-2.5 py-1 rounded-full bg-white/5 text-gray-400 hover:text-cyan-300 mono">$10K</button>
+                <button data-amt="100000" class="amt-btn text-[11px] px-2.5 py-1 rounded-full bg-white/5 text-gray-400 hover:text-cyan-300 mono">$100K</button>
+                <input type="number" id="amt-custom" placeholder="custom $" class="w-24 text-[11px] px-2.5 py-1 rounded-full bg-white/5 text-gray-300 mono border border-white/10 focus:border-cyan-500/50 outline-none">
+            </div>
+        </div>
+        <input type="range" id="amt-slider" min="0" max="1000" value="500" aria-label="Trade size">
+        <div class="flex justify-between text-[9px] text-gray-600 mono mt-1"><span>$10</span><span>$1K</span><span>$100K</span><span>$1M</span></div>
+    </div>
+
+    <!-- results -->
+    <div class="glass-card p-5">
+        <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
+            <h3 class="font-semibold" id="results-title">Where to trade</h3>
+            <span class="text-[10px] text-gray-600" id="results-count"></span>
+        </div>
+        <p class="text-[11px] text-gray-500 mb-3">Ranked cheapest first — the crown marks your best pool. <span class="text-cyan-400 cursor-pointer hover:underline" onclick="document.getElementById('model-note').classList.toggle('open')">how it's estimated</span></p>
+        <div id="model-note" class="desc-full mb-3"><span class="text-gray-300 font-semibold">The model:</span> for standard (xyk) pools, price impact = trade ÷ (the sold token's pool reserve + trade) — the exact constant-product execution-price formula on live reserves. Concentrated and stable pools bunch liquidity near the current price, so their true impact is <i>lower</i> than shown — those rows carry "≤" and grade on the bound. This ignores swap fees, multi-hop routing, and same-block competition: it's a planning number, not a quote. Grades: <span class="mono">A</span>&lt;0.5% · <span class="mono">B</span>&lt;1% · <span class="mono">C</span>&lt;3% · <span class="mono">D</span>&lt;8% · <span class="mono">F</span> above. SkeletonSwap reserves come from an unverified upstream and are labeled.</div>
+        <div id="results" class="space-y-1.5"><div class="loading-pulse text-gray-500 text-sm py-4 text-center">Fetching live reserves…</div></div>
+        <div class="text-[10px] text-gray-600 mt-4 pt-3 border-t border-white/5" id="freshness"></div>
+    </div>
+
+    <div class="text-center text-[10px] text-gray-700 mt-6">Read-only · nothing to sign · data from the community-run TLA capture layer (<a class="text-gray-500 hover:text-cyan-400" href="https://github.com/thealliancedao/tla-core" target="_blank" rel="noopener">tla-core</a>) · not financial advice — verify before trading</div>
+</main>
+
+<script>
+(() => {
+    'use strict';
+    const DEX_URLS = [
+        ['astroport', 'https://raw.githubusercontent.com/thealliancedao/tla-core/main/dex-data/astroport/snapshots/current.json'],
+        ['skeletonswap', 'https://raw.githubusercontent.com/thealliancedao/tla-core/main/dex-data/skeletonswap/snapshots/current.json'],
+    ];
+    const CATALOG_URL = 'https://raw.githubusercontent.com/thealliancedao/tla-core/main/token-catalog/snapshots/current.json';
+    const MIN_TVL = 200;           // hide dust pools that would show absurd impacts
+    const $ = (id) => document.getElementById(id);
+    const fmt$ = (v) => '$' + Number(v).toLocaleString(undefined, { maximumFractionDigits: v < 100 ? 2 : 0 });
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+    const store = { pools: [], prices: new Map(), token: null, amount: 1000, capturedAt: null, priceAt: null };
+
+    // log slider: 0..1000 → $10..$1,000,000
+    const sliderToUsd = (v) => Math.round(10 * Math.pow(10, v / 200));
+    const usdToSlider = (usd) => Math.max(0, Math.min(1000, Math.round(200 * Math.log10(Math.max(10, usd) / 10))));
+
+    async function load() {
+        const j = (u) => fetch(u + '?t=' + Date.now()).then(r => r.ok ? r.json() : null).catch(() => null);
+        const [cat, ...dex] = await Promise.all([j(CATALOG_URL), ...DEX_URLS.map(([, u]) => j(u))]);
+        if (!cat || dex.every(d => !d)) {
+            $('results').innerHTML = '<div class="text-red-400 text-sm text-center py-4">Live feeds unavailable — refresh to retry.</div>';
+            $('tok-chips').innerHTML = '<span class="text-red-400 text-sm">Feed unavailable.</span>';
+            return;
+        }
+        for (const t of (cat.tokens || [])) {
+            const p = t.prices?.tla?.usd ?? t.prices?.coingecko?.usd ?? t.prices?.astroport?.usd ?? null;
+            if (t.denom && p > 0) store.prices.set(t.denom, p);
+        }
+        store.priceAt = cat.meta?.captured_at || cat.meta?.capturedAt || null;
+        for (let i = 0; i < dex.length; i++) {
+            const d = dex[i];
+            if (!d) continue;
+            const dexName = DEX_URLS[i][0];
+            store.capturedAt = store.capturedAt || d.meta?.captured_at || d.meta?.capturedAt || null;
+            for (const p of (d.pools || [])) {
+                if (!Array.isArray(p.assets) || p.assets.length !== 2) continue;
+                const [a, b] = p.assets;
+                const pa = store.prices.get(a.denom), pb = store.prices.get(b.denom);
+                if (!pa || !pb) continue;   // both sides must be priced — no guessed reserves
+                const usdA = Number(a.amount_raw) / 10 ** (a.decimals ?? 6) * pa;
+                const usdB = Number(b.amount_raw) / 10 ** (b.decimals ?? 6) * pb;
+                if (usdA + usdB < MIN_TVL) continue;
+                store.pools.push({
+                    name: p.pool_name, dex: dexName, type: p.pool_type || 'xyk',
+                    tla: !!p.tla_relevant || !!p.bucket,
+                    sides: [{ sym: a.symbol, usd: usdA }, { sym: b.symbol, usd: usdB }],
+                });
+            }
+        }
+        // token list ordered by total liquidity behind it — the natural "popular first"
+        const liq = new Map();
+        for (const p of store.pools) for (const s of p.sides) liq.set(s.sym, (liq.get(s.sym) || 0) + s.usd);
+        const toks = [...liq.entries()].sort((x, y) => y[1] - x[1]).map(([sym]) => sym);
+        store.token = toks.includes('LUNA') ? 'LUNA' : toks[0];
+        $('tok-chips').innerHTML = toks.map(t =>
+            `<button class="tok-chip text-[12px] px-3 py-1 rounded-full bg-white/5 border border-white/10 text-gray-300 font-medium${t === store.token ? ' active' : ''}" data-tok="${esc(t)}">${esc(t)}</button>`).join('');
+        $('tok-chips').querySelectorAll('.tok-chip').forEach(b => b.addEventListener('click', () => {
+            store.token = b.dataset.tok;
+            $('tok-chips').querySelectorAll('.tok-chip').forEach(x => x.classList.toggle('active', x === b));
+            render();
+        }));
+        const cap = String(store.capturedAt || '').replace('T', ' ').slice(0, 16);
+        $('freshness').innerHTML = `<i class="fas fa-satellite-dish text-gray-500 mr-1"></i>Live reserves captured ${esc(cap || 'recently')} UTC · prices from the TLA token catalog · pools under ${fmt$(MIN_TVL)} hidden · refreshes on page load`;
+        render();
+    }
+
+    const gradeOf = (pct) => pct < 0.5 ? 'A' : pct < 1 ? 'B' : pct < 3 ? 'C' : pct < 8 ? 'D' : 'F';
+    const gradeStyle = { A: 'bg-emerald-500/20 text-emerald-300', B: 'bg-cyan-500/20 text-cyan-300', C: 'bg-yellow-500/20 text-yellow-300', D: 'bg-orange-500/20 text-orange-300', F: 'bg-red-500/20 text-red-300' };
+    const barColor = { A: '#34d399', B: '#22d3ee', C: '#fde047', D: '#fb923c', F: '#f87171' };
+
+    function render() {
+        const tok = store.token, amt = store.amount;
+        if (!tok) return;
+        $('results-title').innerHTML = `Where to trade <span class="text-cyan-300">${esc(tok)}</span>`;
+        const rows = [];
+        for (const p of store.pools) {
+            const i = p.sides.findIndex(s => s.sym === tok);
+            if (i < 0) continue;
+            const sold = p.sides[i], get = p.sides[1 - i];
+            const curved = p.type === 'concentrated' || p.type === 'stable';
+            const impact = amt / (sold.usd + amt) * 100;          // xyk execution-price impact
+            rows.push({ p, get, impact, curved, poolUsd: sold.usd + get.usd });
+        }
+        if (!rows.length) {
+            $('results').innerHTML = `<div class="text-gray-500 text-sm text-center py-4">No priced pools carry ${esc(tok)} right now.</div>`;
+            $('results-count').textContent = '';
+            return;
+        }
+        rows.sort((a, b) => a.impact - b.impact);
+        const maxShownPct = Math.min(Math.max(rows[rows.length - 1].impact, 1), 12); // bar scale cap
+        $('results-count').textContent = `${rows.length} pool${rows.length === 1 ? '' : 's'} · ${fmt$(amt)} of ${tok}`;
+        $('results').innerHTML = rows.map((r, idx) => {
+            const g = gradeOf(r.impact);
+            const lossUsd = amt * r.impact / 100;
+            const w = Math.max(2, Math.min(100, r.impact / maxShownPct * 100));
+            const impactTxt = (r.curved ? '≤' : '') + (r.impact < 0.05 ? '<0.05' : r.impact.toFixed(2)) + '%';
+            return `
+            <div class="pool-row rounded-xl bg-white/[0.02] border border-white/5 p-3">
+                <div class="flex items-center gap-3">
+                    <span class="grade-badge ${gradeStyle[g]}">${g}</span>
+                    <div class="min-w-0 flex-1">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            ${idx === 0 ? '<span class="crown text-amber-300" title="Cheapest pool for this trade">👑</span>' : ''}
+                            <span class="font-semibold text-sm">${esc(r.p.name)}</span>
+                            <span class="text-[9px] px-1.5 py-0.5 rounded ${r.p.dex === 'astroport' ? 'bg-purple-500/15 text-purple-300' : 'bg-pink-500/15 text-pink-300'}">${r.p.dex === 'astroport' ? 'Astroport' : 'SkeletonSwap'}</span>
+                            ${r.p.dex === 'skeletonswap' ? '<span class="text-[8px] text-amber-500/80" title="SkeletonSwap reserve data comes from an unverified upstream — treat with extra caution.">unverified</span>' : ''}
+                            ${r.curved ? `<span class="text-[8px] text-gray-500" title="Concentrated/stable pools bunch liquidity near the price — true impact is LOWER than this bound.">${esc(r.p.type)} · true cost lower</span>` : ''}
+                            ${r.p.tla ? '<span class="text-[8px] text-cyan-500/70" title="A TLA-incentivized pool">TLA</span>' : ''}
+                        </div>
+                        <div class="impact-bar mt-1.5"><div class="impact-fill" style="width:${w}%;background:${barColor[g]}"></div></div>
+                        <div class="text-[10px] text-gray-500 mt-1">→ receive ${esc(r.get.sym)} · pool depth ${fmt$(r.poolUsd)}</div>
+                    </div>
+                    <div class="text-right shrink-0">
+                        <div class="mono text-base font-bold ${r.impact < 1 ? 'text-gray-100' : r.impact < 3 ? 'text-yellow-300' : 'text-red-400'}">${impactTxt}</div>
+                        <div class="text-[10px] mono ${lossUsd < amt * 0.01 ? 'text-gray-500' : 'text-amber-300/90'}" title="Approximate value lost to price impact — before fees">${r.curved ? '≤' : '~'}${fmt$(lossUsd)} lost</div>
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    function setAmount(usd, fromSlider) {
+        store.amount = Math.max(10, Math.min(1000000, Math.round(usd)));
+        $('amt-display').textContent = fmt$(store.amount);
+        if (!fromSlider) $('amt-slider').value = usdToSlider(store.amount);
+        render();
+    }
+
+    function init() {
+        $('amt-slider').addEventListener('input', (e) => setAmount(sliderToUsd(Number(e.target.value)), true));
+        document.querySelectorAll('.amt-btn').forEach(b => b.addEventListener('click', () => setAmount(Number(b.dataset.amt))));
+        $('amt-custom').addEventListener('change', (e) => { const v = Number(e.target.value); if (v > 0) setAmount(v); });
+        setAmount(1000);
+        load();
+    }
+    document.addEventListener('DOMContentLoaded', init);
+})();
+</script>
+<script defer src="/_vercel/insights/script.js"></script>
+</body>
+</html>
