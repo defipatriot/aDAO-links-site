@@ -180,6 +180,16 @@
             <div id="ladder" class="space-y-1.5"><div class="loading-pulse text-gray-500 text-sm">Scanning the collection… (10,000 tokens, one moment)</div></div>
         </div>
 
+        <!-- lifetime cost & activity — tla-flows/pnl Phase A (measured legs only) -->
+        <div class="glass-card p-5 mb-4">
+            <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
+                <h3 class="font-semibold flex items-center gap-2"><i class="fas fa-receipt text-emerald-300"></i> Lifetime Cost &amp; Activity</h3>
+                <span class="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 font-semibold uppercase tracking-wider" title="Every dollar figure here is measured from this wallet's actual on-chain transactions, valued at the price on the day each one happened. Nothing is estimated.">measured</span>
+            </div>
+            <p class="text-[11px] text-gray-500 mb-3">The first P&amp;L legs, from captured deposit/withdraw/claim events: real entry cost and every swap fee this wallet has ever paid entering pools — valued at the price <i>on the day it happened</i>, never today's price. Legs that can't be measured yet are shown as unvalued, not guessed.</p>
+            <div id="pnl-card"><div class="loading-pulse text-gray-500 text-sm">Loading the flow ledger…</div></div>
+        </div>
+
         <!-- trends honesty -->
         <div class="glass-card p-5 mb-4">
             <h3 class="font-semibold mb-1 flex items-center gap-2"><i class="fas fa-chart-line text-cyan-400"></i> Trends</h3>
@@ -231,6 +241,7 @@
     const CONFIG = {
         participantsUrl: 'https://raw.githubusercontent.com/defipatriot/tla-participants-data_2026/main/data/current.json',
         votionPositionsUrl: 'https://raw.githubusercontent.com/defipatriot/votion-positions-data_2026/main/data/current.json',
+        pnlUrl: 'https://raw.githubusercontent.com/thealliancedao/tla-core/main/tla-flows/pnl/rollup.json',
         adaoPositionsUrl: 'https://raw.githubusercontent.com/defipatriot/adao-positions-data_2026/main/data/current.json',
         alliesUrl: 'https://raw.githubusercontent.com/defipatriot/adao-allies-data_2026/main/data/current.json',
         orgNftSummaryUrl: 'https://raw.githubusercontent.com/thealliancedao/tla-core/main/nfts/adao/snapshots/summary.json',
@@ -242,6 +253,7 @@
             ['aDAO positions', 'https://raw.githubusercontent.com/defipatriot/adao-positions-data_2026/main/data/heartbeat.json'],
             ['aDAO allies', 'https://raw.githubusercontent.com/defipatriot/adao-allies-data_2026/main/data/heartbeat.json'],
             ['NFT tracker (org)', 'https://raw.githubusercontent.com/thealliancedao/tla-core/main/nfts/adao/snapshots/heartbeat.json'],
+            ['P&L rollup (org)', 'https://raw.githubusercontent.com/thealliancedao/tla-core/main/tla-flows/pnl/heartbeat.json'],
         ],
         storageKey: 'tla_portfolio_wallet',
     };
@@ -651,6 +663,7 @@
         const bals = (m.wallet_balances || []).filter(b => (b.usd_value || 0) > 0.01).sort((a, b) => (b.usd_value || 0) - (a.usd_value || 0));
         renderLadder(m).catch(err => console.warn('ladder:', err));
         renderVotion(wallet).catch(err => console.warn('votion:', err));
+        renderPnl(wallet).catch(err => console.warn('pnl:', err));
         $('balances-table').innerHTML = bals.length ? `
             <table class="data-table"><thead><tr><th>Token</th><th class="text-right">Amount</th><th class="text-right">Value</th></tr></thead><tbody>
             ${bals.map(b => `<tr><td class="font-medium">${esc(b.symbol || b.denom?.split('/').pop() || '?')}</td><td class="text-right mono text-gray-300">${fmtNum(b.amount_human)}</td><td class="text-right mono text-amber-300/90">${fmt$(b.usd_value)}</td></tr>`).join('')}
@@ -722,6 +735,81 @@
             <div class="flex justify-between text-[11px] text-gray-400 mt-2 pt-2 border-t border-white/10">
                 <span>${rows.length} position${rows.length === 1 ? '' : 's'} · captured ${cap}${covPct < 90 ? ` · <span class="text-amber-500" title="Discovered holder balances vs vtoken supply — the feed cannot yet see all holders">discovery ${covPct.toFixed(0)}%</span>` : ''}</span>
                 <span class="mono">${fmtUsd(totUsd)} · ${fmtNum(totVp)} implied VP</span>
+            </div>`;
+    }
+
+    // ---------------- Lifetime cost & activity (tla-flows/pnl Phase A) ----------------
+    async function fetchPnl() {
+        if (store.pnlData !== undefined && store.pnlData !== null) return store.pnlData;
+        if (store._pnlP) return store._pnlP;
+        store._pnlP = fetch(CONFIG.pnlUrl + '?t=' + Date.now())
+            .then(r => r.ok ? r.json() : null)
+            .then(j => {
+                if (j && Array.isArray(j.wallets)) {
+                    j._byAddr = new Map(j.wallets.map(w => [w.address, w]));
+                }
+                return (store.pnlData = j);
+            })
+            .catch(() => (store.pnlData = null));
+        return store._pnlP;
+    }
+    async function renderPnl(wallet) {
+        const el = $('pnl-card');
+        if (!el) return;
+        const d = await fetchPnl();
+        if (store.wallet !== wallet) return; // user moved on mid-fetch
+        if (!d || !d._byAddr) {
+            el.innerHTML = '<div class="text-gray-600 text-sm">Flow-ledger feed unavailable right now.</div>';
+            return;
+        }
+        // Coverage strip — built from the rollup's own recorded gap, never hardcoded.
+        const gap = (d.sources?.known_gaps || [])[0] || null;
+        const gapFrom = gap?.from_date_approx || '2025-01-07';
+        const covChip = (ok, label, title) => `<span class="text-[9px] px-1.5 py-0.5 rounded ${ok === true ? 'bg-emerald-500/15 text-emerald-300' : ok === false ? 'bg-red-500/15 text-red-300' : 'bg-white/5 text-gray-500'}" title="${esc(title)}">${label}</span>`;
+        const w = d._byAddr.get(wallet);
+        const strip = (ww) => `<div class="flex items-center gap-1.5 flex-wrap mb-3">
+            <span class="text-[9px] uppercase tracking-wider text-gray-600">capture coverage</span>
+            ${covChip(ww ? ww.eras.fcd : null, '2024-08 → ' + esc(gapFrom.slice(0, 7)), 'Genesis era, recovered from the frozen FCD archive.' + (ww ? (ww.eras.fcd ? ' This wallet has activity here.' : ' No activity from this wallet here.') : ''))}
+            ${covChip(false, esc(gapFrom.slice(0, 7)) + ' → 2026-06 not captured', 'The archive-node gap — activity in this window is NOT counted yet. Backfill queued; these numbers are a lower bound.')}
+            ${covChip(ww ? ww.eras.walker : null, '2026-06 → now', 'Live block-walker capture.' + (ww ? (ww.eras.walker ? ' This wallet has activity here.' : ' No activity from this wallet here.') : ''))}
+        </div>`;
+        if (!w) {
+            el.innerHTML = strip(null) + '<div class="text-gray-600 text-sm">No captured flow activity for this address in the covered windows — note the uncaptured gap above before reading that as "never active."</div>';
+            return;
+        }
+        const st = (label, val, sub, cls) => `<div class="rounded-lg bg-white/[0.02] border border-white/5 p-3">
+            <div class="text-[9px] uppercase tracking-wider text-gray-500">${label}</div>
+            <div class="mono text-base font-bold ${cls || 'text-gray-100'}">${val}</div>
+            <div class="text-[9px] text-gray-600">${sub || ''}</div></div>`;
+        const unvBadge = (n) => n > 0 ? ` <span class="text-[8px] px-1 py-px rounded bg-amber-500/15 text-amber-400" title="Legs with no historical price on the event date (e.g. tokens CoinGecko wasn't tracking then, like the 2024–25 CAPA hole). Counted, shown, never guessed at.">${n} unvalued</span>` : '';
+        const zaps = Object.entries(w.zap_inputs || {}).sort((a, b) => (b[1].usd_at_event || 0) - (a[1].usd_at_event || 0));
+        const unkLegs = Object.values(w.zap_inputs_unknown || {}).reduce((s, u) => s + (u.legs || 0), 0);
+        const fees = Object.entries(w.fees || {}).sort((a, b) => (b[1].usd_at_event || 0) - (a[1].usd_at_event || 0));
+        el.innerHTML = strip(w) + `
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                ${st('Zap cost basis', fmtUsd(w.zap_input_usd_at_event), 'what went in, valued at entry day', 'text-cyan-300')}
+                ${st('Swap fees paid', fmtUsd(w.fees_usd_at_event), 'spread + commission + maker, lifetime', 'text-amber-300')}
+                ${st('Activity', `${w.counts.deposit}<span class="text-gray-600">/</span>${w.counts.withdraw}<span class="text-gray-600">/</span>${w.counts.claim}`, 'deposits / withdraws / claims')}
+                ${st('Active since', esc((w.first_event || '').slice(0, 10)), 'first captured flow event')}
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div>
+                    <div class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-1.5">Entry cost basis by token <span class="text-gray-600 normal-case font-normal">(zap inputs · ${w.deposits_with_cost} of ${w.counts.deposit} deposits carry cost data)</span></div>
+                    ${zaps.length ? `<table class="data-table"><thead><tr><th>Token</th><th class="text-right">Amount in</th><th class="text-right">USD at entry</th></tr></thead><tbody>
+                    ${zaps.map(([sym, z]) => `<tr><td class="font-medium">${esc(sym)}${unvBadge(z.unvalued_legs)}</td><td class="text-right mono text-gray-300">${fmtNum(z.amount_display)}</td><td class="text-right mono text-cyan-300/90">${z.valued_legs > 0 ? fmtUsd(z.usd_at_event) : '<span class="text-gray-600">unvalued</span>'}</td></tr>`).join('')}
+                    </tbody></table>` : '<div class="text-gray-600 text-sm py-1">No zap-visible entries captured.</div>'}
+                    ${unkLegs > 0 ? `<div class="text-[10px] text-gray-600 mt-1.5">+ ${unkLegs} leg${unkLegs === 1 ? '' : 's'} in unmapped historical tokens — recorded raw, unvalued.</div>` : ''}
+                </div>
+                <div>
+                    <div class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-1.5">Fees paid by token</div>
+                    ${fees.length ? `<table class="data-table"><thead><tr><th>Token</th><th class="text-right">Total fees</th><th class="text-right">USD at event</th></tr></thead><tbody>
+                    ${fees.map(([sym, f]) => `<tr><td class="font-medium">${esc(sym)}${unvBadge(f.unvalued_legs)}</td><td class="text-right mono text-gray-300">${fmtNum((f.spread_display || 0) + (f.commission_display || 0) + (f.maker_display || 0))}</td><td class="text-right mono text-amber-300/90">${f.valued_legs > 0 ? fmtUsd(f.usd_at_event) : '<span class="text-gray-600">unvalued</span>'}</td></tr>`).join('')}
+                    </tbody></table>` : '<div class="text-gray-600 text-sm py-1">No swap fee legs captured.</div>'}
+                </div>
+            </div>
+            <div class="text-[10px] text-gray-600 mt-3 pt-2 border-t border-white/5">
+                <i class="fas fa-gift text-gray-500 mr-1"></i>${w.counts.claim} reward claim${w.counts.claim === 1 ? '' : 's'} recorded — <span class="text-gray-500">timing only; claim amounts aren't captured yet (Phase B enrichment), so yield stays honestly unvalued rather than estimated.</span>
+                <span class="block mt-1">Ledger rebuilt ${esc(String(d.builtAt || '').slice(0, 10))} · Phase A of the P&amp;L build — withdraw valuation, yield, and the uncaptured gap land in later phases.</span>
             </div>`;
     }
 
