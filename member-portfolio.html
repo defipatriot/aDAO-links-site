@@ -293,9 +293,17 @@
     // ---------- load ----------
     async function loadAll() {
         const j = (u) => fetch(u).then(r => r.ok ? r.json() : null).catch(() => null);
-        const [parts, adao, allies, orgNft, snap] = await Promise.all([
+        const [parts, adao, allies, orgNft, snap, cat] = await Promise.all([
             j(CONFIG.participantsUrl), j(CONFIG.adaoPositionsUrl), j(CONFIG.alliesUrl), j(CONFIG.orgNftSummaryUrl), j(CONFIG.snapshotUrl),
+            j('https://raw.githubusercontent.com/thealliancedao/tla-core/main/token-catalog/snapshots/current.json'),
         ]);
+        // org token-catalog prices — render-time fallback for assets the
+        // positions feed couldn't price (e.g. single-side xASTRO)
+        store.catalogPrices = new Map();
+        for (const t of (cat?.tokens || [])) {
+            const p = t.prices?.tla?.usd ?? t.prices?.coingecko?.usd ?? null;
+            if (t.denom && p > 0) store.catalogPrices.set(t.denom, { usd: p, at: t.prices?.tla?.captured_at || null });
+        }
         store.feeds = { parts, adao, allies, orgNft, snap };
         // Epoch arrives as an object ({number, ends_at, progress_pct}) — extract
         // the number, and keep the end-time for the countdown chip.
@@ -608,7 +616,19 @@
                 return `<tr class="${inactive ? 'opacity-90' : ''}">
                     <td><div class="font-medium ${inactive ? 'text-red-300' : ''}">${esc(lp.pool_name)} ${lp.is_amplified ? '<span class="text-[8px] px-1 py-px rounded bg-purple-500/20 text-purple-300" title="Amplified (ampLP) position">amp</span>' : ''}</div>
                         <div class="text-[9px] text-gray-600">${esc(lp.dex || '')} · ${esc(lp.bucket || '')}${inactive ? ' · <span class="text-red-400 font-semibold">INACTIVE — paying take rate, earning nothing</span>' : ''}</div></td>
-                    <td class="text-right mono text-cyan-300">${fmt$(lp.estimated_position_usd)}</td>
+                    <td class="text-right mono text-cyan-300">${(() => {
+                        if (lp.estimated_position_usd != null) return fmt$(lp.estimated_position_usd);
+                        // feed couldn't price this asset — derive at render from
+                        // the org token catalog: balance × catalog USD. Marked,
+                        // and not yet in the feed's summary tiles (org positions
+                        // migration folds it in at the source).
+                        const den = String(lp.pool_gauge_id || '').replace(/^(native|cw20):/, '');
+                        const cp = store.catalogPrices?.get(den);
+                        if (cp && lp.user_balance_human > 0 && (!lp.underlying_token_amounts || !lp.underlying_token_amounts.length)) {
+                            return `<span title="Valued at render from the org token catalog (${esc(String(cp.at || '').slice(0, 16))} UTC) — the positions feed couldn't price this token; not yet included in the summary tiles.">${fmt$(lp.user_balance_human * cp.usd)}<span class="text-[8px] text-gray-500 align-super">*</span></span>`;
+                        }
+                        return '—';
+                    })()}</td>
                     <td class="text-right mono text-gray-400">${lp.user_pct_of_pool != null ? lp.user_pct_of_pool.toFixed(2) + '%' : '—'}</td>
                     <td class="text-right mono ${inactive ? 'text-gray-600' : 'text-emerald-400'}">${!inactive && lp.pool_apr_pct != null ? lp.pool_apr_pct.toFixed(0) + '%' : '—'}</td>
                     <td class="text-right mono ${thr != null && thr < 0.5 ? 'text-amber-300' : 'text-gray-500'}" title="Distance above the 1% bucket-vote threshold the pool needs to keep earning">${thr != null ? (thr >= 0 ? '+' : '') + thr.toFixed(1) + 'pp' : '—'}</td>
@@ -811,7 +831,7 @@
                 <i class="fas fa-gift text-gray-500 mr-1"></i>${(w.claimed_yield && w.claimed_yield.valued_events > 0)
                     ? `Claimed yield <span class="mono text-emerald-300/90 font-semibold" title="Measured from ${w.claims?.pool_claim_entries ?? w.claimed_yield.valued_events} per-pool claim events, valued as LUNA at each claim day's price — the reward denom is evidenced on-chain by the vault claim records, never assumed.">${fmtNum(w.claimed_yield.luna_display)} LUNA ≈ ${fmtUsd(w.claimed_yield.usd_at_event)}</span> at claim-day prices, across ${w.counts.claim} claim${w.counts.claim === 1 ? '' : 's'}${(w.claims?.v1_unmeasured_records > 0) ? ` <span class="text-gray-500">(${w.claims.v1_unmeasured_records} newer claim${w.claims.v1_unmeasured_records === 1 ? '' : 's'} still unmeasured until the archive re-derive)</span>` : ''}`
                     : `${w.counts.claim} reward claim${w.counts.claim === 1 ? '' : 's'} recorded — <span class="text-gray-500">timing only; claim amounts aren't captured yet (Phase B enrichment), so yield stays honestly unvalued rather than estimated.</span>`}
-                <span class="block mt-1">Ledger rebuilt ${esc(String(d.builtAt || '').slice(0, 10))} · Phase A of the P&amp;L build — withdraw valuation, yield, and the uncaptured gap land in later phases.</span>
+                <span class="block mt-1">Ledger rebuilt ${esc(String(d.builtAt || '').slice(0, 10))} · Phase ${esc(String(d.phase || 'A'))} of the P&amp;L build — withdraw valuation and the uncaptured gap land in later phases.</span>
             </div>`;
     }
 
