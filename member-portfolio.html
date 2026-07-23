@@ -609,7 +609,7 @@
         // LP table
         const lps = (m.lp_positions || []).slice().sort((a, b) => (b.estimated_position_usd || 0) - (a.estimated_position_usd || 0));
         $('lp-table').innerHTML = lps.length ? `
-            <table class="data-table"><thead><tr><th>Pool</th><th class="text-right">Value</th><th class="text-right">Pool share</th><th class="text-right" title="Dex-side APR only (swap fees / pre-split dex figure) — TLA reward emissions, the dominant yield for these pools, are NOT included yet. The full reward-APR model (base + amplified boost, per the Eris display) is the queued APR-convention audit.">Dex APR<span class="text-[8px] text-gray-600 align-super">†</span></th><th class="text-right">Threshold</th></tr></thead><tbody>
+            <table class="data-table"><thead><tr><th>Pool</th><th class="text-right">Value</th><th class="text-right">Pool share</th><th class="text-right">APR</th><th class="text-right">Threshold</th></tr></thead><tbody>
             ${lps.map(lp => {
                 const inactive = lp.status !== 'active';
                 const thr = lp.distance_from_threshold_pp;
@@ -630,7 +630,21 @@
                         return '—';
                     })()}</td>
                     <td class="text-right mono text-gray-400">${lp.user_pct_of_pool != null ? lp.user_pct_of_pool.toFixed(2) + '%' : '—'}</td>
-                    <td class="text-right mono ${inactive ? 'text-gray-600' : 'text-emerald-400'}">${!inactive && lp.pool_apr_pct != null ? lp.pool_apr_pct.toFixed(0) + '%' : '—'}</td>
+                    <td class="text-right mono ${inactive ? 'text-gray-600' : 'text-emerald-400'}">${(() => {
+                        if (inactive) return '—';
+                        // SPEC-lp-apr v1: reward APR from the snapshot's
+                        // chain-distributions figure (pot × pool share ÷ staked),
+                        // matched by gauge id; dex-side APR shown in the hover
+                        // breakdown. Amp positions compound on top — exact boost
+                        // factor is the spec's open item, stated, never guessed.
+                        const sp = (store.feeds?.snap?.pools || []).find(p => p.gauge_pool_id && p.gauge_pool_id === lp.pool_gauge_id);
+                        const rw = sp?.rewards;
+                        if (rw && rw.approx_apr_pct != null) {
+                            const dex = lp.pool_apr_pct != null ? ` + ${lp.pool_apr_pct.toFixed(1)}% dex-side` : '';
+                            return `<span title="${rw.approx_apr_pct.toFixed(2)}% TLA reward emissions (chain distributions: ${fmtNum(rw.annual_emissions_luna)} LUNA/yr to this pool ÷ pool staked)${dex}.${lp.is_amplified ? ' Amplified positions auto-compound on top of this base — the exact boost factor is pending the APR-convention audit.' : ''} Captured ${esc(String(store.feeds?.snap?.capturedAt || '').slice(0, 16))} UTC.">${rw.approx_apr_pct.toFixed(0)}%${lp.is_amplified ? '<span class="text-[8px] text-purple-300 align-super" title="amplified — compounds above this base">+</span>' : ''}</span>`;
+                        }
+                        return lp.pool_apr_pct != null ? lp.pool_apr_pct.toFixed(0) + '%' : '—';
+                    })()}</td>
                     <td class="text-right mono ${thr != null && thr < 0.5 ? 'text-amber-300' : 'text-gray-500'}" title="Distance above the 1% bucket-vote threshold the pool needs to keep earning">${thr != null ? (thr >= 0 ? '+' : '') + thr.toFixed(1) + 'pp' : '—'}</td>
                 </tr>`;
             }).join('')}
