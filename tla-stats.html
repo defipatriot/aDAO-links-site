@@ -7484,19 +7484,23 @@
     // pool-status history (staked/depth/VP/token detail), this-epoch bribes,
     // snapshot reward APR, and the bribe runway. Lazy: built on first expand.
     const _drillRecs = new Map();
-    function drillChartSvg(pts, w, h, fmt) {
+    function drillChartSvg(pts, w, h, fmt, color = '#22D3EE') {
         const vals = pts.map(p => p[1]).filter(v => v != null);
         if (vals.length < 2) return '<div class="text-[10px] text-gray-600">not enough history yet</div>';
         const min = Math.min(...vals), max = Math.max(...vals), span = (max - min) || 1;
-        const sx = i => 4 + i * (w - 8) / (pts.length - 1);
-        const sy = v => h - 14 - (v - min) / span * (h - 24);
+        const sx = i => 2 + i * (w - 4) / (pts.length - 1);
+        const sy = v => 3 + (1 - (v - min) / span) * (h - 6);
         const line = pts.map((p, i) => p[1] == null ? null : `${sx(i).toFixed(1)},${sy(p[1]).toFixed(1)}`).filter(Boolean).join(' ');
-        const ticks = pts.map((p, i) => (i === 0 || i === pts.length - 1 || i === Math.floor(pts.length / 2))
-            ? `<text x="${sx(i).toFixed(1)}" y="${h - 3}" font-size="8" fill="#6B7280" text-anchor="middle">e${p[0]}</text>` : '').join('');
-        return `<svg viewBox="0 0 ${w} ${h}" class="w-full" preserveAspectRatio="none">
-            <text x="2" y="9" font-size="8" fill="#6B7280">${fmt(max)}</text>
-            <text x="2" y="${h - 16}" font-size="8" fill="#6B7280">${fmt(min)}</text>
-            <polyline points="${line}" fill="none" stroke="#22D3EE" stroke-width="1.5"/>${ticks}</svg>`;
+        const area = `2,${h} ` + line + ` ${w - 2},${h}`;
+        // labels live in HTML (never inside a stretched SVG — the e190 blowup bug)
+        return `<div class="relative">
+            <svg viewBox="0 0 ${w} ${h}" class="w-full h-[52px]" preserveAspectRatio="none">
+              <polygon points="${area}" fill="${color}" opacity="0.08"/>
+              <polyline points="${line}" fill="none" stroke="${color}" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
+            <span class="absolute top-0 left-1 text-[9px] text-gray-500 mono">${fmt(max)}</span>
+            <span class="absolute bottom-0 left-1 text-[9px] text-gray-600 mono">${fmt(min)}</span>
+            <div class="flex justify-between text-[9px] text-gray-600 mono px-0.5"><span>e${pts[0][0]}</span><span>e${pts[Math.floor(pts.length / 2)][0]}</span><span>e${pts[pts.length - 1][0]}</span></div>
+          </div>`;
     }
     function drillFlowBars(pts, w, h) {
         const ds = []; for (let i = 1; i < pts.length; i++) if (pts[i][1] != null && pts[i-1][1] != null) ds.push([pts[i][0], pts[i][1] - pts[i-1][1]]);
@@ -7869,8 +7873,15 @@
             const compToggle = comp
                 ? `<button onclick="this.closest('[data-erow]').querySelector('[data-comp]').classList.toggle('hidden')" class="text-[9px] text-gray-600 hover:text-cyan-400 mt-1 transition-colors"><i class="fas fa-layer-group text-[8px] mr-0.5"></i>composition</button>`
                 : '';
+            // v2.1 dense row: the width carries real columns — trend, APR,
+            // runway, VP, flow, staked — each captioned, so a scroll-through
+            // reads like a table without losing the card feel. Numbers only
+            // where measured; em-dash where not (never zero-as-unknown).
+            const apr = _aprOf(r), rwLeft = _runwayOf(r);
+            const vpNow = r.hp ? (() => { const eps = Object.keys(r.hp.epochs || {}).map(Number); if (!eps.length) return null; return r.hp.epochs[String(Math.max(...eps))]?.vp_human ?? null; })() : null;
+            const col = (cap, val, cls, tip) => `<div class="text-right shrink-0 hidden md:block" style="width:72px" ${tip ? `title="${tip}"` : ''}><div class="mono text-[11px] ${cls}">${val}</div><div class="text-[8px] text-gray-600 -mt-0.5">${cap}</div></div>`;
             return `
-            <div data-erow class="p-3 rounded-lg border-l-2 ${border}">
+            <div data-erow class="p-2.5 rounded-lg border-l-2 ${border}">
               <div class="flex items-center gap-3">
                 <span class="w-2 h-2 rounded-full shrink-0" style="background:${dotColor(r)}" title="${r.sev === 'high' ? 'High exit risk' : r.sev === 'med' ? 'Watch' : 'Healthy'}"></span>
                 <div class="flex-1 min-w-0">
@@ -7881,17 +7892,21 @@
                     ${sc}
                     ${runwayChip(r)}
                   </div>
-                  <div class="flex items-center gap-2 mt-1">
+                  <div class="flex items-center gap-2 mt-0.5">
                     ${sparkline(r.series, sparkColor(r))}
                     <span class="text-[10px] ${tw.cls}">${tw.txt}</span>
                     ${compOpen ? '' : compToggle}
-                    <button onclick="togglePoolDrill(this, '${(r.name + '|' + r.bucket).replace(/'/g, '')}')" class="text-[9px] text-gray-600 hover:text-cyan-400 mt-1 transition-colors"><i class="fas fa-chevron-down text-[8px] mr-0.5 transition-transform"></i>details</button>
+                    <button onclick="togglePoolDrill(this, '${(r.name + '|' + r.bucket).replace(/'/g, '')}')" class="text-[9px] text-gray-600 hover:text-cyan-400 transition-colors"><i class="fas fa-chevron-down text-[8px] mr-0.5 transition-transform"></i>details</button>
                   </div>
                 </div>
-                <div class="text-right shrink-0" style="width:96px">
+                ${col('reward APR', apr != null ? apr.toFixed(0) + '%' : '\u2014', 'text-emerald-300/90', 'TLA reward emissions \u00f7 pool staked (chain distributions, base rate)')}
+                ${col('bribe runway', rwLeft != null ? rwLeft + ' ep' : '\u2014', rwLeft != null && rwLeft <= 1 ? 'text-amber-300' : 'text-gray-300', 'Epochs of bribes still funded in the manager\u2019s future pots')}
+                ${col('vote power', vpNow != null ? (vpNow >= 1e6 ? (vpNow / 1e6).toFixed(2) + 'M' : Math.round(vpNow).toLocaleString()) : '\u2014', 'text-violet-300/90', 'vAMP voting power on this gauge right now')}
+                ${col('flow', flowStr || '\u2014', flowCls, 'Dollars into/out of TLA staking since last epoch')}
+                <div class="text-right shrink-0" style="width:88px">
                   <div class="mono text-[13px] font-bold text-cyan-400">${fmt$(r.staked)}</div>
                   <div class="text-[9px] text-gray-500 -mt-0.5">staked in TLA</div>
-                  ${flowStr ? `<div class="mono text-[11px] ${flowCls} mt-1">${flowStr}</div><div class="text-[8px] ${flowCls} opacity-70 -mt-0.5">${flowLabel}</div>` : ''}
+                  ${flowStr ? `<div class="mono text-[10px] ${flowCls} mt-0.5 md:hidden">${flowStr} <span class="opacity-70 text-[8px]">${flowLabel}</span></div>` : ''}
                 </div>
               </div>
               ${comp ? `<div data-comp class="${compOpen ? '' : 'hidden'}">${comp}</div>` : ''}
@@ -7899,8 +7914,21 @@
             </div>`;
         };
 
-        // Group by bucket: show top 3 per bucket (severity first, then stake), rest expandable.
-        // Keeps the panel short and makes the bucket structure legible instead of one long list.
+        // Pool Health v2.1 (Camron): ALL pools shown per bucket, user-sortable.
+        // The sort answers "what do I want to scan for": biggest money, biggest
+        // moves, best-paid, longest-funded, or highest risk.
+        store._phSort = store._phSort || 'staked';
+        const SORTS = {
+            staked: { label: 'TLA staked', fn: (a, c) => c.staked - a.staked },
+            flow:   { label: 'flow this epoch', fn: (a, c) => Math.abs(c.dollarFlow || 0) - Math.abs(a.dollarFlow || 0) },
+            trend:  { label: '4-epoch trend', fn: (a, c) => (a.netW ?? 0) - (c.netW ?? 0) },
+            apr:    { label: 'reward APR', fn: (a, c) => (_aprOf(c) ?? -1) - (_aprOf(a) ?? -1) },
+            runway: { label: 'bribe runway', fn: (a, c) => (_runwayOf(a) ?? 999) - (_runwayOf(c) ?? 999) },
+            risk:   { label: 'risk first', fn: (a, c) => (sevRank(c.sev) - sevRank(a.sev)) || (c.staked - a.staked) },
+        };
+        function _aprOf(r) { const sp = (store.pools || []).find(p => p.name === r.name && String(p.bucket || '').toLowerCase() === String(r.bucket || '').toLowerCase()); return sp?.rewards?.approx_apr_pct ?? null; }
+        function _runwayOf(r) { return store.runway?._byKey?.get(`${r.name}|${String(r.bucket || '').toUpperCase()}`)?.epochs_left ?? null; }
+        window.setPoolSort = (v) => { store._phSort = v; renderExitRisk(); };
         const BUCKET_ORDER = ['STABLE', 'PROJECT', 'BLUECHIP', 'SINGLE'];
         const byBucket = {};
         for (const r of list) {
@@ -7909,13 +7937,17 @@
         }
         const bucketKeys = [...new Set([...BUCKET_ORDER, ...Object.keys(byBucket)])].filter(b => byBucket[b] && byBucket[b].length);
         const slug = (b) => b.toLowerCase().replace(/[^a-z0-9]/g, '');
-        panel.innerHTML = bucketKeys.map(b => {
-            const rows = byBucket[b].sort((a, c) => (sevRank(c.sev) - sevRank(a.sev)) || (c.staked - a.staked));
+        const sortBar = `<div class="flex items-center gap-1 flex-wrap mb-3 px-1">
+            <span class="text-[10px] text-gray-500 mr-1">sort by</span>
+            ${Object.entries(SORTS).map(([k, v]) => `<button onclick="setPoolSort('${k}')" class="text-[10px] px-2 py-1 rounded-md border transition-colors ${store._phSort === k ? 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30' : 'bg-white/[0.02] text-gray-500 border-white/5 hover:text-gray-300'}">${v.label}</button>`).join('')}
+          </div>`;
+        panel.innerHTML = sortBar + bucketKeys.map(b => {
+            const rows = byBucket[b].sort(SORTS[store._phSort].fn);
             const flagged = rows.filter(r => r.sev).length;
             const totStaked = rows.reduce((s, r) => s + (r.staked || 0), 0);
-            const visible = rows.slice(0, 3).map((r, i) => rowHtml(r, i)).join('');
-            const hidden = rows.length > 3 ? rows.slice(3).map((r, i) => rowHtml(r, i + 3)).join('') : '';
-            const btn = rows.length > 3
+            const visible = rows.map((r, i) => rowHtml(r, i)).join('');
+            const hidden = '';
+            const btn = false
                 ? `<button onclick="this.previousElementSibling.classList.toggle('hidden');const e=this.querySelector('span');const c=this.querySelector('i');if(e.dataset.o!=='1'){e.dataset.o='1';e.textContent='Show fewer';c.className='fas fa-chevron-up text-[10px]';}else{e.dataset.o='0';e.textContent='Show ${rows.length - 3} more in ${b.toLowerCase()}';c.className='fas fa-chevron-down text-[10px]';}" class="w-full mt-1 py-1.5 px-3 rounded-lg bg-white/[0.03] hover:bg-white/[0.06] border border-white/5 text-gray-400 text-xs transition-colors flex items-center justify-center gap-2"><i class="fas fa-chevron-down text-[10px]"></i><span data-o="0">Show ${rows.length - 3} more in ${b.toLowerCase()}</span></button>`
                 : '';
             return `
