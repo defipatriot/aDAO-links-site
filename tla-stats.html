@@ -7479,6 +7479,78 @@
         return `<span class="text-[9px] px-1.5 py-0.5 rounded ${cls}" title="${tip}">bribed thru e${p.last_funded_period} · ${p.epochs_left} epoch${p.epochs_left === 1 ? '' : 's'}</span>`;
     }
 
+    // ---- Pool drill-down (Pool Health v2, Camron 2026-07-30: "expand for real
+    // detail") — everything below renders from feeds ALREADY loaded: 13-epoch
+    // pool-status history (staked/depth/VP/token detail), this-epoch bribes,
+    // snapshot reward APR, and the bribe runway. Lazy: built on first expand.
+    const _drillRecs = new Map();
+    function drillChartSvg(pts, w, h, fmt) {
+        const vals = pts.map(p => p[1]).filter(v => v != null);
+        if (vals.length < 2) return '<div class="text-[10px] text-gray-600">not enough history yet</div>';
+        const min = Math.min(...vals), max = Math.max(...vals), span = (max - min) || 1;
+        const sx = i => 4 + i * (w - 8) / (pts.length - 1);
+        const sy = v => h - 14 - (v - min) / span * (h - 24);
+        const line = pts.map((p, i) => p[1] == null ? null : `${sx(i).toFixed(1)},${sy(p[1]).toFixed(1)}`).filter(Boolean).join(' ');
+        const ticks = pts.map((p, i) => (i === 0 || i === pts.length - 1 || i === Math.floor(pts.length / 2))
+            ? `<text x="${sx(i).toFixed(1)}" y="${h - 3}" font-size="8" fill="#6B7280" text-anchor="middle">e${p[0]}</text>` : '').join('');
+        return `<svg viewBox="0 0 ${w} ${h}" class="w-full" preserveAspectRatio="none">
+            <text x="2" y="9" font-size="8" fill="#6B7280">${fmt(max)}</text>
+            <text x="2" y="${h - 16}" font-size="8" fill="#6B7280">${fmt(min)}</text>
+            <polyline points="${line}" fill="none" stroke="#22D3EE" stroke-width="1.5"/>${ticks}</svg>`;
+    }
+    function drillFlowBars(pts, w, h) {
+        const ds = []; for (let i = 1; i < pts.length; i++) if (pts[i][1] != null && pts[i-1][1] != null) ds.push([pts[i][0], pts[i][1] - pts[i-1][1]]);
+        if (!ds.length) return '';
+        const mx = Math.max(...ds.map(d => Math.abs(d[1])), 1);
+        const bw = (w - 8) / ds.length, mid = h / 2;
+        const bars = ds.map((d, i) => {
+            const bh = Math.abs(d[1]) / mx * (mid - 4);
+            const y = d[1] >= 0 ? mid - bh : mid;
+            return `<rect x="${(4 + i * bw + 1).toFixed(1)}" y="${y.toFixed(1)}" width="${Math.max(bw - 2, 1).toFixed(1)}" height="${Math.max(bh, 0.5).toFixed(1)}" fill="${d[1] >= 0 ? '#34D399' : '#F87171'}" opacity="0.8"><title>e${d[0]}: ${d[1] >= 0 ? '+' : '\u2212'}$${Math.abs(d[1]).toLocaleString(undefined,{maximumFractionDigits:0})} staked</title></rect>`;
+        }).join('');
+        return `<svg viewBox="0 0 ${w} ${h}" class="w-full" preserveAspectRatio="none"><line x1="4" y1="${mid}" x2="${w-4}" y2="${mid}" stroke="#374151" stroke-width="0.5"/>${bars}</svg>`;
+    }
+    window.togglePoolDrill = function (btn, key) {
+        const row = btn.closest('[data-erow]'); if (!row) return;
+        const box = row.querySelector('[data-drill]'); if (!box) return;
+        box.classList.toggle('hidden');
+        btn.querySelector('i')?.classList.toggle('fa-rotate-180');
+        if (box.dataset.built || box.classList.contains('hidden')) return;
+        const r = _drillRecs.get(key); if (!r || !r.hp) { box.innerHTML = '<div class="text-[10px] text-gray-600 p-2">no history for this pool yet</div>'; return; }
+        const eps = Object.keys(r.hp.epochs || {}).map(Number).sort((a, b) => a - b);
+        const staked = eps.map(e => [e, r.hp.epochs[String(e)]?.staked_usd ?? null]);
+        const vp = eps.map(e => [e, r.hp.epochs[String(e)]?.vp_human ?? null]);
+        const last = r.hp.epochs[String(eps[eps.length - 1])] || {};
+        const f$ = v => '$' + Number(v || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
+        // this-epoch bribes for the pool (already computed at load)
+        let bribeUsd = null;
+        for (const b of Object.values(store.bribesData?.allBribedPools || {})) for (const p of b) {
+            if (p.pool === r.name) bribeUsd = (bribeUsd || 0) + (p.pdUSD || 0) + (p.otherUSD || 0);
+        }
+        // reward APR from the snapshot (chain-distributions figure)
+        const sp = (store.pools || []).find(p => p.name === r.name && String(p.bucket || '').toLowerCase() === String(r.bucket || '').toLowerCase());
+        const apr = sp?.rewards?.approx_apr_pct;
+        const stat = (label, val, tip) => `<div class="p-2 rounded bg-white/[0.03]" ${tip ? `title="${tip}"` : ''}><div class="text-[9px] text-gray-500">${label}</div><div class="text-[12px] mono text-gray-200">${val}</div></div>`;
+        box.innerHTML = `
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
+            ${stat('staked in TLA', f$(last.staked_usd), 'Dollar value of this pool\u2019s LP tokens staked through TLA, at capture prices.')}
+            ${stat('pool depth', f$(last.depth_usd), 'Total pool liquidity on the dex \u2014 TLA-staked and not.')}
+            ${stat('vote power', (last.vp_human != null ? Number(last.vp_human).toLocaleString(undefined,{maximumFractionDigits:0}) : '\u2014') + ' VP', 'vAMP voting power currently allocated to this pool\u2019s gauge.')}
+            ${stat('reward APR', apr != null ? apr.toFixed(0) + '%' : '\u2014', 'TLA reward emissions \u00f7 pool staked, from chain distributions (base rate; amplified positions compound above it).')}
+            ${stat('bribes this epoch', bribeUsd != null ? f$(bribeUsd) : '\u2014', 'Bribes measured in this epoch\u2019s pots for this pool, valued at current prices.')}
+            ${stat('runway', (store.runway?._byKey?.get(`${r.name}|${String(r.bucket||'').toUpperCase()}`)?.epochs_left ?? '\u2014') + ' epochs', 'How many epochs of bribes remain funded in the manager\u2019s future pots \u2014 see the chip above for detail.')}
+            ${stat('4-epoch trend', (r.netW != null ? (r.netW >= 0 ? '+' : '\u2212') + Math.abs(r.netW * 100).toFixed(0) + '%' : '\u2014'), 'Net change in TLA-staked dollars across the sparkline window.')}
+            ${stat('flow this epoch', (r.dollarFlow != null ? (r.dollarFlow >= 0 ? '+' : '\u2212') + f$(Math.abs(r.dollarFlow)).slice(0) : '\u2014'), 'Dollars in or out of TLA staking since last epoch.')}
+          </div>
+          <div class="text-[9px] text-gray-500 mb-0.5">TLA-staked $ \u00b7 ${eps.length} epochs (e${eps[0]}\u2192e${eps[eps.length-1]})</div>
+          ${drillChartSvg(staked, 320, 64, f$)}
+          <div class="text-[9px] text-gray-500 mt-1 mb-0.5">per-epoch staked flow (\u0394$)</div>
+          ${drillFlowBars(staked, 320, 36)}
+          <div class="text-[9px] text-gray-500 mt-1 mb-0.5">vote power on this gauge</div>
+          ${drillChartSvg(vp, 320, 48, v => Number(v).toLocaleString(undefined,{maximumFractionDigits:0}))}`;
+        box.dataset.built = '1';
+    };
+
     function renderExitRisk() {
         const panel = document.getElementById('exit-risk-panel');
         const summaryEl = document.getElementById('exit-risk-summary');
@@ -7557,7 +7629,7 @@
                 comp = { s0: hc.a0_sym, s1: hc.a1_sym, v0, v1, pct0: split0, da0, da1, pegged, subtype,
                          amt0: hc.a0_amt || 0, amt1: hc.a1_amt || 0 };
             }
-            const rec = { name: p.name, bucket: p.bucket, staked, prevStaked: hp ? (hp.staked_usd || 0) : null, isSingle, dStaked, dDepth, dBase, dTok, tokSym, dollarFlow, series, split0, a0sym: hc.a0_sym, a1sym: hc.a1_sym, comp };
+            const rec = { name: p.name, bucket: p.bucket, staked, prevStaked: hp ? (hp.staked_usd || 0) : null, isSingle, dStaked, dDepth, dBase, dTok, tokSym, dollarFlow, series, split0, a0sym: hc.a0_sym, a1sym: hc.a1_sym, comp , hp: p };
             const key = p.pool_address || `${p.name}|${p.bucket}`;
             const ex = byPool.get(key);
             if (!ex || staked > ex.staked) byPool.set(key, rec);
@@ -7780,6 +7852,7 @@
             return `<div class="text-[9px] text-gray-600 mt-1 text-center" title="Impermanent loss is the gap vs simply holding the two tokens, caused by their price ratio diverging. These are hypothetical sensitivities for this standard 50/50 pool — not what occurred this epoch (week-to-week IL here is ~0). A pool earns fees/incentives to offset this.">IL if ${c.s0}/${c.s1} diverge: <span class="text-gray-500">25%\u2192${i25}% \u00b7 50%\u2192${i50}% \u00b7 2\u00d7\u2192${i100}%</span></div>`;
         };
         const rowHtml = (r, idx) => {
+            _drillRecs.set(`${r.name}|${r.bucket}`, r);
             const border = r.sev === 'high' ? 'border-l-red-500/60 bg-red-500/[0.04]'
                 : (r.sev === 'med' ? 'border-l-amber-500/50 bg-amber-500/[0.03]' : 'border-l-white/5 bg-white/[0.02]');
             const tw = trendWord(r);
@@ -7812,6 +7885,7 @@
                     ${sparkline(r.series, sparkColor(r))}
                     <span class="text-[10px] ${tw.cls}">${tw.txt}</span>
                     ${compOpen ? '' : compToggle}
+                    <button onclick="togglePoolDrill(this, '${(r.name + '|' + r.bucket).replace(/'/g, '')}')" class="text-[9px] text-gray-600 hover:text-cyan-400 mt-1 transition-colors"><i class="fas fa-chevron-down text-[8px] mr-0.5 transition-transform"></i>details</button>
                   </div>
                 </div>
                 <div class="text-right shrink-0" style="width:96px">
@@ -7821,6 +7895,7 @@
                 </div>
               </div>
               ${comp ? `<div data-comp class="${compOpen ? '' : 'hidden'}">${comp}</div>` : ''}
+              <div data-drill class="hidden mt-2 pt-2 border-t border-white/5"></div>
             </div>`;
         };
 
