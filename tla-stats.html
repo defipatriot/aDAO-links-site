@@ -7484,6 +7484,47 @@
     // pool-status history (staked/depth/VP/token detail), this-epoch bribes,
     // snapshot reward APR, and the bribe runway. Lazy: built on first expand.
     const _drillRecs = new Map();
+    // Pool Health v3 helpers (Camron: "present it so nobody has to decipher").
+    // Window: how many epochs the row charts + trend labels cover. Global so
+    // every row stays comparable; trend text always names its window.
+    function phWin() { return store._phWin || 4; }
+    function _aprOf(r) { const sp = (store.pools || []).find(p => p.name === r.name && String(p.bucket || '').toLowerCase() === String(r.bucket || '').toLowerCase()); return sp?.rewards?.approx_apr_pct ?? null; }
+    function _runwayOf(r) { return store.runway?._byKey?.get(`${r.name}|${String(r.bucket || '').toUpperCase()}`)?.epochs_left ?? null; }
+    window.setPoolWin = (n) => { store._phWin = n; renderExitRisk(); };
+    function windowedStaked(r) {
+        const hp = r.hp; if (!hp) return { pts: (r.series || []).map((v, i) => [i, v]), from: null, to: null };
+        const eps = Object.keys(hp.epochs || {}).map(Number).sort((x, y) => x - y).slice(-(phWin() + 1));
+        return { pts: eps.map(e => [e, hp.epochs[String(e)]?.staked_usd ?? null]), from: eps[0], to: eps[eps.length - 1] };
+    }
+    function windowedTrendPct(r) {
+        const w = windowedStaked(r).pts.map(p => p[1]).filter(v => v != null);
+        if (w.length < 2 || !(w[0] > 0)) return null;
+        return (w[w.length - 1] - w[0]) / w[0] * 100;
+    }
+    // The verdict: two honest sentences a newcomer can read cold. Every clause
+    // comes from a measured field; hedged wording where the data is thin.
+    function poolVerdict(r) {
+        const f$ = v => '$' + Number(v || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
+        const t = windowedTrendPct(r);
+        const trendTxt = t == null ? 'not enough history to call a trend'
+            : Math.abs(t) < 3 ? 'roughly flat' : `${t > 0 ? 'up' : 'down'} ${Math.abs(t).toFixed(0)}% over ${phWin()} epochs`;
+        const flow = r.dollarFlow || 0;
+        const flowTxt = r.prevStaked == null ? '' : Math.abs(flow) < 50 ? ' and little moved this week'
+            : `, with ${f$(Math.abs(flow))} ${flow >= 0 ? 'added' : 'withdrawn'} this epoch`;
+        const rw = store.runway?._byKey?.get(`${r.name}|${String(r.bucket || '').toUpperCase()}`);
+        const denoms = rw ? Object.keys(rw.by_denom || {}) : [];
+        const recycled = rw && rw.epochs_left <= 1 && denoms.length && denoms.every(d => RECYCLE_DENOMS.has(d));
+        const rwTxt = !rw ? 'No bribes are currently funded for this pool\u2019s gauge.'
+            : recycled ? 'Its bribes refill automatically every epoch from trading-fee recycling.'
+            : rw.epochs_left === 0 ? '\u26a0 Its bribes run out after the CURRENT epoch \u2014 unless renewed, voters lose their incentive next week.'
+            : `Bribes are funded ${rw.epochs_left} more epoch${rw.epochs_left === 1 ? '' : 's'} (through \u2248${rw.expires_approx}), so voters have a paid reason to keep supporting it.`;
+        const apr = _aprOf(r);
+        const aprTxt = apr != null ? ` LPs currently earn \u2248${apr.toFixed(0)}% APR from TLA reward emissions.` : '';
+        const risk = r.sev === 'high' ? '\u26a0 Our drain detector flags this pool: staked capital is leaving unusually fast. '
+            : r.sev === 'med' ? '\u26a0 Worth watching: this pool is draining faster than similar pools. ' : '';
+        return `${risk}${f$(r.staked)} is staked through TLA here \u2014 ${trendTxt}${flowTxt}. ${rwTxt}${aprTxt}`;
+    }
+
     function drillChartSvg(pts, w, h, fmt, color = '#22D3EE') {
         const vals = pts.map(p => p[1]).filter(v => v != null);
         if (vals.length < 2) return '<div class="text-[10px] text-gray-600">not enough history yet</div>';
@@ -7536,9 +7577,12 @@
         const apr = sp?.rewards?.approx_apr_pct;
         const stat = (label, val, tip) => `<div class="p-2 rounded bg-white/[0.03]" ${tip ? `title="${tip}"` : ''}><div class="text-[9px] text-gray-500">${label}</div><div class="text-[12px] mono text-gray-200">${val}</div></div>`;
         box.innerHTML = `
+          <div class="mb-2 p-2.5 rounded-lg bg-cyan-500/[0.04] border border-cyan-500/15 text-[11.5px] text-gray-300 leading-snug" data-verdict>
+            <i class="fas fa-comment-dots text-cyan-400/70 mr-1"></i>${poolVerdict(r)}
+          </div>
           <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
-            ${stat('staked in TLA', f$(last.staked_usd), 'Dollar value of this pool\u2019s LP tokens staked through TLA, at capture prices.')}
-            ${stat('pool depth', f$(last.depth_usd), 'Total pool liquidity on the dex \u2014 TLA-staked and not.')}
+            ${stat('money staked via TLA', f$(last.staked_usd), 'Dollar value of this pool\u2019s LP tokens staked through TLA, at capture prices.')}
+            ${stat('whole pool size', f$(last.depth_usd), 'Total pool liquidity on the dex \u2014 TLA-staked and not.')}
             ${stat('vote power', (last.vp_human != null ? Number(last.vp_human).toLocaleString(undefined,{maximumFractionDigits:0}) : '\u2014') + ' VP', 'vAMP voting power currently allocated to this pool\u2019s gauge.')}
             ${stat('reward APR', apr != null ? apr.toFixed(0) + '%' : '\u2014', 'TLA reward emissions \u00f7 pool staked, from chain distributions (base rate; amplified positions compound above it).')}
             ${stat('bribes this epoch', bribeUsd != null ? f$(bribeUsd) : '\u2014', 'Bribes measured in this epoch\u2019s pots for this pool, valued at current prices.')}
@@ -7546,11 +7590,11 @@
             ${stat('4-epoch trend', (r.netW != null ? (r.netW >= 0 ? '+' : '\u2212') + Math.abs(r.netW * 100).toFixed(0) + '%' : '\u2014'), 'Net change in TLA-staked dollars across the sparkline window.')}
             ${stat('flow this epoch', (r.dollarFlow != null ? (r.dollarFlow >= 0 ? '+' : '\u2212') + f$(Math.abs(r.dollarFlow)).slice(0) : '\u2014'), 'Dollars in or out of TLA staking since last epoch.')}
           </div>
-          <div class="text-[9px] text-gray-500 mb-0.5">TLA-staked $ \u00b7 ${eps.length} epochs (e${eps[0]}\u2192e${eps[eps.length-1]})</div>
+          <div class="text-[9px] text-gray-500 mb-0.5">Money staked via TLA in this pool \u2014 full ${eps.length}-epoch history (e${eps[0]}\u2192e${eps[eps.length-1]}; one epoch = one week)</div>
           ${drillChartSvg(staked, 320, 64, f$)}
-          <div class="text-[9px] text-gray-500 mt-1 mb-0.5">per-epoch staked flow (\u0394$)</div>
+          <div class="text-[9px] text-gray-500 mt-1 mb-0.5">Weekly change \u2014 green = money added, red = money withdrawn (hover a bar for the exact $)</div>
           ${drillFlowBars(staked, 320, 36)}
-          <div class="text-[9px] text-gray-500 mt-1 mb-0.5">vote power on this gauge</div>
+          <div class="text-[9px] text-gray-500 mt-1 mb-0.5">Voting support \u2014 vAMP votes decide this pool\u2019s share of weekly rewards; rising support = rewards likely to grow</div>
           ${drillChartSvg(vp, 320, 48, v => Number(v).toLocaleString(undefined,{maximumFractionDigits:0}))}`;
         box.dataset.built = '1';
     };
@@ -7878,6 +7922,13 @@
             // reads like a table without losing the card feel. Numbers only
             // where measured; em-dash where not (never zero-as-unknown).
             const apr = _aprOf(r), rwLeft = _runwayOf(r);
+            const ws = windowedStaked(r);
+            const wt = windowedTrendPct(r);
+            const wTrendTxt = wt == null ? tw.txt : `${wt >= 0 ? 'up' : 'down'} ${Math.abs(wt).toFixed(0)}% over ${phWin()} epochs`;
+            const wTrendCls = wt == null ? tw.cls : (wt > 3 ? 'text-emerald-400' : wt < -3 ? 'text-red-400' : 'text-gray-500');
+            const midChart = ws.pts.filter(p => p[1] != null).length >= 2
+                ? `<div class="hidden lg:block shrink-0 self-center" style="width:190px" title="TLA-staked $ in this pool over the last ${phWin()} epochs (e${ws.from}\u2192e${ws.to}). Open details for the full history.">${drillChartSvg(ws.pts, 190, 34, v => '$' + (v >= 1000 ? (v / 1000).toFixed(0) + 'K' : Math.round(v)), wt != null && wt < -3 ? '#F87171' : wt != null && wt > 3 ? '#34D399' : '#22D3EE')}</div>`
+                : `<div class="hidden lg:block shrink-0" style="width:190px"></div>`;
             const vpNow = r.hp ? (() => { const eps = Object.keys(r.hp.epochs || {}).map(Number); if (!eps.length) return null; return r.hp.epochs[String(Math.max(...eps))]?.vp_human ?? null; })() : null;
             const col = (cap, val, cls, tip) => `<div class="text-right shrink-0 hidden md:block" style="width:72px" ${tip ? `title="${tip}"` : ''}><div class="mono text-[11px] ${cls}">${val}</div><div class="text-[8px] text-gray-600 -mt-0.5">${cap}</div></div>`;
             return `
@@ -7893,12 +7944,13 @@
                     ${runwayChip(r)}
                   </div>
                   <div class="flex items-center gap-2 mt-0.5">
-                    ${sparkline(r.series, sparkColor(r))}
-                    <span class="text-[10px] ${tw.cls}">${tw.txt}</span>
+                    <span class="lg:hidden">${sparkline(r.series, sparkColor(r))}</span>
+                    <span class="text-[10px] ${wTrendCls}">${wTrendTxt}</span>
                     ${compOpen ? '' : compToggle}
                     <button onclick="togglePoolDrill(this, '${(r.name + '|' + r.bucket).replace(/'/g, '')}')" class="text-[9px] text-gray-600 hover:text-cyan-400 transition-colors"><i class="fas fa-chevron-down text-[8px] mr-0.5 transition-transform"></i>details</button>
                   </div>
                 </div>
+                ${midChart}
                 ${col('reward APR', apr != null ? apr.toFixed(0) + '%' : '\u2014', 'text-emerald-300/90', 'TLA reward emissions \u00f7 pool staked (chain distributions, base rate)')}
                 ${col('bribe runway', rwLeft != null ? rwLeft + ' ep' : '\u2014', rwLeft != null && rwLeft <= 1 ? 'text-amber-300' : 'text-gray-300', 'Epochs of bribes still funded in the manager\u2019s future pots')}
                 ${col('vote power', vpNow != null ? (vpNow >= 1e6 ? (vpNow / 1e6).toFixed(2) + 'M' : Math.round(vpNow).toLocaleString()) : '\u2014', 'text-violet-300/90', 'vAMP voting power on this gauge right now')}
@@ -7919,15 +7971,14 @@
         // moves, best-paid, longest-funded, or highest risk.
         store._phSort = store._phSort || 'staked';
         const SORTS = {
-            staked: { label: 'TLA staked', fn: (a, c) => c.staked - a.staked },
-            flow:   { label: 'flow this epoch', fn: (a, c) => Math.abs(c.dollarFlow || 0) - Math.abs(a.dollarFlow || 0) },
-            trend:  { label: '4-epoch trend', fn: (a, c) => (a.netW ?? 0) - (c.netW ?? 0) },
-            apr:    { label: 'reward APR', fn: (a, c) => (_aprOf(c) ?? -1) - (_aprOf(a) ?? -1) },
-            runway: { label: 'bribe runway', fn: (a, c) => (_runwayOf(a) ?? 999) - (_runwayOf(c) ?? 999) },
-            risk:   { label: 'risk first', fn: (a, c) => (sevRank(c.sev) - sevRank(a.sev)) || (c.staked - a.staked) },
+            staked:  { label: 'TLA staked', tip: 'Biggest pools first \u2014 where most of TLA\u2019s money sits.', fn: (a, c) => c.staked - a.staked },
+            inflow:  { label: 'inflows', tip: 'Largest dollar INFLOWS this epoch first \u2014 where money is arriving right now.', fn: (a, c) => (c.dollarFlow || 0) - (a.dollarFlow || 0) },
+            outflow: { label: 'outflows', tip: 'Largest dollar OUTFLOWS this epoch first \u2014 where money is leaving right now.', fn: (a, c) => (a.dollarFlow || 0) - (c.dollarFlow || 0) },
+            trend:   { label: 'trend \u0394%', tip: 'Steepest percentage DECLINE in TLA-staked dollars over the selected window first (use the 4/8/12 toggle). Flip through to find fast growers at the bottom.', fn: (a, c) => (windowedTrendPct(a) ?? 0) - (windowedTrendPct(c) ?? 0) },
+            apr:     { label: 'reward APR', tip: 'Highest LP reward rate first \u2014 TLA emissions \u00f7 pool staked, from chain distributions.', fn: (a, c) => (_aprOf(c) ?? -1) - (_aprOf(a) ?? -1) },
+            runway:  { label: 'bribe runway', tip: 'Shortest remaining bribe funding first \u2014 the renewal watchlist for briber teams; pools near the top lose their voter incentive soonest.', fn: (a, c) => (_runwayOf(a) ?? 999) - (_runwayOf(c) ?? 999) },
+            risk:    { label: 'risk first', tip: 'Pools our drain detector flagged first (leaving faster than similar pools, or bleeding for several straight epochs), then by size.', fn: (a, c) => (sevRank(c.sev) - sevRank(a.sev)) || (c.staked - a.staked) },
         };
-        function _aprOf(r) { const sp = (store.pools || []).find(p => p.name === r.name && String(p.bucket || '').toLowerCase() === String(r.bucket || '').toLowerCase()); return sp?.rewards?.approx_apr_pct ?? null; }
-        function _runwayOf(r) { return store.runway?._byKey?.get(`${r.name}|${String(r.bucket || '').toUpperCase()}`)?.epochs_left ?? null; }
         window.setPoolSort = (v) => { store._phSort = v; renderExitRisk(); };
         const BUCKET_ORDER = ['STABLE', 'PROJECT', 'BLUECHIP', 'SINGLE'];
         const byBucket = {};
@@ -7939,7 +7990,10 @@
         const slug = (b) => b.toLowerCase().replace(/[^a-z0-9]/g, '');
         const sortBar = `<div class="flex items-center gap-1 flex-wrap mb-3 px-1">
             <span class="text-[10px] text-gray-500 mr-1">sort by</span>
-            ${Object.entries(SORTS).map(([k, v]) => `<button onclick="setPoolSort('${k}')" class="text-[10px] px-2 py-1 rounded-md border transition-colors ${store._phSort === k ? 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30' : 'bg-white/[0.02] text-gray-500 border-white/5 hover:text-gray-300'}">${v.label}</button>`).join('')}
+            ${Object.entries(SORTS).map(([k, v]) => `<button onclick="setPoolSort('${k}')" title="${v.tip}" class="text-[10px] px-2 py-1 rounded-md border transition-colors ${store._phSort === k ? 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30' : 'bg-white/[0.02] text-gray-500 border-white/5 hover:text-gray-300'}">${v.label}</button>`).join('')}
+            <span class="mx-1 text-gray-700">|</span>
+            <span class="text-[10px] text-gray-500" title="How many epochs the row charts and trend labels cover. One epoch = one week.">window</span>
+            ${[4, 8, 12].map(n => `<button onclick="setPoolWin(${n})" title="Charts + trend % over the last ${n} epochs (${n} weeks)" class="text-[10px] px-2 py-1 rounded-md border transition-colors ${phWin() === n ? 'bg-violet-500/15 text-violet-300 border-violet-500/30' : 'bg-white/[0.02] text-gray-500 border-white/5 hover:text-gray-300'}">${n}</button>`).join('')}
           </div>`;
         panel.innerHTML = sortBar + bucketKeys.map(b => {
             const rows = byBucket[b].sort(SORTS[store._phSort].fn);
