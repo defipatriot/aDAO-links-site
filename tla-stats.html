@@ -7464,19 +7464,38 @@
             }).catch(() => (store.runway = null));
         return store._runwayP;
     }
+    // Funder-class chips (Camron 2026-07-30): WHO funds a pool comes only from
+    // attributed on-chain placement events (runway.funders, cron v1.1) — the
+    // old "auto-bribed" pattern-guess is retired. Multiple classes can apply to
+    // one pool; "+unattributed" appears whenever the pots hold money no captured
+    // event explains (hole-era). Runway colors per Camron: ≤1 red · 2–4 yellow · 5+ green.
+    const FUNDER_CLASS_UI = {
+        pd:      { txt: 'PD bribed', cls: 'bg-purple-500/15 text-purple-300' },
+        project: { txt: 'Project bribed', cls: 'bg-blue-500/15 text-blue-300' },
+        dex:     { txt: 'DEX support', cls: 'bg-cyan-500/12 text-cyan-300/90' },
+        user:    { txt: 'User bribed', cls: 'bg-emerald-500/12 text-emerald-300/90' },
+    };
+    function runwayFor(r) { return store.runway?._byKey?.get(`${r.name}|${String(r.bucket || '').toUpperCase()}`) || null; }
     function runwayChip(r) {
         const rw = store.runway;
         if (!rw || !rw._byKey) { ensureRunway(); return ''; }
-        const p = rw._byKey.get(`${r.name}|${String(r.bucket || '').toUpperCase()}`);
+        const p = runwayFor(r);
         if (!p) return '';
         const denoms = Object.keys(p.by_denom || {});
         const toks = denoms.map(d => (store.tokenSymbols?.[d]) || d.split(/[:/]/).pop().slice(-6)).join(', ');
-        const recycled = p.epochs_left <= 1 && denoms.length > 0 && denoms.every(d => RECYCLE_DENOMS.has(d));
-        const tip = `Bribes funded through epoch ${p.last_funded_period} (≈ ${p.expires_approx}) · tokens: ${toks}. From the incentive manager's future pot state — includes bribes whose payer isn't attributed yet. Linear bribes taper per epoch rather than stopping cold.`;
-        if (recycled) return `<span class="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400/80" title="${tip} This pool's pots refill every epoch from the take-rate recyclers (single-epoch LUNA/ASTRO pattern) — automated, expected to renew weekly.">♻ auto-bribed weekly</span>`;
-        if (p.epochs_left === 0) return `<span class="text-[9px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-300 font-semibold" title="${tip}">bribes expire after this epoch</span>`;
-        const cls = p.epochs_left <= 3 ? 'bg-amber-500/15 text-amber-300' : 'bg-emerald-500/15 text-emerald-300';
-        return `<span class="text-[9px] px-1.5 py-0.5 rounded ${cls}" title="${tip}">bribed thru e${p.last_funded_period} · ${p.epochs_left} epoch${p.epochs_left === 1 ? '' : 's'}</span>`;
+        const tip = `Bribes funded through epoch ${p.last_funded_period} (≈ ${p.expires_approx}) · tokens: ${toks}. From the incentive manager's future pot state. Linear bribes taper per epoch rather than stopping cold. Who funds it: see the source tags and details.`;
+        const left = p.epochs_left;
+        const cls = left <= 1 ? 'bg-red-500/15 text-red-300 font-semibold' : left <= 4 ? 'bg-amber-500/15 text-amber-300' : 'bg-emerald-500/15 text-emerald-300';
+        const txt = left === 0 ? 'bribes end after this epoch' : `bribed thru e${p.last_funded_period} · ${left} epoch${left === 1 ? '' : 's'}`;
+        let out = `<span class="text-[9px] px-1.5 py-0.5 rounded ${cls}" title="${tip}">${txt}</span>`;
+        if (Array.isArray(p.funders)) {
+            for (const c of [...new Set(p.funders.map(f => f.class))]) {
+                const u = FUNDER_CLASS_UI[c];
+                if (u) out += `<span class="text-[9px] px-1.5 py-0.5 rounded ${u.cls}" title="At least one attributed on-chain bribe from this source spans the present — open details for who, which tokens, and until when.">${u.txt}</span>`;
+            }
+            if (p.has_unattributed) out += `<span class="text-[9px] px-1.5 py-0.5 rounded bg-gray-500/15 text-gray-400" title="Part of this pool’s bribe pots isn’t explained by any captured placement event — real money, unknown payer until the archive backfill closes the Feb 2025–Jun 2026 capture window.">+unattributed</span>`;
+        }
+        return out;
     }
 
     // ---- Pool drill-down (Pool Health v2, Camron 2026-07-30: "expand for real
@@ -7518,9 +7537,9 @@
             : `, with ${f$(Math.abs(flow))} net ${flow >= 0 ? 'added' : 'withdrawn'} over those ${phWin()} epochs`;
         const rw = store.runway?._byKey?.get(`${r.name}|${String(r.bucket || '').toUpperCase()}`);
         const denoms = rw ? Object.keys(rw.by_denom || {}) : [];
-        const recycled = rw && rw.epochs_left <= 1 && denoms.length && denoms.every(d => RECYCLE_DENOMS.has(d));
+        const dexOnly = rw && Array.isArray(rw.funders) && rw.funders.length && rw.funders.every(f => f.class === 'dex');
         const rwTxt = !rw ? 'No bribes are currently funded for this pool\u2019s gauge.'
-            : recycled ? 'Its bribes refill automatically every epoch from trading-fee recycling.'
+            : dexOnly ? 'Its bribes come from the DEX take-rate recyclers (attributed on-chain), which historically refill each epoch.'
             : rw.epochs_left === 0 ? '\u26a0 Its bribes run out after the CURRENT epoch \u2014 unless renewed, voters lose their incentive next week.'
             : `Bribes are funded ${rw.epochs_left} more epoch${rw.epochs_left === 1 ? '' : 's'} (through \u2248${rw.expires_approx}), so voters have a paid reason to keep supporting it.`;
         const apr = _aprOf(r);
@@ -7599,6 +7618,25 @@
           <div class="mb-2 p-2.5 rounded-lg bg-cyan-500/[0.04] border border-cyan-500/15 text-[11.5px] text-gray-300 leading-snug" data-verdict>
             <i class="fas fa-comment-dots text-cyan-400/70 mr-1"></i>${poolVerdict(r)}
           </div>
+          ${(() => {
+              const p = runwayFor(r);
+              if (!p || !Array.isArray(p.funders)) return '';
+              const rows = p.funders.map(f => {
+                  const u = FUNDER_CLASS_UI[f.class] || { txt: f.class, cls: 'bg-gray-500/15 text-gray-400' };
+                  const toks = f.tokens.map(d => (store.tokenSymbols?.[d]) || d.split(/[:/]/).pop().slice(-6)).join(', ');
+                  return `<div class="flex items-center gap-2 py-1 border-b border-white/5 last:border-0 text-[11px]">
+                      <span class="text-[9px] px-1.5 py-0.5 rounded ${u.cls} shrink-0">${u.txt}</span>
+                      <span class="text-gray-300 truncate" title="${f.briber}">${esc(f.label)}</span>
+                      <span class="text-gray-500 mono text-[10px] ml-auto shrink-0">${toks}</span>
+                      <span class="mono text-[10px] shrink-0 ${p.last_funded_period - f.thru <= 0 ? 'text-emerald-300' : 'text-gray-400'}">thru e${f.thru}</span>
+                    </div>`;
+              }).join('');
+              const unatt = p.has_unattributed ? `<div class="flex items-center gap-2 py-1 text-[11px]"><span class="text-[9px] px-1.5 py-0.5 rounded bg-gray-500/15 text-gray-400 shrink-0">unattributed</span><span class="text-gray-500">additional pot money with no captured payer event — named when the archive backfill lands</span></div>` : '';
+              if (!rows && !unatt) return '';
+              return `<div class="mb-2 p-2 rounded-lg bg-white/[0.02] border border-white/5">
+                  <div class="text-[9px] text-gray-500 mb-1">WHO’S PAYING THE BRIBES <span class="normal-case">— from attributed on-chain placements only</span></div>
+                  ${rows}${unatt}</div>`;
+          })()}
           <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
             ${stat('money staked via TLA', f$(last.staked_usd), 'Dollar value of this pool\u2019s LP tokens staked through TLA, at capture prices.')}
             ${stat('whole pool size', f$(last.depth_usd), 'Total pool liquidity on the dex \u2014 TLA-staked and not.')}
