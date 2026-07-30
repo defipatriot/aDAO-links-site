@@ -7496,6 +7496,11 @@
         const eps = Object.keys(hp.epochs || {}).map(Number).sort((x, y) => x - y).slice(-(phWin() + 1));
         return { pts: eps.map(e => [e, hp.epochs[String(e)]?.staked_usd ?? null]), from: eps[0], to: eps[eps.length - 1] };
     }
+    function windowedNetFlow(r) {
+        const w = windowedStaked(r).pts.map(p => p[1]).filter(v => v != null);
+        if (w.length < 2) return null;
+        return w[w.length - 1] - w[0];
+    }
     function windowedTrendPct(r) {
         const w = windowedStaked(r).pts.map(p => p[1]).filter(v => v != null);
         if (w.length < 2 || !(w[0] > 0)) return null;
@@ -7508,9 +7513,9 @@
         const t = windowedTrendPct(r);
         const trendTxt = t == null ? 'not enough history to call a trend'
             : Math.abs(t) < 3 ? 'roughly flat' : `${t > 0 ? 'up' : 'down'} ${Math.abs(t).toFixed(0)}% over ${phWin()} epochs`;
-        const flow = r.dollarFlow || 0;
-        const flowTxt = r.prevStaked == null ? '' : Math.abs(flow) < 50 ? ' and little moved this week'
-            : `, with ${f$(Math.abs(flow))} ${flow >= 0 ? 'added' : 'withdrawn'} this epoch`;
+        const flow = windowedNetFlow(r);
+        const flowTxt = flow == null ? '' : Math.abs(flow) < 50 ? ' and little net money moved in that window'
+            : `, with ${f$(Math.abs(flow))} net ${flow >= 0 ? 'added' : 'withdrawn'} over those ${phWin()} epochs`;
         const rw = store.runway?._byKey?.get(`${r.name}|${String(r.bucket || '').toUpperCase()}`);
         const denoms = rw ? Object.keys(rw.by_denom || {}) : [];
         const recycled = rw && rw.epochs_left <= 1 && denoms.length && denoms.every(d => RECYCLE_DENOMS.has(d));
@@ -7525,7 +7530,7 @@
         return `${risk}${f$(r.staked)} is staked through TLA here \u2014 ${trendTxt}${flowTxt}. ${rwTxt}${aprTxt}`;
     }
 
-    function drillChartSvg(pts, w, h, fmt, color = '#22D3EE') {
+    function drillChartSvg(pts, w, h, fmt, color = '#22D3EE', opts = {}) {
         const vals = pts.map(p => p[1]).filter(v => v != null);
         if (vals.length < 2) return '<div class="text-[10px] text-gray-600">not enough history yet</div>';
         const min = Math.min(...vals), max = Math.max(...vals), span = (max - min) || 1;
@@ -7534,8 +7539,22 @@
         const line = pts.map((p, i) => p[1] == null ? null : `${sx(i).toFixed(1)},${sy(p[1]).toFixed(1)}`).filter(Boolean).join(' ');
         const area = `2,${h} ` + line + ` ${w - 2},${h}`;
         // labels live in HTML (never inside a stretched SVG — the e190 blowup bug)
+        const cssH = opts.cssH || 'h-[52px]';
+        if (opts.compact) {
+            // row variant: one clean line, range label BESIDE the chart, no
+            // stacked min/max (the label-pile-up bug from the first cut)
+            return `<div class="flex items-center gap-1.5">
+                <svg viewBox="0 0 ${w} ${h}" class="flex-1 ${cssH}" preserveAspectRatio="none">
+                  <polygon points="${area}" fill="${color}" opacity="0.10"/>
+                  <polyline points="${line}" fill="none" stroke="${color}" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
+                <div class="text-right shrink-0 leading-tight">
+                  <div class="text-[8px] text-gray-500 mono">${fmt(max)}</div>
+                  <div class="text-[8px] text-gray-600 mono">${fmt(min)}</div>
+                </div>
+              </div>`;
+        }
         return `<div class="relative">
-            <svg viewBox="0 0 ${w} ${h}" class="w-full h-[52px]" preserveAspectRatio="none">
+            <svg viewBox="0 0 ${w} ${h}" class="w-full ${cssH}" preserveAspectRatio="none">
               <polygon points="${area}" fill="${color}" opacity="0.08"/>
               <polyline points="${line}" fill="none" stroke="${color}" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
             <span class="absolute top-0 left-1 text-[9px] text-gray-500 mono">${fmt(max)}</span>
@@ -7874,6 +7893,7 @@
             }
             return `
               <div class="mt-2 pt-2 border-t border-white/5">
+                <div class="text-[9.5px] text-gray-500 mb-1.5 leading-snug"><i class="fas fa-circle-info text-[8px] mr-1"></i>What the pool holds and which way its tokens are drifting. Mostly background info &#8212; it matters when both sides drain at once (LPs leaving), or a stablecoin pair drifts far off 50/50 (possible depeg). The last line estimates impermanent loss if the two tokens&#8217; prices diverge.</div>
                 <div class="flex items-center gap-1 h-[6px] rounded-full overflow-hidden mb-1">${bar}</div>
                 <div class="flex items-center justify-between text-[10px]">${sideLine}</div>
                 ${read ? `<div class="text-[9px] mt-0.5 text-center">${read}</div>` : ''}
@@ -7915,7 +7935,7 @@
             // pools (watch/high), keep it one tap away (collapsed) on calm ones.
             const compOpen = !!r.sev;
             const compToggle = comp
-                ? `<button onclick="this.closest('[data-erow]').querySelector('[data-comp]').classList.toggle('hidden')" class="text-[9px] text-gray-600 hover:text-cyan-400 mt-1 transition-colors"><i class="fas fa-layer-group text-[8px] mr-0.5"></i>composition</button>`
+                ? `<button onclick="this.closest('[data-erow]').querySelector('[data-comp]').classList.toggle('hidden')" class="text-[9px] px-1.5 py-0.5 rounded border border-white/10 bg-white/[0.03] text-gray-400 hover:text-cyan-300 hover:border-cyan-500/30 transition-colors"><i class="fas fa-layer-group text-[8px] mr-0.5"></i>what&#8217;s inside &#9662;</button>`
                 : '';
             // v2.1 dense row: the width carries real columns — trend, APR,
             // runway, VP, flow, staked — each captioned, so a scroll-through
@@ -7926,9 +7946,12 @@
             const wt = windowedTrendPct(r);
             const wTrendTxt = wt == null ? tw.txt : `${wt >= 0 ? 'up' : 'down'} ${Math.abs(wt).toFixed(0)}% over ${phWin()} epochs`;
             const wTrendCls = wt == null ? tw.cls : (wt > 3 ? 'text-emerald-400' : wt < -3 ? 'text-red-400' : 'text-gray-500');
+            const wFlow = windowedNetFlow(r);
+            const wFlowStr = wFlow == null ? null : (wFlow >= 0 ? '+' : '\u2212') + fmt$(Math.abs(wFlow));
+            const wFlowCls = wFlow == null ? 'text-gray-500' : wFlow > 50 ? 'text-emerald-400' : wFlow < -50 ? 'text-red-400' : 'text-gray-500';
             const midChart = ws.pts.filter(p => p[1] != null).length >= 2
-                ? `<div class="hidden lg:block shrink-0 self-center" style="width:190px" title="TLA-staked $ in this pool over the last ${phWin()} epochs (e${ws.from}\u2192e${ws.to}). Open details for the full history.">${drillChartSvg(ws.pts, 190, 34, v => '$' + (v >= 1000 ? (v / 1000).toFixed(0) + 'K' : Math.round(v)), wt != null && wt < -3 ? '#F87171' : wt != null && wt > 3 ? '#34D399' : '#22D3EE')}</div>`
-                : `<div class="hidden lg:block shrink-0" style="width:190px"></div>`;
+                ? `<div class="hidden lg:block shrink-0 self-center" style="width:200px" title="TLA-staked $ in this pool over the last ${phWin()} epochs (e${ws.from}\u2192e${ws.to}). Open details for the full history.">${drillChartSvg(ws.pts, 200, 40, v => '$' + (v >= 1000 ? (v / 1000).toFixed(0) + 'K' : Math.round(v)), wt != null && wt < -3 ? '#F87171' : wt != null && wt > 3 ? '#34D399' : '#22D3EE', { compact: true, cssH: 'h-[34px]' })}</div>`
+                : `<div class="hidden lg:block shrink-0" style="width:200px"></div>`;
             const vpNow = r.hp ? (() => { const eps = Object.keys(r.hp.epochs || {}).map(Number); if (!eps.length) return null; return r.hp.epochs[String(Math.max(...eps))]?.vp_human ?? null; })() : null;
             const col = (cap, val, cls, tip) => `<div class="text-right shrink-0 hidden md:block" style="width:72px" ${tip ? `title="${tip}"` : ''}><div class="mono text-[11px] ${cls}">${val}</div><div class="text-[8px] text-gray-600 -mt-0.5">${cap}</div></div>`;
             return `
@@ -7954,7 +7977,7 @@
                 ${col('reward APR', apr != null ? apr.toFixed(0) + '%' : '\u2014', 'text-emerald-300/90', 'TLA reward emissions \u00f7 pool staked (chain distributions, base rate)')}
                 ${col('bribe runway', rwLeft != null ? rwLeft + ' ep' : '\u2014', rwLeft != null && rwLeft <= 1 ? 'text-amber-300' : 'text-gray-300', 'Epochs of bribes still funded in the manager\u2019s future pots')}
                 ${col('vote power', vpNow != null ? (vpNow >= 1e6 ? (vpNow / 1e6).toFixed(2) + 'M' : Math.round(vpNow).toLocaleString()) : '\u2014', 'text-violet-300/90', 'vAMP voting power on this gauge right now')}
-                ${col('flow', flowStr || '\u2014', flowCls, 'Dollars into/out of TLA staking since last epoch')}
+                ${col('net flow \u00b7 ' + phWin() + 'ep', wFlowStr || '\u2014', wFlowCls, 'Net dollars into/out of TLA staking in this pool over the selected ' + phWin() + '-epoch window (follows the window toggle). Per-epoch breakdown is in details.')}
                 <div class="text-right shrink-0" style="width:88px">
                   <div class="mono text-[13px] font-bold text-cyan-400">${fmt$(r.staked)}</div>
                   <div class="text-[9px] text-gray-500 -mt-0.5">staked in TLA</div>
@@ -7972,8 +7995,8 @@
         store._phSort = store._phSort || 'staked';
         const SORTS = {
             staked:  { label: 'TLA staked', tip: 'Biggest pools first \u2014 where most of TLA\u2019s money sits.', fn: (a, c) => c.staked - a.staked },
-            inflow:  { label: 'inflows', tip: 'Largest dollar INFLOWS this epoch first \u2014 where money is arriving right now.', fn: (a, c) => (c.dollarFlow || 0) - (a.dollarFlow || 0) },
-            outflow: { label: 'outflows', tip: 'Largest dollar OUTFLOWS this epoch first \u2014 where money is leaving right now.', fn: (a, c) => (a.dollarFlow || 0) - (c.dollarFlow || 0) },
+            inflow:  { label: 'inflows', tip: 'Largest dollar INFLOWS over the selected window first \u2014 where money is arriving (follows the 4/8/12 toggle).', fn: (a, c) => (windowedNetFlow(c) ?? 0) - (windowedNetFlow(a) ?? 0) },
+            outflow: { label: 'outflows', tip: 'Largest dollar OUTFLOWS over the selected window first \u2014 where money is leaving (follows the 4/8/12 toggle).', fn: (a, c) => (windowedNetFlow(a) ?? 0) - (windowedNetFlow(c) ?? 0) },
             trend:   { label: 'trend \u0394%', tip: 'Steepest percentage DECLINE in TLA-staked dollars over the selected window first (use the 4/8/12 toggle). Flip through to find fast growers at the bottom.', fn: (a, c) => (windowedTrendPct(a) ?? 0) - (windowedTrendPct(c) ?? 0) },
             apr:     { label: 'reward APR', tip: 'Highest LP reward rate first \u2014 TLA emissions \u00f7 pool staked, from chain distributions.', fn: (a, c) => (_aprOf(c) ?? -1) - (_aprOf(a) ?? -1) },
             runway:  { label: 'bribe runway', tip: 'Shortest remaining bribe funding first \u2014 the renewal watchlist for briber teams; pools near the top lose their voter incentive soonest.', fn: (a, c) => (_runwayOf(a) ?? 999) - (_runwayOf(c) ?? 999) },
