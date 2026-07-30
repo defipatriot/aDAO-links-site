@@ -6202,7 +6202,7 @@
             // Rev 5.5: the four gauge tribute contracts top the board on event count and
             // read like mystery whales — explain in place that they're protocol plumbing.
             if (/gauge tribute/i.test(label)) {
-                return `<span class="text-purple-300" title="${addr}">${label}</span> <i class="fas fa-gears text-[9px] text-gray-500 cursor-help" title="Protocol plumbing, not a person. This contract automatically sweeps the take-rate fees on its gauge pools and recycles the accumulated ASTRO back into the incentive manager as bribes — it fires every epoch, which is why its bribe count is so high."></i>`;
+                return `<span class="text-purple-300" title="${addr}">${label}</span> <i class="fas fa-gears text-[9px] text-gray-500 cursor-help" title="Protocol plumbing, not a person \u2014 these are the four asset-staking buckets recycling Astroport take-rate fees into bribes automatically (so yes: this IS the \u2018Astroport bribes\u2019 flow). This contract automatically sweeps the take-rate fees on its gauge pools and recycles the accumulated ASTRO back into the incentive manager as bribes — it fires every epoch, which is why its bribe count is so high."></i>`;
             }
             return `<span class="text-purple-300" title="${addr}">${label}</span>`;
         }
@@ -6253,6 +6253,28 @@
             }
             banner.textContent = `${order.length} bribers · ${totalEvents} attributed bribes since ${firstEver}${cov}`;
             banner.title = 'All-time bribe providers, valued in USD at the moment each bribe was placed. Attribution is measured, never assumed: bribe flow the ledger counts but no on-chain event names a payer for stays out of every row — most of it sits in the Feb 2025 – Jun 2026 capture window, queued for the registry backfill.';
+            // Loud incompleteness banner (Camron 2026-07-30: the small % note wasn't
+            // landing — the board reads as "wrong" when payers like Solid's current
+            // wallet, PD, and hole-era individual bribes are absent). Say it plainly:
+            // the ledger MEASURES the full flow; only the slice with an on-chain
+            // payer event shows below. Numbers from bribe_ledger, never invented.
+            (() => {
+                const led = roll.bribe_ledger?.lifetime; if (!led) return;
+                let miss = 0, tokens = 0;
+                for (const [den, v] of Object.entries(led)) {
+                    const st = Number(v.state || 0), att = Number(v.attributed_exact || 0) + Number(v.attributed_spanning || 0);
+                    if (st > 0) { tokens++; if (att < st) miss++; }
+                }
+                if (!miss) return;
+                let note = document.getElementById('briber-coverage-note');
+                if (!note) {
+                    note = document.createElement('div');
+                    note.id = 'briber-coverage-note';
+                    note.className = 'mt-2 mb-1 p-2 rounded-lg bg-amber-500/[0.06] border border-amber-500/20 text-[11px] text-amber-200/80 leading-snug';
+                    banner.parentElement && banner.parentElement.insertBefore(note, banner.nextSibling);
+                }
+                note.innerHTML = `<i class="fas fa-triangle-exclamation text-amber-400/80 mr-1"></i><b>This board is a preview, not the full picture.</b> The ledger measures every bribe that ever flowed, but a payer can only be named where an on-chain placement event was captured — and ${miss} of ${tokens} bribe tokens still have most of their flow inside the Feb 2025 → Jun 2026 capture gap. Missing names you'd expect here — Solid's current wallet, Phoenix Directive, and many individual bribes (they're real; their pots are even visible on the runway chips) — appear when the archive backfill closes that window. Rankings below reflect only the attributed slice.`;
+            })();
         }
         boardExpander(el, order.map((b, i) => briberRowHtml(b, i, builtAtDate)), 'briball',
             '<div class="text-gray-600 text-sm">No attributed bribers yet.</div>');
@@ -7411,6 +7433,52 @@
     // pool_address series (never by name). The USD value split is NOT used as a health
     // signal — constant-product pools sit ~50/50 even mid-exit; the real tell is the
     // reserve token-amount drift + price, captured by the HIGH composite.
+    // ---- bribe runway chips (SPEC-bribe-runway v2 UI) ------------------------
+    // Data: tla-voting/bribe-state/runway.json — the manager's FUTURE pots probed
+    // until empty (state truth: unattributed hole-era bribes included; payers
+    // unnamed by design). Chip grammar: green "bribed thru eN" / amber ≤3 left /
+    // red expires-after-this-epoch — EXCEPT the tribute pattern: a 1-epoch pot
+    // of only LUNA/ASTRO is the take-rate recyclers refilling weekly by
+    // automation, styled neutral so the board doesn't cry wolf every week
+    // (heuristic stated in the tooltip, not hidden).
+    const RECYCLE_DENOMS = new Set(['native:uluna', 'native:ibc/8D8A7F7253615E5F76CB6252A1E1BD921D5EDB7BBAAF8913FB1C77FF125D9995']);
+    function ensureRunway() {
+        if (store._runwayP) return store._runwayP;
+        store._runwayP = fetch('https://raw.githubusercontent.com/thealliancedao/tla-core/main/tla-voting/bribe-state/runway.json?t=' + Date.now())
+            .then(r => r.ok ? r.json() : null)
+            .then(rw => {
+                if (rw && Array.isArray(rw.pools)) {
+                    const nameByGid = new Map();
+                    for (const p of (store.pools || [])) if (p.gauge_pool_id) nameByGid.set(p.gauge_pool_id, p.name);
+                    for (const p of (store.votePools || [])) if (p.gauge_pool_id && !nameByGid.has(p.gauge_pool_id)) nameByGid.set(p.gauge_pool_id, p.name);
+                    rw._byKey = new Map();
+                    for (const p of rw.pools) {
+                        const nm = nameByGid.get(p.pool);
+                        if (nm) rw._byKey.set(`${nm}|${String(p.gauge || '').toUpperCase()}`, p);
+                    }
+                }
+                store.runway = rw;
+                // chips arrived after first paint → repaint the watchlist once
+                if (rw && document.querySelector('[data-erow]')) { try { renderExitRisk(); } catch (e) {} }
+                return rw;
+            }).catch(() => (store.runway = null));
+        return store._runwayP;
+    }
+    function runwayChip(r) {
+        const rw = store.runway;
+        if (!rw || !rw._byKey) { ensureRunway(); return ''; }
+        const p = rw._byKey.get(`${r.name}|${String(r.bucket || '').toUpperCase()}`);
+        if (!p) return '';
+        const denoms = Object.keys(p.by_denom || {});
+        const toks = denoms.map(d => (store.tokenSymbols?.[d]) || d.split(/[:/]/).pop().slice(-6)).join(', ');
+        const recycled = p.epochs_left <= 1 && denoms.length > 0 && denoms.every(d => RECYCLE_DENOMS.has(d));
+        const tip = `Bribes funded through epoch ${p.last_funded_period} (≈ ${p.expires_approx}) · tokens: ${toks}. From the incentive manager's future pot state — includes bribes whose payer isn't attributed yet. Linear bribes taper per epoch rather than stopping cold.`;
+        if (recycled) return `<span class="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400/80" title="${tip} This pool's pots refill every epoch from the take-rate recyclers (single-epoch LUNA/ASTRO pattern) — automated, expected to renew weekly.">♻ auto-bribed weekly</span>`;
+        if (p.epochs_left === 0) return `<span class="text-[9px] px-1.5 py-0.5 rounded bg-red-500/15 text-red-300 font-semibold" title="${tip}">bribes expire after this epoch</span>`;
+        const cls = p.epochs_left <= 3 ? 'bg-amber-500/15 text-amber-300' : 'bg-emerald-500/15 text-emerald-300';
+        return `<span class="text-[9px] px-1.5 py-0.5 rounded ${cls}" title="${tip}">bribed thru e${p.last_funded_period} · ${p.epochs_left} epoch${p.epochs_left === 1 ? '' : 's'}</span>`;
+    }
+
     function renderExitRisk() {
         const panel = document.getElementById('exit-risk-panel');
         const summaryEl = document.getElementById('exit-risk-summary');
@@ -7738,6 +7806,7 @@
                     <span class="text-[9px] px-1 py-0.5 rounded bg-gray-500/20 text-gray-400">${r.bucket}</span>
                     ${statusBadge(r)}
                     ${sc}
+                    ${runwayChip(r)}
                   </div>
                   <div class="flex items-center gap-2 mt-1">
                     ${sparkline(r.series, sparkColor(r))}
