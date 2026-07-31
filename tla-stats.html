@@ -7475,6 +7475,72 @@
         dex:     { txt: 'DEX support', cls: 'bg-cyan-500/12 text-cyan-300/90' },
         user:    { txt: 'User bribed', cls: 'bg-emerald-500/12 text-emerald-300/90' },
     };
+    // "What happens to votes NEXT epoch" (Camron 2026-07-30): the distributions
+    // harvest records the VP that governed each PAST payout; live vote-state is
+    // where votes sit NOW. now \u2212 last-payout = the reward shift already locked
+    // in for next week (Votion\u2019s reallocation is the dominant mover in it).
+    // Chain truth, no prediction: votes already cast, payout not yet run.
+    function ensureDistributions() {
+        if (store._distP) return store._distP;
+        store._distP = fetch('https://raw.githubusercontent.com/thealliancedao/tla-core/main/tla-voting/distributions/history.json?t=' + Date.now())
+            .then(r => r.ok ? r.json() : null)
+            .then(h => {
+                const entries = h && h.entries;
+                if (!entries || !entries.length) { store.lastPayoutVp = null; return null; }
+                const last = entries[entries.length - 1];
+                const m = new Map();
+                for (const g of last.gauges || []) for (const a of g.assets || []) {
+                    const id = a.asset && (a.asset.cw20 ? 'cw20:' + a.asset.cw20 : a.asset.native ? 'native:' + a.asset.native : null);
+                    if (id) m.set(id, Number(a.total_vp || 0) / 1e6);
+                }
+                store.lastPayoutVp = { period: last.period, byPool: m };
+                if (document.querySelector('[data-erow]')) { try { renderExitRisk(); } catch (e) {} }
+                return store.lastPayoutVp;
+            }).catch(() => (store.lastPayoutVp = null));
+        return store._distP;
+    }
+    // Votion PLANNED overlay (first-party optimizer capture, hourly): the
+    // cross-lockup aggregate of votes Votion has already decided to place
+    // before voteBefore. INTENTION layer; the vote-shift sub-line is the
+    // committed layer. Coverage = captured vaults, stated in the tooltip.
+    function ensureVotionPlan() {
+        if (store._vplanP) return store._vplanP;
+        store._vplanP = fetch('https://raw.githubusercontent.com/thealliancedao/tla-core/main/votion/optimization/current.json?t=' + Date.now())
+            .then(r => r.ok ? r.json() : null)
+            .then(d => {
+                if (!d || !d.aggregate) { store.votionPlan = null; return null; }
+                const byId = new Map();
+                for (const [gauge, gd] of Object.entries(d.aggregate)) {
+                    for (const [pid, p] of Object.entries(gd.pools || {})) {
+                        byId.set(pid, { ...p, gauge, moving: (gd.vaults_moving || []).length > 0 });
+                    }
+                }
+                store.votionPlan = { byId, voteBefore: d.voteBefore, capturedAt: d.capturedAt, vaultCount: Object.keys(d.vaults || {}).length };
+                if (document.querySelector('[data-erow]')) { try { renderExitRisk(); } catch (e) {} }
+                return store.votionPlan;
+            }).catch(() => (store.votionPlan = null));
+        return store._vplanP;
+    }
+    function votionPlanFor(r) {
+        const vp = store.votionPlan;
+        if (!vp) { ensureVotionPlan(); return null; }
+        const sp = (store.pools || []).find(p => p.name === r.name && String(p.bucket || '').toLowerCase() === String(r.bucket || '').toLowerCase());
+        const gid = sp && sp.gauge_pool_id ? sp.gauge_pool_id.replace(/^(native|cw20):/, '') : null;
+        if (!gid) return null;
+        const p = vp.byId.get(gid);
+        if (!p) return null;
+        return { ...p, voteBefore: vp.voteBefore, vaultCount: vp.vaultCount };
+    }
+    function voteShiftFor(r, vpNow) {
+        const lp = store.lastPayoutVp;
+        if (!lp) { ensureDistributions(); return null; }
+        const sp = (store.pools || []).find(p => p.name === r.name && String(p.bucket || '').toLowerCase() === String(r.bucket || '').toLowerCase());
+        const gid = sp && sp.gauge_pool_id;
+        if (!gid || vpNow == null) return null;
+        const prev = lp.byPool.get(gid);
+        if (!prev || prev <= 0) return null;
+        return { pct: (vpNow - prev) / prev * 100, prev, period: lp.period };
+    }
     function runwayFor(r) { return store.runway?._byKey?.get(`${r.name}|${String(r.bucket || '').toUpperCase()}`) || null; }
     function runwayChip(r) {
         const rw = store.runway;
@@ -7542,11 +7608,20 @@
             : dexOnly ? 'Its bribes come from the DEX take-rate recyclers (attributed on-chain), which historically refill each epoch.'
             : rw.epochs_left === 0 ? '\u26a0 Its bribes run out after the CURRENT epoch \u2014 unless renewed, voters lose their incentive next week.'
             : `Bribes are funded ${rw.epochs_left} more epoch${rw.epochs_left === 1 ? '' : 's'} (through \u2248${rw.expires_approx}), so voters have a paid reason to keep supporting it.`;
+        const vpN = r.hp ? (() => { const eps = Object.keys(r.hp.epochs || {}).map(Number); if (!eps.length) return null; return r.hp.epochs[String(Math.max(...eps))]?.vp_human ?? null; })() : null;
+        const shift = voteShiftFor(r, vpN);
+        const shiftTxt = shift && Math.abs(shift.pct) >= 5
+            ? ` Voting support for next week is ${shift.pct > 0 ? 'up' : 'down'} ${Math.abs(shift.pct).toFixed(0)}% vs the last payout \u2014 its reward share should ${shift.pct > 0 ? 'grow' : 'shrink'} accordingly.`
+            : '';
+        const vplan = votionPlanFor(r);
+        const vplanTxt = vplan && Math.abs(vplan.delta_vp) > 1000 && (vplan.current_vp === 0 || Math.abs(vplan.delta_vp / vplan.current_vp) >= 0.05)
+            ? ` Votion\u2019s optimizer has ${vplan.delta_vp > 0 ? (vplan.current_vp === 0 ? 'scheduled a NEW position here' : 'scheduled a vote increase here') : 'scheduled a vote reduction here'} before ${String(vplan.voteBefore || '').slice(0, 10)} \u2014 not yet cast, but reward direction is telegraphed.`
+            : '';
         const apr = _aprOf(r);
         const aprTxt = apr != null ? ` LPs currently earn \u2248${apr.toFixed(0)}% APR from TLA reward emissions.` : '';
         const risk = r.sev === 'high' ? '\u26a0 Our drain detector flags this pool: staked capital is leaving unusually fast. '
             : r.sev === 'med' ? '\u26a0 Worth watching: this pool is draining faster than similar pools. ' : '';
-        return `${risk}${f$(r.staked)} is staked through TLA here \u2014 ${trendTxt}${flowTxt}. ${rwTxt}${aprTxt}`;
+        return `${risk}${f$(r.staked)} is staked through TLA here \u2014 ${trendTxt}${flowTxt}. ${rwTxt}${aprTxt}${shiftTxt}${vplanTxt}`;
     }
 
     function drillChartSvg(pts, w, h, fmt, color = '#22D3EE', opts = {}) {
@@ -7621,12 +7696,13 @@
           ${(() => {
               const p = runwayFor(r);
               if (!p || !Array.isArray(p.funders)) return '';
+              const _e = (x) => String(x ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
               const rows = p.funders.map(f => {
                   const u = FUNDER_CLASS_UI[f.class] || { txt: f.class, cls: 'bg-gray-500/15 text-gray-400' };
                   const toks = f.tokens.map(d => (store.tokenSymbols?.[d]) || d.split(/[:/]/).pop().slice(-6)).join(', ');
                   return `<div class="flex items-center gap-2 py-1 border-b border-white/5 last:border-0 text-[11px]">
                       <span class="text-[9px] px-1.5 py-0.5 rounded ${u.cls} shrink-0">${u.txt}</span>
-                      <span class="text-gray-300 truncate" title="${f.briber}">${esc(f.label)}</span>
+                      <span class="text-gray-300 truncate" title="${f.briber}">${_e(f.label)}</span>
                       <span class="text-gray-500 mono text-[10px] ml-auto shrink-0">${toks}</span>
                       <span class="mono text-[10px] shrink-0 ${p.last_funded_period - f.thru <= 0 ? 'text-emerald-300' : 'text-gray-400'}">thru e${f.thru}</span>
                     </div>`;
@@ -7636,6 +7712,40 @@
               return `<div class="mb-2 p-2 rounded-lg bg-white/[0.02] border border-white/5">
                   <div class="text-[9px] text-gray-500 mb-1">WHO’S PAYING THE BRIBES <span class="normal-case">— from attributed on-chain placements only</span></div>
                   ${rows}${unatt}</div>`;
+          })()}
+          ${(() => {
+              // 3-layer vote-shift breakdown (Camron 2026-07-31):
+              //   committed = on-chain votes now \u2212 the VP that governed the last
+              //   payout \u00b7 planned = Votion optimizer target \u2212 votes now \u00b7
+              //   total = committed + planned = projected next-payout shift.
+              const vpN2 = r.hp ? (() => { const eps = Object.keys(r.hp.epochs || {}).map(Number); if (!eps.length) return null; return r.hp.epochs[String(Math.max(...eps))]?.vp_human ?? null; })() : null;
+              const sh = voteShiftFor(r, vpN2);
+              const pl = votionPlanFor(r);
+              if (!sh && !pl) return '';
+              const f = (v) => (Math.abs(v) >= 1e6 ? (v / 1e6).toFixed(2) + 'M' : Math.round(v).toLocaleString());
+              const committed = sh ? vpN2 - sh.prev : null;
+              const planned = pl ? pl.delta_vp : 0;
+              const total = (committed ?? 0) + planned;
+              const line = (label, v, base, tip) => v == null
+                  ? `<div class="flex justify-between text-[11px] py-0.5" title="${tip}"><span class="text-gray-500">${label}</span><span class="text-gray-600">\u2014 no baseline</span></div>`
+                  : `<div class="flex justify-between text-[11px] py-0.5" title="${tip}"><span class="text-gray-500">${label}</span><span class="mono ${v > 0 ? 'text-emerald-300' : v < 0 ? 'text-red-300' : 'text-gray-400'}">${v >= 0 ? '+' : ''}${f(v)} VP${base > 0 ? ` (${(v / base * 100).toFixed(0)}%)` : ''}</span></div>`;
+              return `<div class="mb-2 p-2 rounded-lg bg-white/[0.02] border border-white/5">
+                  <div class="text-[9px] text-gray-500 mb-1">VOTE SHIFT \u00b7 NEXT EPOCH <span class="normal-case">\u2014 three layers, definitions in the hovers</span></div>
+                  ${line('1 \u00b7 casted (on-chain)', committed, sh ? sh.prev : 0, 'Votes now minus the VP that governed the last payout (e' + (sh ? sh.period : '?') + ') \u2014 already cast, already counts.')}
+                  ${line('2 \u00b7 Votion planned', pl ? planned : null, vpN2 || 0, 'Votion optimizer target minus votes now \u2014 published intention across the captured lockups, cast by ' + (pl ? String(pl.voteBefore || '').slice(0, 10) : '?') + '.')}
+                  ${line('3 \u00b7 total projected', sh ? total : null, sh ? sh.prev : 0, 'casted + planned = the projected shift vs the last payout if Votion executes its plan. Reward share follows this.')}
+                </div>`;
+          })()}
+          ${(() => {
+              const p = votionPlanFor(r);
+              if (!p || (p.delta_vp === 0 && !p.note)) return '';
+              const f = (v) => (v >= 1e6 ? (v / 1e6).toFixed(2) + 'M' : Math.round(v).toLocaleString());
+              const dir = p.delta_vp > 0 ? 'text-emerald-300' : p.delta_vp < 0 ? 'text-red-300' : 'text-gray-400';
+              return `<div class="mb-2 p-2 rounded-lg bg-violet-500/[0.04] border border-violet-500/15">
+                  <div class="text-[9px] text-gray-500 mb-1">VOTION\u2019S PLAN <span class="normal-case">\u2014 optimizer intention across ${p.vaultCount} captured lockup${p.vaultCount === 1 ? '' : 's'}; votes cast by ${String(p.voteBefore || '').slice(0, 10)}</span></div>
+                  <div class="text-[11px] text-gray-300">${f(p.current_vp)} VP now \u2192 ${f(p.planned_vp)} VP planned <span class="mono ${dir}">(${p.delta_vp >= 0 ? '+' : ''}${f(Math.abs(p.delta_vp))}${p.current_vp > 0 ? ' \u00b7 ' + (p.delta_vp / p.current_vp * 100).toFixed(0) + '%' : ''})</span>${p.note ? ` <span class="text-[10px] ${p.note.startsWith('NEW') ? 'text-emerald-400' : 'text-amber-300'}">${p.note}</span>` : ''}</div>
+                  <div class="text-[9px] text-gray-600 mt-0.5">Intention, not yet on chain \u2014 the committed shift above updates once cast. Skipped (\u201cnot worth changing\u201d) lockups count as keeping current votes.</div>
+                </div>`;
           })()}
           <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
             ${stat('money staked via TLA', f$(last.staked_usd), 'Dollar value of this pool\u2019s LP tokens staked through TLA, at capture prices.')}
@@ -7995,7 +8105,7 @@
             return `
             <div data-erow class="p-2.5 rounded-lg border-l-2 ${border}">
               <div class="flex items-center gap-3">
-                <span class="w-2 h-2 rounded-full shrink-0" style="background:${dotColor(r)}" title="${r.sev === 'high' ? 'High exit risk' : r.sev === 'med' ? 'Watch' : 'Healthy'}"></span>
+                <span class="w-2 h-2 rounded-full shrink-0" style="background:${dotColor(r)}" title="${r.sev === 'high' ? 'RED: high exit risk \u2014 depth, reserves and price all falling together' : r.sev === 'med' ? 'YELLOW: watch \u2014 draining faster than similar pools, or several straight epochs of decline' : (r.netW > 0.03 ? 'GREEN: growing \u2014 TLA-staked money in this pool is up over the window, no risk flags' : 'GRAY: steady \u2014 no risk flags, no notable growth')}"></span>
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-2 flex-wrap">
                     <span class="font-medium truncate">${r.name}</span>
@@ -8013,8 +8123,31 @@
                 </div>
                 ${midChart}
                 ${col('reward APR', apr != null ? apr.toFixed(0) + '%' : '\u2014', 'text-emerald-300/90', 'TLA reward emissions \u00f7 pool staked (chain distributions, base rate)')}
-                ${col('bribe runway', rwLeft != null ? rwLeft + ' ep' : '\u2014', rwLeft != null && rwLeft <= 1 ? 'text-amber-300' : 'text-gray-300', 'Epochs of bribes still funded in the manager\u2019s future pots')}
-                ${col('vote power', vpNow != null ? (vpNow >= 1e6 ? (vpNow / 1e6).toFixed(2) + 'M' : Math.round(vpNow).toLocaleString()) : '\u2014', 'text-violet-300/90', 'vAMP voting power on this gauge right now')}
+${(() => {
+                    const cls = rwLeft == null ? 'text-gray-500' : rwLeft <= 1 ? 'text-red-300' : rwLeft <= 4 ? 'text-amber-300' : 'text-emerald-300';
+                    return `<button onclick="togglePoolDrill(this, '${(r.name + '|' + r.bucket).replace(/'/g, '')}')" class="text-right shrink-0 hidden md:block hover:bg-white/[0.04] rounded px-0.5 transition-colors" style="width:72px" title="Epochs of bribes still funded in the manager\u2019s future pots \u2014 click to see WHO is paying, in which tokens, and until when. Colors: \u22641 red \u00b7 2\u20134 yellow \u00b7 5+ green.">
+                      <div class="mono text-[11px] ${cls}">${rwLeft != null ? rwLeft + ' ep' : '\u2014'}</div>
+                      <div class="text-[8px] text-gray-600 -mt-0.5">bribe runway \u25be</div>
+                    </button>`;
+                })()}
+                ${(() => {
+                    const shift = voteShiftFor(r, vpNow);
+                    const val = vpNow != null ? (vpNow >= 1e6 ? (vpNow / 1e6).toFixed(2) + 'M' : Math.round(vpNow).toLocaleString()) : '\u2014';
+                    const plan = votionPlanFor(r);
+                    const planPct = plan && plan.current_vp > 0 ? plan.delta_vp / plan.current_vp * 100 : (plan && plan.delta_vp > 0 ? null : 0);
+                    const planMaterial = plan && (Math.abs(plan.delta_vp) > 1000) && (planPct == null || Math.abs(planPct) >= 3);
+                    const planLine = planMaterial ? `Votion plans ${plan.delta_vp > 0 ? '+' : ''}${planPct == null ? 'entry' : planPct.toFixed(0) + '%'}` : null;
+                    const sub = shift == null ? (planLine || 'vote power')
+                        : Math.abs(shift.pct) < 2 ? (planLine || 'votes \u2248 steady')
+                        : `votes ${shift.pct > 0 ? '+' : ''}${shift.pct.toFixed(0)}% next ep`;
+                    const subCls = (shift == null || Math.abs(shift.pct) < 2)
+                        ? (planLine ? (plan.delta_vp > 0 ? 'text-violet-300/90' : 'text-violet-400/70') : 'text-gray-600')
+                        : shift.pct > 0 ? 'text-emerald-400/90' : 'text-red-400/90';
+                    return `<button onclick="togglePoolDrill(this, '${(r.name + '|' + r.bucket).replace(/'/g, '')}')" class="text-right shrink-0 hidden md:block hover:bg-white/[0.04] rounded px-0.5 transition-colors" style="width:78px" title="Click for the 3-layer vote-shift breakdown (committed \u00b7 Votion planned \u00b7 total projected). vAMP votes on this gauge right now${shift ? ` vs the ${Math.round(shift.prev) >= 1e6 ? (shift.prev / 1e6).toFixed(2) + 'M' : Math.round(shift.prev).toLocaleString()} VP that governed the last payout (e${shift.period}). Votes are already cast \u2014 this shift decides next week\u2019s reward share; Votion\u2019s bribe-following reallocation is the dominant mover.` : ''}${plan ? ` PLANNED (Votion optimizer, ${plan.vaultCount} lockup${plan.vaultCount === 1 ? '' : 's'} captured, votes cast by ${String(plan.voteBefore || '').slice(0, 10)}): ${plan.delta_vp >= 0 ? '+' : ''}${plan.delta_vp.toLocaleString()} VP${plan.note ? ' \u2014 ' + plan.note : ''}. Intention, not yet on chain \u2014 firms up near the deadline.` : ''}">
+                      <div class="mono text-[11px] text-violet-300/90">${val}</div>
+                      <div class="text-[8px] ${subCls} -mt-0.5">${sub} \u25be</div>
+                    </button>`;
+                })()}
                 ${col('net flow \u00b7 ' + phWin() + 'ep', wFlowStr || '\u2014', wFlowCls, 'Net dollars into/out of TLA staking in this pool over the selected ' + phWin() + '-epoch window (follows the window toggle). Per-epoch breakdown is in details.')}
                 <div class="text-right shrink-0" style="width:88px">
                   <div class="mono text-[13px] font-bold text-cyan-400">${fmt$(r.staked)}</div>
@@ -8056,7 +8189,17 @@
             <span class="text-[10px] text-gray-500" title="How many epochs the row charts and trend labels cover. One epoch = one week.">window</span>
             ${[4, 8, 12].map(n => `<button onclick="setPoolWin(${n})" title="Charts + trend % over the last ${n} epochs (${n} weeks)" class="text-[10px] px-2 py-1 rounded-md border transition-colors ${phWin() === n ? 'bg-violet-500/15 text-violet-300 border-violet-500/30' : 'bg-white/[0.02] text-gray-500 border-white/5 hover:text-gray-300'}">${n}</button>`).join('')}
           </div>`;
-        panel.innerHTML = sortBar + bucketKeys.map(b => {
+        const colHeads = `<div class="hidden md:flex items-center gap-3 px-2.5 mb-1 mt-1">
+            <span class="w-2 shrink-0"></span>
+            <div class="flex-1 min-w-0 text-[9px] text-gray-600 uppercase tracking-wider">pool</div>
+            <div class="hidden lg:block shrink-0 text-[9px] text-gray-600 uppercase tracking-wider text-center" style="width:200px" title="TLA-staked $ over the selected window">staked trend</div>
+            <div class="text-right shrink-0 text-[9px] text-gray-600 uppercase tracking-wider" style="width:72px">reward APR</div>
+            <div class="text-right shrink-0 text-[9px] text-gray-600 uppercase tracking-wider" style="width:72px">bribe runway</div>
+            <div class="text-right shrink-0 text-[9px] text-gray-600 uppercase tracking-wider" style="width:78px" title="click a value for the full 3-layer shift breakdown">votes \u00b7 shift</div>
+            <div class="text-right shrink-0 text-[9px] text-gray-600 uppercase tracking-wider" style="width:72px">net flow</div>
+            <div class="text-right shrink-0 text-[9px] text-gray-600 uppercase tracking-wider" style="width:88px">staked in TLA</div>
+          </div>`;
+        panel.innerHTML = sortBar + colHeads + bucketKeys.map(b => {
             const rows = byBucket[b].sort(SORTS[store._phSort].fn);
             const flagged = rows.filter(r => r.sev).length;
             const totStaked = rows.reduce((s, r) => s + (r.staked || 0), 0);
