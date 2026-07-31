@@ -3424,6 +3424,8 @@
             depth: p.depth || 0,
             tla_staked: p.tla_staked || 0,
             rewards_per_year: p.rewards_per_year || 0,
+            rewards: p.rewards,   // raw chain-distributions block (when present)
+            apr: p.apr,           // transformed {non_amp, amplified} — the APR column/drill source
             
             // Flatten APR (v3: apr.non_amp, apr.amplified)
             apr_non_amp: p.apr?.non_amp || p.apr_non_amp || 0,
@@ -4083,6 +4085,7 @@
                 depth: depthUsd,
                 tla_staked: tlaStakedUsd,
                 rewards_per_year: p.rewards?.annual_emissions_usd || 0,
+                rewards: p.rewards,   // coherent single-source APR (both sides at snapshot prices)
                 apr: {
                     non_amp: aprNon,
                     amplified: aprNon * computeAmpFactor(p.bucket),
@@ -7573,7 +7576,21 @@
     // Window: how many epochs the row charts + trend labels cover. Global so
     // every row stays comparable; trend text always names its window.
     function phWin() { return store._phWin || 4; }
-    function _aprOf(r) { const sp = (store.pools || []).find(p => p.name === r.name && String(p.bucket || '').toLowerCase() === String(r.bucket || '').toLowerCase()); return sp?.rewards?.approx_apr_pct ?? null; }
+    function _aprOf(r) {
+        // APR lives on the LIQUIDITY pool rows (store.tlaPools, flattened
+        // apr_non_amp) — NOT on store.pools (vote pools, slim by design).
+        // 0 there means the transform's small-pool suppression (<$20K) — shown
+        // as \u2014, matching its intent, never as a fake zero.
+        const q = (arr) => (arr || []).find(p => p.name === r.name && String(p.bucket || '').toLowerCase() === String(r.bucket || '').toLowerCase());
+        const sp = q(store.tlaPools) || q(store.tlaInactivePools);
+        // Prefer the snapshot's own approx_apr_pct: numerator AND denominator
+        // priced at the same capture (the joined apr_non_amp mixes snapshot
+        // emissions with history-priced staked \u2014 the 90%-vs-69% bug).
+        const coh = sp?.rewards?.approx_apr_pct;
+        if (typeof coh === 'number' && isFinite(coh) && coh > 0) return Math.min(coh, 200);
+        const a = sp && (sp.apr_non_amp ?? sp.apr?.non_amp);
+        return (typeof a === 'number' && a > 0) ? a : null;
+    }
     function _runwayOf(r) { return store.runway?._byKey?.get(`${r.name}|${String(r.bucket || '').toUpperCase()}`)?.epochs_left ?? null; }
     window.setPoolWin = (n) => { store._phWin = n; renderExitRisk(); };
     function windowedStaked(r) {
@@ -7647,12 +7664,16 @@
                 </div>
               </div>`;
         }
-        return `<div class="relative">
-            <svg viewBox="0 0 ${w} ${h}" class="w-full ${cssH}" preserveAspectRatio="none">
-              <polygon points="${area}" fill="${color}" opacity="0.08"/>
-              <polyline points="${line}" fill="none" stroke="${color}" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
-            <span class="absolute top-0 left-1 text-[9px] text-gray-500 mono">${fmt(max)}</span>
-            <span class="absolute bottom-0 left-1 text-[9px] text-gray-600 mono">${fmt(min)}</span>
+        return `<div>
+            <div class="flex items-center gap-1.5">
+              <svg viewBox="0 0 ${w} ${h}" class="flex-1 ${cssH}" preserveAspectRatio="none">
+                <polygon points="${area}" fill="${color}" opacity="0.08"/>
+                <polyline points="${line}" fill="none" stroke="${color}" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
+              <div class="text-right shrink-0 leading-tight">
+                <div class="text-[9px] text-gray-500 mono">${fmt(max)}</div>
+                <div class="text-[9px] text-gray-600 mono">${fmt(min)}</div>
+              </div>
+            </div>
             <div class="flex justify-between text-[9px] text-gray-600 mono px-0.5"><span>e${pts[0][0]}</span><span>e${pts[Math.floor(pts.length / 2)][0]}</span><span>e${pts[pts.length - 1][0]}</span></div>
           </div>`;
     }
@@ -7686,10 +7707,11 @@
             if (p.pool === r.name) bribeUsd = (bribeUsd || 0) + (p.pdUSD || 0) + (p.otherUSD || 0);
         }
         // reward APR from the snapshot (chain-distributions figure)
-        const sp = (store.pools || []).find(p => p.name === r.name && String(p.bucket || '').toLowerCase() === String(r.bucket || '').toLowerCase());
-        const apr = sp?.rewards?.approx_apr_pct;
+        const apr = _aprOf(r);
         const stat = (label, val, tip) => `<div class="p-2 rounded bg-white/[0.03]" ${tip ? `title="${tip}"` : ''}><div class="text-[9px] text-gray-500">${label}</div><div class="text-[12px] mono text-gray-200">${val}</div></div>`;
         box.innerHTML = `
+          <div class="grid md:grid-cols-2 gap-x-4 gap-y-2 items-start">
+          <div class="min-w-0">
           <div class="mb-2 p-2.5 rounded-lg bg-cyan-500/[0.04] border border-cyan-500/15 text-[11.5px] text-gray-300 leading-snug" data-verdict>
             <i class="fas fa-comment-dots text-cyan-400/70 mr-1"></i>${poolVerdict(r)}
           </div>
@@ -7747,11 +7769,13 @@
                   <div class="text-[9px] text-gray-600 mt-0.5">Intention, not yet on chain \u2014 the committed shift above updates once cast. Skipped (\u201cnot worth changing\u201d) lockups count as keeping current votes.</div>
                 </div>`;
           })()}
-          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
+          </div>
+          <div class="min-w-0">
+          <div class="grid grid-cols-2 gap-2 mb-2">
             ${stat('money staked via TLA', f$(last.staked_usd), 'Dollar value of this pool\u2019s LP tokens staked through TLA, at capture prices.')}
             ${stat('whole pool size', f$(last.depth_usd), 'Total pool liquidity on the dex \u2014 TLA-staked and not.')}
             ${stat('vote power', (last.vp_human != null ? Number(last.vp_human).toLocaleString(undefined,{maximumFractionDigits:0}) : '\u2014') + ' VP', 'vAMP voting power currently allocated to this pool\u2019s gauge.')}
-            ${stat('reward APR', apr != null ? apr.toFixed(0) + '%' : '\u2014', 'TLA reward emissions \u00f7 pool staked, from chain distributions (base rate; amplified positions compound above it).')}
+            ${stat('reward APR', apr != null ? apr.toFixed(0) + '%' : '\u2014', 'GROSS emissions APR at capture prices \u00f7 $ staked via TLA (base; amplified compounds above it). Eris\u2019s UI figure is net + forward-modeled and runs ~15\u201322% lower \u2014 different convention, not a disagreement.')}
             ${stat('bribes this epoch', bribeUsd != null ? f$(bribeUsd) : '\u2014', 'Bribes measured in this epoch\u2019s pots for this pool, valued at current prices.')}
             ${stat('runway', (store.runway?._byKey?.get(`${r.name}|${String(r.bucket||'').toUpperCase()}`)?.epochs_left ?? '\u2014') + ' epochs', 'How many epochs of bribes remain funded in the manager\u2019s future pots \u2014 see the chip above for detail.')}
             ${stat('4-epoch trend', (r.netW != null ? (r.netW >= 0 ? '+' : '\u2212') + Math.abs(r.netW * 100).toFixed(0) + '%' : '\u2014'), 'Net change in TLA-staked dollars across the sparkline window.')}
@@ -7762,7 +7786,9 @@
           <div class="text-[9px] text-gray-500 mt-1 mb-0.5">Weekly change \u2014 green = money added, red = money withdrawn (hover a bar for the exact $)</div>
           ${drillFlowBars(staked, 320, 36)}
           <div class="text-[9px] text-gray-500 mt-1 mb-0.5">Voting support \u2014 vAMP votes decide this pool\u2019s share of weekly rewards; rising support = rewards likely to grow</div>
-          ${drillChartSvg(vp, 320, 48, v => Number(v).toLocaleString(undefined,{maximumFractionDigits:0}))}`;
+          ${drillChartSvg(vp, 320, 48, v => Number(v).toLocaleString(undefined,{maximumFractionDigits:0}))}
+          </div>
+          </div>`;
         box.dataset.built = '1';
     };
 
@@ -8122,7 +8148,15 @@
                   </div>
                 </div>
                 ${midChart}
-                ${col('reward APR', apr != null ? apr.toFixed(0) + '%' : '\u2014', 'text-emerald-300/90', 'TLA reward emissions \u00f7 pool staked (chain distributions, base rate)')}
+${(() => {
+                    const sh2 = voteShiftFor(r, vpNow);
+                    const nextApr = apr != null && sh2 && sh2.prev > 0 && vpNow != null ? apr * (vpNow / sh2.prev) : null;
+                    const sub2 = nextApr != null && apr != null && Math.abs(nextApr - apr) / apr >= 0.02
+                        ? `<div class="text-[8px] ${nextApr > apr ? 'text-emerald-400' : 'text-red-400'} -mt-0.5">next \u2248${nextApr.toFixed(0)}%</div>` : `<div class="text-[8px] text-gray-600 -mt-0.5">reward APR</div>`;
+                    return `<div class="text-right shrink-0 hidden md:block" style="width:72px" title="TLA reward emissions ÷ dollars STAKED VIA TLA (chain distributions) — the yield on TLA-staked capital specifically. Reads HIGHER than Eris’s display, which divides by whole-pool depth with their fee treatment; reconciliation is an open spec item. Reads HIGHER than Eris\u2019s display, which divides by whole-pool depth with their fee treatment \u2014 different question, different number; reconciliation is an open spec item.${nextApr != null ? ` Next epoch \u2248${nextApr.toFixed(1)}% \u2014 scaled by the committed vote shift vs the last payout; gauge-total drift ignored \u2014 an estimate.` : ''}">
+                      <div class="mono text-[11px] text-emerald-300/90">${apr != null ? apr.toFixed(0) + '%' : '\u2014'}</div>${sub2}
+                    </div>`;
+                })()}
 ${(() => {
                     const cls = rwLeft == null ? 'text-gray-500' : rwLeft <= 1 ? 'text-red-300' : rwLeft <= 4 ? 'text-amber-300' : 'text-emerald-300';
                     return `<button onclick="togglePoolDrill(this, '${(r.name + '|' + r.bucket).replace(/'/g, '')}')" class="text-right shrink-0 hidden md:block hover:bg-white/[0.04] rounded px-0.5 transition-colors" style="width:72px" title="Epochs of bribes still funded in the manager\u2019s future pots \u2014 click to see WHO is paying, in which tokens, and until when. Colors: \u22641 red \u00b7 2\u20134 yellow \u00b7 5+ green.">
@@ -8142,7 +8176,7 @@ ${(() => {
                         : `votes ${shift.pct > 0 ? '+' : ''}${shift.pct.toFixed(0)}% next ep`;
                     const subCls = (shift == null || Math.abs(shift.pct) < 2)
                         ? (planLine ? (plan.delta_vp > 0 ? 'text-violet-300/90' : 'text-violet-400/70') : 'text-gray-600')
-                        : shift.pct > 0 ? 'text-emerald-400/90' : 'text-red-400/90';
+                        : shift.pct > 0 ? 'text-emerald-400' : 'text-red-400';
                     return `<button onclick="togglePoolDrill(this, '${(r.name + '|' + r.bucket).replace(/'/g, '')}')" class="text-right shrink-0 hidden md:block hover:bg-white/[0.04] rounded px-0.5 transition-colors" style="width:78px" title="Click for the 3-layer vote-shift breakdown (committed \u00b7 Votion planned \u00b7 total projected). vAMP votes on this gauge right now${shift ? ` vs the ${Math.round(shift.prev) >= 1e6 ? (shift.prev / 1e6).toFixed(2) + 'M' : Math.round(shift.prev).toLocaleString()} VP that governed the last payout (e${shift.period}). Votes are already cast \u2014 this shift decides next week\u2019s reward share; Votion\u2019s bribe-following reallocation is the dominant mover.` : ''}${plan ? ` PLANNED (Votion optimizer, ${plan.vaultCount} lockup${plan.vaultCount === 1 ? '' : 's'} captured, votes cast by ${String(plan.voteBefore || '').slice(0, 10)}): ${plan.delta_vp >= 0 ? '+' : ''}${plan.delta_vp.toLocaleString()} VP${plan.note ? ' \u2014 ' + plan.note : ''}. Intention, not yet on chain \u2014 firms up near the deadline.` : ''}">
                       <div class="mono text-[11px] text-violet-300/90">${val}</div>
                       <div class="text-[8px] ${subCls} -mt-0.5">${sub} \u25be</div>
@@ -8151,7 +8185,7 @@ ${(() => {
                 ${col('net flow \u00b7 ' + phWin() + 'ep', wFlowStr || '\u2014', wFlowCls, 'Net dollars into/out of TLA staking in this pool over the selected ' + phWin() + '-epoch window (follows the window toggle). Per-epoch breakdown is in details.')}
                 <div class="text-right shrink-0" style="width:88px">
                   <div class="mono text-[13px] font-bold text-cyan-400">${fmt$(r.staked)}</div>
-                  <div class="text-[9px] text-gray-500 -mt-0.5">staked in TLA</div>
+                  ${(() => { const pv = r.prevStaked; if (!(pv > 0)) return `<div class="text-[9px] text-gray-500 -mt-0.5">staked in TLA</div>`; const d = (r.staked - pv) / pv * 100; const c = d > 1 ? 'text-emerald-400' : d < -1 ? 'text-red-400' : 'text-gray-500'; return `<div class="text-[9px] ${c} -mt-0.5" title="vs last epoch (${fmt$(pv)})">${d >= 0 ? '+' : ''}${d.toFixed(0)}% \u00b7 staked in TLA</div>`; })()}
                   ${flowStr ? `<div class="mono text-[10px] ${flowCls} mt-0.5 md:hidden">${flowStr} <span class="opacity-70 text-[8px]">${flowLabel}</span></div>` : ''}
                 </div>
               </div>
@@ -8169,7 +8203,7 @@ ${(() => {
             inflow:  { label: 'inflows', tip: 'Largest dollar INFLOWS over the selected window first \u2014 where money is arriving (follows the 4/8/12 toggle).', fn: (a, c) => (windowedNetFlow(c) ?? 0) - (windowedNetFlow(a) ?? 0) },
             outflow: { label: 'outflows', tip: 'Largest dollar OUTFLOWS over the selected window first \u2014 where money is leaving (follows the 4/8/12 toggle).', fn: (a, c) => (windowedNetFlow(a) ?? 0) - (windowedNetFlow(c) ?? 0) },
             trend:   { label: 'trend \u0394%', tip: 'Steepest percentage DECLINE in TLA-staked dollars over the selected window first (use the 4/8/12 toggle). Flip through to find fast growers at the bottom.', fn: (a, c) => (windowedTrendPct(a) ?? 0) - (windowedTrendPct(c) ?? 0) },
-            apr:     { label: 'reward APR', tip: 'Highest LP reward rate first \u2014 TLA emissions \u00f7 pool staked, from chain distributions.', fn: (a, c) => (_aprOf(c) ?? -1) - (_aprOf(a) ?? -1) },
+            apr:     { label: 'reward APR', tip: 'Highest LP reward rate first \u2014 TLA emissions \u00f7 dollars staked via TLA (higher than Eris\u2019s per-depth display by design).', fn: (a, c) => (_aprOf(c) ?? -1) - (_aprOf(a) ?? -1) },
             runway:  { label: 'bribe runway', tip: 'Shortest remaining bribe funding first \u2014 the renewal watchlist for briber teams; pools near the top lose their voter incentive soonest.', fn: (a, c) => (_runwayOf(a) ?? 999) - (_runwayOf(c) ?? 999) },
             risk:    { label: 'risk first', tip: 'Pools our drain detector flagged first (leaving faster than similar pools, or bleeding for several straight epochs), then by size.', fn: (a, c) => (sevRank(c.sev) - sevRank(a.sev)) || (c.staked - a.staked) },
         };
@@ -13201,7 +13235,7 @@ ${(() => {
             }
             // Fetch once on load so the footer is correct before the modal is ever opened.
             (function primeFooterRev() {
-                fetch('https://raw.githubusercontent.com/defipatriot/website-adao-core/main/tla-log.md', { cache: 'no-cache' })
+                fetch('https://raw.githubusercontent.com/thealliancedao/tla-core/main/docs/changelogs/tla-log.md', { cache: 'no-cache' })
                     .then(function(r) { return r.ok ? r.text() : null; })
                     .then(function(md) { if (md) updateFooterRev(md); })
                     .catch(function() { /* keep static default */ });
@@ -13288,7 +13322,7 @@ ${(() => {
                         if (c) { c.style.opacity = '1'; c.style.transform = 'scale(1)'; }
                     });
                     if (!changelogLoaded && changelogContent) {
-                        var url = 'https://raw.githubusercontent.com/defipatriot/website-adao-core/main/tla-log.md';
+                        var url = 'https://raw.githubusercontent.com/thealliancedao/tla-core/main/docs/changelogs/tla-log.md';
                         fetch(url, { cache: 'no-cache' })
                             .then(function(r) { if (!r.ok) throw new Error('Network response not ok: ' + r.status); return r.text(); })
                             .then(function(md) { changelogContent.innerHTML = parseMarkdown(md); changelogLoaded = true; updateFooterRev(md); buildChangelogJump(md); })
