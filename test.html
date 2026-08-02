@@ -873,7 +873,7 @@
         <div class="max-w-7xl mx-auto px-4 py-4">
             <div class="flex items-center justify-between flex-wrap gap-4">
                 <div>
-                    <h1 class="text-xl font-bold">Terra Liquidity Alliance Tracker <span class="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 align-middle font-semibold">TEST T1</span></h1>
+                    <h1 class="text-xl font-bold">Terra Liquidity Alliance Tracker <span class="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 align-middle font-semibold">TEST T1.1</span></h1>
                     <p class="text-xs text-gray-500">
                         <a href="https://www.erisprotocol.com/terra/liquidity-hub?tab=liquidity" target="_blank" class="text-purple-400 hover:text-purple-300 hover:underline">
                             <i class="fas fa-external-link-alt text-[9px] mr-1"></i>Eris TLA
@@ -5992,7 +5992,12 @@
         // 200+ deep; dumping them all at once was a wall of rows).
         let html = rows.map((r, i) => i < 5 ? r : `<div class="bx-${uid}-x hidden">${r}</div>`).join('');
         if (rows.length > 5) {
-            html += `<button id="bx-${uid}-btn" onclick="bxMore('${uid}')" class="text-[10px] text-cyan-400 hover:text-cyan-300 w-full text-center pt-1">show 10 more (${rows.length - 5} hidden) \u25be</button>`;
+            // Rev T1.1: collapse is available the moment ANYTHING is expanded —
+            // no need to page to the end first. Same two controls on every board.
+            html += `<div class="flex items-center justify-center gap-4 pt-1">
+                <button id="bx-${uid}-btn" onclick="bxMore('${uid}')" class="text-[10px] text-cyan-400 hover:text-cyan-300">show 10 more (${rows.length - 5} hidden) \u25be</button>
+                <button id="bx-${uid}-col" onclick="bxCollapse('${uid}')" class="hidden text-[10px] text-gray-500 hover:text-gray-300">collapse to top 5 \u25b4</button>
+            </div>`;
         }
         el.innerHTML = html;
     }
@@ -6007,14 +6012,27 @@
         const all = Array.from(document.querySelectorAll('.bx-' + uid + '-x'));
         const hidden = all.filter(d => d.classList.contains('hidden'));
         const btn = document.getElementById('bx-' + uid + '-btn');
-        if (!hidden.length) { // fully expanded -> collapse back to top 5
-            all.forEach(d => d.classList.add('hidden'));
-            if (btn) btn.textContent = `show 10 more (${all.length} hidden) \u25be`;
-            return;
-        }
+        const col = document.getElementById('bx-' + uid + '-col');
         hidden.slice(0, 10).forEach(d => d.classList.remove('hidden'));
+        if (col) col.classList.remove('hidden');   // collapsing is now always one click away
         const left = Math.max(hidden.length - 10, 0);
-        if (btn) btn.textContent = left > 0 ? `show 10 more (${left} hidden) \u25be` : 'collapse to top 5 \u25b4';
+        if (btn) {
+            if (left > 0) { btn.classList.remove('hidden'); btn.textContent = `show 10 more (${left} hidden) \u25be`; }
+            else btn.classList.add('hidden');      // nothing left to reveal
+        }
+    }
+    function bxCollapse(uid) {
+        track('board_collapse', { board: uid });
+        const all = Array.from(document.querySelectorAll('.bx-' + uid + '-x'));
+        all.forEach(d => d.classList.add('hidden'));
+        const btn = document.getElementById('bx-' + uid + '-btn');
+        const col = document.getElementById('bx-' + uid + '-col');
+        if (btn) { btn.classList.remove('hidden'); btn.textContent = `show 10 more (${all.length} hidden) \u25be`; }
+        if (col) col.classList.add('hidden');
+        // Collapsing from deep in a 200-row board would strand the viewport —
+        // bring the board back into view.
+        const host = all[0] && all[0].parentElement;
+        if (host && host.scrollIntoView) host.scrollIntoView({ block: 'nearest' });
     }
 
     // Board rows drive the same member lens as the header dropdown.
@@ -6265,9 +6283,11 @@
         } else {
             valueHtml = `<span class="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-gray-400" title="No historical price record for the bribe token(s) (${unpricedTokens || 'all'} unpriced) — amounts are chain-exact, USD is never guessed.">unpriced</span>`;
         }
-        const sub = `${b.event_count} bribe${b.event_count === 1 ? '' : 's'} · ${b.first_bribe || '?'} → ${b.last_bribe || '?'} · <span class="text-cyan-500 hover:text-cyan-300 cursor-pointer" onclick="event.stopPropagation();openBriberModal('${b.briber}')" title="Bribe history: per-epoch timeline, pools, and tokens for this briber"><i class="fas fa-chart-column text-[8px]"></i> history</span>`;
-        const isMember = !!store.nameByWallet?.get(b.briber);
-        return personRow(i, briberNameHtml(b.briber, b.label), sub, valueHtml, isMember ? b.briber : null);
+        const sub = `${b.event_count} bribe${b.event_count === 1 ? '' : 's'} · ${b.first_bribe || '?'} → ${b.last_bribe || '?'} · <span class="text-cyan-500"><i class="fas fa-chart-column text-[8px]"></i> full history</span>`;
+        // Rev T1.1: the WHOLE row opens the deep-dive (per-pool USD totals,
+        // per-token amounts + USD at placement, per-epoch chart). The old tiny
+        // "history" link was the only door and nobody found it.
+        return `<div class="cursor-pointer rounded-lg hover:bg-white/[0.04] transition-colors" onclick="openBriberModal('${b.briber}')" title="Click for full bribe history — every LP bribed with total USD applied, token breakdown, USD at placement vs today">${personRow(i, briberNameHtml(b.briber, b.label), sub, valueHtml, null)}</div>`;
     }
     async function renderTopBribersAllTime(el, banner) {
         const roll = await fetchVotingRollups();
