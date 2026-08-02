@@ -873,7 +873,7 @@
         <div class="max-w-7xl mx-auto px-4 py-4">
             <div class="flex items-center justify-between flex-wrap gap-4">
                 <div>
-                    <h1 class="text-xl font-bold">Terra Liquidity Alliance Tracker <span class="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 align-middle font-semibold">TEST T1.1</span></h1>
+                    <h1 class="text-xl font-bold">Terra Liquidity Alliance Tracker <span class="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 align-middle font-semibold">TEST T2</span></h1>
                     <p class="text-xs text-gray-500">
                         <a href="https://www.erisprotocol.com/terra/liquidity-hub?tab=liquidity" target="_blank" class="text-purple-400 hover:text-purple-300 hover:underline">
                             <i class="fas fa-external-link-alt text-[9px] mr-1"></i>Eris TLA
@@ -934,17 +934,18 @@
         <div class="glass-card grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 divide-x divide-white/5">
             <div class="stat-box">
                 <div class="stat-box-content">
-                    <div class="stat-label">Active Astroport Pools</div>
-                    <div id="stat-astro-pools" class="stat-value mono">-</div>
+                    <div class="stat-label">Active Pools</div>
+                    <div id="stat-active-pools" class="stat-value mono">-</div>
+                    <div id="stat-active-pools-sub" class="text-[10px] text-gray-500 mt-0.5">-</div>
                 </div>
-                <div id="trend-astro-pools" class="stat-trend" onclick="showHistoryModal('astro-pools')"></div>
+                <div id="trend-active-pools" class="stat-trend" onclick="showHistoryModal('active-pools')"></div>
             </div>
             <div class="stat-box">
                 <div class="stat-box-content">
-                    <div class="stat-label">Active Skeleton Pools</div>
-                    <div id="stat-ww-pools" class="stat-value mono">-</div>
+                    <div class="stat-label">TLA TVL <i class="fas fa-info-circle text-gray-500 text-xs ml-1 cursor-help" title="Total USD staked into TLA gauges across all active pools — the capital the gauge war is fighting over."></i></div>
+                    <div id="stat-tla-tvl" class="stat-value mono">-</div>
                 </div>
-                <div id="trend-ww-pools" class="stat-trend" onclick="showHistoryModal('ww-pools')"></div>
+                <div id="trend-tla-tvl" class="stat-trend" onclick="showHistoryModal('tla-tvl')"></div>
             </div>
             <div class="stat-box">
                 <div class="stat-box-content">
@@ -3813,6 +3814,7 @@
             // filter + 200% cap the live APR uses (so current vs prev is apples-to-apples).
             // Empty until apr-history.json exists -> the APR badge simply doesn't render.
             store.prevAprByName = {};
+            store.aprHistory = aprHistResp;   // Rev T2: full per-epoch rollup kept for the hero sparkline
             const aprBaseIdx = buildAprBaselineIndex(aprHistResp, lastCompleteEpoch);
             Object.entries(aprBaseIdx).forEach(([k, v]) => {
                 const nm = k.split('|')[0];
@@ -4921,11 +4923,17 @@
         
         // Astroport active pools
         const astroPools = activePools.filter(p => p.dex?.includes('Astro'));
-        document.getElementById('stat-astro-pools').textContent = astroPools.length;
+        // (merged Active Pools + TVL setters moved below wwPools — Rev T2)
         
         // Skeleton Swap active pools  
         const wwPools = activePools.filter(p => p.dex?.includes('Skeleton'));
-        document.getElementById('stat-ww-pools').textContent = wwPools.length;
+        // Rev T2: merged Active Pools tile (count + per-DEX split) + TLA TVL tile.
+        document.getElementById('stat-active-pools').textContent = astroPools.length + wwPools.length;
+        const apSub = document.getElementById('stat-active-pools-sub');
+        if (apSub) apSub.textContent = `${astroPools.length} Astro \u00b7 ${wwPools.length} SS`;
+        const tvlEl = document.getElementById('stat-tla-tvl');
+        if (tvlEl) tvlEl.textContent = fmt$(store.tlaPools.reduce((s, p) => s + (p.tla_staked || 0), 0));
+
         
         // TLA Epoch Rewards in LUNA (using Luna price from aDAO snap or token_prices)
         const totalRewardsPerYearUSD = store.tlaPools.reduce((sum, p) => sum + (p.rewards_per_year || 0), 0);
@@ -5234,6 +5242,10 @@
                     <div class="flex flex-col min-w-0">
                         <span class="text-sm font-medium truncate">${who(x.m.wallet)}${isYou ? ' <span class="text-[8px] px-1 py-px rounded bg-amber-500/25 text-amber-300 font-semibold">SELECTED</span>' : ''}</span>
                         <span class="text-[9px] text-gray-600">${fmtNum(x.cur)} \u2192 ${fmtNum(x.pot)} VP if adjusted</span>
+                        <div class="h-1 rounded-full bg-white/5 overflow-hidden flex mt-1 w-36 max-w-full" title="cyan = live VP · amber = stale (recoverable)">
+                            <div class="h-full bg-cyan-400/70" style="width:${(x.pot > 0 ? x.cur / x.pot * 100 : 0).toFixed(1)}%"></div>
+                            <div class="h-full bg-amber-500/60" style="width:${pctOfPot.toFixed(1)}%"></div>
+                        </div>
                     </div>
                 </div>
                 <div class="text-right shrink-0"><span class="mono text-sm text-amber-300 font-semibold">+${fmtNum(x.gap)}</span><div class="text-[9px] text-gray-600">${pctOfPot.toFixed(0)}% stale</div></div>
@@ -5275,6 +5287,9 @@
                     <div class="flex flex-col min-w-0">
                         <span class="text-sm font-medium truncate">${who(x.m.wallet)}${isYou ? ' <span class="text-[8px] px-1 py-px rounded bg-amber-500/25 text-amber-300 font-semibold">SELECTED</span>' : ''}</span>
                         <span class="text-[9px] text-gray-600">${fmt$(x.exp)} being taken</span>
+                        <div class="h-1 rounded-full bg-white/5 overflow-hidden mt-1 w-36 max-w-full" title="how much of the parked capital the take-rate has bitten">
+                            <div class="h-full bg-red-400/60" style="width:${(x.usd > 0 ? Math.min(x.exp / x.usd * 100, 100) : 0).toFixed(1)}%"></div>
+                        </div>
                     </div>
                 </div>
                 <span class="mono text-sm text-red-300 font-semibold shrink-0">${fmt$(x.usd)}</span>
@@ -5955,20 +5970,33 @@
             return;
         }
         deltas.sort((a, b) => b.d - a.d);
-        const gainers = deltas.filter(x => x.d > 0).slice(0, 3);
-        const losers = deltas.filter(x => x.d < 0).slice(-3).reverse();
-        const row = (x) => `
-            <div class="flex items-center justify-between p-2 rounded-lg bg-white/[0.02]">
-                <div class="flex flex-col min-w-0">
-                    <span class="text-sm font-medium truncate">${x.p.name}</span>
-                    <span class="text-[9px] text-gray-600 uppercase">${x.p.bucket || ''}</span>
+        // Rev T2: diverging bars — every row's magnitude on ONE shared scale
+        // from a center axis, so gainers vs losers read at a glance.
+        const gainers = deltas.filter(x => x.d > 0).slice(0, 5);
+        const losers = deltas.filter(x => x.d < 0).slice(-5).reverse();
+        const maxAbs = Math.max(...deltas.map(x => Math.abs(x.d)));
+        const row = (x) => {
+            const w = maxAbs > 0 ? Math.max(Math.abs(x.d) / maxAbs * 50, 1.5) : 0;
+            const pos = x.d > 0;
+            return `
+            <div class="p-2 rounded-lg bg-white/[0.02]">
+                <div class="flex items-center justify-between mb-1">
+                    <div class="flex items-baseline gap-2 min-w-0">
+                        <span class="text-sm font-medium truncate">${x.p.name}</span>
+                        <span class="text-[9px] text-gray-600 uppercase shrink-0">${x.p.bucket || ''}</span>
+                    </div>
+                    <span class="mono text-sm font-semibold shrink-0 ${pos ? 'text-emerald-400' : 'text-red-400'}">${pos ? '+' : ''}${fmtNum(x.d)} VP</span>
                 </div>
-                <span class="mono text-sm font-semibold ${x.d > 0 ? 'text-emerald-400' : 'text-red-400'}">${x.d > 0 ? '+' : ''}${fmtNum(x.d)} VP</span>
+                <div class="relative h-1.5 rounded-full bg-white/[0.04] overflow-hidden">
+                    <div class="absolute top-0 bottom-0 left-1/2 w-px bg-white/15"></div>
+                    <div class="absolute top-0 bottom-0 ${pos ? 'left-1/2 bg-emerald-400/60 rounded-r-full' : 'right-1/2 bg-red-400/60 rounded-l-full'}" style="width:${w.toFixed(1)}%"></div>
+                </div>
             </div>`;
+        };
         el.innerHTML =
             (gainers.length ? `<div class="text-[10px] text-emerald-400/80 uppercase tracking-wider font-semibold">Gaining support</div>` + gainers.map(row).join('') : '') +
             (losers.length ? `<div class="text-[10px] text-red-400/80 uppercase tracking-wider font-semibold mt-2">Losing support</div>` + losers.map(row).join('') : '') +
-            `<div class="text-[9px] text-gray-600 pt-1">vs locked-in baseline${store.lockedInDate ? ` · ${store.lockedInDate}` : ''}</div>`;
+            `<div class="text-[9px] text-gray-600 pt-1">bars share one scale (widest = largest move) \u00b7 vs locked-in baseline${store.lockedInDate ? ` · ${store.lockedInDate}` : ''}</div>`;
     }
 
     // ---------------- People boards ----------------
@@ -6121,10 +6149,21 @@
                 })
                 .filter(x => x.last > 0)
                 .sort((a, b) => b.last - a.last || ((b.m.summary?.display_voting_power_human || 0) - (a.m.summary?.display_voting_power_human || 0)));
+            // Rev T2: show what the touch left behind — the measured stale gap NOW
+            // (potential − current, participants feed). A true "+VP recovered by
+            // this touch" needs the before-snapshot from daily member history
+            // (queued derive) — until then only what's measured, never estimated.
+            const freshChip = (m) => {
+                const su = m.summary || {};
+                const g = Math.max(0, (su.potential_vp_human || 0) - (su.current_vp_human || 0));
+                return g <= 1
+                    ? ' \u00b7 <span class="text-emerald-400/80">fully refreshed <i class="fas fa-check text-[8px]"></i></span>'
+                    : ` \u00b7 <span class="text-amber-400/80">${fmtNum(g)} VP still stale</span>`;
+            };
             boardExpander(adjEl, rows.map((x, i) => personRow(
                 i,
                 `${displayName(x.m.wallet)} ${walletBadges(x.m.wallet)}`,
-                `${x.touched} bucket${x.touched === 1 ? '' : 's'} voted`,
+                `${x.touched} bucket${x.touched === 1 ? '' : 's'} voted${freshChip(x.m)}`,
                 cur && x.last >= cur
                     ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-semibold">THIS EPOCH</span>'
                     : `<span class="mono text-xs text-gray-400">period ${x.last}</span>`,
@@ -7191,10 +7230,10 @@
                 avgVolume: p.vol_4ep_avg || 0
             }))
             .filter(p => p.avgVolume > 0)
-            .sort((a, b) => b.avgVolume - a.avgVolume)
-            .slice(0, 5);
-        
-        document.getElementById('top-vp-pools').innerHTML = topVolume.map((p, i) => `
+            .sort((a, b) => b.avgVolume - a.avgVolume);
+        // Rev T1.2: pool tiles use the SAME expander as every person board —
+        // top 5, +10 per click, collapse always available once expanded.
+        boardExpander(document.getElementById('top-vp-pools'), topVolume.map((p, i) => `
             <div class="flex items-center justify-between p-2 rounded-lg bg-white/[0.02] hover:bg-white/[0.04]">
                 <div class="flex items-center gap-2">
                     <span class="w-6 h-6 rounded flex items-center justify-center text-xs font-bold ${i < 3 ? `rank-${i+1}` : 'bg-white/10'}">${i+1}</span>
@@ -7211,7 +7250,7 @@
                     ${volDexMode === 'all' ? deltaLine(p.avgVolume, prevVolByName[p.name]) : ''}
                 </div>
             </div>
-        `).join('') || '<div class="text-gray-500 text-sm">No volume data</div>';
+        `), 'volp', '<div class="text-gray-500 text-sm">No volume data</div>');
         
         // Top by Avg DEX Liquidity (liq_4ep_avg) OR TLA-staked, per the toggle.
         const liqMode = store.liqTileMode || 'dex';
@@ -7248,14 +7287,13 @@
         const topLiquidity = [...active]
             .map(p => ({ ...p, _liq: liqValue(p) }))
             .filter(p => p._liq > 0)
-            .sort((a, b) => b._liq - a._liq)
-            .slice(0, 5);
+            .sort((a, b) => b._liq - a._liq);
         // Prior-window ranking for THIS mode (rank badges).
         const prevByLiqMode = liqMode === 'tla'
             ? Object.entries(prevTlaStakedByName).map(([name, v]) => ({ name, v })).sort((a, b) => b.v - a.v)
             : prevByLiq;
 
-        document.getElementById('top-depth-pools').innerHTML = topLiquidity.map((p, i) => `
+        boardExpander(document.getElementById('top-depth-pools'), topLiquidity.map((p, i) => `
             <div class="flex items-center justify-between p-2 rounded-lg bg-white/[0.02] hover:bg-white/[0.04]">
                 <div class="flex items-center gap-2">
                     <span class="w-6 h-6 rounded flex items-center justify-center text-xs font-bold ${i < 3 ? `rank-${i+1}` : 'bg-white/10'}">${i+1}</span>
@@ -7272,7 +7310,7 @@
                     ${deltaLine(p._liq, liqPrev(p))}
                 </div>
             </div>
-        `).join('') || '<div class="text-gray-500 text-sm">No liquidity data</div>';
+        `), 'liqp', '<div class="text-gray-500 text-sm">No liquidity data</div>');
 
         // Top by APR — with VP-change + bribe context (the drivers of an APR move).
         // APR follows emissions (which follow votes), with bribes stacked on top, so the
@@ -7285,9 +7323,9 @@
         const aprKey = aprTileMode === 'amp' ? 'apr_amp' : 'apr_non';
         const aprSubEl = document.getElementById('apr-tile-sub');
         if (aprSubEl) aprSubEl.textContent = aprTileMode === 'amp' ? 'live amplified · ▲▼ APR rank vs last epoch' : 'live non-amplified · rank history is amp-based (arrows hidden here)';
-        const topAPR = [...active].filter(p => (p[aprKey] || 0) > 0).sort((a, b) => (b[aprKey] || 0) - (a[aprKey] || 0)).slice(0, 5);
+        const topAPR = [...active].filter(p => (p[aprKey] || 0) > 0).sort((a, b) => (b[aprKey] || 0) - (a[aprKey] || 0));
 
-        document.getElementById('top-apr-pools').innerHTML = topAPR.map((p, i) => `
+        boardExpander(document.getElementById('top-apr-pools'), topAPR.map((p, i) => `
             <div class="flex items-center justify-between p-2 rounded-lg bg-white/[0.02] hover:bg-white/[0.04]">
                 <div class="flex items-center gap-2">
                     <span class="w-6 h-6 rounded flex items-center justify-center text-xs font-bold ${i < 3 ? `rank-${i+1}` : 'bg-white/10'}">${i+1}</span>
@@ -7304,7 +7342,7 @@
                     ${aprTileMode === 'amp' ? deltaLine(p.apr_amp, prevAprByName[p.name]) : ''}
                 </div>
             </div>
-        `).join('');
+        `), 'aprp', '<div class="text-gray-500 text-sm">No APR data</div>');
 
         wireLiqModeToggle();
         wireVolDexToggle();
@@ -11917,6 +11955,13 @@ ${(() => {
             unit: 'pools',
             changeType: 'absolute' // Show +1, -2 instead of %
         },
+        'active-pools': {
+            title: 'Active Pools (all DEXes)',
+            getValue: (data, adao) => (data?.vote?.pools || data?.pools || []).filter(p => p.is_active !== false).length || 0,
+            format: (v) => v.toString(),
+            unit: 'pools',
+            changeType: 'absolute'
+        },
         'epoch-rewards': {
             title: 'Epoch Rewards (USD)',
             getValue: (data, adao) => {
@@ -11979,6 +12024,54 @@ ${(() => {
         }
     };
     
+    // Rev T2: per-epoch aggregate series from poolStatusHistory for the hero
+    // sparklines. Same variant rule as the leaderboard baselines: same-name
+    // pool variants collapse to the LARGEST-VP one per epoch (a dead gauge
+    // twin must never inflate the aggregate). Only metrics with a REAL
+    // multi-epoch series get a sparkline — rewards/bribes have no committed
+    // history feed yet, so their chips stay text-only (honest).
+    function heroSeries() {
+        const hist = store.poolStatusHistory;
+        if (!hist?.epochs?.length || !hist?.pools?.length) return {};
+        const eps = [...hist.epochs].sort((a, b) => a - b);
+        const tvl = [], count = [];
+        for (const ep of eps) {
+            const byName = {};
+            for (const hp of hist.pools) {
+                const e = hp.epochs?.[ep] ?? hp.epochs?.[String(ep)];
+                if (!e) continue;
+                const vp = e.vp_human || 0;
+                const cur = byName[hp.name];
+                if (!cur || vp > cur.vp) byName[hp.name] = { vp, staked: e.staked_usd || 0 };
+            }
+            const vals = Object.values(byName);
+            tvl.push(vals.reduce((s, v) => s + (v.staked || 0), 0));
+            count.push(vals.filter(v => v.vp > 0).length);
+        }
+        const out = { 'tla-tvl': { eps, vals: tvl }, 'active-pools': { eps, vals: count } };
+        // amplified-APR series from the apr-history rollup, when present
+        const ah = store.aprHistory;
+        if (ah?.epochs && typeof ah.epochs === 'object') {
+            const aeps = Object.keys(ah.epochs).map(Number).sort((a, b) => a - b);
+            const avals = aeps.map(k => {
+                const pools = ah.epochs[k]?.pools || ah.epochs[String(k)]?.pools || [];
+                const arr = (Array.isArray(pools) ? pools : Object.values(pools)).map(p => p.apr_amplified ?? p.apr_amp ?? 0).filter(a => a > 0);
+                return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
+            });
+            if (aeps.length >= 3 && avals.some(v => v != null)) out['apr-amp'] = { eps: aeps, vals: avals.map(v => v ?? 0) };
+        }
+        return out;
+    }
+    function heroSparkSvg(vals, key) {
+        const pts = vals.filter(v => isFinite(v));
+        if (pts.length < 3) return '';
+        const min = Math.min(...pts), max = Math.max(...pts), span = (max - min) || 1;
+        const W = 54, H = 14;
+        const line = vals.map((v, i) => `${(i / (vals.length - 1) * W).toFixed(1)},${(H - 1 - ((v - min) / span) * (H - 2)).toFixed(1)}`).join(' ');
+        const up = vals[vals.length - 1] >= vals[0];
+        return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" class="mr-1.5 shrink-0" aria-hidden="true"><polyline points="${line}" fill="none" stroke="${up ? '#34D399' : '#F87171'}" stroke-width="1.3" opacity="0.75"/></svg>`;
+    }
+
     // Calculate and render trend rows under stat tiles
     function renderTrendRows() {
         if (!store.previousEpochData) {
@@ -11995,6 +12088,7 @@ ${(() => {
         const currentAdao = store.adaoSnap;
         const prevAdao = store.previousAdaoSnap;
         
+        renderTrendRows._series = heroSeries();
         Object.entries(historyMetrics).forEach(([key, metric]) => {
             const el = document.getElementById(`trend-${key}`);
             if (!el) return;
@@ -12068,8 +12162,12 @@ ${(() => {
                 el.innerHTML = `${arrow} ${changeText}`;
                 el.title = `${changeText} from Epoch ${prevEpochLabel}`;
             } else {
-                // Full format for stat bar
-                el.innerHTML = `${arrow} ${changeText} from E${prevEpochLabel}`;
+                // Full format for stat bar — with the metric's real epoch series
+                // as a sparkline where one exists (Rev T2).
+                const s = (renderTrendRows._series || {})[key];
+                const spark = s ? heroSparkSvg(s.vals, key) : '';
+                el.innerHTML = `${spark}${arrow} ${changeText} from E${prevEpochLabel}`;
+                if (s) el.title = `${s.eps.length} epochs (E${s.eps[0]} \u2192 E${s.eps[s.eps.length - 1]}) \u2014 click for full history`;
             }
         });
     }
