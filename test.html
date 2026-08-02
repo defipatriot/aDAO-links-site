@@ -879,7 +879,7 @@
         <div class="max-w-7xl mx-auto px-4 py-4">
             <div class="flex items-center justify-between flex-wrap gap-4">
                 <div>
-                    <h1 class="text-xl font-bold">Terra Liquidity Alliance Tracker <span class="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 align-middle font-semibold">TEST T2.3</span></h1>
+                    <h1 class="text-xl font-bold">Terra Liquidity Alliance Tracker <span class="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 align-middle font-semibold">TEST T2.5</span></h1>
                     <p class="text-xs text-gray-500">
                         <a href="https://www.erisprotocol.com/terra/liquidity-hub?tab=liquidity" target="_blank" class="text-purple-400 hover:text-purple-300 hover:underline">
                             <i class="fas fa-external-link-alt text-[9px] mr-1"></i>Eris TLA
@@ -1246,8 +1246,9 @@
                     <div class="flex items-center justify-between mb-4">
                         <h3 class="font-semibold flex items-center gap-2"><i class="fas fa-hand-holding-dollar text-amber-300"></i> Top Bribers</h3>
                         <div class="flex gap-1 text-[10px]">
-                            <button id="bribe-mode-alltime" onclick="setBribeBoardMode('alltime')" class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300" title="All-time bribe providers — who funds the vote incentives, valued at placement">All-time</button>
-                            <button id="bribe-mode-earners" onclick="setBribeBoardMode('earners')" class="px-2 py-0.5 rounded bg-white/5 text-gray-400" title="Pending bribe rewards accrued this epoch, per voting wallet">Earners</button>
+                            <button id="bribe-mode-alltime" onclick="setBribeBoardMode('alltime')" class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300" title="All-time bribe providers — who funds the vote incentives, valued at placement">Bribers</button>
+                            <button id="bribe-mode-earned" onclick="setBribeBoardMode('earned')" class="px-2 py-0.5 rounded bg-white/5 text-gray-400" title="All-time bribe rewards CLAIMED per wallet, valued at claim date (from the captured claim events)">Earned</button>
+                            <button id="bribe-mode-earners" onclick="setBribeBoardMode('earners')" class="px-2 py-0.5 rounded bg-white/5 text-gray-400" title="Pending bribe rewards accruing THIS epoch, per voting wallet (vote-share × live pots)">Pending</button>
                         </div>
                     </div>
                     <p id="top-bribers-banner" class="text-[11px] text-gray-500 -mt-2 mb-3">all-time bribe providers · valued at placement</p>
@@ -6266,19 +6267,48 @@
         track('bribe_board_mode', { mode });
         store.bribeBoardMode = mode;
         const on = 'bg-amber-500/20 text-amber-300', off = 'bg-white/5 text-gray-400';
-        const a = document.getElementById('bribe-mode-alltime'), e = document.getElementById('bribe-mode-earners');
+        const a = document.getElementById('bribe-mode-alltime'), e = document.getElementById('bribe-mode-earners'), g = document.getElementById('bribe-mode-earned');
         if (a) a.className = `px-2 py-0.5 rounded ${mode === 'alltime' ? on : off}`;
         if (e) e.className = `px-2 py-0.5 rounded ${mode === 'earners' ? on : off}`;
+        if (g) g.className = `px-2 py-0.5 rounded ${mode === 'earned' ? on : off}`;
         renderBribeBoardCard();
     }
-    function renderBribeBoardCard() {
+    async function renderBribeBoardCard() {
         const el = document.getElementById('top-board-bribes');
         const banner = document.getElementById('top-bribers-banner');
         if (!el) return;
+        if ((store.bribeBoardMode || 'alltime') === 'earned') {
+            // Rev T2.5: ALL-TIME EARNED — total bribe/reward claims per wallet
+            // from the captured claim events, valued at claim date (rollup
+            // voters[].claims — the data existed, the page never rendered it).
+            const roll = await fetchVotingRollups();
+            if ((store.bribeBoardMode || 'alltime') !== 'earned') return;
+            if (!roll || !Array.isArray(roll.voters)) { el.innerHTML = '<div class="text-gray-600 text-sm">Voter rollup unavailable.</div>'; return; }
+            if (banner) {
+                banner.textContent = 'all-time claimed rewards · valued at claim date';
+                const cov = (roll.claim_coverage || []).map(c => `${c.from} \u2192 ${c.to}: ${c.source}`).join(' \u00b7 ');
+                banner.title = 'Total bribe + reward claims per wallet from captured on-chain claim events, priced on the day each claim happened. Coverage: ' + cov + ' \u2014 figures are a lower bound where coverage notes a hole.';
+            }
+            const rows = roll.voters
+                .map(v => ({ v, c: v.claims }))
+                .filter(x => x.c && (x.c.totals?.usd_at_claim || 0) > 0.005)
+                .sort((a, b) => (b.c.totals.usd_at_claim || 0) - (a.c.totals.usd_at_claim || 0));
+            boardExpander(el, rows.map((x, i) => personRow(
+                i,
+                `${displayName(x.v.wallet)} ${walletBadges(x.v.wallet)}`,
+                `${x.c.claim_tx_count} claim tx${x.c.claim_tx_count === 1 ? '' : 's'} \u00b7 ${(x.c.first_claim_ts || '?').slice(0, 10)} \u2192 ${(x.c.last_claim_ts || '?').slice(0, 10)}`,
+                `<span class="mono text-sm text-emerald-300 font-semibold" title="At today's prices: ${fmt$(x.c.totals.usd_at_build || 0)}">${fmt$(x.c.totals.usd_at_claim)}</span>`,
+                x.v.wallet
+            )), 'earned', '<div class="text-gray-600 text-sm">No claim history captured yet.</div>');
+            return;
+        }
         if ((store.bribeBoardMode || 'alltime') === 'earners') {
-            if (banner) { banner.textContent = 'pending bribe rewards · this epoch'; banner.title = 'Pending bribe rewards accrued this epoch (USD), per wallet. Claimable after the epoch closes.'; }
+            if (banner) { banner.textContent = 'pending bribe rewards · this epoch · vote-share × live pots'; banner.title = 'Each wallet\u2019s VP share of every active pool\u2019s live bribe pots, at current token prices — the same computation as the Member Bribe Rewards tile. Claimable after the epoch closes.'; }
+            const poolByGid = {};
+            for (const p of (store.tlaSnapshot?.pools || [])) if (p.gauge_pool_id) poolByGid[p.gauge_pool_id] = p;
+            const tokenPrices = store.networkPrices?.token_prices || {};
             const rows = getAllSelectableMembers()
-                .map(m => ({ m, usd: m.summary?.total_pending_bribes_usd || 0 }))
+                .map(m => ({ m, usd: pendingBribesUsdFor(m, poolByGid, tokenPrices) }))
                 .filter(x => x.usd > 0.005)
                 .sort((a, b) => b.usd - a.usd);
             boardExpander(el, rows.map((x, i) => personRow(
@@ -6673,8 +6703,14 @@
     //   votesByPool    — Map<gaugePoolId, vpAllocated> — keyed on the truly unique
     //                    gauge_pool_id (not name+dex which can collide when multiple
     //                    pools share the same pair on the same DEX in the same bucket).
-    function getSelectedMemberAllocations() {
-        const m = getSelectedMember();
+    // Rev T2.4: allocation parsing generalized to ANY member — the Earners
+    // board and the member tile must run the SAME math (one computation, two
+    // views). Previously the board trusted the positions cron's
+    // total_pending_bribes_usd, which live-audited broken: 11 of 155 wallets
+    // nonzero, max $26.62, while the live pots hold ~$959 this epoch — and
+    // members who plainly earn (voted, 1M+ VP) read $0. The cron field is no
+    // longer consumed anywhere on this page.
+    function allocationsFor(m) {
         if (!m) return null;
         const totalVp = m.summary?.display_voting_power_human || 0;
         const byPool = new Map();
@@ -6688,6 +6724,34 @@
             }
         }
         return { member: m, totalVp, votesByPool: byPool };
+    }
+    function getSelectedMemberAllocations() { return allocationsFor(getSelectedMember()); }
+
+    // Pending bribe rewards this epoch for one member: their VP share of each
+    // ACTIVE pool's live pots, priced with the same token prices the whole
+    // page uses. EXACTLY the member tile's math — extracted so the Earners
+    // board runs it per member.
+    function pendingBribesUsdFor(m, poolByGid, tokenPrices) {
+        const alloc = allocationsFor(m);
+        if (!alloc) return 0;
+        let usd = 0;
+        for (const [gid, memberVpInPool] of alloc.votesByPool) {
+            const pool = poolByGid[gid];
+            if (!pool || pool.status !== 'active') continue;
+            const poolTotalVp = pool.voting_power?.vp_human || 0;
+            if (poolTotalVp <= 0) continue;
+            const share = memberVpInPool / poolTotalVp;
+            for (const bucket of (pool.bribes?.active_now || [])) {
+                for (const asset of (bucket.assets || [])) {
+                    const amount = parseFloat(asset.amount) || 0;
+                    if (amount === 0) continue;
+                    const { decimals } = resolveTokenMetaFromInfo(asset.info, tokenPrices);
+                    const priceUsd = resolveTokenPriceFromInfo(asset.info, tokenPrices);
+                    if (priceUsd) usd += (amount / Math.pow(10, decimals)) * share * priceUsd;
+                }
+            }
+        }
+        return usd;
     }
 
     // Build the lookup key from a normalized pool object in store.pools.
