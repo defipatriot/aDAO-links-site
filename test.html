@@ -879,7 +879,7 @@
         <div class="max-w-7xl mx-auto px-4 py-4">
             <div class="flex items-center justify-between flex-wrap gap-4">
                 <div>
-                    <h1 class="text-xl font-bold">Terra Liquidity Alliance Tracker <span class="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 align-middle font-semibold">TEST T2.2</span></h1>
+                    <h1 class="text-xl font-bold">Terra Liquidity Alliance Tracker <span class="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 align-middle font-semibold">TEST T2.3</span></h1>
                     <p class="text-xs text-gray-500">
                         <a href="https://www.erisprotocol.com/terra/liquidity-hub?tab=liquidity" target="_blank" class="text-purple-400 hover:text-purple-300 hover:underline">
                             <i class="fas fa-external-link-alt text-[9px] mr-1"></i>Eris TLA
@@ -6301,9 +6301,12 @@
             .catch(() => null);
         return store._votingRollupsPromise;
     }
+    // Rev T2.3 label scheme (Camron): DAODAO-registered handles = bold sky
+    // blue; protocol/project labels = bold orange; bare addresses = unchanged
+    // gray mono. Same function feeds the board rows AND the drill modal header.
     function briberNameHtml(addr, label) {
         const rosterName = store.nameByWallet?.get(addr);
-        if (rosterName) return `${displayName(addr)} ${walletBadges(addr)}`;
+        if (rosterName) return `<span class="font-bold text-sky-300">${displayName(addr)}</span> ${walletBadges(addr)}`;
         if (label) {
             // Rev 5.5: the four gauge tribute contracts top the board on event count and
             // read like mystery whales — explain in place that they're protocol plumbing.
@@ -6320,9 +6323,9 @@
                 };
                 const bucket = TRIBUTE_BUCKETS[addr];
                 const shown = bucket ? `Astroport take-rate \u00b7 ${bucket} bucket` : label;
-                return `<span class="text-purple-300" title="${addr}">${shown}</span> <i class="fas fa-gears text-[9px] text-gray-500 cursor-help" title="Protocol plumbing, not a person \u2014 this is the ${bucket ? bucket + '-bucket' : ''} asset-staking contract recycling Astroport take-rate fees into bribes automatically (so yes: this IS the \u2018Astroport bribes\u2019 flow). It sweeps the take-rate on its gauge pools and places the accumulated ASTRO back into the incentive manager as bribes every epoch — which is why its bribe count is so high."></i>`;
+                return `<span class="font-bold text-orange-400" title="${addr}">${shown}</span> <i class="fas fa-gears text-[9px] text-gray-500 cursor-help" title="Protocol plumbing, not a person \u2014 this is the ${bucket ? bucket + '-bucket' : ''} asset-staking contract recycling Astroport take-rate fees into bribes automatically (so yes: this IS the \u2018Astroport bribes\u2019 flow). It sweeps the take-rate on its gauge pools and places the accumulated ASTRO back into the incentive manager as bribes every epoch — which is why its bribe count is so high."></i>`;
             }
-            return `<span class="text-purple-300" title="${addr}">${label}</span>`;
+            return `<span class="font-bold text-orange-400" title="${addr}">${label}</span>`;
         }
         return `<span class="mono" title="${addr}">${addr.slice(0, 8)}\u2026${addr.slice(-4)}</span> ${walletBadges(addr)}`;
     }
@@ -6433,7 +6436,10 @@
         const t = b.totals || {};
         const ep = b.by_epoch || {};
         const epochs = Object.keys(ep).sort((a, c) => Number(a) - Number(c));
-        const counts = epochs.map(k => Object.values(ep[k].pools || {}).reduce((s, n) => s + n, 0));
+        // Rev T2.3: per-epoch count = the rollup's total event count (n) when
+        // present; older rollups only counted POOLED events, which charted
+        // governance-executed bribes (pool:null, e.g. PD's 189) as zero.
+        const counts = epochs.map(k => ep[k].n != null ? ep[k].n : Object.values(ep[k].pools || {}).reduce((s, n) => s + n, 0));
         const pools = Object.entries(b.by_pool || {}).map(([gid, p]) => ({
             name: _briberPoolName(gid), count: p.bribe_count || 0,
             toks: Object.entries(p.by_token || {}).map(([sym, x]) => `${fmtNum(x.amount_display)} ${sym}`).join(' · '),
