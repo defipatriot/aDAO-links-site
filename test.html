@@ -879,7 +879,7 @@
         <div class="max-w-7xl mx-auto px-4 py-4">
             <div class="flex items-center justify-between flex-wrap gap-4">
                 <div>
-                    <h1 class="text-xl font-bold">Terra Liquidity Alliance Tracker <span class="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 align-middle font-semibold">TEST T2.5</span></h1>
+                    <h1 class="text-xl font-bold">Terra Liquidity Alliance Tracker <span class="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 align-middle font-semibold">TEST T2.6</span></h1>
                     <p class="text-xs text-gray-500">
                         <a href="https://www.erisprotocol.com/terra/liquidity-hub?tab=liquidity" target="_blank" class="text-purple-400 hover:text-purple-300 hover:underline">
                             <i class="fas fa-external-link-alt text-[9px] mr-1"></i>Eris TLA
@@ -2576,6 +2576,7 @@
         poolStatusHistoryUrl: 'https://raw.githubusercontent.com/defipatriot/tla-snapshot-data_2026/main/data/pool-status-history.json',
         networkPricesUrl:  'https://raw.githubusercontent.com/defipatriot/network-and-prices-data_2026/main/data/network-and-prices.json',
         adaoPositionsUrl:  'https://raw.githubusercontent.com/defipatriot/adao-positions-data_2026/main/data/current.json',
+        pdBribesProductUrl: 'https://raw.githubusercontent.com/thealliancedao/tla-core/main/tla-voting/pd-bribes/current.json',
         adaoMembersUrl:    'https://raw.githubusercontent.com/defipatriot/adao-positions-data_2026/main/data/members.json',
         // Community layer (Stage A, 2026-07): all TLA lockers w/ names + first participation,
         // registered allies (Pixel Lions / Lion DAO), and the org-side aDAO staker roster.
@@ -3507,6 +3508,10 @@
 
             // === Fetch all primary sources in parallel ===
             const lastCompleteEpoch = currentEpoch - 1;
+            // Rev T2.6: PD governance-bribe product (org derive) — fetched in
+            // parallel, consumed product-first by buildBribesIndex; graceful
+            // null until the derive's first publish.
+            const pdBribesProductP = fetch(CONFIG.pdBribesProductUrl + '?t=' + Date.now()).then(r => r.ok ? r.json() : null).catch(() => null);
             const [
                 tlaSnapshotResp,
                 networkPricesResp,
@@ -3617,6 +3622,8 @@
             store.adaoPositions = adaoPositionsResp;
             store.bribesCurrent = bribesCurrentResp;
             store.pdBribesData = pdBribesResp;
+            store.pdBribesProduct = await pdBribesProductP;
+            if (store.pdBribesProduct) console.log(`pd-bribes product: ${store.pdBribesProduct.meta?.verified_placements} verified placements (${store.pdBribesProduct.meta?.version})`);
             // FUEL latest USD price from its own data repo (not in network-and-prices).
             store.fuelPriceUsd = (() => {
                 const hist = fuelIndexResp?.history;
@@ -4242,6 +4249,28 @@
                 }
             }
         }
+        // Rev T2.6: ORG PRODUCT FIRST. The pd-bribes derive (proposal-module
+        // state × captured events, per-epoch spread exact) supersedes the
+        // hand-maintained file whenever it covers the current epoch — keyed by
+        // gauge_pool_id (chain identity), not name matching. The legacy path
+        // above stays as fallback until the product's first publish, then is
+        // simply never reached.
+        store.pdSplitSource = 'legacy-file';
+        let pdLunaByGid = null;
+        {
+            const pbp = store.pdBribesProduct;
+            const epNow = store.epoch ?? store.currentRealEpoch ?? null;
+            const slot = epNow != null ? (pbp?.by_epoch?.[String(epNow)] || pbp?.by_epoch?.[epNow]) : null;
+            if (slot && slot.pools) {
+                pdLunaByGid = {};
+                for (const [gid, ps] of Object.entries(slot.pools)) {
+                    pdLunaByGid[`${gid}|${(ps.gauge || '').toLowerCase()}`] = ps.by_denom?.['native:uluna'] || 0;
+                    pdLunaByGid[gid] = (pdLunaByGid[gid] || 0) + (ps.by_denom?.['native:uluna'] || 0);
+                }
+                store.pdSplitSource = 'org-capture';
+                store.pdFileStale = false;   // product is current by construction (rebuilt with rollups; PD's next prop auto-appears)
+            }
+        }
         // Attribute each PD (name|bucket) amount once, to the first matching pool variant
         // with active bribes (the live one), so duplicate gauge ids don't double-count.
         const pdConsumed = {};
@@ -4266,15 +4295,19 @@
                 }
             }
             const key = `${normName(p.name)}|${(p.bucket || '').toLowerCase()}`;
-            const pdLuna = pdLunaByKey[key] || 0;
+            const gidGaugeKey = `${p.gauge_pool_id}|${(p.bucket || '').toLowerCase()}`;
+            const pdLuna = pdLunaByGid
+                ? (pdLunaByGid[gidGaugeKey] ?? pdLunaByGid[p.gauge_pool_id] ?? 0)
+                : (pdLunaByKey[key] || 0);
             let pdUsd = 0, pdLunaAssigned = 0;
-            if (pdLuna > 0 && !pdConsumed[key]) {
+            if (pdLuna > 0 && !(pdConsumed[key] && !pdLunaByGid) && !(pdLunaByGid && pdConsumed[gidGaugeKey])) {
                 const hasActive = activeNow.length > 0;
                 if (hasActive || totalUsd > 0) {
                     const pdComputed = lunaPrice > 0 ? pdLuna * lunaPrice : 0;
                     pdUsd = (totalUsd > 0) ? Math.min(pdComputed, totalUsd) : pdComputed;
                     pdLunaAssigned = pdLuna;
                     pdConsumed[key] = true;
+                    if (pdLunaByGid) { pdConsumed[gidGaugeKey] = true; delete pdLunaByGid[p.gauge_pool_id]; delete pdLunaByGid[gidGaugeKey]; }
                 }
             }
             const otherUsdRaw = (totalUsd > 0) ? Math.max(0, totalUsd - pdUsd) : 0;
@@ -6470,11 +6503,22 @@
         // present; older rollups only counted POOLED events, which charted
         // governance-executed bribes (pool:null, e.g. PD's 189) as zero.
         const counts = epochs.map(k => ep[k].n != null ? ep[k].n : Object.values(ep[k].pools || {}).reduce((s, n) => s + n, 0));
-        const pools = Object.entries(b.by_pool || {}).map(([gid, p]) => ({
+        let pools = Object.entries(b.by_pool || {}).map(([gid, p]) => ({
             name: _briberPoolName(gid), count: p.bribe_count || 0,
             toks: Object.entries(p.by_token || {}).map(([sym, x]) => `${fmtNum(x.amount_display)} ${sym}`).join(' · '),
             usd: Object.values(p.by_token || {}).reduce((s, x) => s + (x.usd_at_placement || 0), 0),
         })).sort((a, c) => c.usd - a.usd || c.count - a.count);
+        // Rev T2.6: governance-executed bribers (PD) have pool:null in the
+        // event rollup — their per-pool truth lives in the pd-bribes product.
+        let poolsSourceNote = '';
+        if (pools.length === 0 && b.briber === 'terra1k8ug6dkzntczfzn76wsh24tdjmx944yj6mk063wum7n20cwd7lxq4lppjg' && store.pdBribesProduct?.by_pool) {
+            pools = Object.entries(store.pdBribesProduct.by_pool).map(([gid, p]) => ({
+                name: _briberPoolName(gid), count: p.leg_count || 0,
+                toks: Object.entries(p.by_denom || {}).map(([d, amt]) => `${fmtNum(amt)} ${d === 'native:uluna' ? 'LUNA' : d.split(/[:/]/).pop()}`).join(' · '),
+                usd: 0,
+            })).sort((a, c) => c.count - a.count);
+            poolsSourceNote = ' · from proposal-state derive (verified placements)';
+        }
         const toks = Object.entries(t.by_token || {}).sort((a, c) => (c[1].usd_at_placement || 0) - (a[1].usd_at_placement || 0));
         document.getElementById('briber-modal-body').innerHTML = `
             <div class="flex items-start justify-between gap-3 mb-1">
@@ -6494,7 +6538,7 @@
             <div class="rounded-lg bg-white/[0.02] p-2 mb-3" style="height:150px"><canvas id="briber-epoch-chart"></canvas></div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                    <div class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-1">By pool</div>
+                    <div class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-1">By pool<span class="normal-case font-normal text-gray-600">${poolsSourceNote}</span></div>
                     ${pools.length ? pools.map(p => `<div class="flex items-center justify-between text-[11px] py-1 border-b border-white/[0.04]"><div class="min-w-0"><div class="font-medium truncate">${p.name}</div><div class="text-[9px] text-gray-600 truncate">${p.toks || ''}</div></div><span class="mono shrink-0 ml-2 ${p.usd > 0 ? 'text-amber-300/90' : 'text-gray-600'}">${p.count}\u00d7${p.usd > 0 ? ' \u00b7 ' + fmt$(p.usd) : ''}</span></div>`).join('') : '<div class="text-gray-600 text-[11px]">No per-pool detail.</div>'}
                 </div>
                 <div>
