@@ -276,11 +276,11 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 4px;
-            padding: 6px 10px;
-            border-radius: 6px;
-            font-size: 11px;
-            font-weight: 500;
+            gap: 5px;
+            padding: 5px 12px;
+            border-radius: 9999px;      /* Rev T2.2: status pill */
+            font-size: 12px;
+            font-weight: 700;
             cursor: pointer;
             transition: all 0.2s ease;
             background: rgba(255, 255, 255, 0.04);
@@ -288,6 +288,12 @@
             min-height: 28px;
             flex-shrink: 0;
         }
+        /* Rev T2.2: uniform hero tiles — every tile is a drill (click anywhere),
+           same three-row rhythm (label / value / sub), status pill below. */
+        .stat-box.drillable { cursor: pointer; transition: background 0.15s ease; }
+        .stat-box.drillable:hover { background: rgba(255, 255, 255, 0.03); }
+        .stat-box.drillable:hover .stat-label::after { content: ' \f065'; font-family: 'Font Awesome 6 Free'; font-weight: 900; font-size: 8px; opacity: 0.5; }
+        .stat-sub { font-size: 10px; color: #6b7280; margin-top: 2px; min-height: 14px; }
         
         .stat-trend:hover {
             background: rgba(255, 255, 255, 0.08);
@@ -295,15 +301,15 @@
         }
         
         .stat-trend.positive {
-            color: #10b981;
-            background: rgba(16, 185, 129, 0.08);
-            border-color: rgba(16, 185, 129, 0.2);
+            color: #34d399;
+            background: rgba(16, 185, 129, 0.12);
+            border-color: rgba(16, 185, 129, 0.35);
         }
         
         .stat-trend.negative {
-            color: #ef4444;
-            background: rgba(239, 68, 68, 0.08);
-            border-color: rgba(239, 68, 68, 0.2);
+            color: #f87171;
+            background: rgba(239, 68, 68, 0.12);
+            border-color: rgba(239, 68, 68, 0.35);
         }
         
         .stat-trend.neutral {
@@ -873,7 +879,7 @@
         <div class="max-w-7xl mx-auto px-4 py-4">
             <div class="flex items-center justify-between flex-wrap gap-4">
                 <div>
-                    <h1 class="text-xl font-bold">Terra Liquidity Alliance Tracker <span class="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 align-middle font-semibold">TEST T2</span></h1>
+                    <h1 class="text-xl font-bold">Terra Liquidity Alliance Tracker <span class="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 align-middle font-semibold">TEST T2.2</span></h1>
                     <p class="text-xs text-gray-500">
                         <a href="https://www.erisprotocol.com/terra/liquidity-hub?tab=liquidity" target="_blank" class="text-purple-400 hover:text-purple-300 hover:underline">
                             <i class="fas fa-external-link-alt text-[9px] mr-1"></i>Eris TLA
@@ -932,49 +938,53 @@
     <!-- Stats Bar -->
     <section class="max-w-7xl mx-auto px-4 py-6">
         <div class="glass-card grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 divide-x divide-white/5">
-            <div class="stat-box">
+            <div class="stat-box drillable" onclick="showHistoryModal('active-pools')" title="Click for epoch history">
                 <div class="stat-box-content">
                     <div class="stat-label">Active Pools</div>
                     <div id="stat-active-pools" class="stat-value mono">-</div>
-                    <div id="stat-active-pools-sub" class="text-[10px] text-gray-500 mt-0.5">-</div>
+                    <div id="stat-active-pools-sub" class="stat-sub">-</div>
                 </div>
-                <div id="trend-active-pools" class="stat-trend" onclick="showHistoryModal('active-pools')"></div>
+                <div id="trend-active-pools" class="stat-trend" onclick="event.stopPropagation();showHistoryModal('active-pools')"></div>
             </div>
-            <div class="stat-box">
+            <div class="stat-box drillable" onclick="showHistoryModal('tla-tvl')" title="Click for epoch history">
                 <div class="stat-box-content">
-                    <div class="stat-label">TLA TVL <i class="fas fa-info-circle text-gray-500 text-xs ml-1 cursor-help" title="Total USD staked into TLA gauges across all active pools — the capital the gauge war is fighting over."></i></div>
+                    <div class="stat-label">TLA TVL <i class="fas fa-info-circle text-gray-500 text-xs ml-1 cursor-help" onclick="event.stopPropagation()" title="Total USD staked into TLA gauges across all active pools — the capital the gauge war is fighting over."></i></div>
                     <div id="stat-tla-tvl" class="stat-value mono">-</div>
+                    <div id="stat-tla-tvl-sub" class="stat-sub">-</div>
                 </div>
-                <div id="trend-tla-tvl" class="stat-trend" onclick="showHistoryModal('tla-tvl')"></div>
+                <div id="trend-tla-tvl" class="stat-trend" onclick="event.stopPropagation();showHistoryModal('tla-tvl')"></div>
             </div>
-            <div class="stat-box">
+            <div class="stat-box drillable" onclick="showHistoryModal('epoch-rewards')" title="Click for epoch history">
                 <div class="stat-box-content">
                     <div class="stat-label">Epoch Rewards</div>
                     <div id="stat-epoch-rewards" class="stat-value-sm mono">-</div>
-                    <div id="stat-epoch-rewards-sub" class="text-[10px] text-gray-500 mt-0.5">-</div>
+                    <div id="stat-epoch-rewards-sub" class="stat-sub">-</div>
                 </div>
-                <div id="trend-epoch-rewards" class="stat-trend" onclick="showHistoryModal('epoch-rewards')"></div>
+                <div id="trend-epoch-rewards" class="stat-trend" onclick="event.stopPropagation();showHistoryModal('epoch-rewards')"></div>
             </div>
-            <div class="stat-box">
+            <div class="stat-box drillable" onclick="showHistoryModal('epoch-bribes')" title="Click for epoch history">
                 <div class="stat-box-content">
-                    <div class="stat-label">Epoch Bribes <i class="fas fa-info-circle text-gray-500 text-xs ml-1 cursor-pointer" onclick="event.stopPropagation(); showBribesModal();" title="Click for breakdown"></i></div>
+                    <div class="stat-label">Epoch Bribes <i class="fas fa-info-circle text-gray-500 text-xs ml-1 cursor-pointer" onclick="event.stopPropagation(); showBribesModal();" title="Click for the PD / Other split by pool"></i></div>
                     <div id="stat-total-bribes" class="stat-value mono">-</div>
+                    <div id="stat-total-bribes-sub" class="stat-sub">-</div>
                 </div>
-                <div id="trend-epoch-bribes" class="stat-trend" onclick="showHistoryModal('epoch-bribes')"></div>
+                <div id="trend-epoch-bribes" class="stat-trend" onclick="event.stopPropagation();showHistoryModal('epoch-bribes')"></div>
             </div>
-            <div class="stat-box">
+            <div class="stat-box drillable" onclick="showHistoryModal('apr-non')" title="Click for epoch history">
                 <div class="stat-box-content">
                     <div class="stat-label">Avg APR (Non-Amp)</div>
                     <div id="stat-avg-apr-non" class="stat-value mono">-</div>
+                    <div id="stat-avg-apr-non-sub" class="stat-sub">-</div>
                 </div>
-                <div id="trend-apr-non" class="stat-trend" onclick="showHistoryModal('apr-non')"></div>
+                <div id="trend-apr-non" class="stat-trend" onclick="event.stopPropagation();showHistoryModal('apr-non')"></div>
             </div>
-            <div class="stat-box">
+            <div class="stat-box drillable" onclick="showHistoryModal('apr-amp')" title="Click for epoch history">
                 <div class="stat-box-content">
                     <div class="stat-label">Avg APR (Amplified)</div>
                     <div id="stat-avg-apr-amp" class="stat-value mono">-</div>
+                    <div id="stat-avg-apr-amp-sub" class="stat-sub">-</div>
                 </div>
-                <div id="trend-apr-amp" class="stat-trend" onclick="showHistoryModal('apr-amp')"></div>
+                <div id="trend-apr-amp" class="stat-trend" onclick="event.stopPropagation();showHistoryModal('apr-amp')"></div>
             </div>
         </div>
 
@@ -4215,6 +4225,14 @@
         if (Array.isArray(pdBribes)) {
             const ep = tlaSnapshot.epoch?.currentEpoch ?? tlaSnapshot.epoch?.epoch ?? (typeof tlaSnapshot.epoch === 'number' ? tlaSnapshot.epoch : null) ?? tlaSnapshot.current_epoch ?? null;
             const range = pdBribes.find(r => ep != null && ep >= r.start_epoch && ep <= r.end_epoch);
+            // Rev T2.1: the PD split comes from a hand-maintained legacy file —
+            // record its coverage so the modal can DECLARE staleness instead of
+            // silently showing PD $0.00 when the live epoch runs past it
+            // (observed live: file ends e188, epoch 196 — PD's prop-247/250 LUNA
+            // was falling into "Other" with no explanation). Totals stay
+            // chain-true either way; only the split is affected.
+            store.pdFileCoverageEnd = Math.max(...pdBribes.map(r => r.end_epoch || 0), 0);
+            store.pdFileStale = ep != null && store.pdFileCoverageEnd > 0 && ep > store.pdFileCoverageEnd;
             if (range) {
                 for (const b of (range.bribes || [])) {
                     const key = `${normName(b.pool)}|${(b.gauge || '').toLowerCase()}`;
@@ -4933,6 +4951,12 @@
         if (apSub) apSub.textContent = `${astroPools.length} Astro \u00b7 ${wwPools.length} SS`;
         const tvlEl = document.getElementById('stat-tla-tvl');
         if (tvlEl) tvlEl.textContent = fmt$(store.tlaPools.reduce((s, p) => s + (p.tla_staked || 0), 0));
+        // Rev T2.2: uniform sub-lines — every tile carries one line of context.
+        const setSub = (id, txt) => { const e = document.getElementById(id); if (e) e.textContent = txt; };
+        setSub('stat-tla-tvl-sub', 'staked into TLA gauges');
+        setSub('stat-total-bribes-sub', 'active this epoch \u00b7 \u24d8 for PD/Other split');
+        setSub('stat-avg-apr-non-sub', 'simple avg \u00b7 active pools');
+        setSub('stat-avg-apr-amp-sub', 'with bucket amplification');
 
         
         // TLA Epoch Rewards in LUNA (using Luna price from aDAO snap or token_prices)
@@ -11769,6 +11793,25 @@ ${(() => {
             document.getElementById('bribes-luna-price').textContent = 'LUNA price unavailable';
         }
         document.getElementById('bribes-pd-usd').textContent = fmt$(totalPdUSD);
+        // Rev T2.1: declare a stale PD split honestly. The PD column is fed by a
+        // hand-maintained legacy file (tla_pd_bribes.json) matched by epoch
+        // range; past its coverage the split silently reads $0.00 while any PD
+        // LUNA in the live pots falls into "Other". Say so in place — and clear
+        // the note again if the epoch is covered.
+        (() => {
+            let n = document.getElementById('bribes-pd-stale-note');
+            if (store.pdFileStale && totalPdUSD === 0) {
+                if (!n) {
+                    n = document.createElement('div');
+                    n.id = 'bribes-pd-stale-note';
+                    n.className = 'text-[9px] text-amber-400/80 leading-snug mt-1';
+                    const host = document.getElementById('bribes-pd-usd');
+                    host && host.parentElement && host.parentElement.appendChild(n);
+                }
+                n.innerHTML = `no split data past e${store.pdFileCoverageEnd} \u2014 PD's live bribes (props 247/250) are counted in \u201cOther\u201d until attribution re-homes to the org capture`;
+                n.title = 'The PD/Other split comes from a legacy hand-maintained file whose last entered range ends at e' + store.pdFileCoverageEnd + '. Chain totals on this popup are exact regardless; only the payer split is affected. The archive backfill + governance-bribe attribution derive replaces this file.';
+            } else if (n) n.remove();
+        })();
         document.getElementById('bribes-other-usd').textContent = fmt$(totalOtherUSD);
         document.getElementById('bribes-total-usd').textContent = fmt$(totalBribesUSD);
         
