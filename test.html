@@ -501,7 +501,11 @@
             });
         }
 
-        // aDAO NFTs by tier at sales floors
+        // aDAO NFTs by tier at the CONSERVATIVE floor (Camron 2026-08-03):
+        // min(live listing floor, recent sales floor). Sales-floor-only pricing
+        // overstated value whenever live asks sat below recent sales (base tier:
+        // sales $97.90 vs Atrium listings from ~$50) — the lower signal is the
+        // honest mark. Both signals shown; the one used is named.
         if (ok) {
             const recs = (store.nfts.records || []).filter(r => r.real_owner === wallet);
             const tiers = { phoenix: [], base: [], broken: [] };
@@ -512,18 +516,20 @@
             for (const [tier, arr] of Object.entries(tiers)) {
                 if (!arr.length) continue;
                 const f = pt[tier] || {};
-                const unit = f.sales_floor_usd ?? null;
+                const sf = f.sales_floor_usd ?? null, lf = f.listing_floor_usd ?? null;
+                const unit = (sf != null && lf != null) ? Math.min(sf, lf) : (sf ?? lf ?? null);
+                const usedSrc = unit == null ? null : (lf != null && (sf == null || lf <= sf)) ? 'live listing floor' : 'recent sales floor';
                 const tierLabel = tier === 'phoenix' ? 'aDAO Phoenix Rising' : tier === 'base' ? 'aDAO NFTs (unbroken)' : 'aDAO NFTs (broken)';
                 items.push({
                     icon: tier === 'phoenix' ? 'fa-fire' : 'fa-image', tint: tier === 'phoenix' ? 'text-amber-300' : tier === 'broken' ? 'text-gray-500' : 'text-cyan-300',
                     label: `${tierLabel} ×${arr.length}`,
-                    sub: unit != null ? `${fmt$(unit)} each at recent sales floor${f.listing_floor_usd ? ` · listed floor ${fmt$(f.listing_floor_usd)}` : ''}` : 'no recent sales to price from',
+                    sub: unit != null ? `${fmt$(unit)} each — conservative floor (${usedSrc})${sf != null && lf != null ? ` · sales ${fmt$(sf)} / listed ${fmt$(lf)}` : ''}` : 'no floor signal to price from',
                     usd: unit != null ? unit * arr.length : null,
                     note: unit == null ? 'unpriced' : null,
                 });
                 if (unit != null) floorsTxt.push(`${tier} floor ${fmt$(unit)}`);
             }
-            $('ladder-floors').textContent = floorsTxt.length ? `Floors (${floorRow.date || 'latest'}): ${floorsTxt.join(' · ')}.` : '';
+            $('ladder-floors').textContent = floorsTxt.length ? `Conservative floors (${floorRow.date || 'latest'} — lower of live listings & recent sales): ${floorsTxt.join(' · ')}.` : '';
         } else {
             items.push({ icon: 'fa-image', tint: 'text-gray-500', label: `aDAO NFTs ×${m.nft_count || 0}`, sub: 'NFT tracker feed unreachable — count from the positions feed, value unavailable', usd: null, note: 'unpriced' });
         }
@@ -1131,6 +1137,7 @@
     async function renderTrendDeep(wallet) {
         const el = $('trend-card-body'); if (!el) return;
         const metric = store._deepMetric || 'clm_usd';
+        const cum = store._deepCum !== false;   // cumulative by default — the story view
         const off = store._deepOffset || 0;   // 0 = latest DEEP_WIN epochs
         el.innerHTML = '<div class="loading-pulse text-gray-500 text-sm py-6 text-center">Opening the epoch ledger…</div>';
         const led = await fetchLedger(wallet);
@@ -1145,10 +1152,15 @@
         const hi = eMax - off * DEEP_WIN;
         const lo = Math.max(eMin, hi - DEEP_WIN + 1);
         const pts = [];
+        // cumulative runs from the wallet's FIRST epoch so paging never lies
+        // about where the running total stands mid-history.
+        let run = 0;
+        if (cum) for (let E = eMin; E < lo; E++) { const b = led.epochs[E]; run += !b ? 0 : metric === 'act' ? (b.c.dep + b.c.wdr + b.c.clm) : (b[metric] || 0); }
         for (let E = lo; E <= hi; E++) {
             const b = led.epochs[E];
-            const y = !b ? 0 : metric === 'act' ? (b.c.dep + b.c.wdr + b.c.clm) : (b[metric] || 0);
-            pts.push({ x: 'e' + E, y });
+            const v = !b ? 0 : metric === 'act' ? (b.c.dep + b.c.wdr + b.c.clm) : (b[metric] || 0);
+            run += v;
+            pts.push({ x: 'e' + E, y: cum ? run : v });
         }
         const mdef = DEEP_METRICS[metric];
         const mBtns = Object.entries(DEEP_METRICS).map(([k, d]) =>
@@ -1158,15 +1170,17 @@
           <div class="flex items-center gap-1.5 flex-wrap mb-2">
             <span class="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 font-semibold uppercase tracking-wider" title="Epoch-bucketed measured history from the flow capture — genesis-complete since the archive walk.">deep history</span>
             ${mBtns}
+            <button onclick="mpSetDeepCum(${cum ? 'false' : 'true'})" class="text-[10px] px-2 py-1 rounded-md border transition-colors ${cum ? 'bg-violet-500/15 text-violet-300 border-violet-500/30' : 'bg-white/[0.02] text-gray-500 border-white/5 hover:text-gray-300'}" title="${cum ? 'Showing the RUNNING TOTAL from your first epoch — tap for per-epoch buckets.' : 'Showing per-epoch buckets — tap for the running total from your first epoch.'}">Σ cumulative</button>
             <span class="ml-auto flex items-center gap-1">
               <button onclick="mpPageDeep(1)" ${canEarlier ? '' : 'disabled'} class="text-[10px] px-2 py-1 rounded-md border ${canEarlier ? 'bg-white/[0.02] text-gray-400 border-white/5 hover:text-gray-200' : 'text-gray-700 border-white/5 opacity-40'}">◀ earlier</button>
               <button onclick="${off > 0 ? 'mpPageDeep(-1)' : 'mpDeepExit()'}" class="text-[10px] px-2 py-1 rounded-md border bg-white/[0.02] text-gray-400 border-white/5 hover:text-gray-200">${off > 0 ? 'later ▶' : 'daily view ▶'}</button>
             </span>
           </div>
           ${chartSvg(pts, { color: mdef.color, fmt: mdef.fmt, startNote: lo === eMin ? 'first captured epoch e' + eMin : null })}
-          <div class="text-[10px] text-gray-600 mt-1">Epochs e${lo}–e${hi} · measured Tier-M legs bucketed by TLA epoch from the genesis-complete flow capture${led.negative_unit_flags ? ` · ${led.negative_unit_flags.length} position${led.negative_unit_flags.length === 1 ? '' : 's'} with cross-unit ledgers (amplp vs shares — flagged, never converted)` : ''}. Position <b>value</b> per epoch isn't shown: no pool state exists before 2026-06-26 — the archive state sampler upgrades that tier in place.</div>`;
+          <div class="text-[10px] text-gray-600 mt-1">Epochs e${lo}–e${hi}${cum ? ' · running total since e' + eMin : ' · per-epoch buckets'} · measured Tier-M legs bucketed by TLA epoch from the genesis-complete flow capture${led.negative_unit_flags ? ` · ${led.negative_unit_flags.length} position${led.negative_unit_flags.length === 1 ? '' : 's'} with cross-unit ledgers (amplp vs shares — flagged, never converted)` : ''}. Position <b>value</b> per epoch isn't shown: no pool state exists before 2026-06-26 — the archive state sampler upgrades that tier in place.</div>`;
     }
     window.mpSetDeepMetric = (k) => { store._deepMetric = k; renderTrendDeep(store.wallet); };
+    window.mpSetDeepCum = (v) => { store._deepCum = v; renderTrendDeep(store.wallet); };
     window.mpPageDeep = (dir) => { store._deepOffset = Math.max(0, (store._deepOffset || 0) + dir); renderTrendDeep(store.wallet); };
     window.mpDeepEnter = () => { store._trendDeep = true; store._deepOffset = 0; renderTrendDeep(store.wallet); };
     window.mpDeepExit = () => { store._trendDeep = false; renderTrendCard(store.wallet); };
@@ -1442,7 +1456,10 @@
     // ---------- native LUNA staking (live chain read) ----------
     async function renderNativeStaking(wallet) {
         try {
-            const j = await lcdGet(`/cosmos/staking/v1beta1/delegations/${wallet}?pagination.limit=200`);
+            const [j, rew] = await Promise.all([
+                lcdGet(`/cosmos/staking/v1beta1/delegations/${wallet}?pagination.limit=200`),
+                lcdGet(`/cosmos/distribution/v1beta1/delegators/${wallet}/rewards`).catch(() => null),
+            ]);
             if (store.wallet !== wallet) return;
             const dels = j.delegation_responses || [];
             let uluna = 0;
@@ -1452,9 +1469,11 @@
             if (!el) return;
             if (!(luna > 0)) { el.innerHTML = ''; return; }
             const cp = store.catalogPrices.get('native:uluna') || store.catalogPrices.get('uluna');
+            let pendingLuna = 0;
+            for (const t of (rew?.total || [])) if (t.denom === 'uluna') pendingLuna += Number(t.amount) / 1e6;
             el.innerHTML = `<div class="flex items-center justify-between text-[12px] py-1.5 mt-1 border-t border-white/5" title="Live chain read of this wallet's native Terra staking delegations — separate from TLA locks and not in the portfolio tiles.">
                 <span class="font-medium">LUNA staked <span class="text-[8px] px-1 py-px rounded bg-cyan-500/20 text-cyan-300">native · live</span> <span class="text-[9px] text-gray-600">${dels.length} validator${dels.length === 1 ? '' : 's'}</span></span>
-                <span class="mono text-amber-300/90">${fmtNum(luna)}${cp ? ` · ${fmt$(luna * cp.usd)}` : ''}</span></div>`;
+                <span class="mono text-amber-300/90">${fmtNum(luna)}${cp ? ` · ${fmt$(luna * cp.usd)}` : ''}${pendingLuna > 0.000001 ? ` · <span class="text-emerald-400/90" title="Pending native staking rewards, live from the distribution module${cp ? ` — ${fmt$(pendingLuna * cp.usd)}` : ''}">+${fmtNum(pendingLuna)} pending</span>` : ''}</span></div>`;
         } catch (e) { console.warn('native staking read:', e.message); }
     }
 
@@ -1496,31 +1515,63 @@
         return dec ? bech32Encode(prefix, dec.words) : null;
     }
     const SIBLING_CHAINS = [
-        { prefix: 'cosmos', name: 'Cosmos Hub', denom: 'uatom', sym: 'ATOM', rest: 'https://cosmos-rest.publicnode.com' },
-        { prefix: 'osmo', name: 'Osmosis', denom: 'uosmo', sym: 'OSMO', rest: 'https://osmosis-rest.publicnode.com' },
-        { prefix: 'neutron', name: 'Neutron', denom: 'untrn', sym: 'NTRN', rest: 'https://neutron-rest.publicnode.com' },
+        { prefix: 'cosmos', name: 'Cosmos Hub', denom: 'uatom', sym: 'ATOM', rests: ['https://rest.cosmos.directory/cosmoshub', 'https://cosmos-rest.publicnode.com'] },
+        { prefix: 'osmo', name: 'Osmosis', denom: 'uosmo', sym: 'OSMO', rests: ['https://rest.cosmos.directory/osmosis', 'https://osmosis-rest.publicnode.com'] },
+        { prefix: 'neutron', name: 'Neutron', denom: 'untrn', sym: 'NTRN', rests: ['https://rest.cosmos.directory/neutron', 'https://neutron-rest.publicnode.com'] },
     ];
+    async function chainGet(ch, p) {
+        let last = null;
+        for (const rest of ch.rests) {
+            try { const r = await fetch(rest + p); if (r.ok) return await r.json(); last = new Error('HTTP ' + r.status); }
+            catch (e) { last = e; }
+        }
+        throw last || new Error('all rests failed');
+    }
+    window.mpLinkChain = (prefix) => {
+        const host = document.getElementById('sib-link-' + prefix);
+        if (!host) return;
+        host.innerHTML = `<input id="sib-in-${prefix}" placeholder="${prefix}1…" class="bg-white/5 border border-white/10 rounded px-2 py-0.5 text-[11px] mono w-44 text-gray-200">
+            <button onclick="mpLinkSave('${prefix}')" class="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300">save</button>`;
+    };
+    window.mpLinkSave = (prefix) => {
+        const v = (document.getElementById('sib-in-' + prefix)?.value || '').trim();
+        if (v && !v.startsWith(prefix + '1')) { alert('That is not a ' + prefix + '1… address.'); return; }
+        try { v ? localStorage.setItem('mp_link:' + prefix, v) : localStorage.removeItem('mp_link:' + prefix); } catch (e) {}
+        renderSiblingChains(store.wallet).catch(() => {});
+    };
     async function renderSiblingChains(wallet) {
         const host = $('sibling-chains'); if (!host) return;
         const rows = await Promise.all(SIBLING_CHAINS.map(async (ch) => {
-            const addr = siblingAddress(wallet, ch.prefix);
+            let linked = null;
+            try { linked = localStorage.getItem('mp_link:' + ch.prefix) || null; } catch (e) {}
+            const addr = linked || siblingAddress(wallet, ch.prefix);
             if (!addr) return null;
             try {
-                const [bal, del] = await Promise.all([
-                    fetch(`${ch.rest}/cosmos/bank/v1beta1/balances/${addr}?pagination.limit=200`).then(r => r.ok ? r.json() : null),
-                    fetch(`${ch.rest}/cosmos/staking/v1beta1/delegations/${addr}?pagination.limit=200`).then(r => r.ok ? r.json() : null),
+                const [bal, del, rew] = await Promise.all([
+                    chainGet(ch, `/cosmos/bank/v1beta1/balances/${addr}?pagination.limit=200`).catch(() => null),
+                    chainGet(ch, `/cosmos/staking/v1beta1/delegations/${addr}?pagination.limit=200`).catch(() => null),
+                    chainGet(ch, `/cosmos/distribution/v1beta1/delegators/${addr}/rewards`).catch(() => null),
                 ]);
-                if (!bal && !del) return null;
-                let liquid = 0, staked = 0, vals = 0;
+                if (!bal && !del) return { ch, addr, linked: !!linked, empty: true };
+                let liquid = 0, staked = 0, vals = 0, pending = 0;
                 for (const b of (bal?.balances || [])) if (b.denom === ch.denom) liquid += Number(b.amount) / 1e6;
                 for (const d of (del?.delegation_responses || [])) if (d.balance?.denom === ch.denom) { staked += Number(d.balance.amount) / 1e6; vals++; }
-                if (!(liquid > 0.000001 || staked > 0.000001)) return null;   // nothing found — nothing shown
-                return { ch, addr, liquid, staked, vals };
-            } catch (e) { return null; }
+                for (const t of (rew?.total || [])) if (t.denom === ch.denom) pending += Number(t.amount) / 1e6;
+                if (!(liquid > 0.000001 || staked > 0.000001)) return { ch, addr, linked: !!linked, empty: true };
+                return { ch, addr, linked: !!linked, liquid, staked, vals, pending };
+            } catch (e) { return { ch, addr, linked: !!linked, empty: true }; }
         }));
         if (store.wallet !== wallet) return;
-        const found = rows.filter(Boolean);
-        if (!found.length) { host.innerHTML = ''; return; }
+        const found = rows.filter(r => r && !r.empty);
+        const anyLinked = rows.some(r => r && r.linked);
+        if (!found.length && !anyLinked) {
+            // nothing derived, nothing linked — offer the link affordance only
+            host.innerHTML = `<div class="mt-2 pt-2 border-t border-white/5 text-[10px] text-gray-600">
+                Other Cosmos chains: nothing at the derived sibling addresses — which proves nothing if your wallet derives chains differently (coin type 330 vs 118).
+                ${SIBLING_CHAINS.map(ch => `<span id="sib-link-${ch.prefix}" class="ml-1"><button onclick="mpLinkChain('${ch.prefix}')" class="text-cyan-400/80 hover:text-cyan-300">link ${ch.sym} address</button></span>`).join(' · ')}
+            </div>`;
+            return;
+        }
         host.innerHTML = `
             <div class="mt-2 pt-2 border-t border-white/5">
                 <div class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-1 flex items-center gap-1.5">Other Cosmos chains
@@ -1528,10 +1579,11 @@
                     <i class="fas fa-circle-info text-[8px] text-gray-600" title="Sibling addresses: your terra1 key-hash re-encoded with each chain's prefix — live chain reads. This is only YOUR address there if your wallet derives both chains from the same key path (wallets differ: Terra registers coin type 330, most Cosmos chains 118). Anything shown IS at that derived address; an empty chain is NOT proof you hold nothing there. Injective excluded — different key scheme, re-encoding invalid. Amounts unpriced: these tokens sit outside the TLA catalog, and we never guess a dollar."></i>
                 </div>
                 ${found.map(r => `
-                <div class="flex items-center justify-between text-[12px] py-1" title="${r.addr}">
-                    <span class="font-medium">${r.ch.sym} <span class="text-[9px] text-gray-600">${r.ch.name}</span></span>
-                    <span class="mono text-gray-300">${r.liquid > 0.000001 ? fmtNum(r.liquid) + ' liquid' : ''}${r.liquid > 0.000001 && r.staked > 0.000001 ? ' · ' : ''}${r.staked > 0.000001 ? `<span class="text-amber-300/90">${fmtNum(r.staked)} staked</span> <span class="text-[9px] text-gray-600">${r.vals} val${r.vals === 1 ? '' : 's'}</span>` : ''}</span>
+                <div class="flex items-center justify-between text-[12px] py-1" title="${r.addr}${r.linked ? ' (manually linked)' : ' (derived sibling)'}">
+                    <span class="font-medium">${r.ch.sym} <span class="text-[9px] text-gray-600">${r.ch.name}${r.linked ? ' · linked' : ''}</span></span>
+                    <span class="mono text-gray-300">${r.liquid > 0.000001 ? fmtNum(r.liquid) + ' liquid' : ''}${r.liquid > 0.000001 && r.staked > 0.000001 ? ' · ' : ''}${r.staked > 0.000001 ? `<span class="text-amber-300/90">${fmtNum(r.staked)} staked</span> <span class="text-[9px] text-gray-600">${r.vals} val${r.vals === 1 ? '' : 's'}</span>` : ''}${r.pending > 0.000001 ? ` · <span class="text-emerald-400/90" title="Pending staking rewards, live from the distribution module">+${fmtNum(r.pending)} pending</span>` : ''}</span>
                 </div>`).join('')}
+                <div class="text-[10px] text-gray-600 mt-1">${SIBLING_CHAINS.map(ch => `<span id="sib-link-${ch.prefix}"><button onclick="mpLinkChain('${ch.prefix}')" class="text-cyan-400/70 hover:text-cyan-300">${(() => { try { return localStorage.getItem('mp_link:' + ch.prefix) ? 're-link ' + ch.sym : 'link ' + ch.sym; } catch (e) { return 'link ' + ch.sym; } })()}</button></span>`).join(' · ')} <span class="text-gray-700">— paste your real address if your wallet derives differently</span></div>
             </div>`;
     }
 
