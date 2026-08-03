@@ -3578,7 +3578,17 @@
                 fetch(CONFIG.bribesCurrentUrl).then(r => r.ok ? r.json() : null).catch(e => { console.warn('bribes fetch:', e.message); return null; }),
                 fetch(CONFIG.pdBribesUrl).then(r => r.ok ? r.json() : null).catch(() => null),
                 fetch(CONFIG.historicalUrls[2026]).then(r => r.ok ? r.json() : null).catch(() => null),
-                fetch(`${CONFIG.votionBaseUrl}/votion-epoch-${currentEpoch}.json`).then(r => r.ok ? r.json() : null).catch(() => null),
+                // Votion: same epoch-boundary pattern as astroport below — the votion
+                // roller creates epoch-N.json on its first run inside epoch N, so on
+                // day 1 the current file 404s (observed live e197, 2026-08-03).
+                // The N-1 file keeps the votion boards populated until it lands.
+                fetch(`${CONFIG.votionBaseUrl}/votion-epoch-${currentEpoch}.json`)
+                    .then(r => {
+                        if (r.ok) return r.json();
+                        return fetch(`${CONFIG.votionBaseUrl}/votion-epoch-${currentEpoch - 1}.json`)
+                            .then(r2 => r2.ok ? r2.json() : null);
+                    })
+                    .catch(() => null),
                 // Astroport: live file for current epoch — carries epochs[N-1] inside.
                 // Fallback to the previous epoch's file: the nightly roller creates
                 // epoch-N.json on its FIRST run inside epoch N, so on day 1 of every
