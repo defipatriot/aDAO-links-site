@@ -1426,8 +1426,8 @@
                         </div>
                         <i id="slip-card-chev" class="fas fa-chevron-down text-[10px] text-gray-500 transition-transform"></i>
                     </div>
+                    <div id="arb-strip" class="mt-2"></div>
                     <div id="slip-card-body" class="hidden mt-2">
-                    <div id="arb-strip"></div>
                     <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
                         <div class="flex items-center gap-1.5 flex-wrap">
                             <button type="button" data-slipdir="toLuna" class="slip-dir-btn text-[10px] px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-medium" title="Selling the paired asset INTO the pool for LUNA (e.g. $100 of USDC sold for LUNA)">Asset → LUNA</button>
@@ -5540,6 +5540,10 @@
         store.slipExpanded = !store.slipExpanded;
         renderSlippageSim();
     }
+    // T2.8b: the strip lives OUTSIDE the collapsed body and must render at
+    // page load, wallet or not — a live divergence hidden behind a collapsed
+    // card is a radar that doesn't radar.
+    function ensureArbStrip() { try { renderArbStrip(); } catch (e) {} }
 
     // ---- Simulator card collapse (Camron 2026-08-02: tools shouldn't interrupt
     // the summary→table read). Collapsed by default; state lives for the session.
@@ -7443,6 +7447,7 @@
         try { wirePieModeToggle(); } catch (err) { console.warn('wirePieModeToggle:', err); }
         try { renderSlippageSim(); } catch (err) { console.warn('renderSlippageSim:', err); }
         try { wireSlippageSim(); } catch (err) { console.warn('wireSlippageSim:', err); }
+        ensureArbStrip();   // T2.8b: strip renders at load, outside the collapse
         try { renderCommunityWatch(); } catch (err) { console.warn('renderCommunityWatch:', err); }
     }
     
