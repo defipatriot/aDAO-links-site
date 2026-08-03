@@ -4300,7 +4300,23 @@
         {
             const pbp = store.pdBribesProduct;
             const epNow = store.epoch ?? store.currentRealEpoch ?? null;
-            const slot = epNow != null ? (pbp?.by_epoch?.[String(epNow)] || pbp?.by_epoch?.[epNow]) : null;
+            // Rev T2.7 (2026-08-03, live flip-day failure): the popup renders the
+            // manager's active set = the DISTRIBUTING epoch's frozen bribes
+            // (epoch N is tallied during N, frozen at the flip, PAID during
+            // N+1). On flip day epNow advances to N+1 while the money on
+            // screen is still N's — keying the split by epNow alone made PD
+            // fall into "Other" every flip morning (observed e196→e197).
+            // Prefer epNow; fall back to the distributing epoch epNow−1.
+            // Self-healing: once PD's committed range truly ends, neither
+            // slot exists and the honest fallback note engages.
+            let slot = null, slotEpoch = null;
+            if (epNow != null) {
+                for (const tryEp of [epNow, epNow - 1]) {
+                    const cand = pbp?.by_epoch?.[String(tryEp)] || pbp?.by_epoch?.[tryEp];
+                    if (cand && cand.pools) { slot = cand; slotEpoch = tryEp; break; }
+                }
+            }
+            store.pdSplitEpoch = slotEpoch;
             if (slot && slot.pools) {
                 pdLunaByGid = {};
                 for (const [gid, ps] of Object.entries(slot.pools)) {
@@ -12448,7 +12464,9 @@ ${(() => {
                     const host = document.getElementById('bribes-pd-usd');
                     host && host.parentElement && host.parentElement.appendChild(n);
                 }
-                n.innerHTML = `no split data past e${store.pdFileCoverageEnd} \u2014 PD's live bribes (props 247/250) are counted in \u201cOther\u201d until attribution re-homes to the org capture`;
+                n.innerHTML = store.pdBribesProduct
+                    ? `PD has no verified placements covering this epoch \u2014 any PD amounts on-chain appear in \u201cOther\u201d until its next proposal lands`
+                    : `no split data past e${store.pdFileCoverageEnd} \u2014 PD's live bribes (props 247/250) are counted in \u201cOther\u201d until attribution re-homes to the org capture`;
                 n.title = 'The PD/Other split comes from a legacy hand-maintained file whose last entered range ends at e' + store.pdFileCoverageEnd + '. Chain totals on this popup are exact regardless; only the payer split is affected. The archive backfill + governance-bribe attribution derive replaces this file.';
             } else if (n) n.remove();
         })();
