@@ -12959,7 +12959,11 @@
                             const sf = med(salesDesc.filter(s => tierOfSale(s.token_id, s.timestamp) === t).slice(0, lastK[t]).map(s => s.notional_usd).filter(v => v != null));
                             const lfArr = allLst.filter(l => tierNow(l.tokenId) === t && l.priceUsd > 0).map(l => l.priceUsd);
                             const lf = lfArr.length ? Math.min(...lfArr) : null;
-                            const mark = (sf && lf != null) ? (sf + lf) / 2 : (sf || lf || 0);
+                            // 2026-08-03 floor audit: conservative mark — the LOWER of
+                            // recent-sales median and live cross-marketplace listing
+                            // floor (was the midpoint, which overstated whenever live
+                            // asks sat below recent sales). Floor-based mcap convention.
+                            const mark = (sf != null && lf != null) ? Math.min(sf, lf) : (sf ?? lf ?? 0);
                             return { t, mark };
                         });
                         const unmintedSet = new Set(window._dashNfts.filter(n => n.owner === window._dashDaoWallet).map(n => String(n.id)));
@@ -13004,6 +13008,26 @@
                     fillTiers('bbl',    marketplaceCache.bbl?.alliance_dao?.listings);
                     fillTiers('boost',  marketplaceCache.boost?.alliance_dao?.listings);
                     fillTiers('atrium', atriumListings);
+                    // 2026-08-03 (Camron floor audit): the headline "Unbroken Floor"
+                    // tile was BBL-only (bLUNA reserve of the first non-broken BBL
+                    // listing) — blind to Atrium/Boost asks sitting lower. Once the
+                    // cross-marketplace context exists, override it with the TRUE
+                    // floor: the lowest non-broken listing across all three venues.
+                    // Idempotent, runs at the same race points as the tier rows.
+                    try {
+                        const allMp = [];
+                        (marketplaceCache.bbl?.alliance_dao?.listings || []).forEach(l => allMp.push({ l, mp: 'BBL' }));
+                        (marketplaceCache.boost?.alliance_dao?.listings || []).forEach(l => allMp.push({ l, mp: 'Boost' }));
+                        (atriumListings || []).forEach(l => allMp.push({ l, mp: 'Atrium' }));
+                        const unbroken = allMp.filter(x => x.l.priceUsd > 0 && tierOfListing(x.l) !== 'broken');
+                        if (unbroken.length) {
+                            const best = unbroken.reduce((a, b) => (b.l.priceUsd < a.l.priceUsd ? b : a));
+                            const floorEl2 = document.getElementById('unbroken-floor-usd');
+                            const floorSubEl2 = document.getElementById('unbroken-floor-bluna-subtext');
+                            if (floorEl2) floorEl2.innerHTML = `$${best.l.priceUsd.toFixed(2)}`;
+                            if (floorSubEl2) floorSubEl2.textContent = `lowest of ${unbroken.length} listings · BBL + Boost + Atrium (${best.mp})`;
+                        }
+                    } catch (e) { console.warn('cross-marketplace floor override skipped:', e.message); }
                 }
                 function loadV2MarketData() {
                     if (_v2Promise) return _v2Promise;
