@@ -1427,6 +1427,7 @@
                         <i id="slip-card-chev" class="fas fa-chevron-down text-[10px] text-gray-500 transition-transform"></i>
                     </div>
                     <div id="slip-card-body" class="hidden mt-2">
+                    <div id="arb-strip"></div>
                     <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
                         <div class="flex items-center gap-1.5 flex-wrap">
                             <button type="button" data-slipdir="toLuna" class="slip-dir-btn text-[10px] px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-medium" title="Selling the paired asset INTO the pool for LUNA (e.g. $100 of USDC sold for LUNA)">Asset → LUNA</button>
@@ -5433,6 +5434,7 @@
     // SLIPPAGE SIMULATOR (Stage B3, 2026-07)
     // ============================================================
     function renderSlippageSim() {
+        try { renderArbStrip(); } catch (e) {}
         const rowsEl = document.getElementById('slip-rows');
         if (!rowsEl) return;
         if (!store.slipAmount) store.slipAmount = 100;
@@ -5807,6 +5809,57 @@
           </div>`;
     }
 
+    // T2.8: Arb strip — same divergence math as the full simulator's radar,
+    // on this page's snapshot pools. xyk only (concentrated/stable hold
+    // imbalanced reserves BY DESIGN — including them would manufacture fake
+    // arbs). Quiet state shows the largest gap so "efficient" is a reading.
+    function renderArbStrip() {
+        const el = document.getElementById('arb-strip'); if (!el) return;
+        const FEE = 0.003, MIN = 0.008;
+        const groups = new Map(); let max = null; const opps = [];
+        for (const p of _zapPools()) {
+            if (p.dex_subtype === 'concentrated' || p.dex_subtype === 'stable') continue;
+            const a0 = p.lp_health.asset_0, a1 = p.lp_health.asset_1;
+            if (!(a0.usd_value > 0 && a1.usd_value > 0)) continue;
+            const key = [a0.symbol, a1.symbol].sort().join('|');
+            (groups.get(key) || groups.set(key, []).get(key)).push(p);
+        }
+        for (const [key, ps] of groups) {
+            if (ps.length < 2) continue;
+            const [s0] = key.split('|');
+            const wr = ps.map(p => {
+                const i = p.lp_health.asset_0.symbol === s0 ? 0 : 1;
+                const mine = i === 0 ? p.lp_health.asset_0 : p.lp_health.asset_1;
+                const other = i === 0 ? p.lp_health.asset_1 : p.lp_health.asset_0;
+                return { p, ratio: other.usd_value / mine.usd_value, buyDepth: mine.usd_value, sellDepth: other.usd_value };
+            });
+            for (let a = 0; a < wr.length; a++) for (let b = a + 1; b < wr.length; b++) {
+                let lo = wr[a], hi = wr[b];
+                if (lo.ratio > hi.ratio) [lo, hi] = [hi, lo];
+                const spread = hi.ratio / lo.ratio - 1;
+                if (!max || spread > max.spread) max = { spread, key, lo: lo.p, hi: hi.p };
+                if (spread <= MIN) continue;
+                const invR = 1 / lo.buyDepth + 1 / hi.sellDepth, net = spread - 2 * FEE;
+                if (net <= 0) continue;
+                const profit = net * net / (4 * invR);
+                if (profit < 1) continue;
+                opps.push({ sym: s0, lo: lo.p, hi: hi.p, spread, size: net / (2 * invR), profit });
+            }
+        }
+        opps.sort((x, y) => y.profit - x.profit);
+        if (!opps.length) {
+            el.innerHTML = `<div class="text-[10px] text-gray-600 mb-2 flex items-center gap-1.5"><i class="fas fa-tower-broadcast text-gray-600"></i><span class="font-semibold text-gray-500">Arb radar:</span> pools agree on prices${max ? ` · largest gap ${(max.spread * 100).toFixed(2)}% on ${max.key.replace('|', '-')} (below round-trip cost)` : ''} · <a href="slippage.html" class="text-teal-400/80 hover:underline">full radar</a></div>`;
+            return;
+        }
+        el.innerHTML = `<div class="rounded-lg bg-amber-500/[0.06] border border-amber-500/15 p-2 mb-2">` +
+            `<div class="text-[10px] font-semibold text-amber-300 mb-1"><i class="fas fa-tower-broadcast mr-1"></i>Arb radar: ${opps.length} price divergence${opps.length === 1 ? '' : 's'} live <span class="text-gray-500 font-normal">· xyk pools · bots may front-run · <a href="slippage.html" class="text-teal-400/80 hover:underline">details</a></span></div>` +
+            opps.slice(0, 3).map(o => {
+                const nm = (p) => { const n = String(p.name || ''); return /^(cw20:|native:|terra1)/.test(n) ? `unnamed pool ${n.replace(/^cw20:|^native:/, '').slice(0, 10)}…` : n; };
+                const dx = (p) => p.dex ? ` <span class="text-gray-600">(${esc(p.dex)})</span>` : ' <span class="text-gray-600">(unlisted)</span>';
+                return `<div class="text-[10px] text-gray-400 mono">${esc(nm(o.lo))}${dx(o.lo)} vs ${esc(nm(o.hi))}${dx(o.hi)} · <span class="text-amber-300">${(o.spread * 100).toFixed(2)}% apart</span> · best ~${fmt$(o.size)} → <span class="text-emerald-300">~${fmt$(o.profit)} net</span> <span class="text-gray-600" title="Same-pair comparison: catalog prices cancel — this spread is raw reserve truth. Small optimal size = thin pools; verify both pools on-chain before trading.">ⓘ</span></div>`;
+            }).join('') +
+            `</div>`;
+    }
     function wireSlippageSim() {
         const card = document.getElementById('slippage-sim-card');
         if (!card || card.dataset.wired) return;

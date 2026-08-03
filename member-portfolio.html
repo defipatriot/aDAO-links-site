@@ -702,6 +702,7 @@
                 <div class="text-[9px] text-gray-600">${sub || ''}</div>
             </div>`;
         const cl = claimableOf(m);
+        const rpT = repriceSummary(m);
         const dtile = (id, label, val, sub, cls, metric, tip) => `
             <div class="glass-card p-3 ${metric ? 'cursor-pointer hover:bg-white/[0.04] transition-colors' : (id === 'vot' ? 'cursor-pointer hover:bg-white/[0.04] transition-colors' : '')}" ${metric ? `onclick="mpTileDrill('${metric}')"` : (id === 'vot' ? 'onclick="mpVotionDrill()"' : '')} ${tip ? `title="${tip}"` : ''}>
                 <div class="text-[9px] uppercase tracking-wider text-gray-500">${label}${metric ? ' <i class="fas fa-chart-line text-[7px] opacity-40"></i>' : ''}</div>
@@ -711,8 +712,8 @@
             </div>`;
         $('tiles').innerHTML =
             dtile('vp', 'Voting power', fmtNum(s.display_voting_power_human || 0), (s.vp_gap_human || 0) > 500 ? `+${fmtNum(s.vp_gap_human)} reclaimable` : 'fully fresh', 'text-purple-300', 'v', 'Tap for this wallet&#39;s VP history') +
-            dtile('lk', 'Locked value', fmt$(s.total_locked_usd), `${fmtNum(s.total_locked_luna_equivalent || 0)} LUNA-equiv · ${s.lock_count || 0} locks`, '', 'lk', 'Tap for locked-value history') +
-            dtile('lp', 'LP positions', fmt$(s.total_lp_position_usd), `${s.active_lp_position_count || 0} active${(s.inactive_lp_position_count || 0) ? ` · <span class="text-red-400">${s.inactive_lp_position_count} inactive</span>` : ''}`, '', 'lp', 'Tap for LP-value history') +
+            dtile('lk', 'Locked value', fmt$(rpT.live ? rpT.lk : s.total_locked_usd), `${fmtNum(s.total_locked_luna_equivalent || 0)} LUNA-equiv · ${s.lock_count || 0} locks${rpT.live ? ' · <span class="text-emerald-400/70">live px</span>' : ''}`, '', 'lk', 'Locked amounts from the daily 03:00 snapshot, valued at LIVE catalog prices. Tap for locked-value history') +
+            dtile('lp', 'LP positions', fmt$(rpT.live ? rpT.lp : s.total_lp_position_usd), `${s.active_lp_position_count || 0} active${(s.inactive_lp_position_count || 0) ? ` · <span class="text-red-400">${s.inactive_lp_position_count} inactive</span>` : ''}${rpT.live ? ' · <span class="text-emerald-400/70">live px</span>' : ''}`, '', 'lp', 'LP token amounts from the daily 03:00 snapshot, valued at LIVE catalog prices. Tap for LP-value history') +
             dtile('vot', 'Votion', '<span class="loading-pulse text-gray-500 text-sm">…</span>', 'vault positions', 'text-purple-300', null, 'Per-vault vault-share value from the ORG Votion feed (hub-rate LST pricing, corrected VP definition). Tap for history — the org daily archive runs since 2026-07-16.') +
             dtile('nft', 'NFTs', '<span class="loading-pulse text-gray-500 text-sm">…</span>', 'at recent sales floors', 'text-amber-300', null, 'aDAO NFTs valued at recent sales floors from the org NFT tracker. Pixel Lions have no captured floor and stay unpriced.') +
             dtile('clm', 'Claimable', fmt$(cl.rewards), `${cl.rewardsSrc === 'live' ? '<span class="text-emerald-400/80">live</span>' : '<span class="text-gray-600" title="daily 03:00 UTC snapshot — claims since then not yet reflected">daily</span>'} · +${fmt$(cl.bribes)} accruing (est.)`, cl.rewards > 1 ? 'text-amber-300' : 'text-gray-100', null, 'Claimable now = pending LP rewards + rebase, read LIVE from the chain for this wallet (daily snapshot as fallback, labeled). The accruing figure is this epoch&#39;s bribe estimate from live vote-share math — it settles at epoch close and is NOT claimable yet.');
@@ -1113,6 +1114,81 @@
         store._liveClaimInflight = null;
         try { if (store.wallet === wallet) renderPortfolio(wallet); } catch (e) {}
     }
+    // P1.7 (2026-08-03, liveness pass): the whole summary block priced at
+    // capture time went stale for a day at a time. Quantities move rarely —
+    // prices move constantly. Reprice: feed amounts × LIVE org-catalog
+    // prices; any item without a live price keeps its feed value (counted,
+    // never silently bridged). Positions themselves still refresh daily.
+    function _livePriceMaps() {
+        const byDenom = new Map();
+        for (const [den, p] of (store.catalogPrices || new Map())) byDenom.set(den, p.usd);
+        // the org catalog carries denoms only (no symbol field) — the symbol→denom
+        // bridge comes from the feed itself: every member's wallet balances and
+        // locks pair the two. Built once, cached.
+        if (!store._symDenom) {
+            const map = new Map();
+            for (const m of (store.members ? store.members.values() : [])) {
+                for (const b of (m.wallet_balances || [])) if (b.symbol && b.denom && !map.has(b.symbol)) map.set(b.symbol, b.denom);
+                for (const l of (m.locks || [])) {
+                    const den = l.asset_info?.native || l.asset_info?.cw20 || null;
+                    if (l.asset_symbol && den && !map.has(l.asset_symbol)) map.set(l.asset_symbol, den);
+                }
+            }
+            store._symDenom = map;
+        }
+        const bySym = new Map();
+        // PRIMARY symbol prices: the hourly TLA snapshot prices every pool
+        // asset by symbol (price_usd, hour-fresh) — exactly what LP
+        // underlyings key on. The feed-derived denom bridge fills any gaps.
+        for (const p of (store.feeds?.snap?.pools || [])) {
+            for (const a of [p.lp_health?.asset_0, p.lp_health?.asset_1]) {
+                if (a && a.symbol && a.price_usd > 0 && !bySym.has(a.symbol)) bySym.set(a.symbol, a.price_usd);
+            }
+        }
+        for (const [sym, den] of store._symDenom) { if (!bySym.has(sym)) { const p = byDenom.get(den); if (p != null) bySym.set(sym, p); } }
+        return { bySym, byDenom };
+    }
+    function repriceSummary(m) {
+        const s = m.summary || {};
+        const fb = { lk: s.total_locked_usd || 0, lp: s.total_lp_position_usd || 0, wb: s.total_wallet_balances_usd || 0, live: false };
+        const pm = _livePriceMaps();
+        if (!pm.bySym.size) return fb;
+        const px = (denom, sym) => (denom && pm.byDenom.get(denom)) ?? (sym && pm.bySym.get(sym)) ?? null;
+        let fallbacks = 0;
+        // wallet
+        let wb = 0;
+        for (const b of (m.wallet_balances || [])) {
+            const p = px(b.denom, b.symbol);
+            if (p != null) wb += (b.amount_human || 0) * p;
+            else { wb += b.usd_value || 0; fallbacks++; }
+        }
+        // locks
+        let lk = 0;
+        for (const l of (m.locks || [])) {
+            const den = l.asset_info?.native || (l.asset_info?.cw20 ? l.asset_info.cw20 : null);
+            const p = px(den, l.asset_symbol);
+            if (p != null) lk += (l.amount_human || 0) * p;
+            else { lk = fb.lk; fallbacks++; break; }   // partial lock repricing would mislead — whole-section fallback
+        }
+        // LP
+        let lp = 0;
+        for (const pos of (m.lp_positions || [])) {
+            const und = pos.underlying_token_amounts || [];
+            if (und.length) {
+                let v = 0, ok = true;
+                for (const u of und) {
+                    const p = px(null, u.symbol);
+                    if (p != null) v += (u.amount_human || 0) * p; else { ok = false; break; }
+                }
+                if (ok) { lp += v; continue; }
+            } else {
+                const p = px((pos.pool_gauge_id || '').replace(/^native:|^cw20:/, ''), pos.pool_name);
+                if (p != null) { lp += (pos.user_balance_human || 0) * p; continue; }
+            }
+            lp += pos.estimated_position_usd || 0; fallbacks++;
+        }
+        return { lk, lp, wb, live: true, fallbacks, at: store.catalogPricesAt || null };
+    }
     function claimableOf(m) {
         const live = computeLiveBribes(m);
         const lc = (store._liveClaim && store._liveClaim.wallet === m.wallet && store._liveClaim.ok) ? store._liveClaim : null;
@@ -1131,8 +1207,9 @@
         const el = $('networth-banner'); if (!el || !m) return;
         const s = m.summary || {};
         const gov = store._ampcapaGovUsd || 0;   // ampCAPA gov (live read) — folded into LP + grand
-        const tla = (s.total_portfolio_value_usd || 0) + gov;
-        const lk = s.total_locked_usd || 0, lp = (s.total_lp_position_usd || 0) + gov, wb = s.total_wallet_balances_usd || 0;
+        const rp = repriceSummary(m);            // P1.7: live prices × daily quantities
+        const lk = rp.lk, lp = rp.lp + gov, wb = rp.wb;
+        const tla = lk + rp.lp + wb + gov;
         const vot = store._votionUsd != null ? store._votionUsd : null;
         const nft = store.nftLadderTotal != null ? Math.max(0, store.nftLadderTotal - lk) : null; // ladder total includes locks — NFTs slice = total − locks
         const grand = tla + (vot || 0) + (nft || 0);
