@@ -98,7 +98,7 @@
     <div id="state-notfound" class="glass-card p-8 text-center hidden">
         <i class="fas fa-ghost text-4xl text-gray-600 mb-3"></i>
         <div class="text-gray-300 font-medium mb-1">No TLA activity found for <span id="nf-addr" class="mono text-sm text-gray-400"></span></div>
-        <div class="text-[12px] text-gray-500 max-w-xl mx-auto">This wallet has no tracked locks, LP positions, or votes in the Terra Liquidity Alliance. If it just entered TLA, the tracker picks it up within about an hour. (Coverage: all 200+ TLA participants, aDAO members, and registered allies.)</div>
+        <div class="text-[12px] text-gray-500 max-w-xl mx-auto">This wallet has no tracked locks, LP positions, or votes in the Terra Liquidity Alliance. If it just entered TLA, the tracker picks it up at the next daily snapshot (03:00 UTC). (Coverage: all 200+ TLA participants, aDAO members, and registered allies.)</div>
     </div>
 
     <!-- ============ PORTFOLIO ============ -->
@@ -626,8 +626,11 @@
         }
         const clA = claimableOf(m);
         if (clA.total > 1) {
-            A('info', 'fa-gift', `${fmt$(clA.total)} waiting to claim`,
-              `${fmt$(clA.rewards)} rewards${clA.bribes > 0.01 ? ` + ${fmt$(clA.bribes)} bribes${clA.live ? ' (live vote-share math)' : ''}` : ''} accrued. Bribes settle at epoch close.`);
+            const liveTag = clA.rewardsSrc === 'live'
+                ? '<span class="text-emerald-400/90">live</span>'
+                : '<span class="text-gray-500" title="From the daily 03:00 UTC snapshot — a claim made since then still shows until the next run. Live read unavailable this load.">daily snapshot</span>';
+            A('info', 'fa-gift', `${fmt$(clA.rewards)} claimable now${clA.bribes > 0.01 ? ` · ${fmt$(clA.bribes)} accruing` : ''}`,
+              `Claimable ${fmt$(clA.rewards)} rewards (${liveTag})${clA.bribes > 0.01 ? ` · plus ${fmt$(clA.bribes)} bribes accruing this epoch (est., live vote-share math) — settles at epoch close, not claimable yet` : ''}.`);
         }
         if (!alerts.length) {
             A('success', 'fa-circle-check', 'Position healthy', 'No stale VP, nothing inactive, no locks expiring, nothing at the threshold. Nothing needs doing.');
@@ -667,6 +670,15 @@
         // banner + trend + income (P1)
         try { renderBanner(m); } catch (e) { console.warn('banner:', e); }
         store._trendDeep = false; store._deepOffset = 0; store._ampcapaGovUsd = 0;
+        // P1.6 live claimable: fetch once per wallet per load (completion re-renders;
+        // the wallet check below is the loop guard). 60s freshness window.
+        if (!(store._liveClaim && store._liveClaim.wallet === wallet && (Date.now() - store._liveClaim.at) < 60000)) {
+            if (store._liveClaim?.wallet !== wallet) store._liveClaim = null;
+            if (!store._liveClaimInflight || store._liveClaimInflight !== wallet) {
+                store._liveClaimInflight = wallet;
+                try { fetchLiveClaimable(m); } catch (e) {}
+            }
+        }
         try { renderTrendCard(wallet); } catch (e) { console.warn('trend:', e); }
         try { renderIncome(wallet, m); } catch (e) { console.warn('income:', e); }
         renderTlaRank(wallet).catch(e => console.warn('rank:', e));
@@ -703,7 +715,7 @@
             dtile('lp', 'LP positions', fmt$(s.total_lp_position_usd), `${s.active_lp_position_count || 0} active${(s.inactive_lp_position_count || 0) ? ` · <span class="text-red-400">${s.inactive_lp_position_count} inactive</span>` : ''}`, '', 'lp', 'Tap for LP-value history') +
             dtile('vot', 'Votion', '<span class="loading-pulse text-gray-500 text-sm">…</span>', 'vault positions', 'text-purple-300', null, 'Per-vault vault-share value from the ORG Votion feed (hub-rate LST pricing, corrected VP definition). Tap for history — the org daily archive runs since 2026-07-16.') +
             dtile('nft', 'NFTs', '<span class="loading-pulse text-gray-500 text-sm">…</span>', 'at recent sales floors', 'text-amber-300', null, 'aDAO NFTs valued at recent sales floors from the org NFT tracker. Pixel Lions have no captured floor and stay unpriced.') +
-            dtile('clm', 'Claimable', fmt$(cl.total), `${fmt$(cl.rewards)} rewards · ${fmt$(cl.bribes)} bribes${cl.live ? '' : ' <span class="text-gray-700">(feed)</span>'}`, cl.total > 1 ? 'text-amber-300' : 'text-gray-100', null, cl.live ? 'Bribes computed live: your VP share of each voted pool&#39;s current pot, valued via the org token catalog — replaces a known-broken cron field.' : 'Live bribe inputs unavailable this load — feed value shown (known-unreliable field).');
+            dtile('clm', 'Claimable', fmt$(cl.rewards), `${cl.rewardsSrc === 'live' ? '<span class="text-emerald-400/80">live</span>' : '<span class="text-gray-600" title="daily 03:00 UTC snapshot — claims since then not yet reflected">daily</span>'} · +${fmt$(cl.bribes)} accruing (est.)`, cl.rewards > 1 ? 'text-amber-300' : 'text-gray-100', null, 'Claimable now = pending LP rewards + rebase, read LIVE from the chain for this wallet (daily snapshot as fallback, labeled). The accruing figure is this epoch&#39;s bribe estimate from live vote-share math — it settles at epoch close and is NOT claimable yet.');
         // async 7d deltas where the daily archive carries the field
         (async () => {
             const rec = await fetchDayFor(wallet, dstr(new Date(Date.now() - 7 * _dayMs)));
@@ -1054,11 +1066,60 @@
         }
         return { total, rows, unpriced };
     }
+    // ---- LIVE claimable (P1.6, 2026-08-03): the participants feed is a DAILY
+    // snapshot (03:00 UTC) — a claim made after capture showed as pending all
+    // day (observed live on DP's own claim). Platform doctrine: tiles are LIVE
+    // feeds, cron is fallback. Same query shapes the DAO pages' shared lib
+    // uses, pointed at the selected wallet; rewards figure goes live, the
+    // daily value stays as the labeled fallback.
+    const P16 = {
+        buckets: { bluechip: 'terra14mmvqn0kthw6sre75vku263lafn5655mkjdejqjedjga4cw0qx2qlf4arv',
+                   project:  'terra1awq6t7jfakg9wfjn40fk3wzwmd57mvrqtt3a39z9rmet7wdjj3ysgw3lpa',
+                   single:   'terra1qdz5qgafx88kp5mf6m2tah8742g4u5g2cek0m3jrgssexexk7g4qw6e23k',
+                   stable:   'terra1v399cx9drllm70wxfsgvfe694tdsd9x96p9ha36w7muffe4znlusqswspq' },
+        connectors: { bluechip: 'terra16l43xt2uq09yvz4axg73n8rtm0qte9lremdwm6ph0e35r2jnm43qnl8h53',
+                      project:  'terra1x8v9fujf3c78q2we23x0vgzmxgtt0hgvuvfsxy4w3ar9kcua4c6qqcnhyh',
+                      single:   'terra1u72y7gppxrsncctvgfyqduv3md6pgq77pqhz9rxgwl3dqgye00cq7vmf8u',
+                      stable:   'terra1ym2495f63mdx63tu96085x2vf3xpy9z9k5urxwhvmf9jldm99q5qr4q6n8' },
+        gauge: 'terra1hfksrhchkmsj4qdq33wkksrslnfles6y2l77fmmzeep0xmq24l2smsd3lj',
+    };
+    async function fetchLiveClaimable(m) {
+        const wallet = m.wallet;
+        try {
+            const B = Object.keys(P16.buckets);
+            const [pend, conns, rebase] = await Promise.all([
+                Promise.all(B.map(b => lcdSmart(P16.buckets[b], { all_pending_rewards: { address: wallet } }).catch(() => null))),
+                Promise.all(B.map(b => lcdSmart(P16.connectors[b], { state: {} }).catch(() => null))),
+                lcdSmart(P16.gauge, { user_pending_rebase: { user: wallet } }).catch(() => null),
+            ]);
+            if (store.wallet !== wallet) return;   // stale — user moved on
+            let depositLuna = 0, unconverted = false, queryFailed = false;
+            for (let i = 0; i < B.length; i++) {
+                if (!Array.isArray(pend[i])) { queryFailed = true; continue; }   // bucket query failed — can't trust a zero
+                let z = 0;
+                for (const it of pend[i]) z += parseFloat(it?.reward_asset?.amount) || 0;
+                const rate = Number(conns[i]?.share_exchange_rate) || null;
+                if (z > 0 && rate) depositLuna += (z / 1e6) / rate;
+                else if (z > 0) unconverted = true;   // pending exists but no rate — a live zero would UNDERSTATE
+            }
+            const lunaDen = store.catalogPrices?.get('uluna');
+            const lunaUsd = lunaDen?.usd || 0;
+            const ampRatio = 1.1;   // display-scale; rebase is small — labeled approximate
+            const rebaseLuna = ((parseFloat(rebase?.amount) || 0) / 1e6) * ampRatio;
+            store._liveClaim = { wallet, rewardsUsd: (depositLuna + rebaseLuna) * lunaUsd,
+                                 depositLuna, rebaseLuna, at: Date.now(),
+                                 ok: lunaUsd > 0 && !unconverted && !queryFailed };
+        } catch (e) { store._liveClaim = { wallet, ok: false, err: e.message, at: Date.now() }; }
+        store._liveClaimInflight = null;
+        try { if (store.wallet === wallet) renderPortfolio(wallet); } catch (e) {}
+    }
     function claimableOf(m) {
         const live = computeLiveBribes(m);
-        const rewards = m.summary?.total_pending_rewards_usd || 0;
-        if (live) return { total: rewards + live.total, rewards, bribes: live.total, live: true, rows: live.rows, unpriced: live.unpriced };
-        return { total: rewards + (m.summary?.total_pending_bribes_usd || 0), rewards, bribes: m.summary?.total_pending_bribes_usd || 0, live: false, rows: [], unpriced: 0 };
+        const lc = (store._liveClaim && store._liveClaim.wallet === m.wallet && store._liveClaim.ok) ? store._liveClaim : null;
+        const rewards = lc ? lc.rewardsUsd : (m.summary?.total_pending_rewards_usd || 0);
+        const src = lc ? 'live' : 'daily';
+        if (live) return { total: rewards + live.total, rewards, bribes: live.total, live: true, rewardsSrc: src, rows: live.rows, unpriced: live.unpriced };
+        return { total: rewards + (m.summary?.total_pending_bribes_usd || 0), rewards, bribes: m.summary?.total_pending_bribes_usd || 0, live: false, rewardsSrc: src, rows: [], unpriced: 0 };
     }
 
     // ---------- net-worth banner (the full splice) ----------
