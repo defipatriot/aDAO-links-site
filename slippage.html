@@ -77,6 +77,17 @@
         <div class="flex justify-between text-[9px] text-gray-600 mono mt-1"><span>$10</span><span>$1K</span><span>$100K</span><span>$1M</span></div>
     </div>
 
+    <!-- arb radar -->
+    <div class="glass-card p-5 mb-5" id="arb-card" style="display:none">
+        <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
+            <h3 class="font-semibold"><i class="fas fa-tower-broadcast text-amber-300 mr-1.5"></i>Arb Radar <span class="text-[10px] font-normal text-gray-500">— where pools disagree on price</span></h3>
+            <span class="text-[10px] text-gray-600" id="arb-count"></span>
+        </div>
+        <p class="text-[11px] text-gray-500 mb-3">The same pair trading at different prices in two pools is a round-trip profit — until someone takes it. <span class="text-cyan-400 cursor-pointer hover:underline" onclick="document.getElementById('arb-note').classList.toggle('open')">how it's estimated</span></p>
+        <div id="arb-note" class="desc-full mb-3"><span class="text-gray-300 font-semibold">The model:</span> standard (xyk) pools only — a pool's reserve ratio <i>is</i> its price, so two xyk pools holding the same pair at different ratios disagree, and buying in the cheaper one while selling in the richer one profits by the spread minus both legs' price impact and swap fees (0.3% × 2 assumed). Best size and profit come from the exact xyk optimum on live reserves. Concentrated and stable pools are excluded on purpose: they hold imbalanced reserves by design, which would read as fake spreads. Honest caveats: bots race visible spreads and may beat you in the same block; SkeletonSwap reserves are unverified upstream; this ignores gas (tiny on Terra) and multi-hop alternatives. A planning signal, not a quote.</div>
+        <div id="arb-results" class="space-y-1.5"></div>
+    </div>
+
     <!-- results -->
     <div class="glass-card p-5">
         <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
@@ -156,9 +167,85 @@
             $('tok-chips').querySelectorAll('.tok-chip').forEach(x => x.classList.toggle('active', x === b));
             render();
         }));
+        renderArbRadar();
         const cap = String(store.capturedAt || '').replace('T', ' ').slice(0, 16);
         $('freshness').innerHTML = `<i class="fas fa-satellite-dish text-gray-500 mr-1"></i>Live reserves captured ${esc(cap || 'recently')} UTC · prices from the TLA token catalog · pools under ${fmt$(MIN_TVL)} hidden · refreshes on page load`;
         render();
+    }
+
+    // ---- ARB RADAR ----------------------------------------------------------
+    // xyk-only cross-pool price divergence. With every side already valued at
+    // the ONE catalog price set, a pool's usd-side ratio deviating from 1:1
+    // measures how far its implied price sits from catalog; the ratio BETWEEN
+    // two pools of the same pair is the tradeable spread, price-source-free.
+    const FEE = 0.003;                 // per-leg swap fee assumption
+    const MIN_SPREAD = 0.008;          // surface above 0.8% (2×fee + margin)
+    function renderArbRadar() {
+        const card = $('arb-card'); if (!card) return;
+        renderArbRadar._max = null;
+        const groups = new Map();      // pairKey → xyk pools
+        for (const p of store.pools) {
+            if (p.type !== 'xyk') continue;
+            const key = p.sides.map(x => x.sym).sort().join('|');
+            (groups.get(key) || groups.set(key, []).get(key)).push(p);
+        }
+        const opps = [];
+        for (const [key, ps] of groups) {
+            if (ps.length < 2) continue;
+            const [s0] = key.split('|');
+            // implied price factor of s0 in each pool = otherSideUsd / s0SideUsd
+            const withRatio = ps.map(p => {
+                const i = p.sides.findIndex(x => x.sym === s0);
+                return { p, ratio: p.sides[1 - i].usd / p.sides[i].usd, buyDepth: p.sides[i].usd, sellDepth: p.sides[1 - i].usd };
+            });
+            for (let a = 0; a < withRatio.length; a++) for (let b = a + 1; b < withRatio.length; b++) {
+                let lo = withRatio[a], hi = withRatio[b];
+                if (lo.ratio > hi.ratio) [lo, hi] = [hi, lo];
+                const spread = hi.ratio / lo.ratio - 1;      // buy s0 where cheap (lo), sell where rich (hi)
+                if (spread > (renderArbRadar._max?.spread || 0)) renderArbRadar._max = { spread, key, lo: lo.p, hi: hi.p };
+                if (!(spread > MIN_SPREAD)) continue;
+                // xyk optimum: profit(x) ≈ spread·x − x²(1/Rlo+1/Rhi) − 2·FEE·x
+                const invR = 1 / lo.buyDepth + 1 / hi.sellDepth;
+                const net = spread - 2 * FEE;
+                if (net <= 0) continue;
+                const xStar = net / (2 * invR);
+                const pStar = net * net / (4 * invR);
+                if (pStar < 1) continue;                     // sub-$1 noise
+                opps.push({ key, lo: lo.p, hi: hi.p, spread, size: xStar, profit: pStar, sym: s0 });
+            }
+        }
+        opps.sort((x, y) => y.profit - x.profit);
+        card.style.display = '';
+        if (!opps.length) {
+            const mx = renderArbRadar._max;
+            $('arb-count').textContent = 'all quiet · xyk pools only';
+            $('arb-results').innerHTML = `<div class="text-[12px] text-gray-500 py-2"><i class="fas fa-circle-check text-emerald-400/70 mr-1.5"></i>No profitable divergences right now — pools agree on prices.${mx ? ` Largest gap: <span class="mono text-gray-400">${(mx.spread * 100).toFixed(2)}%</span> on <span class="text-gray-400">${esc(mx.key.replace('|', '-'))}</span> (${esc(mx.lo.dex)} vs ${esc(mx.hi.dex)}) — below the ~0.8% round-trip cost.` : ''} Divergences appear after big one-sided trades; worth a glance when markets move.</div>`;
+            return;
+        }
+        $('arb-count').textContent = `${opps.length} divergence${opps.length === 1 ? '' : 's'} live · xyk pools only`;
+        $('arb-results').innerHTML = opps.slice(0, 6).map(o => {
+            const unv = (o.lo.dex === 'skeletonswap' || o.hi.dex === 'skeletonswap');
+            const dexTag = (d) => `<span class="text-[9px] px-1.5 py-0.5 rounded ${d === 'astroport' ? 'bg-purple-500/15 text-purple-300' : 'bg-pink-500/15 text-pink-300'}">${d === 'astroport' ? 'Astroport' : 'SkeletonSwap'}</span>`;
+            return `
+            <div class="pool-row rounded-xl bg-white/[0.02] border border-amber-500/10 p-3">
+                <div class="flex items-center gap-3 flex-wrap">
+                    <span class="grade-badge bg-amber-500/20 text-amber-300"><i class="fas fa-bolt text-[10px]"></i></span>
+                    <div class="min-w-0 flex-1">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <span class="font-semibold text-sm">${esc(o.lo.name)}</span>${dexTag(o.lo.dex)}
+                            <span class="text-gray-600 text-[10px]">vs</span>
+                            <span class="font-semibold text-sm">${esc(o.hi.name)}</span>${dexTag(o.hi.dex)}
+                            ${unv ? '<span class="text-[8px] text-amber-500/80" title="One side of this loop uses SkeletonSwap reserves from an unverified upstream — confirm on-chain before trading.">unverified leg</span>' : ''}
+                        </div>
+                        <div class="text-[10px] text-gray-500 mt-1">buy ${esc(o.sym)} in the first, sell in the second · best size ~${fmt$(o.size)} · after 0.3%×2 fees</div>
+                    </div>
+                    <div class="text-right shrink-0">
+                        <div class="mono text-base font-bold text-amber-300">${(o.spread * 100).toFixed(2)}% apart</div>
+                        <div class="text-[10px] mono text-emerald-300/90" title="Estimated net profit at the best size — before gas and same-block competition">~${fmt$(o.profit)} net</div>
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
     }
 
     const gradeOf = (pct) => pct < 0.5 ? 'A' : pct < 1 ? 'B' : pct < 3 ? 'C' : pct < 8 ? 'D' : 'F';
