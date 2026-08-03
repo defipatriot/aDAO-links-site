@@ -260,7 +260,9 @@
 
     const CONFIG = {
         participantsUrl: 'https://raw.githubusercontent.com/defipatriot/tla-participants-data_2026/main/data/current.json',
-        votionPositionsUrl: 'https://raw.githubusercontent.com/defipatriot/votion-positions-data_2026/main/data/current.json',
+        votionPositionsUrl: 'https://raw.githubusercontent.com/thealliancedao/tla-core/main/votion/snapshots/current.json',      // ORG feed (org-votion) — personal votion-positions repo retired from this page 2026-08-03
+        votionDailyBaseUrl: 'https://raw.githubusercontent.com/thealliancedao/tla-core/main/votion/snapshots/daily',              // org daily archive, since 2026-07-16
+        votionTrackStart: '2026-07-16',
         pnlUrl: 'https://raw.githubusercontent.com/thealliancedao/tla-core/main/tla-flows/pnl/rollup.json',
         adaoPositionsUrl: 'https://raw.githubusercontent.com/defipatriot/adao-positions-data_2026/main/data/current.json',
         alliesUrl: 'https://raw.githubusercontent.com/defipatriot/adao-allies-data_2026/main/data/current.json',
@@ -661,7 +663,7 @@
             </div>`;
         const cl = claimableOf(m);
         const dtile = (id, label, val, sub, cls, metric, tip) => `
-            <div class="glass-card p-3 ${metric ? 'cursor-pointer hover:bg-white/[0.04] transition-colors' : ''}" ${metric ? `onclick="mpTileDrill('${metric}')"` : ''} ${tip ? `title="${tip}"` : ''}>
+            <div class="glass-card p-3 ${metric ? 'cursor-pointer hover:bg-white/[0.04] transition-colors' : (id === 'vot' ? 'cursor-pointer hover:bg-white/[0.04] transition-colors' : '')}" ${metric ? `onclick="mpTileDrill('${metric}')"` : (id === 'vot' ? 'onclick="mpVotionDrill()"' : '')} ${tip ? `title="${tip}"` : ''}>
                 <div class="text-[9px] uppercase tracking-wider text-gray-500">${label}${metric ? ' <i class="fas fa-chart-line text-[7px] opacity-40"></i>' : ''}</div>
                 <div class="mono text-base font-bold ${cls || 'text-gray-100'}" id="tile-${id}">${val}</div>
                 <div class="text-[9px] text-gray-600" id="tile-${id}-sub">${sub || ''}</div>
@@ -671,7 +673,7 @@
             dtile('vp', 'Voting power', fmtNum(s.display_voting_power_human || 0), (s.vp_gap_human || 0) > 500 ? `+${fmtNum(s.vp_gap_human)} reclaimable` : 'fully fresh', 'text-purple-300', 'v', 'Tap for this wallet&#39;s VP history') +
             dtile('lk', 'Locked value', fmt$(s.total_locked_usd), `${fmtNum(s.total_locked_luna_equivalent || 0)} LUNA-equiv · ${s.lock_count || 0} locks`, '', 'lk', 'Tap for locked-value history') +
             dtile('lp', 'LP positions', fmt$(s.total_lp_position_usd), `${s.active_lp_position_count || 0} active${(s.inactive_lp_position_count || 0) ? ` · <span class="text-red-400">${s.inactive_lp_position_count} inactive</span>` : ''}`, '', 'lp', 'Tap for LP-value history') +
-            dtile('vot', 'Votion', '<span class="loading-pulse text-gray-500 text-sm">…</span>', 'vault positions', 'text-purple-300', null, 'Per-vault vault-share value from the live Votion feed. No daily archive yet — the archive rider is queued, so no trend on this tile.') +
+            dtile('vot', 'Votion', '<span class="loading-pulse text-gray-500 text-sm">…</span>', 'vault positions', 'text-purple-300', null, 'Per-vault vault-share value from the ORG Votion feed (hub-rate LST pricing, corrected VP definition). Tap for history — the org daily archive runs since 2026-07-16.') +
             dtile('nft', 'NFTs', '<span class="loading-pulse text-gray-500 text-sm">…</span>', 'at recent sales floors', 'text-amber-300', null, 'aDAO NFTs valued at recent sales floors from the org NFT tracker. Pixel Lions have no captured floor and stay unpriced.') +
             dtile('clm', 'Claimable', fmt$(cl.total), `${fmt$(cl.rewards)} rewards · ${fmt$(cl.bribes)} bribes${cl.live ? '' : ' <span class="text-gray-700">(feed)</span>'}`, cl.total > 1 ? 'text-amber-300' : 'text-gray-100', null, cl.live ? 'Bribes computed live: your VP share of each voted pool&#39;s current pot, valued via the org token catalog — replaces a known-broken cron field.' : 'Live bribe inputs unavailable this load — feed value shown (known-unreliable field).');
         // async 7d deltas where the daily archive carries the field
@@ -1084,7 +1086,7 @@
             if (!rec || rec.p == null || store.wallet !== wallet) return null;
             const delta = nowV - rec.p, pct = rec.p > 0 ? delta / rec.p * 100 : null;
             const up = delta >= 0;
-            return `<span class="text-[11px] px-2 py-1 rounded-lg ${up ? 'bg-emerald-500/10 text-emerald-300' : 'bg-red-500/10 text-red-300'} mono" title="TLA position (locks + LP + wallet) vs the ${d === 1 ? 'last complete day' : d + '-day-ago'} daily archive. Votion & NFTs have no daily archive yet, so they aren't in this delta.">${d}d ${up ? '+' : '\u2212'}${fmt$(Math.abs(delta))}${pct != null ? ` (${up ? '+' : ''}${pct.toFixed(1)}%)` : ''}</span>`;
+            return `<span class="text-[11px] px-2 py-1 rounded-lg ${up ? 'bg-emerald-500/10 text-emerald-300' : 'bg-red-500/10 text-red-300'} mono" title="TLA position (locks + LP + wallet) vs the ${d === 1 ? 'last complete day' : d + '-day-ago'} daily archive. Votion (own org archive, on its tile) and NFTs aren't in this delta.">${d}d ${up ? '+' : '\u2212'}${fmt$(Math.abs(delta))}${pct != null ? ` (${up ? '+' : ''}${pct.toFixed(1)}%)` : ''}</span>`;
         }));
         const html = chips.filter(Boolean).join('');
         if (store.wallet !== wallet) return;
@@ -1128,7 +1130,7 @@
         el.innerHTML = `
           <div class="flex items-center gap-1.5 flex-wrap mb-2">${mBtns}<span class="mx-1 text-gray-700">|</span>${rBtns}</div>
           ${pts.filter(p => p.y != null).length >= 2 ? chart : `<div class="text-gray-600 text-sm py-6 text-center">No daily history for this wallet — the archive covers <b>registered</b> aDAO members (this wallet's curve starts the day it registers). VP-only history for the wider electorate is a queued org feed.</div>`}
-          <div class="text-[10px] text-gray-600 mt-1">Sampled points from the registered-member daily archive (since ${CONFIG.trackStart} — every earlier day is a permanently missing point). Dots are real captured days, never interpolated. Votion & NFT value have no daily archive yet — riders queued.</div>`;
+          <div class="text-[10px] text-gray-600 mt-1">Sampled points from the registered-member daily archive (since ${CONFIG.trackStart} — every earlier day is a permanently missing point). Dots are real captured days, never interpolated. Votion has its own org daily archive (since 2026-07-16 — see its card and tile drill); NFT value has no daily archive yet.</div>`;
     }
 
     // ---------- tile metric drill ----------
@@ -1207,6 +1209,43 @@
         return store._votionP;
     }
     const fmtUsd = (v) => (v == null || isNaN(v)) ? '—' : '$' + Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    // Vault label from the factory vdenom path: {duration}/{vtoken} —
+    // vampluna→ampLUNA, varbluna→arbLUNA; duration max/12/1.
+    function votionVaultLabel(v) {
+        const parts = String(v.vdenom || '').split('/');
+        const tok = (parts.pop() || '').replace(/^v/, '');
+        const dur = parts.pop() || '';
+        const sym = tok === 'ampluna' ? 'ampLUNA' : tok === 'arbluna' ? 'arbLUNA' : tok;
+        return { sym, label: `${sym}-${dur === 'max' ? 'MAX' : dur + 'mo'}` };
+    }
+    // org votion daily archive → this wallet's votion USD / implied-VP series.
+    // Files are ~12KB, so a straight per-day fetch is fine; per-wallet slim
+    // records cache in sessionStorage.
+    async function fetchVotionSeries(wallet, days) {
+        const today = new Date(Date.now() - _dayMs);
+        const start = new Date(Math.max(new Date(CONFIG.votionTrackStart).getTime(), today.getTime() - (days - 1) * _dayMs));
+        const dates = [];
+        for (let t = start.getTime(); t <= today.getTime(); t += _dayMs) dates.push(dstr(new Date(t)));
+        const recs = await Promise.all(dates.map(async (d) => {
+            const ck = `mp_v:${wallet}:${d}`;
+            try { const c = sessionStorage.getItem(ck); if (c) return c === '!' ? null : { date: d, ...JSON.parse(c) }; } catch (e) {}
+            const day = await fetch(`${CONFIG.votionDailyBaseUrl}/${d}.json`).then(r => r.ok ? r.json() : null).catch(() => null);
+            let usd = 0, vp = 0, found = false;
+            for (const v of (day?.vaults || [])) for (const h of (v.holders || [])) if (h.address === wallet) { usd += h.underlying_usd || 0; vp += h.implied_vp || 0; found = true; }
+            const slim = found ? { u: usd, iv: vp } : (day ? { u: 0, iv: 0 } : null);
+            try { sessionStorage.setItem(ck, slim ? JSON.stringify(slim) : '!'); } catch (e) {}
+            return slim ? { date: d, ...slim } : null;
+        }));
+        return recs.filter(Boolean);
+    }
+    window.mpVotionDrill = async () => {
+        if (!store.wallet) return;
+        openModal('Votion position — history', '<div class="loading-pulse text-gray-500 text-sm py-6 text-center">Pulling the org daily archive…</div>');
+        const ser = await fetchVotionSeries(store.wallet, 9999);
+        $('mp-modal-body').innerHTML = `
+          ${chartSvg(ser.map(r => ({ x: r.date, y: r.u })), { color: '#c084fc', fmt: (v) => fmt$(v), h: 220, startNote: 'org archive began ' + CONFIG.votionTrackStart })}
+          <div class="text-[10px] text-gray-600 mt-2">Your summed vault-position value from the org Votion daily archive (hub-rate LST pricing). Every earlier day is a permanently missing point.</div>`;
+    };
     async function renderVotion(wallet) {
         const el = $('votion-table');
         if (!el) return;
@@ -1216,38 +1255,39 @@
             el.innerHTML = '<div class="text-gray-600 text-sm">Votion feed unavailable right now.</div>';
             return;
         }
+        // ORG feed shape (org-votion): meta{version,generated_at,status,
+        // discovery_basis} · totals{vault_count,unique_holders,total_tvl_usd
+        // (discovered),total_vault_tvl_usd (real)} · vaults[].{vdenom,
+        // exchange_rate, vault_tvl_usd, holder_count,
+        // holder_discovery_complete, holders[].{address, vtoken_balance,
+        // underlying_lst, underlying_usd, underlying_usd_price_source,
+        // share_of_vault_pct, implied_vp}}
         const rows = [];
+        let anyIncomplete = false;
         for (const v of d.vaults) {
+            if (v.holder_discovery_complete === false) anyIncomplete = true;
             for (const h of (v.holders || [])) {
                 if (h.address !== wallet) continue;
-                rows.push({ label: v.label || v.lst_symbol || shortAddr(v.address), lst: v.lst_symbol || '', vtok: h.vtoken_balance, und: h.underlying_lst, usd: h.underlying_usd, share: h.share_of_vault_pct, vp: h.implied_vp });
+                const lb = votionVaultLabel(v);
+                rows.push({ label: lb.label, lst: lb.sym, vtok: h.vtoken_balance, und: h.underlying_lst, usd: h.underlying_usd, share: h.share_of_vault_pct, vp: h.implied_vp, src: h.underlying_usd_price_source });
             }
         }
-        const cap = String(d.capturedAt || '').slice(0, 10);
-        // Honesty guard: the feed's discovered-holder balances vs actual vtoken
-        // supply. If discovery covers only a fraction of supply, an empty result
-        // means "can't see", not "you have nothing" — and we say so.
-        let supply = 0, found = 0;
-        for (const v of d.vaults) {
-            supply += Number(v.vdenom_supply_human) || 0;
-            for (const h of (v.holders || [])) found += Number(h.vtoken_balance) || 0;
-        }
-        const covPct = supply > 0 ? (found / supply * 100) : 100;
+        const cap = String(d.meta?.generated_at || '').slice(0, 10);
         store._votionUsd = rows.reduce((x, r) => x + (r.usd || 0), 0);
         const tv = $('tile-vot');
         if (tv) { tv.textContent = fmt$(store._votionUsd); const sub = $('tile-vot-sub'); if (sub) sub.innerHTML = rows.length ? `${rows.length} vault position${rows.length === 1 ? '' : 's'}` : 'no positions found'; }
         try { renderBanner(store.members.get(store.wallet)); } catch (e) {}
+        const honesty = anyIncomplete
+            ? `<span class="text-amber-400" title="${esc(String(d.meta?.discovery_basis || '').slice(0, 300))}">discovery incomplete on some vaults — absence isn\u2019t proof of absence</span>`
+            : `<span title="Every vault\u2019s holder discovery is complete this capture. Standing caveat from the capture doc: pre-retention depositors who never re-touched can\u2019t be discovered from pruned public nodes.">discovery complete</span>`;
         if (!rows.length) {
-            const partial = covPct < 90;
-            el.innerHTML = `<div class="text-gray-600 text-sm">${partial
-                ? 'No Votion position <span class="text-amber-400">found</span> for this address — but holder discovery currently sees only <span class="mono text-amber-400">' + covPct.toFixed(1) + '%</span> of vault tokens, so absence here isn\'t proof of absence. A discovery fix is queued on the capture side.'
-                : 'No Votion positions for this address.'}</div>
-                <div class="text-[10px] text-gray-600 mt-2">Feed live: ${d.vault_count ?? d.vaults.length} vaults · ${fmtUsd(d.total_tvl_usd)} TVL · ${d.unique_holders ?? '?'} holders discovered · captured ${cap}</div>`;
+            el.innerHTML = `<div class="text-gray-600 text-sm">No Votion positions found for this address.</div>
+                <div class="text-[10px] text-gray-600 mt-2">Org feed: ${(d.totals?.vault_count) ?? d.vaults.length} vaults · ${fmtUsd(d.totals?.total_vault_tvl_usd)} vault TVL · ${d.totals?.unique_holders ?? '?'} holders discovered · ${honesty} · captured ${cap}</div>`;
             return;
         }
         rows.sort((a, b) => (b.usd || 0) - (a.usd || 0));
-        const totUsd = rows.reduce((s, r) => s + (r.usd || 0), 0);
-        const totVp = rows.reduce((s, r) => s + (r.vp || 0), 0);
+        const totUsd = rows.reduce((x, r) => x + (r.usd || 0), 0);
+        const totVp = rows.reduce((x, r) => x + (r.vp || 0), 0);
         el.innerHTML = `
             <div class="space-y-1.5">${rows.map(r => `
                 <div class="flex items-center justify-between p-2 rounded-lg bg-white/[0.02]">
@@ -1256,15 +1296,26 @@
                         <span class="text-[9px] text-gray-600 mono">${fmtNum(r.vtok)} vtokens → ${fmtNum(r.und)} ${esc(r.lst)} · ${(r.share || 0).toFixed(1)}% of vault</span>
                     </div>
                     <div class="text-right shrink-0">
-                        <div class="mono text-sm text-cyan-300 font-semibold">${fmtUsd(r.usd)}</div>
-                        <div class="text-[9px] text-gray-500 mono" title="VP your vault share implies from the vault's TLA lock — shown separately from the VP tile">${fmtNum(r.vp)} implied VP</div>
+                        <div class="mono text-sm text-cyan-300 font-semibold" title="Priced ${esc(r.src || 'hub_exchange_rate')} — the LST\u2019s own hub rate × LUNA USD per the pricing audit; catalog price only as a labeled fallback.">${fmtUsd(r.usd)}</div>
+                        <div class="text-[9px] text-gray-500 mono" title="VP your vault share implies from the vault\u2019s TLA lock (fixed + boost — the corrected VP definition)">${fmtNum(r.vp)} implied VP</div>
                     </div>
                 </div>`).join('')}
             </div>
-            <div class="flex justify-between text-[11px] text-gray-400 mt-2 pt-2 border-t border-white/10">
-                <span>${rows.length} position${rows.length === 1 ? '' : 's'} · captured ${cap}${covPct < 90 ? ` · <span class="text-amber-500" title="Discovered holder balances vs vtoken supply — the feed cannot yet see all holders">discovery ${covPct.toFixed(0)}%</span>` : ''}</span>
+            <div class="flex justify-between items-center text-[11px] text-gray-400 mt-2 pt-2 border-t border-white/10 flex-wrap gap-1">
+                <span>${rows.length} position${rows.length === 1 ? '' : 's'} · captured ${cap} · ${honesty}</span>
                 <span class="mono">${fmtUsd(totUsd)} · ${fmtNum(totVp)} implied VP</span>
-            </div>`;
+            </div>
+            <div class="mt-2" id="votion-spark"></div>`;
+        // 30d sparkline from the org daily archive (async)
+        (async () => {
+            const ser = await fetchVotionSeries(wallet, 30);
+            const sp = $('votion-spark');
+            if (store.wallet !== wallet || !sp) return;
+            const vals = ser.map(r => r.u);
+            sp.innerHTML = vals.filter(v => v != null).length >= 2
+                ? `<div class="flex items-center gap-2 text-[10px] text-gray-600 cursor-pointer" onclick="mpVotionDrill()" title="Tap for the full history">${sparkSvg(vals, '#c084fc')}<span>your Votion value, last 30 days (org daily archive since ${CONFIG.votionTrackStart}) — tap for full history</span></div>`
+                : '';
+        })().catch(() => {});
     }
 
     // ---------------- Lifetime cost & activity (tla-flows/pnl Phase A) ----------------
