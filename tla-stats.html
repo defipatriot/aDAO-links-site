@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Terra Liquidity Alliance Tracker | Alliance DAO</title>
+    <title>Terra Liquidity Alliance Tracker | Alliance DAO — TEST</title>
     
     <!-- Favicons (hosted in aDAO-Image-Files repo) -->
     <link rel="icon" type="image/x-icon" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/favicon.ico">
@@ -276,11 +276,11 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 4px;
-            padding: 6px 10px;
-            border-radius: 6px;
-            font-size: 11px;
-            font-weight: 500;
+            gap: 5px;
+            padding: 5px 12px;
+            border-radius: 9999px;      /* Rev T2.2: status pill */
+            font-size: 12px;
+            font-weight: 700;
             cursor: pointer;
             transition: all 0.2s ease;
             background: rgba(255, 255, 255, 0.04);
@@ -288,6 +288,12 @@
             min-height: 28px;
             flex-shrink: 0;
         }
+        /* Rev T2.2: uniform hero tiles — every tile is a drill (click anywhere),
+           same three-row rhythm (label / value / sub), status pill below. */
+        .stat-box.drillable { cursor: pointer; transition: background 0.15s ease; }
+        .stat-box.drillable:hover { background: rgba(255, 255, 255, 0.03); }
+        .stat-box.drillable:hover .stat-label::after { content: ' \f065'; font-family: 'Font Awesome 6 Free'; font-weight: 900; font-size: 8px; opacity: 0.5; }
+        .stat-sub { font-size: 10px; color: #6b7280; margin-top: 2px; min-height: 14px; }
         
         .stat-trend:hover {
             background: rgba(255, 255, 255, 0.08);
@@ -295,15 +301,15 @@
         }
         
         .stat-trend.positive {
-            color: #10b981;
-            background: rgba(16, 185, 129, 0.08);
-            border-color: rgba(16, 185, 129, 0.2);
+            color: #34d399;
+            background: rgba(16, 185, 129, 0.12);
+            border-color: rgba(16, 185, 129, 0.35);
         }
         
         .stat-trend.negative {
-            color: #ef4444;
-            background: rgba(239, 68, 68, 0.08);
-            border-color: rgba(239, 68, 68, 0.2);
+            color: #f87171;
+            background: rgba(239, 68, 68, 0.12);
+            border-color: rgba(239, 68, 68, 0.35);
         }
         
         .stat-trend.neutral {
@@ -873,7 +879,7 @@
         <div class="max-w-7xl mx-auto px-4 py-4">
             <div class="flex items-center justify-between flex-wrap gap-4">
                 <div>
-                    <h1 class="text-xl font-bold">Terra Liquidity Alliance Tracker</h1>
+                    <h1 class="text-xl font-bold">Terra Liquidity Alliance Tracker <span class="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 align-middle font-semibold">TEST T3</span></h1>
                     <p class="text-xs text-gray-500">
                         <a href="https://www.erisprotocol.com/terra/liquidity-hub?tab=liquidity" target="_blank" class="text-purple-400 hover:text-purple-300 hover:underline">
                             <i class="fas fa-external-link-alt text-[9px] mr-1"></i>Eris TLA
@@ -932,48 +938,53 @@
     <!-- Stats Bar -->
     <section class="max-w-7xl mx-auto px-4 py-6">
         <div class="glass-card grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 divide-x divide-white/5">
-            <div class="stat-box">
+            <div class="stat-box drillable" onclick="showHistoryModal('active-pools')" title="Click for epoch history">
                 <div class="stat-box-content">
-                    <div class="stat-label">Active Astroport Pools</div>
-                    <div id="stat-astro-pools" class="stat-value mono">-</div>
+                    <div class="stat-label">Active Pools</div>
+                    <div id="stat-active-pools" class="stat-value mono">-</div>
+                    <div id="stat-active-pools-sub" class="stat-sub">-</div>
                 </div>
-                <div id="trend-astro-pools" class="stat-trend" onclick="showHistoryModal('astro-pools')"></div>
+                <div id="trend-active-pools" class="stat-trend" onclick="event.stopPropagation();showHistoryModal('active-pools')"></div>
             </div>
-            <div class="stat-box">
+            <div class="stat-box drillable" onclick="showHistoryModal('tla-tvl')" title="Click for epoch history">
                 <div class="stat-box-content">
-                    <div class="stat-label">Active Skeleton Pools</div>
-                    <div id="stat-ww-pools" class="stat-value mono">-</div>
+                    <div class="stat-label">TLA TVL <i class="fas fa-info-circle text-gray-500 text-xs ml-1 cursor-help" onclick="event.stopPropagation()" title="Total USD staked into TLA gauges across all active pools — the capital the gauge war is fighting over."></i></div>
+                    <div id="stat-tla-tvl" class="stat-value mono">-</div>
+                    <div id="stat-tla-tvl-sub" class="stat-sub">-</div>
                 </div>
-                <div id="trend-ww-pools" class="stat-trend" onclick="showHistoryModal('ww-pools')"></div>
+                <div id="trend-tla-tvl" class="stat-trend" onclick="event.stopPropagation();showHistoryModal('tla-tvl')"></div>
             </div>
-            <div class="stat-box">
+            <div class="stat-box drillable" onclick="showHistoryModal('epoch-rewards')" title="Click for epoch history">
                 <div class="stat-box-content">
                     <div class="stat-label">Epoch Rewards</div>
                     <div id="stat-epoch-rewards" class="stat-value-sm mono">-</div>
-                    <div id="stat-epoch-rewards-sub" class="text-[10px] text-gray-500 mt-0.5">-</div>
+                    <div id="stat-epoch-rewards-sub" class="stat-sub">-</div>
                 </div>
-                <div id="trend-epoch-rewards" class="stat-trend" onclick="showHistoryModal('epoch-rewards')"></div>
+                <div id="trend-epoch-rewards" class="stat-trend" onclick="event.stopPropagation();showHistoryModal('epoch-rewards')"></div>
             </div>
-            <div class="stat-box">
+            <div class="stat-box drillable" onclick="showHistoryModal('epoch-bribes')" title="Click for epoch history">
                 <div class="stat-box-content">
-                    <div class="stat-label">Epoch Bribes <i class="fas fa-info-circle text-gray-500 text-xs ml-1 cursor-pointer" onclick="event.stopPropagation(); showBribesModal();" title="Click for breakdown"></i></div>
+                    <div class="stat-label">Epoch Bribes <i class="fas fa-info-circle text-gray-500 text-xs ml-1 cursor-pointer" onclick="event.stopPropagation(); showBribesModal();" title="Click for the PD / Other split by pool"></i></div>
                     <div id="stat-total-bribes" class="stat-value mono">-</div>
+                    <div id="stat-total-bribes-sub" class="stat-sub">-</div>
                 </div>
-                <div id="trend-epoch-bribes" class="stat-trend" onclick="showHistoryModal('epoch-bribes')"></div>
+                <div id="trend-epoch-bribes" class="stat-trend" onclick="event.stopPropagation();showHistoryModal('epoch-bribes')"></div>
             </div>
-            <div class="stat-box">
+            <div class="stat-box drillable" onclick="showHistoryModal('apr-non')" title="Click for epoch history">
                 <div class="stat-box-content">
                     <div class="stat-label">Avg APR (Non-Amp)</div>
                     <div id="stat-avg-apr-non" class="stat-value mono">-</div>
+                    <div id="stat-avg-apr-non-sub" class="stat-sub">-</div>
                 </div>
-                <div id="trend-apr-non" class="stat-trend" onclick="showHistoryModal('apr-non')"></div>
+                <div id="trend-apr-non" class="stat-trend" onclick="event.stopPropagation();showHistoryModal('apr-non')"></div>
             </div>
-            <div class="stat-box">
+            <div class="stat-box drillable" onclick="showHistoryModal('apr-amp')" title="Click for epoch history">
                 <div class="stat-box-content">
                     <div class="stat-label">Avg APR (Amplified)</div>
                     <div id="stat-avg-apr-amp" class="stat-value mono">-</div>
+                    <div id="stat-avg-apr-amp-sub" class="stat-sub">-</div>
                 </div>
-                <div id="trend-apr-amp" class="stat-trend" onclick="showHistoryModal('apr-amp')"></div>
+                <div id="trend-apr-amp" class="stat-trend" onclick="event.stopPropagation();showHistoryModal('apr-amp')"></div>
             </div>
         </div>
 
@@ -1018,14 +1029,14 @@
                 <div class="stat-box-content">
                     <div class="stat-label text-amber-400/80">Member Avg APR (Non-Amp)</div>
                     <div id="stat-member-apr-non" class="stat-value mono text-amber-300">-</div>
-                    <div class="ms-sub"></div>
+                    <div class="ms-sub" id="stat-member-apr-non-sub"></div>
                 </div>
             </div>
             <div class="stat-box">
                 <div class="stat-box-content">
                     <div class="stat-label text-amber-400/80">Member Avg APR (Amplified)</div>
                     <div id="stat-member-apr-amp" class="stat-value mono text-amber-300">-</div>
-                    <div class="ms-sub"></div>
+                    <div class="ms-sub" id="stat-member-apr-amp-sub"></div>
                 </div>
             </div>
         </div>
@@ -1162,7 +1173,12 @@
                 <div class="glass-card p-6">
                     <h3 class="font-semibold mb-4 flex items-center gap-2 cursor-pointer hover:text-cyan-400 transition-colors" onclick="showRankingModal('volume')">
                         <i class="fas fa-chart-line text-orange-400"></i> Top Avg Volume
-                        <i class="fas fa-external-link-alt text-gray-500 text-xs ml-auto"></i>
+                        <span class="flex items-center gap-1 ml-auto mr-2" onclick="event.stopPropagation()">
+                            <button type="button" data-voldex="all" class="vol-dex-btn text-[10px] px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-medium">All</button>
+                            <button type="button" data-voldex="astro" class="vol-dex-btn text-[10px] px-2 py-0.5 rounded bg-white/5 text-gray-400 font-medium">Astro</button>
+                            <button type="button" data-voldex="ss" class="vol-dex-btn text-[10px] px-2 py-0.5 rounded bg-white/5 text-gray-400 font-medium">SS</button>
+                        </span>
+                        <i class="fas fa-external-link-alt text-gray-500 text-xs"></i>
                     </h3>
                     <p class="text-[11px] text-gray-500 -mt-2 mb-3" title="Average of each pool's daily-average trading volume (in USD) across the last 4 completed epochs. The % is vs the prior 4-epoch window. Note: volume is measured in USD, so a pool's % can move from token-price changes, not just trading activity. Arrows show rank movement vs the previous window.">4-epoch avg (USD) · ▲▼ vs prev epoch</p>
                     <div id="top-vp-pools" class="space-y-3">
@@ -1186,9 +1202,13 @@
                 <div class="glass-card p-6">
                     <h3 class="font-semibold mb-4 flex items-center gap-2 cursor-pointer hover:text-cyan-400 transition-colors" onclick="showRankingModal('apr')">
                         <i class="fas fa-percentage text-green-400"></i> Top by APR
-                        <i class="fas fa-external-link-alt text-gray-500 text-xs ml-auto"></i>
+                        <span class="flex items-center gap-1 ml-auto mr-2" onclick="event.stopPropagation()">
+                            <button type="button" data-aprmode="amp" class="apr-mode-btn text-[10px] px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-medium">Amp</button>
+                            <button type="button" data-aprmode="non" class="apr-mode-btn text-[10px] px-2 py-0.5 rounded bg-white/5 text-gray-400 font-medium">Non</button>
+                        </span>
+                        <i class="fas fa-external-link-alt text-gray-500 text-xs"></i>
                     </h3>
-                    <p class="text-[11px] text-gray-500 -mt-2 mb-3" title="Current amplified APR (annualized emissions ÷ value staked in TLA, × bucket factor, same $20K-min filter and 200% cap as the live UI). Arrows show rank movement vs the last completed epoch's comparable APR. Click for the drivers behind each pool's APR.">live · ▲▼ APR rank vs last epoch</p>
+                    <p class="text-[11px] text-gray-500 -mt-2 mb-3" id="apr-tile-sub" title="Current APR (annualized emissions ÷ value staked in TLA; amplified applies the bucket factor; same $20K-min filter and 200% cap as the live UI). Arrows show rank movement vs the last completed epoch's comparable amplified APR — history is amplified-based, so rank arrows show only in Amp mode. Click for the drivers behind each pool's APR.">live amplified · ▲▼ APR rank vs last epoch</p>
                     <div id="top-apr-pools" class="space-y-3">
                         <div class="loading-pulse text-gray-500 text-sm">Loading...</div>
                     </div>
@@ -1226,8 +1246,9 @@
                     <div class="flex items-center justify-between mb-4">
                         <h3 class="font-semibold flex items-center gap-2"><i class="fas fa-hand-holding-dollar text-amber-300"></i> Top Bribers</h3>
                         <div class="flex gap-1 text-[10px]">
-                            <button id="bribe-mode-alltime" onclick="setBribeBoardMode('alltime')" class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300" title="All-time bribe providers — who funds the vote incentives, valued at placement">All-time</button>
-                            <button id="bribe-mode-earners" onclick="setBribeBoardMode('earners')" class="px-2 py-0.5 rounded bg-white/5 text-gray-400" title="Pending bribe rewards accrued this epoch, per voting wallet">Earners</button>
+                            <button id="bribe-mode-alltime" onclick="setBribeBoardMode('alltime')" class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300" title="All-time bribe providers — who funds the vote incentives, valued at placement">Bribers</button>
+                            <button id="bribe-mode-earned" onclick="setBribeBoardMode('earned')" class="px-2 py-0.5 rounded bg-white/5 text-gray-400" title="All-time bribe rewards CLAIMED per wallet, valued at claim date (from the captured claim events)">Earned</button>
+                            <button id="bribe-mode-earners" onclick="setBribeBoardMode('earners')" class="px-2 py-0.5 rounded bg-white/5 text-gray-400" title="Pending bribe rewards accruing THIS epoch, per voting wallet (vote-share × live pots)">Pending</button>
                         </div>
                     </div>
                     <p id="top-bribers-banner" class="text-[11px] text-gray-500 -mt-2 mb-3">all-time bribe providers · valued at placement</p>
@@ -1294,6 +1315,10 @@
                     </div>
                 </div>
                 
+                <!-- Shift summary (Planned view only): the bucket-level current→projected read.
+                     Filled by renderWaterfallChart; hidden in the Locked-in view. -->
+                <div id="waterfall-shift-summary" class="hidden text-[11px] text-gray-400 mb-2 px-1"></div>
+
                 <!-- Scale bar — left-padded by the label gutter (150px) so the axis lines up
                      with the bar plot area, which starts after each row's name column. -->
                 <div class="relative mb-1 h-6" id="waterfall-scale-bar" style="padding-left: 150px;">
@@ -1380,10 +1405,17 @@
                 <div id="exit-risk-summary" class="mb-4"></div>
                 <!-- Slippage simulator (Stage B3) -->
                 <div class="rounded-lg bg-white/[0.02] p-3 mb-4" id="slippage-sim-card">
-                    <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
+                    <!-- Collapsed by default (Camron 2026-08-02: tools shouldn't interrupt the
+                         summary→table read). Header toggles the body; the full-sim link stays live. -->
+                    <div class="flex items-center justify-between flex-wrap gap-2 cursor-pointer select-none" onclick="toggleSlipCard()">
                         <div class="text-sm font-semibold flex items-center gap-2"><i class="fas fa-arrows-turn-to-dots text-cyan-400"></i> Trade Impact Simulator <span id="slip-member-chip" class="hidden text-[9px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300"></span>
-                            <a href="slippage.html" class="text-[10px] px-2 py-0.5 rounded-full bg-teal-500/15 text-teal-300 hover:bg-teal-500/25 font-medium" title="The full-page version: pick any token, slide the amount, every pool ranked — bigger, easier, more fun."><i class="fas fa-water mr-1"></i>open the full simulator <i class="fas fa-arrow-right text-[8px]"></i></a>
+                            <span class="text-[9px] text-gray-600 font-normal" id="slip-card-hint">what a trade or a zap in/out of your LPs costs — tap to open</span>
+                            <a href="slippage.html" onclick="event.stopPropagation()" class="text-[10px] px-2 py-0.5 rounded-full bg-teal-500/15 text-teal-300 hover:bg-teal-500/25 font-medium" title="The full-page version: pick any token, slide the amount, every pool ranked — bigger, easier, more fun."><i class="fas fa-water mr-1"></i>open the full simulator <i class="fas fa-arrow-right text-[8px]"></i></a>
                         </div>
+                        <i id="slip-card-chev" class="fas fa-chevron-down text-[10px] text-gray-500 transition-transform"></i>
+                    </div>
+                    <div id="slip-card-body" class="hidden mt-2">
+                    <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
                         <div class="flex items-center gap-1.5 flex-wrap">
                             <button type="button" data-slipdir="toLuna" class="slip-dir-btn text-[10px] px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-medium" title="Selling the paired asset INTO the pool for LUNA (e.g. $100 of USDC sold for LUNA)">Asset → LUNA</button>
                             <button type="button" data-slipdir="fromLuna" class="slip-dir-btn text-[10px] px-2 py-0.5 rounded bg-white/5 text-gray-400 font-medium" title="Selling LUNA INTO the pool for the paired asset (e.g. $100 of LUNA sold for USDC)">LUNA → Asset</button>
@@ -1397,7 +1429,11 @@
                     </div>
                     <p class="text-[10px] text-gray-500 mb-2">What a one-sided trade of this size costs in price impact, per pool, from live reserves. <span class="desc-toggle" onclick="toggleDesc('slip-full', this)">how it's estimated</span></p>
                     <div id="slip-full" class="desc-full"><span class="ex-lead">The model:</span> For standard (xyk) pools, impact = trade ÷ (input-side reserve + trade) — the exact constant-product execution-price formula, using the pool's real per-side balances, worst direction shown. Concentrated and stable pools bunch their liquidity near the current price, so their true impact is LOWER than this figure — those rows show "≤" and grade on the bound. This ignores fees, routing through other pools, and same-block competition; treat it as a planning number, not a quote. Grades: A under 0.5% · B under 1% · C under 3% · D under 8% · F above.</div>
+                    <!-- Zap planner (member mode): per-position zap-out/zap-in routing costs.
+                         Rendered by renderZapPlanner when a wallet is selected. -->
+                    <div id="zap-panel" class="hidden mb-3"></div>
                     <div id="slip-rows" class="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1"></div>
+                    </div><!-- /slip-card-body -->
                 </div>
                 <div id="exit-risk-panel" class="space-y-2">
                     <div class="text-gray-500 text-sm">Loading...</div>
@@ -2445,21 +2481,34 @@
                     <span class="text-sm text-orange-400">Phoenix Directive</span>
                     <i class="fas fa-external-link-alt text-[10px] text-orange-400/50"></i>
                 </a>
+                <!-- PD Watch slot: goes live with pd-watch.html (spec committed, data product live) -->
+                <span class="flex items-center gap-2 px-3 py-2 bg-white/[0.02] border border-white/5 rounded-lg opacity-50 cursor-default" title="PD Directive Watch — allocation vs stated basis, drift, and support history. Coming soon; the data product behind it is already live.">
+                    <i class="fas fa-magnifying-glass-chart text-gray-500"></i>
+                    <span class="text-sm text-gray-500">PD Watch</span>
+                    <span class="text-[9px] px-1.5 py-0.5 rounded bg-white/5 text-gray-500">soon</span>
+                </span>
             </div>
         </div>
         
-        <!-- Disclaimers -->
-        <div class="mb-6 p-4 bg-gray-800/30 border border-gray-700/50 rounded-lg text-[11px] text-gray-500 space-y-2">
-            <p><strong class="text-gray-400">⚠️ Not Financial Advice:</strong> The information provided on this dashboard is for informational and educational purposes only. It should not be construed as financial, investment, or trading advice. Always do your own research (DYOR) and consult with qualified professionals before making any financial decisions.</p>
-            <p><strong class="text-gray-400">📊 Data Accuracy:</strong> While we strive to maintain accurate and up-to-date information, this dashboard relies on third-party data sources and automated calculations. Data may be delayed, incomplete, or contain errors. We make no guarantees regarding the accuracy, completeness, or reliability of any information presented.</p>
-            <p><strong class="text-gray-400">🔗 Third-Party Links:</strong> This site may contain links to external websites. We are not responsible for the content or accuracy of any third-party sites.</p>
-            <p><strong class="text-gray-400">💡 Use at Your Own Risk:</strong> Any actions taken based on the information on this dashboard are at your own risk. The creators and contributors of this dashboard shall not be held liable for any losses, damages, or claims arising from the use of this information.</p>
+        <!-- Disclaimers — one line + expander (Camron 2026-08-02: bottom-of-page fresh look;
+             the four-paragraph block was 2023-era weight for a footer) -->
+        <div class="mb-6 p-3 bg-gray-800/30 border border-gray-700/50 rounded-lg text-[11px] text-gray-500">
+            <div class="flex items-center justify-between gap-3 flex-wrap">
+                <span><strong class="text-gray-400">\u26a0\ufe0f Not financial advice.</strong> Community-built analytics on third-party data \u2014 figures can be delayed or wrong; verify before acting, and use at your own risk.</span>
+                <button onclick="document.getElementById('footer-disclaimers-full').classList.toggle('hidden')" class="text-[10px] text-gray-500 hover:text-cyan-400 transition-colors shrink-0">full disclaimers <i class="fas fa-chevron-down text-[8px]"></i></button>
+            </div>
+            <div id="footer-disclaimers-full" class="hidden mt-3 pt-3 border-t border-gray-700/50 space-y-2">
+                <p><strong class="text-gray-400">Not Financial Advice:</strong> The information provided on this dashboard is for informational and educational purposes only. It should not be construed as financial, investment, or trading advice. Always do your own research (DYOR) and consult with qualified professionals before making any financial decisions.</p>
+                <p><strong class="text-gray-400">Data Accuracy:</strong> While we strive to maintain accurate and up-to-date information, this dashboard relies on third-party data sources and automated calculations. Data may be delayed, incomplete, or contain errors. We make no guarantees regarding the accuracy, completeness, or reliability of any information presented.</p>
+                <p><strong class="text-gray-400">Third-Party Links:</strong> This site may contain links to external websites. We are not responsible for the content or accuracy of any third-party sites.</p>
+                <p><strong class="text-gray-400">Use at Your Own Risk:</strong> Any actions taken based on the information on this dashboard are at your own risk. The creators and contributors of this dashboard shall not be held liable for any losses, damages, or claims arising from the use of this information.</p>
+            </div>
         </div>
         
         <!-- Credits — minimal, since rev/changelog and footer info come from shared footer below -->
         <div class="flex flex-wrap items-center justify-center gap-4">
             <div class="text-xs text-gray-500">
-                Data from <a href="https://github.com/defipatriot/tla_json_storage" target="_blank" class="text-cyan-400 hover:underline">GitHub</a>
+                Open data \u00b7 captured &amp; published in <a href="https://github.com/thealliancedao/tla-core" target="_blank" class="text-cyan-400 hover:underline">thealliancedao/tla-core</a>
             </div>
         </div>
     </footer>
@@ -2555,6 +2604,7 @@
         poolStatusHistoryUrl: 'https://raw.githubusercontent.com/defipatriot/tla-snapshot-data_2026/main/data/pool-status-history.json',
         networkPricesUrl:  'https://raw.githubusercontent.com/defipatriot/network-and-prices-data_2026/main/data/network-and-prices.json',
         adaoPositionsUrl:  'https://raw.githubusercontent.com/defipatriot/adao-positions-data_2026/main/data/current.json',
+        pdBribesProductUrl: 'https://raw.githubusercontent.com/thealliancedao/tla-core/main/tla-voting/pd-bribes/current.json',
         adaoMembersUrl:    'https://raw.githubusercontent.com/defipatriot/adao-positions-data_2026/main/data/members.json',
         // Community layer (Stage A, 2026-07): all TLA lockers w/ names + first participation,
         // registered allies (Pixel Lions / Lion DAO), and the org-side aDAO staker roster.
@@ -2616,7 +2666,7 @@
     // ============================================================
     // STATE
     // ============================================================
-    const store = {
+    const store = window.__tlaStore = {   // __tlaStore: observation hook for the jsdom gate harness (read-only)
         epoch: null,
         phase: 'end',
         data: null,
@@ -3486,6 +3536,10 @@
 
             // === Fetch all primary sources in parallel ===
             const lastCompleteEpoch = currentEpoch - 1;
+            // Rev T2.6: PD governance-bribe product (org derive) — fetched in
+            // parallel, consumed product-first by buildBribesIndex; graceful
+            // null until the derive's first publish.
+            const pdBribesProductP = fetch(CONFIG.pdBribesProductUrl + '?t=' + Date.now()).then(r => r.ok ? r.json() : null).catch(() => null);
             const [
                 tlaSnapshotResp,
                 networkPricesResp,
@@ -3596,6 +3650,8 @@
             store.adaoPositions = adaoPositionsResp;
             store.bribesCurrent = bribesCurrentResp;
             store.pdBribesData = pdBribesResp;
+            store.pdBribesProduct = await pdBribesProductP;
+            if (store.pdBribesProduct) console.log(`pd-bribes product: ${store.pdBribesProduct.meta?.verified_placements} verified placements (${store.pdBribesProduct.meta?.version})`);
             // FUEL latest USD price from its own data repo (not in network-and-prices).
             store.fuelPriceUsd = (() => {
                 const hist = fuelIndexResp?.history;
@@ -3804,6 +3860,7 @@
             // filter + 200% cap the live APR uses (so current vs prev is apples-to-apples).
             // Empty until apr-history.json exists -> the APR badge simply doesn't render.
             store.prevAprByName = {};
+            store.aprHistory = aprHistResp;   // Rev T2: full per-epoch rollup kept for the hero sparkline
             const aprBaseIdx = buildAprBaselineIndex(aprHistResp, lastCompleteEpoch);
             Object.entries(aprBaseIdx).forEach(([k, v]) => {
                 const nm = k.split('|')[0];
@@ -4204,12 +4261,42 @@
         if (Array.isArray(pdBribes)) {
             const ep = tlaSnapshot.epoch?.currentEpoch ?? tlaSnapshot.epoch?.epoch ?? (typeof tlaSnapshot.epoch === 'number' ? tlaSnapshot.epoch : null) ?? tlaSnapshot.current_epoch ?? null;
             const range = pdBribes.find(r => ep != null && ep >= r.start_epoch && ep <= r.end_epoch);
+            // Rev T2.1: the PD split comes from a hand-maintained legacy file —
+            // record its coverage so the modal can DECLARE staleness instead of
+            // silently showing PD $0.00 when the live epoch runs past it
+            // (observed live: file ends e188, epoch 196 — PD's prop-247/250 LUNA
+            // was falling into "Other" with no explanation). Totals stay
+            // chain-true either way; only the split is affected.
+            store.pdFileCoverageEnd = Math.max(...pdBribes.map(r => r.end_epoch || 0), 0);
+            store.pdFileStale = ep != null && store.pdFileCoverageEnd > 0 && ep > store.pdFileCoverageEnd;
             if (range) {
                 for (const b of (range.bribes || [])) {
                     const key = `${normName(b.pool)}|${(b.gauge || '').toLowerCase()}`;
                     const luna = b.luna_per_epoch || 0;
                     pdLunaByKey[key] = (pdLunaByKey[key] || 0) + luna;
                 }
+            }
+        }
+        // Rev T2.6: ORG PRODUCT FIRST. The pd-bribes derive (proposal-module
+        // state × captured events, per-epoch spread exact) supersedes the
+        // hand-maintained file whenever it covers the current epoch — keyed by
+        // gauge_pool_id (chain identity), not name matching. The legacy path
+        // above stays as fallback until the product's first publish, then is
+        // simply never reached.
+        store.pdSplitSource = 'legacy-file';
+        let pdLunaByGid = null;
+        {
+            const pbp = store.pdBribesProduct;
+            const epNow = store.epoch ?? store.currentRealEpoch ?? null;
+            const slot = epNow != null ? (pbp?.by_epoch?.[String(epNow)] || pbp?.by_epoch?.[epNow]) : null;
+            if (slot && slot.pools) {
+                pdLunaByGid = {};
+                for (const [gid, ps] of Object.entries(slot.pools)) {
+                    pdLunaByGid[`${gid}|${(ps.gauge || '').toLowerCase()}`] = ps.by_denom?.['native:uluna'] || 0;
+                    pdLunaByGid[gid] = (pdLunaByGid[gid] || 0) + (ps.by_denom?.['native:uluna'] || 0);
+                }
+                store.pdSplitSource = 'org-capture';
+                store.pdFileStale = false;   // product is current by construction (rebuilt with rollups; PD's next prop auto-appears)
             }
         }
         // Attribute each PD (name|bucket) amount once, to the first matching pool variant
@@ -4236,15 +4323,19 @@
                 }
             }
             const key = `${normName(p.name)}|${(p.bucket || '').toLowerCase()}`;
-            const pdLuna = pdLunaByKey[key] || 0;
+            const gidGaugeKey = `${p.gauge_pool_id}|${(p.bucket || '').toLowerCase()}`;
+            const pdLuna = pdLunaByGid
+                ? (pdLunaByGid[gidGaugeKey] ?? pdLunaByGid[p.gauge_pool_id] ?? 0)
+                : (pdLunaByKey[key] || 0);
             let pdUsd = 0, pdLunaAssigned = 0;
-            if (pdLuna > 0 && !pdConsumed[key]) {
+            if (pdLuna > 0 && !(pdConsumed[key] && !pdLunaByGid) && !(pdLunaByGid && pdConsumed[gidGaugeKey])) {
                 const hasActive = activeNow.length > 0;
                 if (hasActive || totalUsd > 0) {
                     const pdComputed = lunaPrice > 0 ? pdLuna * lunaPrice : 0;
                     pdUsd = (totalUsd > 0) ? Math.min(pdComputed, totalUsd) : pdComputed;
                     pdLunaAssigned = pdLuna;
                     pdConsumed[key] = true;
+                    if (pdLunaByGid) { pdConsumed[gidGaugeKey] = true; delete pdLunaByGid[p.gauge_pool_id]; delete pdLunaByGid[gidGaugeKey]; }
                 }
             }
             const otherUsdRaw = (totalUsd > 0) ? Math.max(0, totalUsd - pdUsd) : 0;
@@ -4912,11 +5003,23 @@
         
         // Astroport active pools
         const astroPools = activePools.filter(p => p.dex?.includes('Astro'));
-        document.getElementById('stat-astro-pools').textContent = astroPools.length;
+        // (merged Active Pools + TVL setters moved below wwPools — Rev T2)
         
         // Skeleton Swap active pools  
         const wwPools = activePools.filter(p => p.dex?.includes('Skeleton'));
-        document.getElementById('stat-ww-pools').textContent = wwPools.length;
+        // Rev T2: merged Active Pools tile (count + per-DEX split) + TLA TVL tile.
+        document.getElementById('stat-active-pools').textContent = astroPools.length + wwPools.length;
+        const apSub = document.getElementById('stat-active-pools-sub');
+        if (apSub) apSub.textContent = `${astroPools.length} Astro \u00b7 ${wwPools.length} SS`;
+        const tvlEl = document.getElementById('stat-tla-tvl');
+        if (tvlEl) tvlEl.textContent = fmt$(store.tlaPools.reduce((s, p) => s + (p.tla_staked || 0), 0));
+        // Rev T2.2: uniform sub-lines — every tile carries one line of context.
+        const setSub = (id, txt) => { const e = document.getElementById(id); if (e) e.textContent = txt; };
+        setSub('stat-tla-tvl-sub', 'staked into TLA gauges');
+        setSub('stat-total-bribes-sub', 'active this epoch \u00b7 \u24d8 for PD/Other split');
+        setSub('stat-avg-apr-non-sub', 'simple avg \u00b7 active pools');
+        setSub('stat-avg-apr-amp-sub', 'with bucket amplification');
+
         
         // TLA Epoch Rewards in LUNA (using Luna price from aDAO snap or token_prices)
         const totalRewardsPerYearUSD = store.tlaPools.reduce((sum, p) => sum + (p.rewards_per_year || 0), 0);
@@ -5103,10 +5206,12 @@
         
         const nonAmpAprs = activePoolsWithApr.map(p => p.apr_non_amp || 0).filter(a => a > 0);
         const avgNonApr = nonAmpAprs.length ? nonAmpAprs.reduce((a, b) => a + b, 0) / nonAmpAprs.length : 0;
+        store.avgNonApr = avgNonApr;   // Rev T1: member-band delta chips read these
         document.getElementById('stat-avg-apr-non').textContent = fmtPct(avgNonApr);
         
         const ampAprs = activePoolsWithApr.map(p => p.apr_amplified || 0).filter(a => a > 0);
         const avgAmpApr = ampAprs.length ? ampAprs.reduce((a, b) => a + b, 0) / ampAprs.length : 0;
+        store.avgAmpApr = avgAmpApr;
         document.getElementById('stat-avg-apr-amp').textContent = fmtPct(avgAmpApr);
         
         // Last updated — element removed in Rev 1.15 (info now in changelog), kept null-safe in case it's restored
@@ -5223,6 +5328,10 @@
                     <div class="flex flex-col min-w-0">
                         <span class="text-sm font-medium truncate">${who(x.m.wallet)}${isYou ? ' <span class="text-[8px] px-1 py-px rounded bg-amber-500/25 text-amber-300 font-semibold">SELECTED</span>' : ''}</span>
                         <span class="text-[9px] text-gray-600">${fmtNum(x.cur)} \u2192 ${fmtNum(x.pot)} VP if adjusted</span>
+                        <div class="h-1 rounded-full bg-white/5 overflow-hidden flex mt-1 w-36 max-w-full" title="cyan = live VP · amber = stale (recoverable)">
+                            <div class="h-full bg-cyan-400/70" style="width:${(x.pot > 0 ? x.cur / x.pot * 100 : 0).toFixed(1)}%"></div>
+                            <div class="h-full bg-amber-500/60" style="width:${pctOfPot.toFixed(1)}%"></div>
+                        </div>
                     </div>
                 </div>
                 <div class="text-right shrink-0"><span class="mono text-sm text-amber-300 font-semibold">+${fmtNum(x.gap)}</span><div class="text-[9px] text-gray-600">${pctOfPot.toFixed(0)}% stale</div></div>
@@ -5264,6 +5373,9 @@
                     <div class="flex flex-col min-w-0">
                         <span class="text-sm font-medium truncate">${who(x.m.wallet)}${isYou ? ' <span class="text-[8px] px-1 py-px rounded bg-amber-500/25 text-amber-300 font-semibold">SELECTED</span>' : ''}</span>
                         <span class="text-[9px] text-gray-600">${fmt$(x.exp)} being taken</span>
+                        <div class="h-1 rounded-full bg-white/5 overflow-hidden mt-1 w-36 max-w-full" title="how much of the parked capital the take-rate has bitten">
+                            <div class="h-full bg-red-400/60" style="width:${(x.usd > 0 ? Math.min(x.exp / x.usd * 100, 100) : 0).toFixed(1)}%"></div>
+                        </div>
                     </div>
                 </div>
                 <span class="mono text-sm text-red-300 font-semibold shrink-0">${fmt$(x.usd)}</span>
@@ -5391,11 +5503,239 @@
                 </button></div>`;
         }
         rowsEl.innerHTML = html;
+        try { renderZapPlanner(); } catch (e) { console.warn('zap planner:', e.message); }
     }
 
     function toggleSlipExpand() {
         store.slipExpanded = !store.slipExpanded;
         renderSlippageSim();
+    }
+
+    // ---- Simulator card collapse (Camron 2026-08-02: tools shouldn't interrupt
+    // the summary→table read). Collapsed by default; state lives for the session.
+    function toggleSlipCard() {
+        const body = document.getElementById('slip-card-body');
+        const chev = document.getElementById('slip-card-chev');
+        const hint = document.getElementById('slip-card-hint');
+        if (!body) return;
+        const opening = body.classList.contains('hidden');
+        body.classList.toggle('hidden');
+        if (chev) chev.style.transform = opening ? 'rotate(180deg)' : '';
+        if (hint) hint.classList.toggle('hidden', opening);
+        store._slipCardOpen = opening;
+        if (opening) { try { renderZapPlanner(); } catch (e) {} }
+    }
+
+    // ============================================================
+    // ZAP PLANNER (Camron 2026-08-02): per-position zap-OUT costs to a target
+    // asset (LUNA / USDC / SOLID + any other), and zap-IN entry costs. All from
+    // live per-side reserves — the same constant-product planning math as the
+    // simulator, extended with routing: direct pool or two-hop via LUNA,
+    // whichever is cheaper, with the winning route named. Concentrated/stable
+    // legs keep the "≤" bound convention. Ignores fees, the Eris zap router's
+    // internals, and same-block competition — a planning number, not a quote.
+    // ============================================================
+    function _zapPools() {
+        return (store.tlaSnapshot?.pools || []).filter(p =>
+            p.status === 'active' && p.is_lp_pair && p.lp_health?.asset_0 && p.lp_health?.asset_1);
+    }
+    // Impact of selling $v of sellSym INTO pool p. reserveScale shrinks the input
+    // side when the route passes through the same pool the user just withdrew from.
+    function _swapImpact(p, sellSym, v, reserveScale = 1) {
+        const a0 = p.lp_health.asset_0, a1 = p.lp_health.asset_1;
+        const s = a0.symbol === sellSym ? (a0.usd_value || 0) : (a1.symbol === sellSym ? (a1.usd_value || 0) : 0);
+        if (!(s > 0)) return null;
+        const curved = p.dex_subtype === 'concentrated' || p.dex_subtype === 'stable';
+        return { pct: v / (s * reserveScale + v) * 100, curved };
+    }
+    // Cheapest route from fromSym to toSym for $v: best direct pool vs best
+    // two-hop via LUNA. Returns { pct, legs[], curvedAny } or null if unroutable.
+    function _bestRoute(fromSym, toSym, v, opts = {}) {
+        if (fromSym === toSym || !(v > 0)) return { pct: 0, legs: [], curvedAny: false };
+        const pools = _zapPools();
+        const scaleFor = (p) => (opts.excludePool && p === opts.excludePool) ? Math.max(0.01, 1 - (opts.shrinkPct || 0)) : 1;
+        const dexShort = (p) => p.dex?.includes('Astro') ? 'Astro' : p.dex?.includes('Skeleton') ? 'SS' : (p.dex || '');
+        let best = null;
+        for (const p of pools) {
+            const syms = [p.lp_health.asset_0.symbol, p.lp_health.asset_1.symbol];
+            if (!(syms.includes(fromSym) && syms.includes(toSym))) continue;
+            const r = _swapImpact(p, fromSym, v, scaleFor(p));
+            if (r && (!best || r.pct < best.pct)) best = { pct: r.pct, legs: [`${fromSym}\u2192${toSym} via ${p.name} (${dexShort(p)})`], curvedAny: r.curved };
+        }
+        if (fromSym !== 'LUNA' && toSym !== 'LUNA') {
+            const l1 = _bestRoute(fromSym, 'LUNA', v, opts);
+            const l2 = _bestRoute('LUNA', toSym, v, opts);
+            if (l1 && l1.legs.length && l2 && l2.legs.length) {
+                const combined = (1 - (1 - l1.pct / 100) * (1 - l2.pct / 100)) * 100;
+                if (!best || combined < best.pct) best = { pct: combined, legs: [...l1.legs, ...l2.legs], curvedAny: l1.curvedAny || l2.curvedAny };
+            }
+        }
+        return best;
+    }
+    // Zap-OUT: withdraw fraction f of a $V position in snapshot pool p (or a
+    // single-asset position), swap every non-target side to the target.
+    function _zapOutCost(p, sym0, sym1, V, f, target) {
+        const X = V * f;
+        if (!(X > 0)) return null;
+        if (!p) {   // single-asset position: one straight swap
+            const r = _bestRoute(sym0, target, X);
+            if (!r || (sym0 !== target && !r.legs.length)) return { pct: null, legs: [], unroutable: sym0, X };
+            return { pct: r.pct, legs: r.legs, curvedAny: r.curvedAny, X };
+        }
+        const a0 = p.lp_health.asset_0, a1 = p.lp_health.asset_1;
+        const tot = (a0.usd_value || 0) + (a1.usd_value || 0);
+        if (!(tot > 0)) return null;
+        const w0 = (a0.usd_value || 0) / tot;
+        const shrinkPct = Math.min(0.9, X / tot);   // withdrawing shrinks this pool before any same-pool swap
+        let acc = 0, curvedAny = false, unroutable = null; const legs = [];
+        for (const [sym, w] of [[a0.symbol, w0], [a1.symbol, 1 - w0]]) {
+            const v = X * w;
+            if (!(v > 0.01)) continue;
+            if (sym === target) { legs.push(`${fmt$(v)} ${sym} received directly`); continue; }
+            const r = _bestRoute(sym, target, v, { excludePool: p, shrinkPct });
+            if (!r || !r.legs.length) { unroutable = sym; continue; }
+            acc += v * (r.pct / 100); curvedAny = curvedAny || r.curvedAny;
+            legs.push(...r.legs.map(l => `${l} ${r.pct < 0.05 ? '<0.05' : (r.curvedAny ? '\u2264' : '') + r.pct.toFixed(2)}%`));
+        }
+        return { pct: acc / X * 100, legs, curvedAny, unroutable, X };
+    }
+    // Zap-IN: enter pool p with $amt of source asset — swap each needed side.
+    function _zapInCost(p, source, amt) {
+        const a0 = p.lp_health.asset_0, a1 = p.lp_health.asset_1;
+        const tot = (a0.usd_value || 0) + (a1.usd_value || 0);
+        if (!(tot > 0)) return null;
+        const w0 = (a0.usd_value || 0) / tot;
+        let acc = 0, curvedAny = false, unroutable = null; const legs = [];
+        for (const [sym, w] of [[a0.symbol, w0], [a1.symbol, 1 - w0]]) {
+            const v = amt * w;
+            if (!(v > 0.01) || sym === source) continue;
+            const r = _bestRoute(source, sym, v);
+            if (!r || !r.legs.length) { unroutable = sym; continue; }
+            acc += v * (r.pct / 100); curvedAny = curvedAny || r.curvedAny;
+            legs.push(...r.legs.map(l => `${l} ${r.pct < 0.05 ? '<0.05' : (r.curvedAny ? '\u2264' : '') + r.pct.toFixed(2)}%`));
+        }
+        return { pct: acc / amt * 100, legs, curvedAny, unroutable };
+    }
+    const ZAP_DEFAULT_TARGETS = ['LUNA', 'USDC', 'SOLID'];
+    function _zapAllSymbols() {
+        const s = new Set();
+        for (const p of _zapPools()) { s.add(p.lp_health.asset_0.symbol); s.add(p.lp_health.asset_1.symbol); }
+        return [...s].sort();
+    }
+    window.setZapMode = (m) => { store._zapMode = m; renderZapPlanner(); };
+    window.setZapFrac = (f) => { store._zapFrac = f; renderZapPlanner(); };
+    window.setZapExtra = (sym) => { store._zapExtra = sym || null; renderZapPlanner(); };
+    window.setZapSource = (sym) => { store._zapSource = sym; renderZapPlanner(); };
+    function renderZapPlanner() {
+        const panel = document.getElementById('zap-panel');
+        if (!panel) return;
+        const member = getSelectedMember();
+        if (!member) { panel.classList.add('hidden'); panel.innerHTML = ''; return; }
+        const pools = _zapPools();
+        if (!pools.length) { panel.classList.add('hidden'); panel.innerHTML = ''; return; }
+        panel.classList.remove('hidden');
+        const mode = store._zapMode || 'out';
+        const frac = store._zapFrac || 0.25;
+        const extra = store._zapExtra || null;
+        const gradeOf = (pct) => pct < 0.5 ? 'A' : pct < 1 ? 'B' : pct < 3 ? 'C' : pct < 8 ? 'D' : 'F';
+        const gradeCls = (g) => g === 'A' ? 'bg-emerald-500/20 text-emerald-300' : g === 'B' ? 'bg-cyan-500/20 text-cyan-300' : g === 'C' ? 'bg-yellow-500/20 text-yellow-300' : g === 'D' ? 'bg-orange-500/20 text-orange-300' : 'bg-red-500/20 text-red-300';
+        // Member positions aggregated by pool name+dex (a wallet can hold one pool
+        // under several stake configs) — LP pairs matched to their snapshot pool for
+        // reserves; single-asset positions kept with p=null (straight-swap zap-out).
+        const agg = new Map();
+        for (const lp of (member.lp_positions || [])) {
+            const key = `${lp.pool_name}|${lp.dex || ''}`;
+            if (!agg.has(key)) agg.set(key, { name: lp.pool_name, dex: lp.dex || '', usd: 0 });
+            agg.get(key).usd += lp.estimated_position_usd || 0;
+        }
+        const positions = [...agg.values()].filter(x => x.usd > 1).sort((a, b) => b.usd - a.usd);
+        const poolFor = (pos) => pools.find(p => p.name === pos.name && (
+            (String(p.dex || '').includes('Astro') && String(pos.dex || '').includes('Astro')) ||
+            (String(p.dex || '').includes('Skeleton') && String(pos.dex || '').includes('Skeleton')))) || null;
+        const targets = [...ZAP_DEFAULT_TARGETS, ...(extra && !ZAP_DEFAULT_TARGETS.includes(extra) ? [extra] : [])];
+        const allSyms = _zapAllSymbols();
+        const cell = (res) => {
+            if (!res) return `<span class="text-gray-700 text-[10px]">\u2014</span>`;
+            if (res.pct == null || res.unroutable) return `<span class="text-[10px] text-purple-300/70" title="No captured TLA route for ${res.unroutable || 'a leg'} — the Eris zapper may still route it via non-TLA pools.">no TLA route</span>`;
+            const g = gradeOf(res.pct);
+            const figStr = res.pct < 0.05 ? '<0.05' : (res.curvedAny ? '\u2264' : '') + res.pct.toFixed(2);
+            return `<span class="inline-flex items-center gap-1" title="${res.legs.join(' \u00b7 ') || 'received directly'}"><span class="w-4 h-4 rounded flex items-center justify-center text-[9px] font-bold ${gradeCls(g)}">${g}</span><span class="mono text-[10px] ${res.pct < 1 ? 'text-gray-300' : res.pct < 3 ? 'text-yellow-300' : 'text-red-400'}">${figStr}%</span></span>`;
+        };
+        const modeBtn = (m, label, tip) => `<button onclick="setZapMode('${m}')" title="${tip}" class="text-[10px] px-2 py-0.5 rounded ${mode === m ? 'bg-cyan-500/20 text-cyan-300' : 'bg-white/5 text-gray-400'} font-medium">${label}</button>`;
+        let body = '';
+        if (mode === 'out') {
+            if (!positions.length) {
+                body = `<div class="text-[11px] text-gray-500 py-2">${displayName(member.wallet)} has no priced LP positions to zap out of.</div>`;
+            } else {
+                const fracBtn = (f) => `<button onclick="setZapFrac(${f})" class="text-[10px] px-2 py-0.5 rounded ${frac === f ? 'bg-amber-500/20 text-amber-300' : 'bg-white/5 text-gray-400'} font-medium mono">${f * 100}%</button>`;
+                const rows = positions.map(pos => {
+                    const p = poolFor(pos);
+                    const isSingle = String(pos.dex) === 'Single' || (!p && !pos.name.includes('-'));
+                    const cells = targets.map(t => {
+                        const res = isSingle
+                            ? _zapOutCost(null, pos.name, null, pos.usd, frac, t)
+                            : (p ? _zapOutCost(p, null, null, pos.usd, frac, t) : null);
+                        return `<td class="text-right py-1 pl-3">${cell(res)}</td>`;
+                    }).join('');
+                    return `<tr class="border-b border-white/[0.03]">
+                        <td class="py-1 pr-2"><span class="text-xs font-medium">${pos.name}</span> ${dexTagOf(pos.dex)}</td>
+                        <td class="text-right py-1 mono text-[10px] text-gray-400">${fmt$(pos.usd * frac)}<span class="text-gray-600"> of ${fmt$(pos.usd)}</span></td>
+                        ${cells}
+                    </tr>`;
+                }).join('');
+                body = `
+                  <div class="flex items-center gap-1.5 flex-wrap mb-2">
+                    <span class="text-[10px] text-gray-500">zap out</span>
+                    ${[0.25, 0.5, 0.75, 1].map(fracBtn).join('')}
+                    <span class="text-gray-700 text-[10px] mx-1">\u00b7</span>
+                    <span class="text-[10px] text-gray-500">extra target</span>
+                    <select onchange="setZapExtra(this.value)" class="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-gray-300 border border-white/10 outline-none">
+                      <option value="">\u2014</option>
+                      ${allSyms.filter(s => !ZAP_DEFAULT_TARGETS.includes(s)).map(s => `<option value="${s}" ${extra === s ? 'selected' : ''}>${s}</option>`).join('')}
+                    </select>
+                  </div>
+                  <table class="w-full text-left"><thead><tr class="text-[9px] text-gray-600 uppercase tracking-wider">
+                    <th class="pb-1">your position</th><th class="text-right pb-1">zapping</th>
+                    ${targets.map(t => `<th class="text-right pb-1 pl-3">\u2192 ${t}</th>`).join('')}
+                  </tr></thead><tbody>${rows}</tbody></table>`;
+            }
+        } else {
+            const source = store._zapSource || 'LUNA';
+            const amt = store.slipAmount || 1000;
+            const myKeys = new Set(positions.filter(x => poolFor(x)).map(x => `${x.name}|${String(x.dex).includes('Astro') ? 'A' : 'S'}`));
+            const keyOf = (p) => `${p.name}|${String(p.dex || '').includes('Astro') ? 'A' : 'S'}`;
+            const entries = pools.map(p => ({ p, res: _zapInCost(p, source, amt), mine: myKeys.has(keyOf(p)) }))
+                .filter(e => e.res)
+                .sort((a, b) => (b.mine - a.mine) || ((a.res.pct ?? 999) - (b.res.pct ?? 999)));
+            const shown = store._zapInExpanded ? entries : entries.slice(0, Math.max(8, entries.filter(e => e.mine).length + 5));
+            body = `
+              <div class="flex items-center gap-1.5 flex-wrap mb-2">
+                <span class="text-[10px] text-gray-500">zap <span class="mono text-gray-300">${fmt$(amt)}</span> of</span>
+                <select onchange="setZapSource(this.value)" class="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-gray-300 border border-white/10 outline-none">
+                  ${allSyms.map(s => `<option value="${s}" ${source === s ? 'selected' : ''}>${s}</option>`).join('')}
+                </select>
+                <span class="text-[10px] text-gray-600">into a pool \u00b7 amount follows the $ buttons above \u00b7 your pools first</span>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-x-4">
+                ${shown.map(e => `<div class="flex items-center gap-2 py-1 border-b border-white/[0.03]">
+                    ${e.mine ? '<i class="fas fa-star text-amber-400 text-[8px]"></i>' : '<span class="w-2"></span>'}
+                    <span class="text-xs font-medium truncate" style="min-width:110px">${e.p.name}</span>
+                    ${dexTagOf(e.p.dex)}
+                    <span class="ml-auto">${cell(e.res)}</span>
+                  </div>`).join('')}
+              </div>
+              ${entries.length > shown.length ? `<div class="text-center pt-1"><button onclick="store._zapInExpanded=true;renderZapPlanner()" class="text-[10px] px-3 py-1 rounded-full bg-white/5 text-gray-400 hover:text-cyan-300 font-medium">show all ${entries.length} pools</button></div>` : ''}`;
+        }
+        panel.innerHTML = `
+          <div class="rounded-lg bg-white/[0.015] border border-white/5 p-2.5">
+            <div class="flex items-center gap-2 flex-wrap mb-1">
+              <span class="text-[11px] font-semibold text-gray-300"><i class="fas fa-right-left text-cyan-400 text-[10px] mr-1"></i>Zap planner \u00b7 ${displayName(member.wallet)}</span>
+              ${modeBtn('out', 'Zap out', 'Cost of converting a slice of each LP position into a single target asset — withdraw both sides, swap the rest via the cheapest TLA route.')}
+              ${modeBtn('in', 'Zap in', 'Cost of entering a pool with a single asset — swap into the pool\u2019s sides via the cheapest TLA route.')}
+            </div>
+            ${body}
+            <div class="text-[9px] text-gray-600 mt-1.5">Planning numbers from live TLA reserves: best of direct pool or two-hop via LUNA (hover a figure for the route). Withdrawals shrink the exited pool before any same-pool swap. Ignores fees, the Eris zapper\u2019s own routing, and same-block competition. \u2264 = concentrated/stable legs, true impact lower.</div>
+          </div>`;
     }
 
     function wireSlippageSim() {
@@ -5944,20 +6284,33 @@
             return;
         }
         deltas.sort((a, b) => b.d - a.d);
-        const gainers = deltas.filter(x => x.d > 0).slice(0, 3);
-        const losers = deltas.filter(x => x.d < 0).slice(-3).reverse();
-        const row = (x) => `
-            <div class="flex items-center justify-between p-2 rounded-lg bg-white/[0.02]">
-                <div class="flex flex-col min-w-0">
-                    <span class="text-sm font-medium truncate">${x.p.name}</span>
-                    <span class="text-[9px] text-gray-600 uppercase">${x.p.bucket || ''}</span>
+        // Rev T2: diverging bars — every row's magnitude on ONE shared scale
+        // from a center axis, so gainers vs losers read at a glance.
+        const gainers = deltas.filter(x => x.d > 0).slice(0, 5);
+        const losers = deltas.filter(x => x.d < 0).slice(-5).reverse();
+        const maxAbs = Math.max(...deltas.map(x => Math.abs(x.d)));
+        const row = (x) => {
+            const w = maxAbs > 0 ? Math.max(Math.abs(x.d) / maxAbs * 50, 1.5) : 0;
+            const pos = x.d > 0;
+            return `
+            <div class="p-2 rounded-lg bg-white/[0.02]">
+                <div class="flex items-center justify-between mb-1">
+                    <div class="flex items-baseline gap-2 min-w-0">
+                        <span class="text-sm font-medium truncate">${x.p.name}</span>
+                        <span class="text-[9px] text-gray-600 uppercase shrink-0">${x.p.bucket || ''}</span>
+                    </div>
+                    <span class="mono text-sm font-semibold shrink-0 ${pos ? 'text-emerald-400' : 'text-red-400'}">${pos ? '+' : ''}${fmtNum(x.d)} VP</span>
                 </div>
-                <span class="mono text-sm font-semibold ${x.d > 0 ? 'text-emerald-400' : 'text-red-400'}">${x.d > 0 ? '+' : ''}${fmtNum(x.d)} VP</span>
+                <div class="relative h-1.5 rounded-full bg-white/[0.04] overflow-hidden">
+                    <div class="absolute top-0 bottom-0 left-1/2 w-px bg-white/15"></div>
+                    <div class="absolute top-0 bottom-0 ${pos ? 'left-1/2 bg-emerald-400/60 rounded-r-full' : 'right-1/2 bg-red-400/60 rounded-l-full'}" style="width:${w.toFixed(1)}%"></div>
+                </div>
             </div>`;
+        };
         el.innerHTML =
             (gainers.length ? `<div class="text-[10px] text-emerald-400/80 uppercase tracking-wider font-semibold">Gaining support</div>` + gainers.map(row).join('') : '') +
             (losers.length ? `<div class="text-[10px] text-red-400/80 uppercase tracking-wider font-semibold mt-2">Losing support</div>` + losers.map(row).join('') : '') +
-            `<div class="text-[9px] text-gray-600 pt-1">vs locked-in baseline${store.lockedInDate ? ` · ${store.lockedInDate}` : ''}</div>`;
+            `<div class="text-[9px] text-gray-600 pt-1">bars share one scale (widest = largest move) \u00b7 vs locked-in baseline${store.lockedInDate ? ` · ${store.lockedInDate}` : ''}</div>`;
     }
 
     // ---------------- People boards ----------------
@@ -5981,7 +6334,12 @@
         // 200+ deep; dumping them all at once was a wall of rows).
         let html = rows.map((r, i) => i < 5 ? r : `<div class="bx-${uid}-x hidden">${r}</div>`).join('');
         if (rows.length > 5) {
-            html += `<button id="bx-${uid}-btn" onclick="bxMore('${uid}')" class="text-[10px] text-cyan-400 hover:text-cyan-300 w-full text-center pt-1">show 10 more (${rows.length - 5} hidden) \u25be</button>`;
+            // Rev T1.1: collapse is available the moment ANYTHING is expanded —
+            // no need to page to the end first. Same two controls on every board.
+            html += `<div class="flex items-center justify-center gap-4 pt-1">
+                <button id="bx-${uid}-btn" onclick="bxMore('${uid}')" class="text-[10px] text-cyan-400 hover:text-cyan-300">show 10 more (${rows.length - 5} hidden) \u25be</button>
+                <button id="bx-${uid}-col" onclick="bxCollapse('${uid}')" class="hidden text-[10px] text-gray-500 hover:text-gray-300">collapse to top 5 \u25b4</button>
+            </div>`;
         }
         el.innerHTML = html;
     }
@@ -5996,14 +6354,27 @@
         const all = Array.from(document.querySelectorAll('.bx-' + uid + '-x'));
         const hidden = all.filter(d => d.classList.contains('hidden'));
         const btn = document.getElementById('bx-' + uid + '-btn');
-        if (!hidden.length) { // fully expanded -> collapse back to top 5
-            all.forEach(d => d.classList.add('hidden'));
-            if (btn) btn.textContent = `show 10 more (${all.length} hidden) \u25be`;
-            return;
-        }
+        const col = document.getElementById('bx-' + uid + '-col');
         hidden.slice(0, 10).forEach(d => d.classList.remove('hidden'));
+        if (col) col.classList.remove('hidden');   // collapsing is now always one click away
         const left = Math.max(hidden.length - 10, 0);
-        if (btn) btn.textContent = left > 0 ? `show 10 more (${left} hidden) \u25be` : 'collapse to top 5 \u25b4';
+        if (btn) {
+            if (left > 0) { btn.classList.remove('hidden'); btn.textContent = `show 10 more (${left} hidden) \u25be`; }
+            else btn.classList.add('hidden');      // nothing left to reveal
+        }
+    }
+    function bxCollapse(uid) {
+        track('board_collapse', { board: uid });
+        const all = Array.from(document.querySelectorAll('.bx-' + uid + '-x'));
+        all.forEach(d => d.classList.add('hidden'));
+        const btn = document.getElementById('bx-' + uid + '-btn');
+        const col = document.getElementById('bx-' + uid + '-col');
+        if (btn) { btn.classList.remove('hidden'); btn.textContent = `show 10 more (${all.length} hidden) \u25be`; }
+        if (col) col.classList.add('hidden');
+        // Collapsing from deep in a 200-row board would strand the viewport —
+        // bring the board back into view.
+        const host = all[0] && all[0].parentElement;
+        if (host && host.scrollIntoView) host.scrollIntoView({ block: 'nearest' });
     }
 
     // Board rows drive the same member lens as the header dropdown.
@@ -6050,17 +6421,28 @@
             x.m.wallet
         )), 'vp');
 
-        // Utilization Leaders — org member-data avg_utilization_pct, 10K+ VP floor
+        // Utilization Leaders — org member-data avg_utilization_pct, 10K+ VP floor.
+        // Rev T1 tiebreak: among equal utilization (a wall of 100%s), the wallet
+        // with the LEAST stale VP leads — decay left unreclaimed is the real
+        // discipline gap. Gap = potential − current from the participants feed;
+        // wallets without a gap reading sort after measured ones (honest).
         if (utilEl) {
+            const gapByAddr = {};
+            for (const gm of members) {
+                const su = gm.summary || {};
+                gapByAddr[gm.wallet] = Math.max(0, (su.potential_vp_human || 0) - (su.current_vp_human || 0));
+            }
             const rows = (store.orgMemberData?.wallets || [])
                 .filter(w => (w.total_vp_held_human || 0) >= 10000)
-                .map(w => ({ w, u: w.avg_utilization_pct ?? null }))
+                .map(w => ({ w, u: w.avg_utilization_pct ?? null, g: gapByAddr[w.address] ?? null }))
                 .filter(x => x.u !== null)
-                .sort((a, b) => b.u - a.u || (b.w.total_vp_held_human - a.w.total_vp_held_human));
+                .sort((a, b) => b.u - a.u
+                    || ((a.g ?? Infinity) - (b.g ?? Infinity))
+                    || (b.w.total_vp_held_human - a.w.total_vp_held_human));
             boardExpander(utilEl, rows.map((x, i) => personRow(
                 i,
                 `${displayName(x.w.address)} ${walletBadges(x.w.address)}`,
-                `${fmtNum(x.w.total_vp_held_human || 0)} VP held`,
+                `${fmtNum(x.w.total_vp_held_human || 0)} VP held · ${x.g == null ? 'stale n/a' : x.g > 1 ? `<span class="text-amber-400/80">${fmtNum(x.g)} VP stale</span>` : '<span class="text-emerald-400/70">0 stale — fully fresh</span>'}`,
                 `<span class="mono text-sm text-emerald-400 font-semibold">${x.u.toFixed(1)}%</span>`,
                 x.w.address
             )), 'util', '<div class="text-gray-600 text-sm">Org member-data feed unavailable.</div>');
@@ -6081,10 +6463,21 @@
                 })
                 .filter(x => x.last > 0)
                 .sort((a, b) => b.last - a.last || ((b.m.summary?.display_voting_power_human || 0) - (a.m.summary?.display_voting_power_human || 0)));
+            // Rev T2: show what the touch left behind — the measured stale gap NOW
+            // (potential − current, participants feed). A true "+VP recovered by
+            // this touch" needs the before-snapshot from daily member history
+            // (queued derive) — until then only what's measured, never estimated.
+            const freshChip = (m) => {
+                const su = m.summary || {};
+                const g = Math.max(0, (su.potential_vp_human || 0) - (su.current_vp_human || 0));
+                return g <= 1
+                    ? ' \u00b7 <span class="text-emerald-400/80">fully refreshed <i class="fas fa-check text-[8px]"></i></span>'
+                    : ` \u00b7 <span class="text-amber-400/80">${fmtNum(g)} VP still stale</span>`;
+            };
             boardExpander(adjEl, rows.map((x, i) => personRow(
                 i,
                 `${displayName(x.m.wallet)} ${walletBadges(x.m.wallet)}`,
-                `${x.touched} bucket${x.touched === 1 ? '' : 's'} voted`,
+                `${x.touched} bucket${x.touched === 1 ? '' : 's'} voted${freshChip(x.m)}`,
                 cur && x.last >= cur
                     ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-semibold">THIS EPOCH</span>'
                     : `<span class="mono text-xs text-gray-400">period ${x.last}</span>`,
@@ -6163,19 +6556,48 @@
         track('bribe_board_mode', { mode });
         store.bribeBoardMode = mode;
         const on = 'bg-amber-500/20 text-amber-300', off = 'bg-white/5 text-gray-400';
-        const a = document.getElementById('bribe-mode-alltime'), e = document.getElementById('bribe-mode-earners');
+        const a = document.getElementById('bribe-mode-alltime'), e = document.getElementById('bribe-mode-earners'), g = document.getElementById('bribe-mode-earned');
         if (a) a.className = `px-2 py-0.5 rounded ${mode === 'alltime' ? on : off}`;
         if (e) e.className = `px-2 py-0.5 rounded ${mode === 'earners' ? on : off}`;
+        if (g) g.className = `px-2 py-0.5 rounded ${mode === 'earned' ? on : off}`;
         renderBribeBoardCard();
     }
-    function renderBribeBoardCard() {
+    async function renderBribeBoardCard() {
         const el = document.getElementById('top-board-bribes');
         const banner = document.getElementById('top-bribers-banner');
         if (!el) return;
+        if ((store.bribeBoardMode || 'alltime') === 'earned') {
+            // Rev T2.5: ALL-TIME EARNED — total bribe/reward claims per wallet
+            // from the captured claim events, valued at claim date (rollup
+            // voters[].claims — the data existed, the page never rendered it).
+            const roll = await fetchVotingRollups();
+            if ((store.bribeBoardMode || 'alltime') !== 'earned') return;
+            if (!roll || !Array.isArray(roll.voters)) { el.innerHTML = '<div class="text-gray-600 text-sm">Voter rollup unavailable.</div>'; return; }
+            if (banner) {
+                banner.textContent = 'all-time claimed rewards · valued at claim date';
+                const cov = (roll.claim_coverage || []).map(c => `${c.from} \u2192 ${c.to}: ${c.source}`).join(' \u00b7 ');
+                banner.title = 'Total bribe + reward claims per wallet from captured on-chain claim events, priced on the day each claim happened. Coverage: ' + cov + ' \u2014 figures are a lower bound where coverage notes a hole.';
+            }
+            const rows = roll.voters
+                .map(v => ({ v, c: v.claims }))
+                .filter(x => x.c && (x.c.totals?.usd_at_claim || 0) > 0.005)
+                .sort((a, b) => (b.c.totals.usd_at_claim || 0) - (a.c.totals.usd_at_claim || 0));
+            boardExpander(el, rows.map((x, i) => personRow(
+                i,
+                `${displayName(x.v.wallet)} ${walletBadges(x.v.wallet)}`,
+                `${x.c.claim_tx_count} claim tx${x.c.claim_tx_count === 1 ? '' : 's'} \u00b7 ${(x.c.first_claim_ts || '?').slice(0, 10)} \u2192 ${(x.c.last_claim_ts || '?').slice(0, 10)}`,
+                `<span class="mono text-sm text-emerald-300 font-semibold" title="At today's prices: ${fmt$(x.c.totals.usd_at_build || 0)}">${fmt$(x.c.totals.usd_at_claim)}</span>`,
+                x.v.wallet
+            )), 'earned', '<div class="text-gray-600 text-sm">No claim history captured yet.</div>');
+            return;
+        }
         if ((store.bribeBoardMode || 'alltime') === 'earners') {
-            if (banner) { banner.textContent = 'pending bribe rewards · this epoch'; banner.title = 'Pending bribe rewards accrued this epoch (USD), per wallet. Claimable after the epoch closes.'; }
+            if (banner) { banner.textContent = 'pending bribe rewards · this epoch · vote-share × live pots'; banner.title = 'Each wallet\u2019s VP share of every active pool\u2019s live bribe pots, at current token prices — the same computation as the Member Bribe Rewards tile. Claimable after the epoch closes.'; }
+            const poolByGid = {};
+            for (const p of (store.tlaSnapshot?.pools || [])) if (p.gauge_pool_id) poolByGid[p.gauge_pool_id] = p;
+            const tokenPrices = store.networkPrices?.token_prices || {};
             const rows = getAllSelectableMembers()
-                .map(m => ({ m, usd: m.summary?.total_pending_bribes_usd || 0 }))
+                .map(m => ({ m, usd: pendingBribesUsdFor(m, poolByGid, tokenPrices) }))
                 .filter(x => x.usd > 0.005)
                 .sort((a, b) => b.usd - a.usd);
             boardExpander(el, rows.map((x, i) => personRow(
@@ -6198,16 +6620,31 @@
             .catch(() => null);
         return store._votingRollupsPromise;
     }
+    // Rev T2.3 label scheme (Camron): DAODAO-registered handles = bold sky
+    // blue; protocol/project labels = bold orange; bare addresses = unchanged
+    // gray mono. Same function feeds the board rows AND the drill modal header.
     function briberNameHtml(addr, label) {
         const rosterName = store.nameByWallet?.get(addr);
-        if (rosterName) return `${displayName(addr)} ${walletBadges(addr)}`;
+        if (rosterName) return `<span class="font-bold text-sky-300">${displayName(addr)}</span> ${walletBadges(addr)}`;
         if (label) {
             // Rev 5.5: the four gauge tribute contracts top the board on event count and
             // read like mystery whales — explain in place that they're protocol plumbing.
             if (/gauge tribute/i.test(label)) {
-                return `<span class="text-purple-300" title="${addr}">${label}</span> <i class="fas fa-gears text-[9px] text-gray-500 cursor-help" title="Protocol plumbing, not a person \u2014 these are the four asset-staking buckets recycling Astroport take-rate fees into bribes automatically (so yes: this IS the \u2018Astroport bribes\u2019 flow). This contract automatically sweeps the take-rate fees on its gauge pools and recycles the accumulated ASTRO back into the incentive manager as bribes — it fires every epoch, which is why its bribe count is so high."></i>`;
+                // Rev T1: name what it actually is. The four tribute contracts ARE
+                // the four asset-staking buckets — addresses from config/contracts.js
+                // (byte-verified identity, tla-log Rev 5.x). Unknown fifth contract
+                // (if one ever appears) keeps the raw label — never guessed.
+                const TRIBUTE_BUCKETS = {
+                    'terra1v399cx9drllm70wxfsgvfe694tdsd9x96p9ha36w7muffe4znlusqswspq': 'Stable',
+                    'terra1awq6t7jfakg9wfjn40fk3wzwmd57mvrqtt3a39z9rmet7wdjj3ysgw3lpa': 'Project',
+                    'terra14mmvqn0kthw6sre75vku263lafn5655mkjdejqjedjga4cw0qx2qlf4arv': 'Bluechip',
+                    'terra1qdz5qgafx88kp5mf6m2tah8742g4u5g2cek0m3jrgssexexk7g4qw6e23k': 'Single',
+                };
+                const bucket = TRIBUTE_BUCKETS[addr];
+                const shown = bucket ? `Astroport take-rate \u00b7 ${bucket} bucket` : label;
+                return `<span class="font-bold text-orange-400" title="${addr}">${shown}</span> <i class="fas fa-gears text-[9px] text-gray-500 cursor-help" title="Protocol plumbing, not a person \u2014 this is the ${bucket ? bucket + '-bucket' : ''} asset-staking contract recycling Astroport take-rate fees into bribes automatically (so yes: this IS the \u2018Astroport bribes\u2019 flow). It sweeps the take-rate on its gauge pools and places the accumulated ASTRO back into the incentive manager as bribes every epoch — which is why its bribe count is so high."></i>`;
             }
-            return `<span class="text-purple-300" title="${addr}">${label}</span>`;
+            return `<span class="font-bold text-orange-400" title="${addr}">${label}</span>`;
         }
         return `<span class="mono" title="${addr}">${addr.slice(0, 8)}\u2026${addr.slice(-4)}</span> ${walletBadges(addr)}`;
     }
@@ -6231,9 +6668,11 @@
         } else {
             valueHtml = `<span class="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-gray-400" title="No historical price record for the bribe token(s) (${unpricedTokens || 'all'} unpriced) — amounts are chain-exact, USD is never guessed.">unpriced</span>`;
         }
-        const sub = `${b.event_count} bribe${b.event_count === 1 ? '' : 's'} · ${b.first_bribe || '?'} → ${b.last_bribe || '?'} · <span class="text-cyan-500 hover:text-cyan-300 cursor-pointer" onclick="event.stopPropagation();openBriberModal('${b.briber}')" title="Bribe history: per-epoch timeline, pools, and tokens for this briber"><i class="fas fa-chart-column text-[8px]"></i> history</span>`;
-        const isMember = !!store.nameByWallet?.get(b.briber);
-        return personRow(i, briberNameHtml(b.briber, b.label), sub, valueHtml, isMember ? b.briber : null);
+        const sub = `${b.event_count} bribe${b.event_count === 1 ? '' : 's'} · ${b.first_bribe || '?'} → ${b.last_bribe || '?'} · <span class="text-cyan-500"><i class="fas fa-chart-column text-[8px]"></i> full history</span>`;
+        // Rev T1.1: the WHOLE row opens the deep-dive (per-pool USD totals,
+        // per-token amounts + USD at placement, per-epoch chart). The old tiny
+        // "history" link was the only door and nobody found it.
+        return `<div class="cursor-pointer rounded-lg hover:bg-white/[0.04] transition-colors" onclick="openBriberModal('${b.briber}')" title="Click for full bribe history — every LP bribed with total USD applied, token breakdown, USD at placement vs today">${personRow(i, briberNameHtml(b.briber, b.label), sub, valueHtml, null)}</div>`;
     }
     async function renderTopBribersAllTime(el, banner) {
         const roll = await fetchVotingRollups();
@@ -6273,10 +6712,13 @@
                 if (!note) {
                     note = document.createElement('div');
                     note.id = 'briber-coverage-note';
-                    note.className = 'mt-2 mb-1 p-2 rounded-lg bg-amber-500/[0.06] border border-amber-500/20 text-[11px] text-amber-200/80 leading-snug';
+                    note.className = 'mt-1 mb-1 text-[10px] text-amber-300/70 leading-snug';
                     banner.parentElement && banner.parentElement.insertBefore(note, banner.nextSibling);
                 }
-                note.innerHTML = `<i class="fas fa-triangle-exclamation text-amber-400/80 mr-1"></i><b>This board is a preview, not the full picture.</b> The ledger measures every bribe that ever flowed, but a payer can only be named where an on-chain placement event was captured — and ${miss} of ${tokens} bribe tokens still have most of their flow inside the Feb 2025 → Jun 2026 capture gap. Missing names you'd expect here — Solid's current wallet, Phoenix Directive, and many individual bribes (they're real; their pots are even visible on the runway chips) — appear when the archive backfill closes that window. Rankings below reflect only the attributed slice.`;
+                // Rev T1: the backfill is RUNNING — the shouty preview box retires
+                // into a one-line status that removes itself when coverage completes
+                // (miss hits 0 -> this whole block never fires).
+                note.innerHTML = `<i class="fas fa-hourglass-half mr-1"></i>Archive backfill in progress \u2014 ${miss} of ${tokens} bribe tokens still have flow inside the Feb 2025 \u2192 Jun 2026 window; missing payers (Solid\u2019s current wallet, PD, hole-era users) fill in as it closes.`;
             })();
         }
         boardExpander(el, order.map((b, i) => briberRowHtml(b, i, builtAtDate)), 'briball',
@@ -6313,12 +6755,26 @@
         const t = b.totals || {};
         const ep = b.by_epoch || {};
         const epochs = Object.keys(ep).sort((a, c) => Number(a) - Number(c));
-        const counts = epochs.map(k => Object.values(ep[k].pools || {}).reduce((s, n) => s + n, 0));
-        const pools = Object.entries(b.by_pool || {}).map(([gid, p]) => ({
+        // Rev T2.3: per-epoch count = the rollup's total event count (n) when
+        // present; older rollups only counted POOLED events, which charted
+        // governance-executed bribes (pool:null, e.g. PD's 189) as zero.
+        const counts = epochs.map(k => ep[k].n != null ? ep[k].n : Object.values(ep[k].pools || {}).reduce((s, n) => s + n, 0));
+        let pools = Object.entries(b.by_pool || {}).map(([gid, p]) => ({
             name: _briberPoolName(gid), count: p.bribe_count || 0,
             toks: Object.entries(p.by_token || {}).map(([sym, x]) => `${fmtNum(x.amount_display)} ${sym}`).join(' · '),
             usd: Object.values(p.by_token || {}).reduce((s, x) => s + (x.usd_at_placement || 0), 0),
         })).sort((a, c) => c.usd - a.usd || c.count - a.count);
+        // Rev T2.6: governance-executed bribers (PD) have pool:null in the
+        // event rollup — their per-pool truth lives in the pd-bribes product.
+        let poolsSourceNote = '';
+        if (pools.length === 0 && b.briber === 'terra1k8ug6dkzntczfzn76wsh24tdjmx944yj6mk063wum7n20cwd7lxq4lppjg' && store.pdBribesProduct?.by_pool) {
+            pools = Object.entries(store.pdBribesProduct.by_pool).map(([gid, p]) => ({
+                name: _briberPoolName(gid), count: p.leg_count || 0,
+                toks: Object.entries(p.by_denom || {}).map(([d, amt]) => `${fmtNum(amt)} ${d === 'native:uluna' ? 'LUNA' : d.split(/[:/]/).pop()}`).join(' · '),
+                usd: 0,
+            })).sort((a, c) => c.count - a.count);
+            poolsSourceNote = ' · from proposal-state derive (verified placements)';
+        }
         const toks = Object.entries(t.by_token || {}).sort((a, c) => (c[1].usd_at_placement || 0) - (a[1].usd_at_placement || 0));
         document.getElementById('briber-modal-body').innerHTML = `
             <div class="flex items-start justify-between gap-3 mb-1">
@@ -6338,7 +6794,7 @@
             <div class="rounded-lg bg-white/[0.02] p-2 mb-3" style="height:150px"><canvas id="briber-epoch-chart"></canvas></div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                    <div class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-1">By pool</div>
+                    <div class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-1">By pool<span class="normal-case font-normal text-gray-600">${poolsSourceNote}</span></div>
                     ${pools.length ? pools.map(p => `<div class="flex items-center justify-between text-[11px] py-1 border-b border-white/[0.04]"><div class="min-w-0"><div class="font-medium truncate">${p.name}</div><div class="text-[9px] text-gray-600 truncate">${p.toks || ''}</div></div><span class="mono shrink-0 ml-2 ${p.usd > 0 ? 'text-amber-300/90' : 'text-gray-600'}">${p.count}\u00d7${p.usd > 0 ? ' \u00b7 ' + fmt$(p.usd) : ''}</span></div>`).join('') : '<div class="text-gray-600 text-[11px]">No per-pool detail.</div>'}
                 </div>
                 <div>
@@ -6547,8 +7003,14 @@
     //   votesByPool    — Map<gaugePoolId, vpAllocated> — keyed on the truly unique
     //                    gauge_pool_id (not name+dex which can collide when multiple
     //                    pools share the same pair on the same DEX in the same bucket).
-    function getSelectedMemberAllocations() {
-        const m = getSelectedMember();
+    // Rev T2.4: allocation parsing generalized to ANY member — the Earners
+    // board and the member tile must run the SAME math (one computation, two
+    // views). Previously the board trusted the positions cron's
+    // total_pending_bribes_usd, which live-audited broken: 11 of 155 wallets
+    // nonzero, max $26.62, while the live pots hold ~$959 this epoch — and
+    // members who plainly earn (voted, 1M+ VP) read $0. The cron field is no
+    // longer consumed anywhere on this page.
+    function allocationsFor(m) {
         if (!m) return null;
         const totalVp = m.summary?.display_voting_power_human || 0;
         const byPool = new Map();
@@ -6562,6 +7024,34 @@
             }
         }
         return { member: m, totalVp, votesByPool: byPool };
+    }
+    function getSelectedMemberAllocations() { return allocationsFor(getSelectedMember()); }
+
+    // Pending bribe rewards this epoch for one member: their VP share of each
+    // ACTIVE pool's live pots, priced with the same token prices the whole
+    // page uses. EXACTLY the member tile's math — extracted so the Earners
+    // board runs it per member.
+    function pendingBribesUsdFor(m, poolByGid, tokenPrices) {
+        const alloc = allocationsFor(m);
+        if (!alloc) return 0;
+        let usd = 0;
+        for (const [gid, memberVpInPool] of alloc.votesByPool) {
+            const pool = poolByGid[gid];
+            if (!pool || pool.status !== 'active') continue;
+            const poolTotalVp = pool.voting_power?.vp_human || 0;
+            if (poolTotalVp <= 0) continue;
+            const share = memberVpInPool / poolTotalVp;
+            for (const bucket of (pool.bribes?.active_now || [])) {
+                for (const asset of (bucket.assets || [])) {
+                    const amount = parseFloat(asset.amount) || 0;
+                    if (amount === 0) continue;
+                    const { decimals } = resolveTokenMetaFromInfo(asset.info, tokenPrices);
+                    const priceUsd = resolveTokenPriceFromInfo(asset.info, tokenPrices);
+                    if (priceUsd) usd += (amount / Math.pow(10, decimals)) * share * priceUsd;
+                }
+            }
+        }
+        return usd;
     }
 
     // Build the lookup key from a normalized pool object in store.pools.
@@ -6693,6 +7183,20 @@
         const ampAvg    = ampTotal    > 0 ? ampWeighted    / ampTotal    : 0;
         setText('stat-member-apr-non', nonAmpTotal > 0 ? `${nonAmpAvg.toFixed(1)}%` : '—');
         setText('stat-member-apr-amp', ampTotal    > 0 ? `${ampAvg.toFixed(1)}%`    : '—');
+
+        // Rev T1: the band's whole point is COMPARISON — put the vs-TLA-avg delta
+        // right on the tile instead of making the reader do the subtraction.
+        // System averages come from the same render pass that fills the top band
+        // (store.avgNonApr / store.avgAmpApr); no value -> chip stays empty (honest).
+        const deltaChip = (elId, mine, sys, has) => {
+            const el = document.getElementById(elId);
+            if (!el) return;
+            if (!has || !(sys > 0)) { el.textContent = ''; return; }
+            const d = mine - sys;
+            el.innerHTML = `<span class="${d >= 0 ? 'text-emerald-400' : 'text-red-400'}" title="Your capital-weighted average vs the TLA-wide simple average of active pools (${fmtPct(sys)})">${d >= 0 ? '+' : ''}${d.toFixed(1)}pt vs TLA avg</span>`;
+        };
+        deltaChip('stat-member-apr-non-sub', nonAmpAvg, store.avgNonApr, nonAmpTotal > 0);
+        deltaChip('stat-member-apr-amp-sub', ampAvg, store.avgAmpApr, ampTotal > 0);
 
         // Wire the expandable breakdown toggles (once).
         wireBreakdownToggle('member-rewards-toggle', 'member-rewards-breakdown');
@@ -7106,34 +7610,41 @@
             }
         };
         
-        // Top by Avg Volume - use vol_4ep_avg field
+        // Top by Avg Volume - use vol_4ep_avg field. Rev T1: per-DEX filter —
+        // top 5 is computed WITHIN the selected DEX, so SS mode is the true SS
+        // top 5, never the all-DEX list with rows removed.
+        const volDexMode = store.volDexMode || 'all';
+        const volDexPass = (p) => volDexMode === 'all' ? true
+            : volDexMode === 'astro' ? (p.dex || '').includes('Astro')
+            : (p.dex || '').includes('Skeleton');
         const topVolume = [...active]
+            .filter(volDexPass)
             .map(p => ({
                 ...p,
                 avgVolume: p.vol_4ep_avg || 0
             }))
             .filter(p => p.avgVolume > 0)
-            .sort((a, b) => b.avgVolume - a.avgVolume)
-            .slice(0, 5);
-        
-        document.getElementById('top-vp-pools').innerHTML = topVolume.map((p, i) => `
+            .sort((a, b) => b.avgVolume - a.avgVolume);
+        // Rev T1.2: pool tiles use the SAME expander as every person board —
+        // top 5, +10 per click, collapse always available once expanded.
+        boardExpander(document.getElementById('top-vp-pools'), topVolume.map((p, i) => `
             <div class="flex items-center justify-between p-2 rounded-lg bg-white/[0.02] hover:bg-white/[0.04]">
                 <div class="flex items-center gap-2">
                     <span class="w-6 h-6 rounded flex items-center justify-center text-xs font-bold ${i < 3 ? `rank-${i+1}` : 'bg-white/10'}">${i+1}</span>
                     <div class="flex flex-col">
                         <div class="flex items-center">
                             <span class="text-sm font-medium">${p.name}</span>
-                            ${getRankBadge(p.name, i, prevByVol)}
+                            ${volDexMode === 'all' ? getRankBadge(p.name, i, prevByVol) : ''}
                         </div>
                         <div class="flex items-center gap-1">${getDexLabel(p.dex)}</div>
                     </div>
                 </div>
                 <div class="flex flex-col items-end">
                     <span class="mono text-orange-400 text-sm">${fmt$(p.avgVolume)}</span>
-                    ${deltaLine(p.avgVolume, prevVolByName[p.name])}
+                    ${volDexMode === 'all' ? deltaLine(p.avgVolume, prevVolByName[p.name]) : ''}
                 </div>
             </div>
-        `).join('') || '<div class="text-gray-500 text-sm">No volume data</div>';
+        `), 'volp', '<div class="text-gray-500 text-sm">No volume data</div>');
         
         // Top by Avg DEX Liquidity (liq_4ep_avg) OR TLA-staked, per the toggle.
         const liqMode = store.liqTileMode || 'dex';
@@ -7170,14 +7681,13 @@
         const topLiquidity = [...active]
             .map(p => ({ ...p, _liq: liqValue(p) }))
             .filter(p => p._liq > 0)
-            .sort((a, b) => b._liq - a._liq)
-            .slice(0, 5);
+            .sort((a, b) => b._liq - a._liq);
         // Prior-window ranking for THIS mode (rank badges).
         const prevByLiqMode = liqMode === 'tla'
             ? Object.entries(prevTlaStakedByName).map(([name, v]) => ({ name, v })).sort((a, b) => b.v - a.v)
             : prevByLiq;
 
-        document.getElementById('top-depth-pools').innerHTML = topLiquidity.map((p, i) => `
+        boardExpander(document.getElementById('top-depth-pools'), topLiquidity.map((p, i) => `
             <div class="flex items-center justify-between p-2 rounded-lg bg-white/[0.02] hover:bg-white/[0.04]">
                 <div class="flex items-center gap-2">
                     <span class="w-6 h-6 rounded flex items-center justify-center text-xs font-bold ${i < 3 ? `rank-${i+1}` : 'bg-white/10'}">${i+1}</span>
@@ -7194,34 +7704,75 @@
                     ${deltaLine(p._liq, liqPrev(p))}
                 </div>
             </div>
-        `).join('') || '<div class="text-gray-500 text-sm">No liquidity data</div>';
+        `), 'liqp', '<div class="text-gray-500 text-sm">No liquidity data</div>');
 
         // Top by APR — with VP-change + bribe context (the drivers of an APR move).
         // APR follows emissions (which follow votes), with bribes stacked on top, so the
         // VP delta explains most of why APR moved; bribes are shown as current context.
         // (prevVpByName computed above with correct variant handling.)
-        const topAPR = [...active].filter(p => p.apr_amp > 0).sort((a, b) => (b.apr_amp || 0) - (a.apr_amp || 0)).slice(0, 5);
+        // Rev T1: Non-Amp / Amplified toggle. The apr-history baseline is
+        // amplified-based, so rank badges + deltas render only in Amp mode —
+        // shown honestly blank in Non rather than compared against the wrong series.
+        const aprTileMode = store.aprTileMode || 'amp';
+        const aprKey = aprTileMode === 'amp' ? 'apr_amp' : 'apr_non';
+        const aprSubEl = document.getElementById('apr-tile-sub');
+        if (aprSubEl) aprSubEl.textContent = aprTileMode === 'amp' ? 'live amplified · ▲▼ APR rank vs last epoch' : 'live non-amplified · rank history is amp-based (arrows hidden here)';
+        const topAPR = [...active].filter(p => (p[aprKey] || 0) > 0).sort((a, b) => (b[aprKey] || 0) - (a[aprKey] || 0));
 
-        document.getElementById('top-apr-pools').innerHTML = topAPR.map((p, i) => `
+        boardExpander(document.getElementById('top-apr-pools'), topAPR.map((p, i) => `
             <div class="flex items-center justify-between p-2 rounded-lg bg-white/[0.02] hover:bg-white/[0.04]">
                 <div class="flex items-center gap-2">
                     <span class="w-6 h-6 rounded flex items-center justify-center text-xs font-bold ${i < 3 ? `rank-${i+1}` : 'bg-white/10'}">${i+1}</span>
                     <div class="flex flex-col">
                         <div class="flex items-center">
                             <span class="text-sm font-medium">${p.name}</span>
-                            ${getRankBadge(p.name, i, prevByApr)}
+                            ${aprTileMode === 'amp' ? getRankBadge(p.name, i, prevByApr) : ''}
                         </div>
                         <div class="flex items-center gap-1">${getDexLabel(p.dex)}</div>
                     </div>
                 </div>
                 <div class="flex flex-col items-end">
-                    <span class="mono text-green-400 text-sm">${fmtPct(p.apr_amp)}</span>
-                    ${deltaLine(p.apr_amp, prevAprByName[p.name])}
+                    <span class="mono text-green-400 text-sm">${fmtPct(p[aprKey])}</span>
+                    ${aprTileMode === 'amp' ? deltaLine(p.apr_amp, prevAprByName[p.name]) : ''}
                 </div>
             </div>
-        `).join('');
+        `), 'aprp', '<div class="text-gray-500 text-sm">No APR data</div>');
 
         wireLiqModeToggle();
+        wireVolDexToggle();
+        wireAprModeToggle();
+    }
+
+    // Rev T1: Volume-board DEX filter + APR-board mode toggles (liq-mode pattern).
+    function wireVolDexToggle() {
+        const btns = document.querySelectorAll('.vol-dex-btn');
+        if (!btns.length || btns[0].dataset.wired) return;
+        btns.forEach(b => {
+            b.dataset.wired = '1';
+            b.addEventListener('click', () => {
+                store.volDexMode = b.dataset.voldex;
+                document.querySelectorAll('.vol-dex-btn').forEach(x => {
+                    const on = x.dataset.voldex === store.volDexMode;
+                    x.className = `vol-dex-btn text-[10px] px-2 py-0.5 rounded font-medium ${on ? 'bg-cyan-500/20 text-cyan-300' : 'bg-white/5 text-gray-400'}`;
+                });
+                try { renderTopPools(); } catch (e) { console.warn('vol dex toggle re-render:', e); }
+            });
+        });
+    }
+    function wireAprModeToggle() {
+        const btns = document.querySelectorAll('.apr-mode-btn');
+        if (!btns.length || btns[0].dataset.wired) return;
+        btns.forEach(b => {
+            b.dataset.wired = '1';
+            b.addEventListener('click', () => {
+                store.aprTileMode = b.dataset.aprmode;
+                document.querySelectorAll('.apr-mode-btn').forEach(x => {
+                    const on = x.dataset.aprmode === store.aprTileMode;
+                    x.className = `apr-mode-btn text-[10px] px-2 py-0.5 rounded font-medium ${on ? 'bg-cyan-500/20 text-cyan-300' : 'bg-white/5 text-gray-400'}`;
+                });
+                try { renderTopPools(); } catch (e) { console.warn('apr mode toggle re-render:', e); }
+            });
+        });
     }
 
     // Toggle handler for the DEX/TLA liquidity tile (wired once on first render).
@@ -7255,10 +7806,75 @@
         return null;
     }
 
+    // ---- ampCAPA Gov DAO position (Camron 2026-08-02) --------------------------
+    // When a member stakes their ampCAPA position's RECEIPT token (ampLP) into the
+    // ampCAPA governance DAO, the receipt leaves the wallet, the positions cron
+    // loses it, and the exit logic reads it as "withdrawn −100%". The liquidity
+    // never left TLA — the ve3 contract still holds it; only the receipt moved.
+    // Fix: one live per-wallet read of the DAODAO voting module (same contracts and
+    // conversion chain as ampcapa-tool.html), cached per wallet for the session.
+    // Honesty rule: we only RE-ATTRIBUTE when the chain confirms a gov balance —
+    // if the LCD is unreachable or the balance is zero, nothing changes (no guessing).
+    const AMPCAPA_GOV = {
+        lcds: ['https://terra.publicnode.com', 'https://terra-lcd.publicnode.com', 'https://phoenix-lcd.terra.dev'],
+        votingModule: 'terra1juj3ymejnug9p92upphcq0prq4e0hpw6rcu20njf8tk7n9sl2wxqldr0mt',   // ampCAPA DAODAO voting module (cw20-stake style: list_stakers / staked_balance)
+        ve3Contract:  'terra1zly98gvcec54m3caxlqexce7rus6rzgplz7eketsdz7nh750h2rqvu8uzx',   // ve3 asset staking — ampLP → ampCAPA exchange rate
+        denom: 'factory/terra186rpfczl7l2kugdsqqedegl4es4hp624phfc7ddy8my02a4e8lgq5rlx7y/ampCAPA',
+        poolName: 'ampCAPA',   // the TLA single-bucket entry this receipt belongs to
+    };
+    async function _ampcapaSmart(contract, query) {
+        const b64 = btoa(unescape(encodeURIComponent(JSON.stringify(query))));
+        let lastErr = null;
+        for (const lcd of AMPCAPA_GOV.lcds) {
+            try {
+                const r = await fetch(`${lcd}/cosmwasm/wasm/v1/contract/${contract}/smart/${b64}`, { headers: { Accept: 'application/json' } });
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                const j = await r.json();
+                return j.data !== undefined ? j.data : j;
+            } catch (e) { lastErr = e; }
+        }
+        throw lastErr || new Error('all LCDs failed');
+    }
+    function ensureAmpCapaGov(wallet) {
+        store._ampcapaGov = store._ampcapaGov || {};
+        const cur = store._ampcapaGov[wallet];
+        if (cur !== undefined) return;                 // resolved, empty, or in-flight
+        store._ampcapaGov[wallet] = null;              // in-flight marker
+        (async () => {
+            try {
+                // 1) the wallet's staked receipt balance in the gov voting module
+                //    (cw20-stake per-address query; voting_power fallback for module variants)
+                let balRaw = null;
+                try {
+                    const d = await _ampcapaSmart(AMPCAPA_GOV.votingModule, { staked_balance_at_height: { address: wallet } });
+                    balRaw = parseFloat(d.balance);
+                } catch (e1) {
+                    const d = await _ampcapaSmart(AMPCAPA_GOV.votingModule, { voting_power_at_height: { address: wallet } });
+                    balRaw = parseFloat(d.power);
+                }
+                if (!(balRaw > 0)) { store._ampcapaGov[wallet] = { balance: 0 }; return; }
+                // 2) ampLP → ampCAPA rate from the ve3 contract (tool's exact query)
+                const rd = await _ampcapaSmart(AMPCAPA_GOV.ve3Contract, { exchange_rates: { assets: [["single", { native: AMPCAPA_GOV.denom }]], limit: 1 } });
+                const rates = rd && rd[0] && rd[0].exchange_rates;
+                if (!rates || !rates.length) throw new Error('no ve3 rate');
+                const rateVe3 = parseFloat(rates.sort((a, b) => b[0] - a[0])[0][1].exchange_rate);
+                const ampCapaAmt = (balRaw / 1e6) * rateVe3;
+                // 3) USD from the priced feed (ampCAPA carries its own hub-ratio price)
+                const px = store.adaoSnap?.token_prices?.ampCAPA?.final_price_usd || 0;
+                store._ampcapaGov[wallet] = { balance: balRaw, ampLp: balRaw / 1e6, rateVe3, ampCapa: ampCapaAmt, usd: ampCapaAmt * px, priced: px > 0, checkedAt: Date.now() };
+                try { renderExitRisk(); } catch (e) {}
+            } catch (e) {
+                console.warn('ampCAPA gov read:', e.message);
+                delete store._ampcapaGov[wallet];      // unknown ≠ zero — retry next select
+            }
+        })();
+    }
+
     // Member mode for the Pool Health panel: the selected wallet's LP positions,
     // ranked by their capital, with how much they added/pulled vs the prior epoch
     // (from the weekly archive) and which positions are inactive or near the threshold.
     function renderExitRiskMember(member, panel, summaryEl) {
+        ensureAmpCapaGov(member.wallet);
         const memberName = member.name || (member.wallet ? member.wallet.slice(0, 10) + '\u2026' : 'Member');
         const titleEl = document.getElementById('exit-risk-title');
         const descEl = document.getElementById('exit-risk-desc');
@@ -7276,7 +7892,7 @@
         const agg = new Map();
         for (const lp of (member.lp_positions || [])) {
             const key = `${lp.pool_name}|${lp.bucket}`;
-            if (!agg.has(key)) agg.set(key, { name: lp.pool_name, bucket: lp.bucket, usd: 0, units: 0, hasUnits: false, status: lp.status, dist: lp.distance_from_threshold_pp, aprW: 0, aprWsum: 0, poolPct: 0, amplified: false });
+            if (!agg.has(key)) agg.set(key, { name: lp.pool_name, bucket: lp.bucket, dex: lp.dex || null, usd: 0, units: 0, hasUnits: false, status: lp.status, dist: lp.distance_from_threshold_pp, aprW: 0, aprWsum: 0, poolPct: 0, amplified: false });
             const a = agg.get(key);
             const posUsd = lp.estimated_position_usd || 0;
             a.usd += posUsd;
@@ -7302,13 +7918,33 @@
                 valuedStake = (unitPct / 100) * pv.usd;   // ~$ of stake added/removed in real terms
             }
             const apr = a.aprWsum > 0 ? a.aprW / a.aprWsum : null;
-            recs.push({ name: a.name, bucket: a.bucket, usd: a.usd, valueDelta, unitPct, valuedStake, status: a.status, dist: a.dist, exited: false, apr, poolPct: a.poolPct || null, amplified: a.amplified });
+            recs.push({ name: a.name, bucket: a.bucket, dex: a.dex, usd: a.usd, valueDelta, unitPct, valuedStake, status: a.status, dist: a.dist, exited: false, apr, poolPct: a.poolPct || null, amplified: a.amplified });
         }
         if (prior) {
             for (const [key, pv] of Object.entries(prior)) {
                 if (seen.has(key) || !pv.usd) continue;
                 const i = key.lastIndexOf('|');
                 recs.push({ name: key.slice(0, i), bucket: key.slice(i + 1), usd: 0, valueDelta: -pv.usd, unitPct: -100, valuedStake: -pv.usd, status: 'exited', dist: null, exited: true });
+            }
+        }
+        // ampCAPA Gov re-attribution: if the chain confirms this wallet holds the
+        // receipt staked in the governance DAO, the position is NOT an exit — it's
+        // still TLA-staked liquidity, held via the voting module. Convert the false
+        // "withdrawn" row (or add the row if the archive never saw it) and value it
+        // from the live gov balance. Only fires on chain-confirmed balance > 0.
+        const gov = store._ampcapaGov?.[member.wallet];
+        if (gov && gov.balance > 0) {
+            const gi = recs.findIndex(r => r.name === AMPCAPA_GOV.poolName);
+            const govUsd = gov.priced ? gov.usd : 0;
+            if (gi >= 0) {
+                const r = recs[gi];
+                const priorUsd = r.exited ? -(r.valueDelta || 0) : null;   // exited rows carried valueDelta = -prior.usd
+                recs[gi] = { ...r, exited: false, govStaked: true, status: 'active',
+                    usd: (r.usd || 0) + govUsd,
+                    valueDelta: (priorUsd != null && govUsd > 0) ? govUsd - priorUsd : (r.exited ? null : r.valueDelta),
+                    unitPct: null, valuedStake: null };
+            } else {
+                recs.push({ name: AMPCAPA_GOV.poolName, bucket: 'single', dex: 'Single', usd: govUsd, valueDelta: null, unitPct: null, valuedStake: null, status: 'active', dist: null, exited: false, govStaked: true, apr: null, poolPct: null, amplified: true });
             }
         }
         if (!recs.length) {
@@ -7409,7 +8045,7 @@
             return `
             <div class="flex items-center gap-3 p-3 rounded-lg border-l-2 ${border}">
               <div class="flex-1 min-w-0">
-                <div class="flex items-center gap-2 flex-wrap"><span class="font-medium truncate">${r.name}</span><span class="text-[9px] px-1 py-0.5 rounded bg-gray-500/20 text-gray-400">${r.bucket}</span>${ampTag}${statusBadge(r)}</div>
+                <div class="flex items-center gap-2 flex-wrap"><span class="font-medium truncate">${r.name}</span>${dexTagOf(r.dex)}<span class="text-[9px] px-1 py-0.5 rounded bg-gray-500/20 text-gray-400">${r.bucket}</span>${ampTag}${statusBadge(r)}${r.govStaked ? `<span class="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 font-semibold" title="This position's receipt token (ampLP) is staked in the ampCAPA governance DAO — the underlying liquidity is STILL staked in TLA via the ve3 contract; only the receipt moved. Live-read from the DAODAO voting module.">staked in ampCAPA Gov \u00b7 still TLA</span>` : ''}</div>
                 ${earnLine}
                 ${splitLine}
                 ${distNote}
@@ -7556,15 +8192,16 @@
         const left = p.epochs_left;
         const cls = left <= 1 ? 'bg-red-500/15 text-red-300 font-semibold' : left <= 4 ? 'bg-amber-500/15 text-amber-300' : 'bg-emerald-500/15 text-emerald-300';
         const txt = left === 0 ? 'bribes end after this epoch' : `bribed thru e${p.last_funded_period} · ${left} epoch${left === 1 ? '' : 's'}`;
-        let out = `<span class="text-[9px] px-1.5 py-0.5 rounded ${cls}" title="${tip}">${txt}</span>`;
-        if (Array.isArray(p.funders)) {
-            for (const c of [...new Set(p.funders.map(f => f.class))]) {
-                const u = FUNDER_CLASS_UI[c];
-                if (u) out += `<span class="text-[9px] px-1.5 py-0.5 rounded ${u.cls}" title="At least one attributed on-chain bribe from this source spans the present — open details for who, which tokens, and until when.">${u.txt}</span>`;
-            }
-            if (p.has_unattributed) out += `<span class="text-[9px] px-1.5 py-0.5 rounded bg-gray-500/15 text-gray-400" title="Part of this pool’s bribe pots isn’t explained by any captured placement event — real money, unknown payer until the archive backfill closes the Feb 2025–Jun 2026 capture window.">+unattributed</span>`;
-        }
-        return out;
+        // Chip diet (Camron 2026-08-02: rows were a wall of badges): the ROW carries
+        // only the runway chip; funder-class tags and the +unattributed marker stay in
+        // the drill's WHO'S-PAYING panel, one tap away. The tip names the funders so
+        // the provenance is still hover-visible without the visual weight.
+        let funderNote = '';
+        if (Array.isArray(p.funders) && p.funders.length) {
+            const classes = [...new Set(p.funders.map(f => f.class))].map(c => (FUNDER_CLASS_UI[c] || {}).txt).filter(Boolean);
+            if (classes.length) funderNote = ` Funded by: ${classes.join(', ')}${p.has_unattributed ? ' (+unattributed pot money)' : ''} — open details for who/which tokens/until when.`;
+        } else if (p.has_unattributed) funderNote = ' Pot money with no captured payer event — details in the drill.';
+        return `<span class="text-[9px] px-1.5 py-0.5 rounded ${cls}" title="${tip}${funderNote}">${txt}</span>`;
     }
 
     // ---- Pool drill-down (Pool Health v2, Camron 2026-07-30: "expand for real
@@ -7791,6 +8428,20 @@
           </div>`;
         box.dataset.built = '1';
     };
+
+    // Shared DEX tag — same color convention as the waterfall (Astro blue,
+    // Skeleton orange, Single gray) so the two LUNA-USDC rows are never
+    // ambiguous again (Camron 2026-08-02: "we don't call out what dex the LP
+    // belongs to"). Used by Pool Health rows (TLA-wide + member) and the zap planner.
+    function dexTagOf(dex) {
+        if (!dex) return '';
+        const isSingle = dex === 'Single';
+        if (isSingle) return '';   // bucket chip already says "single" — a second gray "Single" tag is noise
+        const isAstro = String(dex).includes('Astro');
+        const short = isSingle ? 'Single' : (isAstro ? 'Astro' : 'Skeleton');
+        const cls = isSingle ? 'text-gray-400' : (isAstro ? 'text-blue-400' : 'text-orange-400');
+        return `<span class="text-[9px] font-semibold ${cls}">${short}</span>`;
+    }
 
     function renderExitRisk() {
         const panel = document.getElementById('exit-risk-panel');
@@ -8135,9 +8786,10 @@
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-2 flex-wrap">
                     <span class="font-medium truncate">${r.name}</span>
+                    ${dexTagOf(r.hp && r.hp.dex)}
                     <span class="text-[9px] px-1 py-0.5 rounded bg-gray-500/20 text-gray-400">${r.bucket}</span>
                     ${statusBadge(r)}
-                    ${sc}
+                    ${/possible depeg/.test(sc) ? sc : ''}
                     ${runwayChip(r)}
                   </div>
                   <div class="flex items-center gap-2 mt-0.5">
@@ -8223,7 +8875,7 @@ ${(() => {
             <span class="text-[10px] text-gray-500" title="How many epochs the row charts and trend labels cover. One epoch = one week.">window</span>
             ${[4, 8, 12].map(n => `<button onclick="setPoolWin(${n})" title="Charts + trend % over the last ${n} epochs (${n} weeks)" class="text-[10px] px-2 py-1 rounded-md border transition-colors ${phWin() === n ? 'bg-violet-500/15 text-violet-300 border-violet-500/30' : 'bg-white/[0.02] text-gray-500 border-white/5 hover:text-gray-300'}">${n}</button>`).join('')}
           </div>`;
-        const colHeads = `<div class="hidden md:flex items-center gap-3 px-2.5 mb-1 mt-1">
+        const colHeads = `<div class="hidden md:flex items-center gap-3 px-2.5 py-1 mb-1 mt-1 sticky top-0 z-10 bg-gray-900/90 backdrop-blur-sm rounded">
             <span class="w-2 shrink-0"></span>
             <div class="flex-1 min-w-0 text-[9px] text-gray-600 uppercase tracking-wider">pool</div>
             <div class="hidden lg:block shrink-0 text-[9px] text-gray-600 uppercase tracking-wider text-center" style="width:200px" title="TLA-staked $ over the selected window">staked trend</div>
@@ -8237,6 +8889,13 @@ ${(() => {
             const rows = byBucket[b].sort(SORTS[store._phSort].fn);
             const flagged = rows.filter(r => r.sev).length;
             const totStaked = rows.reduce((s, r) => s + (r.staked || 0), 0);
+            // Bucket-level direction at a glance: summed windowed net flow (follows the
+            // 4/8/12 toggle) so STABLE-vs-PROJECT direction reads without scanning rows.
+            let bktFlow = 0, bktFlowSeen = false;
+            rows.forEach(r => { const f = windowedNetFlow(r); if (f != null) { bktFlow += f; bktFlowSeen = true; } });
+            const bktFlowStr = bktFlowSeen
+                ? `<span class="text-[10px] mono ${bktFlow > 50 ? 'text-emerald-400' : bktFlow < -50 ? 'text-red-400' : 'text-gray-500'}" title="Net dollars into/out of TLA staking across this bucket's pools over the selected ${phWin()}-epoch window">${bktFlow >= 0 ? '+' : '\u2212'}${fmt$(Math.abs(bktFlow))} · ${phWin()}ep</span>`
+                : '';
             const visible = rows.map((r, i) => rowHtml(r, i)).join('');
             const hidden = '';
             const btn = false
@@ -8248,6 +8907,7 @@ ${(() => {
                   <div class="flex items-center gap-2">
                     <span class="text-xs font-semibold text-gray-300 uppercase tracking-wide">${b}</span>
                     <span class="text-[10px] text-gray-600">${rows.length} pool${rows.length === 1 ? '' : 's'} \u00b7 ${fmt$(totStaked)} staked</span>
+                    ${bktFlowStr}
                   </div>
                   ${flagged ? `<span class="text-[10px] px-2 py-0.5 rounded bg-amber-500/15 text-amber-400">${flagged} flagged</span>` : `<span class="text-[10px] px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400">all clear</span>`}
                 </div>
@@ -8268,7 +8928,13 @@ ${(() => {
         const panel = document.getElementById('liq-growth-panel');
         if (!panel) return;
         const hist = store.poolStatusHistory;
-        const heps = (hist?.epochs || []).slice().sort((a, b) => a - b);
+        const allHeps = (hist?.epochs || []).slice().sort((a, b) => a - b);
+        // Window toggle (Camron 2026-08-02 rebuild): all-tracked / 8 / 4 epochs.
+        // History currently reaches back to E184 and grows weekly — the "all"
+        // option is honest about that in its label rather than faking depth.
+        const lgWin = store._lgWin || 'all';
+        window.setLgWin = (w) => { store._lgWin = w; renderLiquidityGrowth(); };
+        const heps = lgWin === 'all' ? allHeps : allHeps.slice(-Number(lgWin));
         if (heps.length < 2) {
             panel.innerHTML = `<div class="p-3 rounded-lg bg-white/[0.02] text-gray-500 text-sm">Liquidity-growth tracking needs at least two epochs of history. It will populate as the pool-status-history cron accumulates data.</div>`;
             return;
@@ -8377,10 +9043,25 @@ ${(() => {
         const gainers = drivers.filter(d => d.dVal > 0).slice(0, 4);
         const losers = drivers.filter(d => d.dVal < 0).slice(-4).reverse();
 
+        // ---- The two-force story (price-neutral): the LUNA family's net change is
+        // mostly the auto-compounding rewards buying back in; everything else is LPs
+        // actually depositing/withdrawing/rebalancing. Splitting them makes the
+        // window's real mechanic the headline instead of a footnote.
+        const LUNA_FAMILY = new Set(['LUNA', 'ampLUNA', 'bLUNA', 'stLUNA', 'arbLUNA', 'boneLUNA']);
+        let lunaFamNet = 0, othersNet = 0;
+        for (const sym of new Set([...Object.keys(amtF), ...Object.keys(amtL)])) {
+            const dVal = ((amtL[sym] || 0) - (amtF[sym] || 0)) * (latestPx[sym] || 0);
+            if (LUNA_FAMILY.has(sym)) lunaFamNet += dVal; else othersNet += dVal;
+        }
+        // Retention: how much of the window-start real base is still here.
+        const retention = first.real > 0 ? (last.real / first.real) * 100 : null;
+
         // ---- The chart: real vs headline, indexed to 100 at window start, with
-        // epoch ticks. SVG, no library, hover titles per point.
+        // epoch ticks + per-epoch REAL flow bars (the epoch-over-epoch change in the
+        // price-neutral series) so a one-week event reads as one visible bar, not a
+        // sentence. SVG, no library, hover titles per point/bar.
         const chart = (() => {
-            const W = 640, H = 150, padL = 34, padR = 10, padT = 12, padB = 22;
+            const W = 640, H = 168, padL = 34, padR = 10, padT = 12, padB = 22;
             const iw = W - padL - padR, ih = H - padT - padB;
             const idx = (v, base) => base > 0 ? (v / base) * 100 : 100;
             const realIdx = series.map(s => idx(s.real, first.real));
@@ -8389,6 +9070,19 @@ ${(() => {
             const lo = Math.min(...all, 98), hi = Math.max(...all, 102);
             const sx = i => padL + (series.length === 1 ? iw / 2 : i / (series.length - 1) * iw);
             const sy = v => padT + (hi - v) / (hi - lo) * ih;
+            // Real-flow bars: drawn in the bottom band, independent scale, zero-line at the band top.
+            const flows = series.map((s, i) => i ? s.real - series[i - 1].real : 0);
+            const maxFlow = Math.max(...flows.map(f => Math.abs(f)), 1);
+            const bandTop = H - padB - Math.min(34, ih * 0.32);
+            const bandH = (H - padB) - bandTop;
+            const barW = Math.max(4, Math.min(14, iw / Math.max(series.length - 1, 1) * 0.5));
+            const flowBars = flows.map((f, i) => {
+                if (i === 0 || Math.abs(f) < 1) return '';
+                const h = Math.max(1.5, Math.abs(f) / maxFlow * bandH);
+                const x = sx(i) - barW / 2;
+                const up = f >= 0;
+                return `<rect x="${x.toFixed(1)}" y="${((H - padB) - h).toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" fill="${up ? 'rgba(16,185,129,0.55)' : 'rgba(239,68,68,0.55)'}"><title>E${series[i - 1].e}\u2192E${series[i].e} \u00b7 real flow ${f >= 0 ? '+' : '\u2212'}${fmt$(Math.abs(f))}</title></rect>`;
+            }).join('');
             const line = (vals) => vals.map((v, i) => `${sx(i).toFixed(1)},${sy(v).toFixed(1)}`).join(' ');
             const dots = (vals, color, label, usdVals) => vals.map((v, i) =>
                 `<circle cx="${sx(i).toFixed(1)}" cy="${sy(v).toFixed(1)}" r="3" fill="${color}" opacity="0.9"><title>E${series[i].e} · ${label} ${fmt$(usdVals[i])} (index ${v.toFixed(1)})</title></circle>`).join('');
@@ -8399,7 +9093,8 @@ ${(() => {
             const eventMark = isEvent
                 ? (() => { const i = series.findIndex(s => s.e === biggestStep.at); return i > 0 ? `<line x1="${sx(i).toFixed(1)}" y1="${padT}" x2="${sx(i).toFixed(1)}" y2="${H - padB}" stroke="${biggestStep.d < 0 ? '#f59e0b' : '#10b981'}" stroke-width="1" stroke-dasharray="2 3" opacity="0.7"/><text x="${sx(i).toFixed(1)}" y="${padT - 2}" fill="${biggestStep.d < 0 ? '#f59e0b' : '#10b981'}" font-size="8.5" text-anchor="middle">event</text>` : ''; })()
                 : '';
-            return `<svg viewBox="0 0 ${W} ${H}" class="w-full" style="max-height:170px" preserveAspectRatio="xMidYMid meet">
+            return `<svg viewBox="0 0 ${W} ${H}" class="w-full" style="max-height:190px" preserveAspectRatio="xMidYMid meet">
+                ${flowBars}
                 ${gridHtml}${eventMark}
                 <polyline points="${line(usdIdx)}" fill="none" stroke="#64748b" stroke-width="1.5" stroke-linejoin="round" opacity="0.75"/>
                 <polyline points="${line(realIdx)}" fill="none" stroke="#22d3ee" stroke-width="2.25" stroke-linejoin="round"/>
@@ -8407,9 +9102,10 @@ ${(() => {
                 ${dots(realIdx, '#22d3ee', 'real', series.map(s => s.real))}
                 ${ticks}
             </svg>
-            <div class="flex items-center gap-4 text-[10px] text-gray-500 -mt-1">
+            <div class="flex items-center gap-4 text-[10px] text-gray-500 -mt-1 flex-wrap">
                 <span class="flex items-center gap-1.5"><span class="inline-block w-4 h-0.5" style="background:#22d3ee"></span>Real (price-neutral) — the honest signal</span>
                 <span class="flex items-center gap-1.5"><span class="inline-block w-4 h-0.5" style="background:#64748b"></span>Headline $ — moves with token prices</span>
+                <span class="flex items-center gap-1.5"><span class="inline-block w-2 h-2 rounded-sm" style="background:rgba(16,185,129,0.55)"></span><span class="inline-block w-2 h-2 rounded-sm -ml-1" style="background:rgba(239,68,68,0.55)"></span>bars = real $ in/out per epoch (hover for amounts)</span>
                 <span class="ml-auto hidden sm:inline">indexed · window start = 100</span>
             </div>`;
         })();
@@ -8430,14 +9126,23 @@ ${(() => {
           <div class="flex items-center gap-3 mb-1 flex-wrap">
             <div class="flex items-center gap-2 text-lg font-bold ${verdict.cls}"><i class="fas ${verdict.icon}"></i>${verdict.txt}</div>
             <div class="text-[11px] text-gray-500">real liquidity over ${heps.length} epochs (E${heps[0]}\u2013E${heps[heps.length - 1]})</div>
+            <div class="flex items-center gap-1 ml-1">
+              <span class="text-[10px] text-gray-600" title="How many epochs the whole panel covers. History reaches back to E${allHeps[0]} and grows weekly.">window</span>
+              ${['4', '8', 'all'].map(w => `<button onclick="setLgWin('${w}')" class="text-[10px] px-2 py-0.5 rounded-md border transition-colors ${String(lgWin) === w ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' : 'bg-white/[0.02] text-gray-500 border-white/5 hover:text-gray-300'}">${w === 'all' ? `all (${allHeps.length})` : w}</button>`).join('')}
+            </div>
             <div class="ml-auto text-[11px] text-gray-500">TLA holds <span class="text-cyan-400 font-semibold mono">${fmt$(last.actual)}</span> staked</div>
           </div>
           <div class="text-xs text-gray-400 mb-3">${story}</div>
           <div class="rounded-lg bg-white/[0.02] p-3 mb-3">${chart}</div>
-          <div class="grid grid-cols-2 md:grid-cols-3 gap-2 mb-3">
+          <div class="grid grid-cols-2 md:grid-cols-3 gap-2 mb-2">
             ${card('Real (price-neutral)', sign(realPct), 'reserves revalued at today\u2019s prices', Math.abs(realPct) <= 5 ? 'text-gray-200' : (realPct > 0 ? 'text-emerald-400' : 'text-red-400'))}
             ${card('Headline $ (with price)', sign(usdPct), 'includes token price moves', Math.abs(usdPct) <= 5 ? 'text-gray-200' : (usdPct > 0 ? 'text-emerald-400' : 'text-red-400'))}
             ${card(`Last ${recent.length} epochs (real)`, sign(recentPct), isEvent ? 'the \u201csince the event\u201d read' : 'recent momentum', Math.abs(recentPct) <= 3 ? 'text-gray-200' : (recentPct > 0 ? 'text-emerald-400' : 'text-red-400'))}
+          </div>
+          <div class="grid grid-cols-2 md:grid-cols-3 gap-2 mb-3">
+            ${card('LUNA family net', (lunaFamNet >= 0 ? '+' : '\u2212') + fmt$(Math.abs(lunaFamNet)), 'mostly auto-compounding buying back in', lunaFamNet >= 0 ? 'text-emerald-400' : 'text-red-400')}
+            ${card('Everything else net', (othersNet >= 0 ? '+' : '\u2212') + fmt$(Math.abs(othersNet)), 'LP deposits, withdrawals & rebalancing', othersNet >= 0 ? 'text-emerald-400' : 'text-red-400')}
+            ${retention != null ? card('Base retained', retention.toFixed(1) + '%', `of the E${heps[0]} real base is still here`, retention >= 97 ? 'text-emerald-400' : retention >= 85 ? 'text-gray-200' : 'text-red-400') : ''}
           </div>
           <div class="text-[11px] text-gray-400 mb-2">What moved (price-neutral, E${heps[0]}\u2192E${heps[heps.length - 1]}):</div>
           <div class="flex flex-wrap gap-1.5 mb-1">
@@ -8908,6 +9613,29 @@ ${(() => {
             if (memberLegend) memberLegend.classList.add('hidden');
             if (footerMemberLegend) footerMemberLegend.classList.add('hidden');
         }
+        // ---- Shift summary (Planned view): the bucket-level current→projected read.
+        // Every figure is measured: locked-in totals from the boundary snapshot, the
+        // projection = live votes with Votion's slice moved to its optimizer target.
+        // Member/aDAO shifts aren't decomposed — their per-pool lock-in baselines
+        // aren't captured yet (a boundary-snapshot rider is queued); stated, not guessed.
+        const shiftEl = document.getElementById('waterfall-shift-summary');
+        if (shiftEl) {
+            if (useNextEpoch && locked) {
+                let lockedTotal = 0, projTotal = 0; const movers = [];
+                pools.forEach(p => {
+                    const lk = p._demotedVariant ? (p.vp || 0) : (locked.get(lockKey(p))?.total ?? (p.vp || 0));
+                    const pj = getPoolVP(p);
+                    lockedTotal += lk; projTotal += pj;
+                    if (Math.abs(pj - lk) > 1) movers.push({ name: p.name, d: pj - lk });
+                });
+                movers.sort((a, b) => Math.abs(b.d) - Math.abs(a.d));
+                const top = movers.slice(0, 3).map(m => `<span class="mono ${m.d >= 0 ? 'text-emerald-400' : 'text-red-400'}">${m.d >= 0 ? '+' : '\u2212'}${fmtNum(Math.abs(m.d))}</span> ${m.name}`).join(' \u00b7 ');
+                const net = projTotal - lockedTotal;
+                const baselineNote = memberAlloc ? ' \u00b7 member/aDAO lock-in baselines not captured yet \u2014 their shifts aren\u2019t decomposed' : '';
+                shiftEl.innerHTML = `<i class="fas fa-arrows-left-right text-[9px] mr-1 text-gray-500"></i>Projected shift vs locked-in (${store.lockedInDate || 'epoch start'}): bucket <span class="mono ${net >= 0 ? 'text-emerald-400' : 'text-red-400'}">${net >= 0 ? '+' : '\u2212'}${fmtNum(Math.abs(net))} VP</span>${top ? ` \u2014 biggest moves: ${top}` : ''} <span class="text-gray-600">\u00b7 ghost outline = locked-in size \u00b7 hatched = the change \u00b7 holds only if votes stand to epoch end${baselineNote}</span>`;
+                shiftEl.classList.remove('hidden');
+            } else shiftEl.classList.add('hidden');
+        }
         document.getElementById('scale-max').textContent = fmtNum(scaleMax);
         document.getElementById('scale-25').textContent = fmtNum(scaleMax * 0.25);
         document.getElementById('scale-50').textContent = fmtNum(scaleMax * 0.50);
@@ -8950,14 +9678,39 @@ ${(() => {
             // Astro = dark blue, Skeleton = orange, Single = gray.
             const dexCls = (pool.dex === 'Single' || pool.is_single) ? 'text-gray-400' : (pool.dex?.includes('Astro') ? 'text-blue-400' : 'text-orange-400');
 
-            // Planned-epoch view: show the projected vote change at the bar's end (+N / +%).
+            // ---- Shift visualization (Planned view, Camron 2026-08-02) ----
+            // The bar shows the PROJECTED epoch-end size; the ghost outline shows the
+            // locked-in size it's moving from; the hatched region is the change itself
+            // (green = gaining VP, red = losing). Decomposition — measured, two parts:
+            //   cast-vote drift  = live on-chain votes minus the locked-in baseline
+            //                      (votes already placed whose VP moved / new placements)
+            //   Votion planned   = optimizer target minus Votion's current placement
+            // Identity: projected − locked = castDrift + votionPlanned.
+            const lockedVP = pool._demotedVariant ? (pool.vp || 0) : (locked?.get(lockKey(pool))?.total ?? (pool.vp || 0));
+            const castDrift = pool._demotedVariant ? 0 : ((pool.vp || 0) - lockedVP);
+            const projShift = useNextEpoch ? (poolVP - lockedVP) : 0;
+            let ghost = '';
+            if (useNextEpoch && locked) {
+                const lockW = (lockedVP / scaleMax) * 100;
+                const projW = poolWidthPct;
+                if (Math.abs(lockW - projW) > 0.05) {
+                    const from = Math.min(lockW, projW), span = Math.abs(lockW - projW);
+                    const grow = projW >= lockW;
+                    ghost = `
+                        <div class="absolute top-1 bottom-1 rounded border border-dashed border-gray-300/30 pointer-events-none z-10" style="left: ${startPct}%; width: ${Math.max(lockW, 0.4)}%;"></div>
+                        <div class="absolute top-1.5 bottom-1.5 pointer-events-none z-10 ${grow ? '' : 'rounded-r'}" style="left: ${startPct + from}%; width: ${span}%; background: repeating-linear-gradient(45deg, ${grow ? 'rgba(16,185,129,0.45)' : 'rgba(239,68,68,0.45)'} 0 3px, transparent 3px 7px);"></div>`;
+                }
+            }
+
+            // Planned-epoch view: label the TOTAL projected shift vs locked-in at the
+            // bar's end (+N / +%), decomposed in the hover title.
             let plannedDelta = '';
-            if (useNextEpoch && Math.abs(votionChange) >= 1) {
-                const nowVP = pool.votion_now_vp || 0;
-                const pct = nowVP > 0 ? (votionChange / nowVP) * 100 : null;
-                const up = votionChange > 0;
+            if (useNextEpoch && Math.abs(projShift) >= 1) {
+                const pct = lockedVP > 0 ? (projShift / lockedVP) * 100 : null;
+                const up = projShift > 0;
                 const pctStr = (pct != null && isFinite(pct)) ? ` / ${up ? '+' : ''}${pct.toFixed(0)}%` : '';
-                const txt = `<span class="text-[10px] mono ${up ? 'text-emerald-400' : 'text-red-400'} whitespace-nowrap">${up ? '+' : ''}${fmtNum(votionChange)}${pctStr}</span>`;
+                const decompTip = `Shift vs locked-in: ${up ? '+' : ''}${fmtNum(projShift)} VP = cast-vote drift ${castDrift >= 0 ? '+' : ''}${fmtNum(castDrift)} + Votion planned ${votionChange >= 0 ? '+' : ''}${fmtNum(votionChange)}`;
+                const txt = `<span class="text-[10px] mono ${up ? 'text-emerald-400' : 'text-red-400'} whitespace-nowrap" title="${decompTip}">${up ? '+' : ''}${fmtNum(projShift)}${pctStr}</span>`;
                 // First bar starts at the left edge → label goes AFTER the bar end. Every
                 // following bar starts further right, with empty space to its left → label
                 // goes BEFORE the bar (ending just at the bar's left edge), which keeps it
@@ -8982,11 +9735,13 @@ ${(() => {
                             ${memberVP > 0 ? `<div class="h-full" style="width: ${mP}%; background: rgba(245, 200, 11, 0.95);"></div>` : ''}
                             ${otherVP > 0 ? `<div class="h-full" style="width: ${oP}%; background: rgba(100, 116, 139, 0.7);"></div>` : ''}
                         </div>
+                        ${ghost}
                         ${plannedDelta}
                         <div class="absolute opacity-0 group-hover:opacity-100 transition-opacity z-30 pointer-events-none bg-gray-900/95 border border-white/10 rounded-lg px-3 py-2 text-xs shadow-xl"
                              style="left: ${Math.min(startPct + poolWidthPct/2, 60)}%; top: 100%; margin-top: 2px; min-width: 180px;">
                             <div class="font-semibold text-white mb-1">${pool.name} <span class="text-gray-400 font-normal">(${pool.dex})</span></div>
-                            <div class="text-gray-300">Total VP: <span class="text-cyan-400 font-mono">${fmtNum(poolVP)}</span></div>
+                            <div class="text-gray-300">${useNextEpoch ? 'Projected VP' : 'Total VP'}: <span class="text-cyan-400 font-mono">${fmtNum(poolVP)}</span></div>
+                            ${useNextEpoch && locked ? `<div class="text-gray-400">Locked-in: <span class="font-mono">${fmtNum(lockedVP)}</span>${Math.abs(projShift) >= 1 ? ` <span class="${projShift > 0 ? 'text-emerald-400' : 'text-red-400'} font-mono">(${projShift > 0 ? '+' : ''}${fmtNum(projShift)})</span>` : ''}</div>${Math.abs(projShift) >= 1 ? `<div class="text-[10px] text-gray-500 mb-0.5">= cast-vote drift <span class="mono ${castDrift >= 0 ? 'text-emerald-400/80' : 'text-red-400/80'}">${castDrift >= 0 ? '+' : ''}${fmtNum(castDrift)}</span> + Votion planned <span class="mono ${votionChange >= 0 ? 'text-emerald-400/80' : 'text-red-400/80'}">${votionChange >= 0 ? '+' : ''}${fmtNum(votionChange)}</span></div>` : ''}` : ''}
                             ${votionVP > 0 ? `<div class="text-emerald-400">Votion${useNextEpoch ? ' (Planned)' : ''}: ${fmtNum(votionVP)} (${vP.toFixed(1)}%)${votionChange !== 0 ? ` <span class="${votionChange > 0 ? 'text-emerald-400' : 'text-red-400'}">(${votionChange > 0 ? '+' : ''}${fmtNum(votionChange)})</span>` : ''}</div>` : ''}
                             ${adaoVP > 0 ? `<div class="text-sky-400">aDAO: ${fmtNum(adaoVP)} (${aP.toFixed(1)}%)</div>` : ''}
                             ${memberVP > 0 ? `<div class="text-amber-400">${memberAlloc ? (memberAlloc.member.name || memberAlloc.member.wallet.slice(0, 12) + '…') : 'Member'}: ${fmtNum(memberVP)} (${mP.toFixed(1)}%)</div>` : ''}
@@ -11612,6 +12367,25 @@ ${(() => {
             document.getElementById('bribes-luna-price').textContent = 'LUNA price unavailable';
         }
         document.getElementById('bribes-pd-usd').textContent = fmt$(totalPdUSD);
+        // Rev T2.1: declare a stale PD split honestly. The PD column is fed by a
+        // hand-maintained legacy file (tla_pd_bribes.json) matched by epoch
+        // range; past its coverage the split silently reads $0.00 while any PD
+        // LUNA in the live pots falls into "Other". Say so in place — and clear
+        // the note again if the epoch is covered.
+        (() => {
+            let n = document.getElementById('bribes-pd-stale-note');
+            if (store.pdFileStale && totalPdUSD === 0) {
+                if (!n) {
+                    n = document.createElement('div');
+                    n.id = 'bribes-pd-stale-note';
+                    n.className = 'text-[9px] text-amber-400/80 leading-snug mt-1';
+                    const host = document.getElementById('bribes-pd-usd');
+                    host && host.parentElement && host.parentElement.appendChild(n);
+                }
+                n.innerHTML = `no split data past e${store.pdFileCoverageEnd} \u2014 PD's live bribes (props 247/250) are counted in \u201cOther\u201d until attribution re-homes to the org capture`;
+                n.title = 'The PD/Other split comes from a legacy hand-maintained file whose last entered range ends at e' + store.pdFileCoverageEnd + '. Chain totals on this popup are exact regardless; only the payer split is affected. The archive backfill + governance-bribe attribution derive replaces this file.';
+            } else if (n) n.remove();
+        })();
         document.getElementById('bribes-other-usd').textContent = fmt$(totalOtherUSD);
         document.getElementById('bribes-total-usd').textContent = fmt$(totalBribesUSD);
         
@@ -11798,6 +12572,13 @@ ${(() => {
             unit: 'pools',
             changeType: 'absolute' // Show +1, -2 instead of %
         },
+        'active-pools': {
+            title: 'Active Pools (all DEXes)',
+            getValue: (data, adao) => (data?.vote?.pools || data?.pools || []).filter(p => p.is_active !== false).length || 0,
+            format: (v) => v.toString(),
+            unit: 'pools',
+            changeType: 'absolute'
+        },
         'epoch-rewards': {
             title: 'Epoch Rewards (USD)',
             getValue: (data, adao) => {
@@ -11860,6 +12641,54 @@ ${(() => {
         }
     };
     
+    // Rev T2: per-epoch aggregate series from poolStatusHistory for the hero
+    // sparklines. Same variant rule as the leaderboard baselines: same-name
+    // pool variants collapse to the LARGEST-VP one per epoch (a dead gauge
+    // twin must never inflate the aggregate). Only metrics with a REAL
+    // multi-epoch series get a sparkline — rewards/bribes have no committed
+    // history feed yet, so their chips stay text-only (honest).
+    function heroSeries() {
+        const hist = store.poolStatusHistory;
+        if (!hist?.epochs?.length || !hist?.pools?.length) return {};
+        const eps = [...hist.epochs].sort((a, b) => a - b);
+        const tvl = [], count = [];
+        for (const ep of eps) {
+            const byName = {};
+            for (const hp of hist.pools) {
+                const e = hp.epochs?.[ep] ?? hp.epochs?.[String(ep)];
+                if (!e) continue;
+                const vp = e.vp_human || 0;
+                const cur = byName[hp.name];
+                if (!cur || vp > cur.vp) byName[hp.name] = { vp, staked: e.staked_usd || 0 };
+            }
+            const vals = Object.values(byName);
+            tvl.push(vals.reduce((s, v) => s + (v.staked || 0), 0));
+            count.push(vals.filter(v => v.vp > 0).length);
+        }
+        const out = { 'tla-tvl': { eps, vals: tvl }, 'active-pools': { eps, vals: count } };
+        // amplified-APR series from the apr-history rollup, when present
+        const ah = store.aprHistory;
+        if (ah?.epochs && typeof ah.epochs === 'object') {
+            const aeps = Object.keys(ah.epochs).map(Number).sort((a, b) => a - b);
+            const avals = aeps.map(k => {
+                const pools = ah.epochs[k]?.pools || ah.epochs[String(k)]?.pools || [];
+                const arr = (Array.isArray(pools) ? pools : Object.values(pools)).map(p => p.apr_amplified ?? p.apr_amp ?? 0).filter(a => a > 0);
+                return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
+            });
+            if (aeps.length >= 3 && avals.some(v => v != null)) out['apr-amp'] = { eps: aeps, vals: avals.map(v => v ?? 0) };
+        }
+        return out;
+    }
+    function heroSparkSvg(vals, key) {
+        const pts = vals.filter(v => isFinite(v));
+        if (pts.length < 3) return '';
+        const min = Math.min(...pts), max = Math.max(...pts), span = (max - min) || 1;
+        const W = 54, H = 14;
+        const line = vals.map((v, i) => `${(i / (vals.length - 1) * W).toFixed(1)},${(H - 1 - ((v - min) / span) * (H - 2)).toFixed(1)}`).join(' ');
+        const up = vals[vals.length - 1] >= vals[0];
+        return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" class="mr-1.5 shrink-0" aria-hidden="true"><polyline points="${line}" fill="none" stroke="${up ? '#34D399' : '#F87171'}" stroke-width="1.3" opacity="0.75"/></svg>`;
+    }
+
     // Calculate and render trend rows under stat tiles
     function renderTrendRows() {
         if (!store.previousEpochData) {
@@ -11876,6 +12705,7 @@ ${(() => {
         const currentAdao = store.adaoSnap;
         const prevAdao = store.previousAdaoSnap;
         
+        renderTrendRows._series = heroSeries();
         Object.entries(historyMetrics).forEach(([key, metric]) => {
             const el = document.getElementById(`trend-${key}`);
             if (!el) return;
@@ -11949,8 +12779,12 @@ ${(() => {
                 el.innerHTML = `${arrow} ${changeText}`;
                 el.title = `${changeText} from Epoch ${prevEpochLabel}`;
             } else {
-                // Full format for stat bar
-                el.innerHTML = `${arrow} ${changeText} from E${prevEpochLabel}`;
+                // Full format for stat bar — with the metric's real epoch series
+                // as a sparkline where one exists (Rev T2).
+                const s = (renderTrendRows._series || {})[key];
+                const spark = s ? heroSparkSvg(s.vals, key) : '';
+                el.innerHTML = `${spark}${arrow} ${changeText} from E${prevEpochLabel}`;
+                if (s) el.title = `${s.eps.length} epochs (E${s.eps[0]} \u2192 E${s.eps[s.eps.length - 1]}) \u2014 click for full history`;
             }
         });
     }
