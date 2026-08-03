@@ -273,6 +273,7 @@
         dailyBaseUrl: 'https://raw.githubusercontent.com/defipatriot/adao-positions-data_2026/main/data/daily',   // registered-member daily archive (trend engine)
         rollupsUrl: 'https://raw.githubusercontent.com/thealliancedao/tla-core/main/tla-voting/events/rollups.json', // voter claims = bribe income
         trackStart: '2026-06-13',   // first daily archive — every earlier day is permanently missing
+        memberDataUrl: 'https://raw.githubusercontent.com/thealliancedao/tla-core/main/member-data/snapshots/current.json',  // ORG: all TLA lock holders, ranked
         heartbeats: [
             ['TLA participants', 'https://raw.githubusercontent.com/defipatriot/tla-participants-data_2026/main/data/heartbeat.json'],
             ['aDAO positions', 'https://raw.githubusercontent.com/defipatriot/adao-positions-data_2026/main/data/heartbeat.json'],
@@ -350,7 +351,7 @@
         store.catalogPrices = new Map();
         for (const t of (cat?.tokens || [])) {
             const p = t.prices?.tla?.usd ?? t.prices?.coingecko?.usd ?? null;
-            if (t.denom && p > 0) store.catalogPrices.set(t.denom, { usd: p, at: t.prices?.tla?.captured_at || null });
+            if (t.denom && p > 0) store.catalogPrices.set(t.denom, { usd: p, at: t.prices?.tla?.captured_at || null, decimals: t.decimals ?? 6, symbol: t.symbol || null });
         }
         store.feeds = { parts, adao, allies, orgNft, snap };
         // Epoch arrives as an object ({number, ends_at, progress_pct}) — extract
@@ -636,7 +637,7 @@
         const pfp = $('id-pfp');
         if (m.nft_image_url) { pfp.src = m.nft_image_url.replace('ipfs://', 'https://ipfs.io/ipfs/'); pfp.classList.remove('hidden'); pfp.onerror = () => pfp.classList.add('hidden'); }
         else pfp.classList.add('hidden');
-        $('id-rank').innerHTML = m.rank_by_vp ? `<span class="text-gray-500">VP rank</span> <span class="mono font-semibold text-cyan-300">#${m.rank_by_vp}</span> <span class="text-[10px] text-gray-600" title="Ranked among aDAO members and registered allies (the participants feed). TLA-wide rank across ALL lock holders — including unregistered whales and vaults — lives on the TLA Stats Voting Leaders board.">of aDAO + allies</span>` : '';
+        $('id-rank').innerHTML = m.rank_by_vp ? `<span class="text-[10px] text-gray-600 loading-pulse">TLA-wide rank…</span>` : '';   // replaced by renderTlaRank (all lock holders)
         $('id-since').textContent = m.first_participation?.period != null
             ? `in TLA since period ${m.first_participation.period}${m.first_participation.approx_date ? ` · ${m.first_participation.approx_date}` : ''}` : '';
 
@@ -644,6 +645,8 @@
         try { renderBanner(m); } catch (e) { console.warn('banner:', e); }
         try { renderTrendCard(wallet); } catch (e) { console.warn('trend:', e); }
         try { renderIncome(wallet, m); } catch (e) { console.warn('income:', e); }
+        renderTlaRank(wallet).catch(e => console.warn('rank:', e));
+        renderAmpCapaGov(wallet).catch(e => console.warn('ampcapa:', e));
 
         // alerts
         const sevCls = { danger: 'alert-danger', warn: 'alert-warn', info: 'alert-info', success: 'alert-success' };
@@ -857,10 +860,8 @@
         renderLadder(m).catch(err => console.warn('ladder:', err));
         renderVotion(wallet).catch(err => console.warn('votion:', err));
         renderPnl(wallet).catch(err => console.warn('pnl:', err));
-        $('balances-table').innerHTML = bals.length ? `
-            <table class="data-table"><thead><tr><th>Token</th><th class="text-right">Amount</th><th class="text-right">Value</th></tr></thead><tbody>
-            ${bals.map(b => `<tr><td class="font-medium">${esc(b.symbol || b.denom?.split('/').pop() || '?')}</td><td class="text-right mono text-gray-300">${fmtNum(b.amount_human)}</td><td class="text-right mono text-amber-300/90">${fmt$(b.usd_value)}</td></tr>`).join('')}
-            </tbody></table>` : '<div class="text-gray-600 text-sm py-2">No meaningful liquid balances.</div>';
+        // balances v2: live bank scan + feed merge (dust collapsed, zLUNA folded)
+        renderBalancesV2(wallet, m).catch(err => { console.warn('balances v2:', err); });
     }
 
     // ============================================================
@@ -894,8 +895,9 @@
     // caches only the selected wallet's slim record in sessionStorage.
     const _dayMs = 86400000;
     const dstr = (d) => d.toISOString().slice(0, 10);
-    function sampleDates(days) {
-        const today = new Date(Date.now() - _dayMs);           // yesterday = last complete day
+    function sampleDates(days, offsetWindows) {
+        const off = offsetWindows || 0;                        // 0 = latest window; 1 = one window earlier…
+        const today = new Date(Date.now() - _dayMs - off * days * _dayMs);
         const start = new Date(Math.max(new Date(CONFIG.trackStart).getTime(), today.getTime() - (days - 1) * _dayMs));
         const span = Math.round((today - start) / _dayMs) + 1;
         const maxPts = 17;
@@ -939,8 +941,8 @@
     }
     // series: [{date, ...slim}] ascending; nulls (missing day / not registered
     // that day) dropped — sampled points only, never interpolated.
-    async function getSeries(wallet, days) {
-        const dates = sampleDates(days);
+    async function getSeries(wallet, days, offsetWindows) {
+        const dates = sampleDates(days, offsetWindows);
         const recs = await Promise.all(dates.map(d => fetchDayFor(wallet, d).then(r => r ? { date: d, ...r } : null)));
         return recs.filter(Boolean);
     }
@@ -1002,10 +1004,11 @@
         }
         return { usd, unpriced };
     }
-    function computeLiveBribes(m) {
+    function computeLiveBribes(m, vpOverride) {
         const pools = store.feeds?.snap?.pools || [];
         const vpb = m.voting?.votes_per_bucket || {};
-        const userVp = m.summary?.display_voting_power_human || m.voting?.total_voting_power_human || 0;
+        const userVp = vpOverride != null ? vpOverride : (m.summary?.display_voting_power_human || m.voting?.total_voting_power_human || 0);
+        const addedVp = vpOverride != null ? Math.max(0, vpOverride - (m.summary?.display_voting_power_human || 0)) : 0;
         if (!pools.length || !userVp) return null;
         const byGid = new Map(pools.map(p => [p.gauge_pool_id, p]));
         let total = 0, unpriced = 0; const rows = [];
@@ -1014,7 +1017,9 @@
                 const pool = byGid.get(v.pool_gauge_id);
                 if (!pool || !pool.voting_power?.vp_human) continue;
                 const myVp = userVp * (v.weight_bps || 0) / 10000;
-                const share = myVp / pool.voting_power.vp_human;
+                // honesty: added VP also grows the pool's total, so the share
+                // denominator includes it when projecting an adjusted position
+                const share = myVp / (pool.voting_power.vp_human + (addedVp * (v.weight_bps || 0) / 10000));
                 const pot = potUsdOf(pool);
                 unpriced += pot.unpriced;
                 const usd = share * pot.usd;
@@ -1111,7 +1116,8 @@
         lk: { label: 'Locked value', color: '#c084fc', fmt: (v) => fmt$(v), tip: 'Total vAMP-locked value.' },
     };
     window.mpSetTrendMetric = (k) => { store._trendMetric = k; renderTrendCard(store.wallet); };
-    window.mpSetTrendRange = (d) => { store._trendRange = d; renderTrendCard(store.wallet); };
+    window.mpSetTrendRange = (d) => { store._trendRange = d; store._trendOffset = 0; renderTrendCard(store.wallet); };
+    window.mpPageTrend = (dir) => { store._trendOffset = Math.max(0, (store._trendOffset || 0) + dir); renderTrendCard(store.wallet); };
     async function renderTrendCard(wallet) {
         const el = $('trend-card-body'); if (!el || !wallet) return;
         const metric = store._trendMetric || 'p';
@@ -1119,18 +1125,26 @@
         const mdef = TREND_METRICS[metric];
         const mBtns = Object.entries(TREND_METRICS).map(([k, d]) =>
             `<button onclick="mpSetTrendMetric('${k}')" title="${d.tip}" class="text-[10px] px-2 py-1 rounded-md border transition-colors ${metric === k ? 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30' : 'bg-white/[0.02] text-gray-500 border-white/5 hover:text-gray-300'}">${d.label}</button>`).join('');
-        const rBtns = [[14, '14d'], [30, '30d'], [9999, 'all']].map(([d, l]) =>
+        const rBtns = [[14, '14d'], [30, '30d'], [84, '12w'], [9999, 'all']].map(([d, l]) =>
             `<button onclick="mpSetTrendRange(${d})" class="text-[10px] px-2 py-1 rounded-md border transition-colors ${range === d ? 'bg-violet-500/15 text-violet-300 border-violet-500/30' : 'bg-white/[0.02] text-gray-500 border-white/5 hover:text-gray-300'}">${l}</button>`).join('');
         el.innerHTML = `<div class="flex items-center gap-1.5 flex-wrap mb-2">${mBtns}<span class="mx-1 text-gray-700">|</span>${rBtns}</div><div class="loading-pulse text-gray-500 text-sm py-6 text-center">Pulling the daily archive…</div>`;
-        const ser = await getSeries(wallet, range);
-        if (store.wallet !== wallet || (store._trendMetric || 'p') !== metric || (store._trendRange || 30) !== range) return;
+        const offset = store._trendOffset || 0;
+        const ser = await getSeries(wallet, range, offset);
+        if (store.wallet !== wallet || (store._trendMetric || 'p') !== metric || (store._trendRange || 30) !== range || (store._trendOffset || 0) !== offset) return;
         const pts = ser.map(r => ({ x: r.date, y: r[metric] }));
         const isAll = range === 9999;
-        const chart = chartSvg(pts, { color: mdef.color, fmt: mdef.fmt, startNote: isAll ? 'tracking began ' + CONFIG.trackStart : null });
+        // paging: earlier windows exist while the window start is after trackStart
+        const winStart = new Date(Date.now() - _dayMs - ((offset + 1) * range - 1) * _dayMs);
+        const canEarlier = !isAll && winStart.getTime() > new Date(CONFIG.trackStart).getTime();
+        const pager = isAll ? '' : `<span class="ml-auto flex items-center gap-1">
+            <button onclick="mpPageTrend(1)" ${canEarlier ? '' : 'disabled'} class="text-[10px] px-2 py-1 rounded-md border ${canEarlier ? 'bg-white/[0.02] text-gray-400 border-white/5 hover:text-gray-200' : 'text-gray-700 border-white/5 opacity-40'}" title="${canEarlier ? 'Page one window earlier' : 'Already at the start of tracked history — deeper history lands with the epoch-ledger derive (queued)'}">◀ earlier</button>
+            <button onclick="mpPageTrend(-1)" ${offset > 0 ? '' : 'disabled'} class="text-[10px] px-2 py-1 rounded-md border ${offset > 0 ? 'bg-white/[0.02] text-gray-400 border-white/5 hover:text-gray-200' : 'text-gray-700 border-white/5 opacity-40'}">later ▶</button>
+        </span>`;
+        const chart = chartSvg(pts, { color: mdef.color, fmt: mdef.fmt, startNote: isAll ? 'tracking began ' + CONFIG.trackStart : (offset > 0 && pts.length ? pts[0].x + ' → ' + pts[pts.length - 1].x : null) });
         el.innerHTML = `
-          <div class="flex items-center gap-1.5 flex-wrap mb-2">${mBtns}<span class="mx-1 text-gray-700">|</span>${rBtns}</div>
+          <div class="flex items-center gap-1.5 flex-wrap mb-2">${mBtns}<span class="mx-1 text-gray-700">|</span>${rBtns}${pager}</div>
           ${pts.filter(p => p.y != null).length >= 2 ? chart : `<div class="text-gray-600 text-sm py-6 text-center">No daily history for this wallet — the archive covers <b>registered</b> aDAO members (this wallet's curve starts the day it registers). VP-only history for the wider electorate is a queued org feed.</div>`}
-          <div class="text-[10px] text-gray-600 mt-1">Sampled points from the registered-member daily archive (since ${CONFIG.trackStart} — every earlier day is a permanently missing point). Dots are real captured days, never interpolated. Votion has its own org daily archive (since 2026-07-16 — see its card and tile drill); NFT value has no daily archive yet.</div>`;
+          <div class="text-[10px] text-gray-600 mt-1">Sampled points from the registered-member daily archive (since ${CONFIG.trackStart}). Dots are real captured days, never interpolated. Deeper history to TLA genesis (epoch-by-epoch positions reconstructed from the now-complete flow capture) is a queued derive — USD marks before ${CONFIG.trackStart} will carry a stated method, never silent estimates. Votion has its own org daily archive (since 2026-07-16 — see its card and tile drill); NFT value has no daily archive yet.</div>`;
     }
 
     // ---------- tile metric drill ----------
@@ -1194,7 +1208,224 @@
           ${bribeToks.length ? `<div class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-1.5">Bribe income by token</div>
           <div class="flex flex-wrap gap-1.5 mb-2">${bribeToks.slice(0, 8).map(t => `<span class="text-[10px] px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-300" title="${fmtNum(t.amt)} ${esc(t.sym)} across ${t.n} claims${t.unpriced ? ' — no claim-day price captured for part of this' : ''}">${esc(t.sym)} ${t.unpriced && !t.usd ? 'unpriced' : fmt$(t.usd)}</span>`).join('')}</div>` : ''}
           ${cl.live && cl.rows.length ? `<div class="text-[10px] text-gray-600 mb-2">This epoch\u2019s accrual: ${cl.rows.sort((a, b) => b.usd - a.usd).slice(0, 4).map(r => `${esc(r.pool)} <span class="mono text-gray-400">${fmt$(r.usd)}</span> <span class="text-gray-700">(${(r.share * 100).toFixed(2)}% of pot)</span>`).join(' · ')}${cl.unpriced ? ` · <span class="text-gray-500">${cl.unpriced} pot token${cl.unpriced === 1 ? '' : 's'} unpriced</span>` : ''}</div>` : ''}
+          ${(() => {
+            const gain = m.summary?.vp_gap_human || 0;
+            if (!(cl.live && gain > 500)) return '';
+            const adjVp = (m.summary?.display_voting_power_human || 0) + gain;   // display basis: boost+fixed, plus the reclaimable gap
+            const adj = computeLiveBribes(m, adjVp);
+            if (!adj || !(adj.total > cl.bribes)) return '';
+            return `<div class="text-[11px] text-amber-300/90 mb-2" title="The same live pot math run with your fully-adjusted VP (${fmtNum(adjVp)}), with your added VP counted in each pool’s total too — the projected share never pretends the pool stays the same size. One re-touch of your locks captures this every epoch."><i class="fas fa-battery-full mr-1"></i>If you reclaimed your +${fmtNum(gain)} VP: bribes ≈ <span class="mono font-semibold">${fmt$(adj.total)}</span>/ep (<span class="mono">+${fmt$(adj.total - cl.bribes)}</span> over today).</div>`;
+          })()}
           <div class="text-[10px] text-gray-600 pt-2 border-t border-white/5"><i class="fas fa-circle-info mr-1"></i>All income figures are MEASURED at claim-day value and are a <b>lower bound</b>: the capture has an uncaptured window (${gap ? esc(String(gap.from_date_approx || '2025-01').slice(0, 7)) + ' → 2026-06' : '2025-01 → 2026-06'}, archive backfill queued) and newer claims settle after the next re-derive. Nothing here is an estimate.</div>`;
+    }
+
+    // ============================================================
+    // TEST P1.1 — feedback round (Camron 2026-08-03): TLA-wide VP rank +
+    // peer drill · ampCAPA gov position (live chain read) · native-staking
+    // row · wallet balances v2 (live bank scan) · adjusted-VP bribe
+    // projection · trend chart paging.
+    // ============================================================
+
+    const LCDS = ['https://terra.publicnode.com', 'https://terra-lcd.publicnode.com', 'https://phoenix-lcd.terra.dev'];
+    async function lcdGet(path) {
+        let last = null;
+        for (const lcd of LCDS) {
+            try {
+                const r = await fetch(lcd + path, { headers: { Accept: 'application/json' } });
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return await r.json();
+            } catch (e) { last = e; }
+        }
+        throw last || new Error('all LCDs failed');
+    }
+    async function lcdSmart(contract, query) {
+        const b64 = btoa(unescape(encodeURIComponent(JSON.stringify(query))));
+        const j = await lcdGet(`/cosmwasm/wasm/v1/contract/${contract}/smart/${b64}`);
+        return j.data !== undefined ? j.data : j;
+    }
+
+    // ---------- TLA-wide VP rank (org member-data: ALL lock holders) ----------
+    async function fetchMemberData() {
+        if (store.mdData !== undefined) return store.mdData;
+        if (store._mdP) return store._mdP;
+        store._mdP = fetch(CONFIG.memberDataUrl + '?t=' + Date.now())
+            .then(r => r.ok ? r.json() : null)
+            .then(j => (store.mdData = j))
+            .catch(() => (store.mdData = null));
+        return store._mdP;
+    }
+    function tlaRankLabelFor(addr) {
+        const nm = store.names.get(addr);
+        if (nm) return nm;
+        if (store.votionVaultSet && store.votionVaultSet.has(addr)) return 'Votion vault';
+        return addr.slice(0, 12) + '…';
+    }
+    async function renderTlaRank(wallet) {
+        const md = await fetchMemberData();
+        if (store.wallet !== wallet || !md || !Array.isArray(md.wallets)) return;
+        const me = md.wallets.find(w => w.address === wallet);
+        const el = $('id-rank');
+        if (!el) return;
+        if (!me) {
+            // wallet holds no direct lock in the org snapshot — say so, don't fake a rank
+            el.innerHTML = `<span class="text-[10px] text-gray-600" title="No direct vAMP lock found in the org member-data snapshot (all ${md.wallets.length} TLA lock holders). Votion-only wallets hold VP through the vault, not a direct lock.">no direct-lock TLA rank</span>`;
+            return;
+        }
+        el.innerHTML = `<span class="text-gray-500">VP rank</span> <span class="mono font-semibold text-cyan-300 cursor-pointer hover:underline" onclick="mpRankDrill()">#${me.rank}</span> <span class="text-[10px] text-gray-600 cursor-pointer" onclick="mpRankDrill()" title="Ranked across ALL ${md.wallets.length} TLA lock holders in the org member-data snapshot — vaults, whales, everyone. Tap to see the ladder around you.">of ${md.wallets.length} TLA voters · tap to compare</span>`;
+    }
+    window.mpRankDrill = async () => {
+        const wallet = store.wallet; if (!wallet) return;
+        openModal('The VP ladder — where you stand', '<div class="loading-pulse text-gray-500 text-sm py-6 text-center">Loading the electorate…</div>');
+        const md = await fetchMemberData();
+        if (!md) { $('mp-modal-body').innerHTML = '<div class="text-gray-600 text-sm">member-data feed unavailable.</div>'; return; }
+        const sorted = [...md.wallets].sort((a, b) => (a.rank || 1e9) - (b.rank || 1e9));
+        const myIdx = sorted.findIndex(w => w.address === wallet);
+        const top = sorted.slice(0, 3);
+        const around = myIdx >= 0 ? sorted.slice(Math.max(0, myIdx - 4), myIdx + 5) : [];
+        const rows = [...new Map([...top, ...around].map(w => [w.address, w])).values()].sort((a, b) => a.rank - b.rank);
+        const maxVp = sorted[0]?.total_vp_held_human || 1;
+        const row = (w) => {
+            const self = w.address === wallet;
+            return `<div class="flex items-center gap-2 py-1 ${self ? 'bg-cyan-500/10 rounded-lg px-2 -mx-2' : ''}">
+                <span class="mono text-[11px] ${self ? 'text-cyan-300 font-bold' : 'text-gray-500'} w-9 text-right">#${w.rank}</span>
+                <span class="text-[12px] ${self ? 'text-cyan-200 font-semibold' : 'text-gray-300'} w-36 truncate" title="${w.address}">${esc(self ? (store.names.get(w.address) || 'you') : tlaRankLabelFor(w.address))}</span>
+                <div class="flex-1 h-2 rounded bg-white/[0.04]"><div class="h-full rounded ${self ? 'bg-cyan-400' : 'bg-purple-500/50'}" style="width:${Math.max(1, w.total_vp_held_human / maxVp * 100).toFixed(1)}%"></div></div>
+                <span class="mono text-[11px] ${self ? 'text-cyan-300' : 'text-gray-400'} w-16 text-right">${fmtNum(w.total_vp_held_human)}</span>
+                <span class="text-[9px] text-gray-600 w-16 text-right" title="Average vote utilization across buckets">${w.avg_utilization_pct != null ? w.avg_utilization_pct.toFixed(0) + '% used' : ''}</span>
+            </div>`;
+        };
+        let html = '';
+        let lastRank = 0;
+        for (const w of rows) {
+            if (lastRank && w.rank > lastRank + 1) html += `<div class="text-center text-gray-700 text-[10px] py-0.5">···</div>`;
+            html += row(w); lastRank = w.rank;
+        }
+        $('mp-modal-body').innerHTML = `${html}
+            <div class="text-[10px] text-gray-600 mt-3 pt-2 border-t border-white/5">All ${md.wallets.length} TLA lock holders from the org member-data snapshot (epoch ${md.meta?.epoch ?? '?'}) — vaults and unregistered whales included; names shown where registered, Votion vaults labeled. Direct-lock VP only: Votion-implied VP lives on the Votion card.</div>`;
+    };
+
+    // ---------- ampCAPA governance position (live chain read) ----------
+    // Same contracts + conversion chain as tla-stats (T3) / ampcapa-tool: the
+    // staked RECEIPT sits in the DAODAO voting module, so the positions cron
+    // can't see it. Re-attribute ONLY when the chain confirms a balance.
+    const AMPCAPA_GOV = {
+        votingModule: 'terra1juj3ymejnug9p92upphcq0prq4e0hpw6rcu20njf8tk7n9sl2wxqldr0mt',
+        ve3Contract:  'terra1zly98gvcec54m3caxlqexce7rus6rzgplz7eketsdz7nh750h2rqvu8uzx',
+        denom: 'factory/terra186rpfczl7l2kugdsqqedegl4es4hp624phfc7ddy8my02a4e8lgq5rlx7y/ampCAPA',
+    };
+    async function renderAmpCapaGov(wallet) {
+        try {
+            let balRaw = null;
+            try {
+                const d = await lcdSmart(AMPCAPA_GOV.votingModule, { staked_balance_at_height: { address: wallet } });
+                balRaw = parseFloat(d.balance);
+            } catch (e1) {
+                const d = await lcdSmart(AMPCAPA_GOV.votingModule, { voting_power_at_height: { address: wallet } });
+                balRaw = parseFloat(d.power);
+            }
+            if (store.wallet !== wallet) return;
+            if (!(balRaw > 0)) return;   // nothing staked — nothing to add, no guessing
+            const rd = await lcdSmart(AMPCAPA_GOV.ve3Contract, { exchange_rates: { assets: [["single", { native: AMPCAPA_GOV.denom }]], limit: 1 } });
+            const rates = rd && rd[0] && rd[0].exchange_rates;
+            if (!rates || !rates.length) throw new Error('no ve3 rate');
+            const rateVe3 = parseFloat(rates.sort((a, b) => b[0] - a[0])[0][1].exchange_rate);
+            const ampCapa = (balRaw / 1e6) * rateVe3;
+            const cp = store.catalogPrices.get(AMPCAPA_GOV.denom) || store.catalogPrices.get('native:' + AMPCAPA_GOV.denom);
+            const usd = cp ? ampCapa * cp.usd : null;
+            if (store.wallet !== wallet) return;
+            const tbody = $('lp-table') && $('lp-table').querySelector('tbody');
+            if (!tbody || tbody.querySelector('[data-ampcapa-gov]')) return;
+            const tr = document.createElement('tr');
+            tr.setAttribute('data-ampcapa-gov', '1');
+            tr.innerHTML = `
+                <td><div class="font-medium">ampCAPA <span class="text-[8px] px-1 py-px rounded bg-cyan-500/20 text-cyan-300" title="Read live from the ampCAPA governance DAO on chain — your staked receipt converted at the ve3 exchange rate. The positions cron can't see this (the receipt left the wallet), so it isn't in the LP/portfolio tiles.">gov · live</span></div>
+                    <div class="text-[9px] text-gray-600">Single · staked in governance DAO</div></td>
+                <td class="text-right mono text-cyan-300">${usd != null ? `<span title="${fmtNum(ampCapa)} ampCAPA × catalog price — live chain read, not in the summary tiles.">${fmt$(usd)}<span class="text-[8px] text-gray-500 align-super">*</span></span>` : `<span class="text-gray-500" title="${fmtNum(ampCapa)} ampCAPA — no catalog price this load; amount shown, value honestly blank.">${fmtNum(ampCapa)} ampCAPA</span>`}</td>
+                <td class="hidden sm:table-cell text-center"><span class="text-gray-800 text-[9px]" title="Live chain read — no daily archive for governance staking yet, so no trend.">·</span></td>
+                <td class="text-right mono text-gray-400">—</td>
+                <td class="text-right mono text-gray-500" title="Earns through the ampCAPA gauge vote, not pool APR">—</td>
+                <td class="text-right mono text-gray-500">—</td>`;
+            tbody.appendChild(tr);
+        } catch (e) { console.warn('ampCAPA gov read:', e.message); /* unknown ≠ zero — show nothing */ }
+    }
+
+    // ---------- native LUNA staking (live chain read) ----------
+    async function renderNativeStaking(wallet) {
+        try {
+            const j = await lcdGet(`/cosmos/staking/v1beta1/delegations/${wallet}?pagination.limit=200`);
+            if (store.wallet !== wallet) return;
+            const dels = j.delegation_responses || [];
+            let uluna = 0;
+            for (const d of dels) if (d.balance?.denom === 'uluna') uluna += Number(d.balance.amount || 0);
+            const luna = uluna / 1e6;
+            const el = $('native-staking-row');
+            if (!el) return;
+            if (!(luna > 0)) { el.innerHTML = ''; return; }
+            const cp = store.catalogPrices.get('native:uluna') || store.catalogPrices.get('uluna');
+            el.innerHTML = `<div class="flex items-center justify-between text-[12px] py-1.5 mt-1 border-t border-white/5" title="Live chain read of this wallet's native Terra staking delegations — separate from TLA locks and not in the portfolio tiles.">
+                <span class="font-medium">LUNA staked <span class="text-[8px] px-1 py-px rounded bg-cyan-500/20 text-cyan-300">native · live</span> <span class="text-[9px] text-gray-600">${dels.length} validator${dels.length === 1 ? '' : 's'}</span></span>
+                <span class="mono text-amber-300/90">${fmtNum(luna)}${cp ? ` · ${fmt$(luna * cp.usd)}` : ''}</span></div>`;
+        } catch (e) { console.warn('native staking read:', e.message); }
+    }
+
+    // ---------- wallet balances v2: live bank scan + feed cw20 merge ----------
+    // The feed's list is the capture engine's TLA-relevant set; a live bank scan
+    // adds anything native/factory/ibc the catalog can price. cw20s can't be
+    // enumerated on-chain without a token list, so the feed remains their source.
+    async function renderBalancesV2(wallet, m) {
+        const el = $('balances-table'); if (!el) return;
+        let live = null;
+        try {
+            const j = await lcdGet(`/cosmos/bank/v1beta1/balances/${wallet}?pagination.limit=500`);
+            live = j.balances || [];
+        } catch (e) { console.warn('bank scan:', e.message); }
+        if (store.wallet !== wallet) return;
+        const rows = new Map();   // symbol -> {sym, amount, usd, srcs:Set}
+        const add = (sym, amount, usd, src) => {
+            if (!sym || !(amount > 0)) return;
+            const cur = rows.get(sym) || { sym, amount: 0, usd: 0, srcs: new Set() };
+            cur.amount += amount; if (usd != null) cur.usd += usd; cur.srcs.add(src);
+            rows.set(sym, cur);
+        };
+        let unpricedLive = 0;
+        if (live) {
+            for (const b of live) {
+                const cp = store.catalogPrices.get(b.denom) || store.catalogPrices.get('native:' + b.denom);
+                const sym = (() => {
+                    const t = String(b.denom).split('/').pop();
+                    if (b.denom === 'uluna') return 'LUNA';
+                    return cp && cp.symbol ? cp.symbol : (t.length <= 12 ? t : null);
+                })();
+                const dec = (cp && cp.decimals) || 6;
+                const amt = Number(b.amount) / Math.pow(10, dec);
+                if (cp) add(sym || b.denom.slice(0, 10), amt, amt * cp.usd, 'live');
+                else if (b.denom.startsWith('ibc/') || b.denom.startsWith('factory/')) unpricedLive++;
+                else if (sym) add(sym, amt, null, 'live');
+            }
+        }
+        // feed rows (covers cw20s + engine symbols) — merged, feed wins nothing:
+        // where both saw a token, keep the larger amount (they're the same
+        // balance read at different times, never additive).
+        for (const b of (m.wallet_balances || [])) {
+            const sym = b.symbol || b.denom?.split('/').pop() || '?';
+            const cur = rows.get(sym);
+            if (cur && cur.srcs.has('live')) { if ((b.amount_human || 0) > cur.amount) { cur.amount = b.amount_human; cur.usd = b.usd_value || cur.usd; } cur.srcs.add('feed'); }
+            else add(sym, b.amount_human || 0, b.usd_value ?? null, 'feed');
+        }
+        const all = [...rows.values()].sort((a, b) => (b.usd || 0) - (a.usd || 0));
+        const isDust = (r) => (r.usd != null && r.usd < 0.10) || /^zluna/i.test(r.sym);
+        const main = all.filter(r => !isDust(r));
+        const dust = all.filter(isDust);
+        const dustUsd = dust.reduce((x, r) => x + (r.usd || 0), 0);
+        el.innerHTML = (main.length || dust.length) ? `
+            <table class="data-table"><thead><tr><th>Token</th><th class="text-right">Amount</th><th class="text-right">Value</th></tr></thead><tbody>
+            ${main.map(r => `<tr><td class="font-medium">${esc(r.sym)}${r.srcs.has('live') && !r.srcs.has('feed') ? ' <span class="text-[8px] px-1 py-px rounded bg-cyan-500/20 text-cyan-300" title="Found by the live bank scan — not in the positions feed\u2019s token set.">live</span>' : ''}</td><td class="text-right mono text-gray-300">${fmtNum(r.amount)}</td><td class="text-right mono ${r.usd != null ? 'text-amber-300/90' : 'text-gray-600'}">${r.usd != null ? fmt$(r.usd) : 'unpriced'}</td></tr>`).join('')}
+            </tbody></table>
+            ${dust.length ? `<div class="text-[10px] text-gray-600 mt-1.5" title="${esc(dust.map(r => `${fmtNum(r.amount)} ${r.sym}`).join(' · '))}">+ ${dust.length} small balance${dust.length === 1 ? '' : 's'} (zLUNA receipts &amp; dust) · ${fmt$(dustUsd)}</div>` : ''}
+            ${unpricedLive ? `<div class="text-[10px] text-gray-600 mt-0.5">${unpricedLive} on-chain denom${unpricedLive === 1 ? '' : 's'} with no catalog price — uncounted, not guessed.</div>` : ''}
+            <div id="native-staking-row"></div>`
+            : '<div class="text-gray-600 text-sm py-2">No meaningful liquid balances.</div><div id="native-staking-row"></div>';
+        renderNativeStaking(wallet).catch(() => {});
     }
 
     // ---------- wiring ----------
@@ -1273,6 +1504,7 @@
             }
         }
         const cap = String(d.meta?.generated_at || '').slice(0, 10);
+        store.votionVaultSet = new Set(d.vaults.map(v => v.address));
         store._votionUsd = rows.reduce((x, r) => x + (r.usd || 0), 0);
         const tv = $('tile-vot');
         if (tv) { tv.textContent = fmt$(store._votionUsd); const sub = $('tile-vot-sub'); if (sub) sub.innerHTML = rows.length ? `${rows.length} vault position${rows.length === 1 ? '' : 's'}` : 'no positions found'; }
