@@ -879,7 +879,7 @@
         <div class="max-w-7xl mx-auto px-4 py-4">
             <div class="flex items-center justify-between flex-wrap gap-4">
                 <div>
-                    <h1 class="text-xl font-bold">Terra Liquidity Alliance Tracker <span class="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 align-middle font-semibold">TEST T3</span></h1>
+                    <h1 class="text-xl font-bold">Terra Liquidity Alliance Tracker</h1>
                     <p class="text-xs text-gray-500">
                         <a href="https://www.erisprotocol.com/terra/liquidity-hub?tab=liquidity" target="_blank" class="text-purple-400 hover:text-purple-300 hover:underline">
                             <i class="fas fa-external-link-alt text-[9px] mr-1"></i>Eris TLA
@@ -1257,6 +1257,18 @@
             </div>
             </div>
             
+            <!-- Unlock Runway (Rev T3.1 — Camron 2026-08-03): VP scheduled to
+                 leave as non-auto-max locks hit their unlock. Early exit-pressure
+                 telemetry: someone letting a lock run out is often pulling LUNA. -->
+            <div class="mt-6 glass-card p-6">
+                <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
+                    <h3 class="font-semibold flex items-center gap-2"><i class="fas fa-hourglass-half text-amber-300"></i> Unlock Runway</h3>
+                    <span id="runway-headline" class="text-[11px] mono text-gray-400"></span>
+                </div>
+                <p class="text-[11px] text-gray-500 mb-3">Voting power scheduled to unlock over the next 8 weeks — locks NOT set to auto-max, from the tracked electorate. VP that unlocks leaves the gauge unless re-locked; a cluster here is early exit-pressure signal.</p>
+                <div id="unlock-runway" class="grid grid-cols-1 lg:grid-cols-2 gap-5"><div class="loading-pulse text-gray-500 text-sm">Loading...</div></div>
+            </div>
+
             <!-- Vote Breakdown Waterfall -->
             <div class="mt-6 glass-card p-6">
                 <div class="flex items-center justify-between mb-2">
@@ -6397,6 +6409,59 @@
         return b.join('');
     }
 
+    // Rev T3.1 — Unlock Runway: aggregate per-lock weeks_to_unlock across the
+    // tracked electorate (participants feed). Auto-max locks never unlock and
+    // are excluded by definition; coverage honesty stated in the footer.
+    function renderUnlockRunway() {
+        const el = document.getElementById('unlock-runway');
+        if (!el) return;
+        const esc = (x) => String(x).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        const members = getAllSelectableMembers();
+        if (!members.length) { el.innerHTML = '<div class="text-gray-600 text-sm">Participants feed unavailable.</div>'; return; }
+        const weeks = Array.from({ length: 8 }, () => ({ vp: 0, locks: 0, assets: {} }));
+        const upcoming = [];
+        let totalTrackedVp = 0;
+        for (const m of members) {
+            totalTrackedVp += m.summary?.display_voting_power_human || 0;
+            for (const l of (m.locks || [])) {
+                if (l.is_auto_max_locked || l.weeks_to_unlock == null) continue;
+                const w = Math.max(1, Math.ceil(l.weeks_to_unlock));
+                if (w > 8) continue;
+                const b = weeks[w - 1];
+                b.vp += l.voting_power_human || 0;
+                b.locks += 1;
+                const sym = l.asset_symbol || '?';
+                b.assets[sym] = (b.assets[sym] || 0) + (l.amount_human || 0);
+                upcoming.push({ wallet: m.wallet, name: m.name || null, id: l.token_id, sym, amt: l.amount_human || 0, vp: l.voting_power_human || 0, w });
+            }
+        }
+        const vp4 = weeks.slice(0, 4).reduce((x, b) => x + b.vp, 0);
+        const vp8 = weeks.reduce((x, b) => x + b.vp, 0);
+        const locks8 = weeks.reduce((x, b) => x + b.locks, 0);
+        const hl = document.getElementById('runway-headline');
+        if (hl) hl.innerHTML = vp8 > 0
+            ? `<span class="text-amber-300 font-semibold">${fmtNum(vp4)} VP</span> unlocking ≤4 epochs · ${fmtNum(vp8)} VP ≤8 <span class="text-gray-600" title="Share of the tracked electorate's total display VP (${fmtNum(totalTrackedVp)}). Auto-max locks never unlock and are excluded by definition.">(${totalTrackedVp > 0 ? (vp8 / totalTrackedVp * 100).toFixed(2) : '?'}% of tracked VP)</span>`
+            : 'no non-auto-max locks inside 8 weeks';
+        if (!vp8) { el.innerHTML = '<div class="text-gray-600 text-sm lg:col-span-2">Nothing scheduled to unlock in the next 8 weeks — every tracked lock in that window is auto-max. Exactly what a healthy runway looks like.</div>'; return; }
+        const maxVp = Math.max(...weeks.map(b => b.vp), 1);
+        const bars = weeks.map((b, i) => `
+            <div class="flex items-center gap-2" title="${b.locks ? `${b.locks} lock${b.locks === 1 ? '' : 's'} · ${Object.entries(b.assets).map(([sy, a]) => fmtNum(a) + ' ' + sy).join(' · ')}` : 'nothing unlocking this week'}">
+                <span class="mono text-[10px] text-gray-500 w-8 text-right">${i + 1}w</span>
+                <div class="flex-1 h-4 rounded bg-white/[0.03]"><div class="h-full rounded ${i < 4 ? 'bg-amber-500/60' : 'bg-amber-500/25'}" style="width:${Math.max(b.vp > 0 ? 2 : 0, b.vp / maxVp * 100).toFixed(1)}%"></div></div>
+                <span class="mono text-[10px] ${b.vp > 0 ? 'text-amber-300' : 'text-gray-700'} w-16">${b.vp > 0 ? fmtNum(b.vp) : '—'}</span>
+            </div>`).join('');
+        upcoming.sort((a, b) => a.w - b.w || b.vp - a.vp);
+        const list = upcoming.slice(0, 8).map(u => `
+            <div class="flex items-center justify-between text-[11px] py-1 border-b border-white/[0.04] last:border-0">
+                <span class="truncate">${u.name ? esc(u.name) : `<span class="mono text-gray-500">${u.wallet.slice(0, 12)}…</span>`} <span class="text-gray-600 mono text-[9px]">#${esc(String(u.id))}</span></span>
+                <span class="mono text-gray-400 shrink-0 ml-2">${fmtNum(u.amt)} ${esc(u.sym)} · <span class="text-amber-300">${fmtNum(u.vp)} VP</span> · <span class="${u.w <= 2 ? 'text-red-400' : 'text-amber-300/80'}">${u.w}w</span></span>
+            </div>`).join('');
+        el.innerHTML = `
+            <div>${bars}<div class="text-[10px] text-gray-600 mt-2">Weeks 1–4 highlighted — the epoch horizon the exit-pressure question lives on.</div></div>
+            <div><div class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-1.5">Largest upcoming unlocks</div>${list}
+                <div class="text-[10px] text-gray-600 mt-2">Tracked electorate only (${members.length} wallets in the participants feed) — unregistered lockers outside the feed aren't counted. Watch for the same wallets also unwinding LP.</div></div>`;
+    }
+
     function renderVoterBoards() {
         const members = getAllSelectableMembers();
         const vpEl = document.getElementById('top-board-vp');
@@ -7262,6 +7327,7 @@
         try { renderBountyBoard(); } catch (err) { console.warn('renderBountyBoard:', err); }
         try { renderEpochMovers(); } catch (err) { console.warn('renderEpochMovers:', err); }
         try { renderVoterBoards(); } catch (err) { console.warn('renderVoterBoards:', err); }
+        try { renderUnlockRunway(); } catch (err) { console.warn('renderUnlockRunway:', err); }
         try { renderCommunityBoards(); } catch (err) { console.warn('renderCommunityBoards:', err); }
         try { wireTopsTabs(); } catch (err) { console.warn('wireTopsTabs:', err); }
         try { wirePieModeToggle(); } catch (err) { console.warn('wirePieModeToggle:', err); }
