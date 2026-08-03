@@ -5542,6 +5542,7 @@
     // ---- Simulator card collapse (Camron 2026-08-02: tools shouldn't interrupt
     // the summary→table read). Collapsed by default; state lives for the session.
     function toggleSlipCard() {
+        store._slipUserToggled = true;   // T2.7d: manual choice wins over auto-open
         const body = document.getElementById('slip-card-body');
         const chev = document.getElementById('slip-card-chev');
         const hint = document.getElementById('slip-card-hint');
@@ -5660,6 +5661,19 @@
         if (!panel) return;
         const member = getSelectedMember();
         if (!member) { panel.classList.add('hidden'); panel.innerHTML = ''; return; }
+        // T2.7d (Camron 2026-08-03): member mode auto-opens the simulator card —
+        // when a wallet is selected the planner IS the workflow. TLA-wide
+        // browsing keeps the 2026-08-02 collapsed default; a manual toggle
+        // (either direction) always wins for the session.
+        if (!store._slipUserToggled) {
+            const sb = document.getElementById('slip-card-body');
+            if (sb && sb.classList.contains('hidden')) {
+                sb.classList.remove('hidden');
+                const chev = document.getElementById('slip-card-chev'); if (chev) chev.style.transform = 'rotate(180deg)';
+                const hint = document.getElementById('slip-card-hint'); if (hint) hint.classList.add('hidden');
+                try { renderSlippageSim(); wireSlippageSim(); } catch (e) {}
+            }
+        }
         const pools = _zapPools();
         if (!pools.length) { panel.classList.add('hidden'); panel.innerHTML = ''; return; }
         panel.classList.remove('hidden');
@@ -5700,11 +5714,14 @@
                 const rows = positions.map(pos => {
                     const p = poolFor(pos);
                     const isSingle = String(pos.dex) === 'Single' || (!p && !pos.name.includes('-'));
+                    const outAmt = pos.usd * frac;
                     const cells = targets.map(t => {
                         const res = isSingle
                             ? _zapOutCost(null, pos.name, null, pos.usd, frac, t)
                             : (p ? _zapOutCost(p, null, null, pos.usd, frac, t) : null);
-                        return `<td class="text-right py-1 pl-3">${cell(res)}</td>`;
+                        const lost = (res && res.pct != null && !res.unroutable)
+                            ? `<div class="mono text-[9px] ${res.pct < 1 ? 'text-gray-600' : res.pct < 3 ? 'text-yellow-500/70' : 'text-red-400/80'}" title="estimated dollars lost to price impact zapping ${fmt$(outAmt)} out to ${t}">${res.curvedAny ? '\u2264' : '~'}${fmt$(outAmt * res.pct / 100)} lost</div>` : '';
+                        return `<td class="text-right py-1 pl-3">${cell(res)}${lost}</td>`;
                     }).join('');
                     return `<tr class="border-b border-white/[0.03]">
                         <td class="py-1 pr-2"><span class="text-xs font-medium">${pos.name}</span> ${dexTagOf(pos.dex)}</td>
