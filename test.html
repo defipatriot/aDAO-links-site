@@ -1216,7 +1216,13 @@
             if (!adj || !(adj.total > cl.bribes)) return '';
             return `<div class="text-[11px] text-amber-300/90 mb-2" title="The same live pot math run with your fully-adjusted VP (${fmtNum(adjVp)}), with your added VP counted in each pool’s total too — the projected share never pretends the pool stays the same size. One re-touch of your locks captures this every epoch."><i class="fas fa-battery-full mr-1"></i>If you reclaimed your +${fmtNum(gain)} VP: bribes ≈ <span class="mono font-semibold">${fmt$(adj.total)}</span>/ep (<span class="mono">+${fmt$(adj.total - cl.bribes)}</span> over today).</div>`;
           })()}
-          <div class="text-[10px] text-gray-600 pt-2 border-t border-white/5"><i class="fas fa-circle-info mr-1"></i>All income figures are MEASURED at claim-day value and are a <b>lower bound</b>: the capture has an uncaptured window (${gap ? esc(String(gap.from_date_approx || '2025-01').slice(0, 7)) + ' → 2026-06' : '2025-01 → 2026-06'}, archive backfill queued) and newer claims settle after the next re-derive. Nothing here is an estimate.</div>`;
+          <div class="text-[10px] text-gray-600 pt-2 border-t border-white/5"><i class="fas fa-circle-info mr-1"></i>All income figures are MEASURED at claim-day value and remain a <b>lower bound</b>: ${(() => {
+            const ms = (pnl?.sources?.months_read || []);
+            const contiguous = ms.length > 1 && (() => { const t = (m) => { const [y, mo] = m.split('/').map(Number); return y * 12 + mo - 1; }; const a = ms.map(t).sort((x, y) => x - y); for (let i = 1; i < a.length; i++) if (a[i] !== a[i - 1] + 1) return false; return true; })();
+            return contiguous
+                ? 'the flow capture now runs unbroken from genesis (archive walk landed), but some claims carry no attributable user, exit values are unvalued until Phase C, and newer claims settle after the next re-derive.'
+                : 'the capture has missing months (see the coverage strip on Lifetime Cost) and newer claims settle after the next re-derive.';
+        })()} Nothing here is an estimate.</div>`;
     }
 
     // ============================================================
@@ -1574,16 +1580,36 @@
             el.innerHTML = '<div class="text-gray-600 text-sm">Flow-ledger feed unavailable right now.</div>';
             return;
         }
-        // Coverage strip — built from the rollup's own recorded gap, never hardcoded.
-        const gap = (d.sources?.known_gaps || [])[0] || null;
-        const gapFrom = gap?.from_date_approx || '2025-01-07';
+        // Coverage strip — derived from sources.months_read (what the builder
+        // ACTUALLY read), never from a recorded-gap note that can go stale.
+        // 2026-08-03: the deep archive-walk filled the former 18-month hole;
+        // the old known_gaps record predates that and is shown only as history.
         const covChip = (ok, label, title) => `<span class="text-[9px] px-1.5 py-0.5 rounded ${ok === true ? 'bg-emerald-500/15 text-emerald-300' : ok === false ? 'bg-red-500/15 text-red-300' : 'bg-white/5 text-gray-500'}" title="${esc(title)}">${label}</span>`;
         const w = d._byAddr.get(wallet);
+        const months = (d.sources?.months_read || []).slice().sort();
+        const monthChips = (() => {
+            if (!months.length) return covChip(null, 'coverage unknown', 'The rollup carries no months_read list.');
+            const toIdx = (m) => { const [y, mo] = m.split('/').map(Number); return y * 12 + (mo - 1); };
+            const fromIdx = (i) => `${Math.floor(i / 12)}-${String(i % 12 + 1).padStart(2, '0')}`;
+            const have = new Set(months.map(toIdx));
+            const lo = toIdx(months[0]), hi = toIdx(months[months.length - 1]);
+            const chips = []; let runStart = null, runOk = null;
+            const flush = (endIdx) => { if (runStart == null) return;
+                chips.push(covChip(runOk, `${fromIdx(runStart)} → ${fromIdx(endIdx)}${runOk ? '' : ' MISSING'}`,
+                    runOk ? 'Every month in this span was read by the P&L builder — includes the FCD genesis era, the archive-walk backfill of the former 2025 hole, and the live walker.'
+                          : 'Months the builder found NO event file for — activity here is not counted; a real gap, shown as one.'));
+                runStart = null; };
+            for (let i = lo; i <= hi; i++) {
+                const okM = have.has(i);
+                if (runOk !== okM) { flush(i - 1); runStart = i; runOk = okM; }
+            }
+            flush(hi);
+            return chips.join('');
+        })();
         const strip = (ww) => `<div class="flex items-center gap-1.5 flex-wrap mb-3">
             <span class="text-[9px] uppercase tracking-wider text-gray-600">capture coverage</span>
-            ${covChip(ww ? ww.eras.fcd : null, '2024-08 → ' + esc(gapFrom.slice(0, 7)), 'Genesis era, recovered from the frozen FCD archive.' + (ww ? (ww.eras.fcd ? ' This wallet has activity here.' : ' No activity from this wallet here.') : ''))}
-            ${covChip(false, esc(gapFrom.slice(0, 7)) + ' → 2026-06 not captured', 'The archive-node gap — activity in this window is NOT counted yet. Backfill queued; these numbers are a lower bound.')}
-            ${covChip(ww ? ww.eras.walker : null, '2026-06 → now', 'Live block-walker capture.' + (ww ? (ww.eras.walker ? ' This wallet has activity here.' : ' No activity from this wallet here.') : ''))}
+            ${monthChips}
+            ${ww ? covChip(null, ww.eras.fcd && ww.eras.walker ? 'active: genesis era + recent' : ww.eras.fcd ? 'active: genesis era' : 'active: recent era', 'Which capture eras this wallet has recorded activity in.') : ''}
         </div>`;
         if (!w) {
             el.innerHTML = strip(null) + '<div class="text-gray-600 text-sm">No captured flow activity for this address in the covered windows — note the uncaptured gap above before reading that as "never active."</div>';
