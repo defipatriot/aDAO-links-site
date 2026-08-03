@@ -644,7 +644,7 @@
 
         // banner + trend + income (TEST P1)
         try { renderBanner(m); } catch (e) { console.warn('banner:', e); }
-        store._trendDeep = false; store._deepOffset = 0;
+        store._trendDeep = false; store._deepOffset = 0; store._ampcapaGovUsd = 0;
         try { renderTrendCard(wallet); } catch (e) { console.warn('trend:', e); }
         try { renderIncome(wallet, m); } catch (e) { console.warn('income:', e); }
         renderTlaRank(wallet).catch(e => console.warn('rank:', e));
@@ -1046,8 +1046,9 @@
     function renderBanner(m) {
         const el = $('networth-banner'); if (!el || !m) return;
         const s = m.summary || {};
-        const tla = s.total_portfolio_value_usd || 0;
-        const lk = s.total_locked_usd || 0, lp = s.total_lp_position_usd || 0, wb = s.total_wallet_balances_usd || 0;
+        const gov = store._ampcapaGovUsd || 0;   // ampCAPA gov (live read) — folded into LP + grand
+        const tla = (s.total_portfolio_value_usd || 0) + gov;
+        const lk = s.total_locked_usd || 0, lp = (s.total_lp_position_usd || 0) + gov, wb = s.total_wallet_balances_usd || 0;
         const vot = store._votionUsd != null ? store._votionUsd : null;
         const nft = store.nftLadderTotal != null ? Math.max(0, store.nftLadderTotal - lk) : null; // ladder total includes locks — NFTs slice = total − locks
         const grand = tla + (vot || 0) + (nft || 0);
@@ -1401,19 +1402,40 @@
             const cp = store.catalogPrices.get(AMPCAPA_GOV.denom) || store.catalogPrices.get('native:' + AMPCAPA_GOV.denom);
             const usd = cp ? ampCapa * cp.usd : null;
             if (store.wallet !== wallet) return;
+            // pool joins (same snapshot the other rows use)
+            const pool = (store.feeds?.snap?.pools || []).find(p => p.gauge_pool_id === 'native:' + AMPCAPA_GOV.denom);
+            const base = pool?.rewards?.approx_apr_pct;
+            const amp = base != null ? (Math.pow(1 + base / 100 / 52.14, 52.14) - 1) * 100 : null;
+            // Camron 2026-08-03: pool share = your ampCAPA over ALL TLA-staked
+            // ampCAPA (non-amp + amplified — gov-staked receipts are still inside
+            // the ve3 amplified total, so the pool's staked figure IS the whole).
+            const share = (usd != null && pool?.staked_in_tla_usd > 0) ? usd / pool.staked_in_tla_usd * 100 : null;
+            const thr = pool?.voting_power?.pct_of_bucket != null ? pool.voting_power.pct_of_bucket - 1.0 : null;
             const tbody = $('lp-table') && $('lp-table').querySelector('tbody');
             if (!tbody || tbody.querySelector('[data-ampcapa-gov]')) return;
             const tr = document.createElement('tr');
             tr.setAttribute('data-ampcapa-gov', '1');
             tr.innerHTML = `
-                <td><div class="font-medium">ampCAPA <span class="text-[8px] px-1 py-px rounded bg-cyan-500/20 text-cyan-300" title="Read live from the ampCAPA governance DAO on chain — your staked receipt converted at the ve3 exchange rate. The positions cron can't see this (the receipt left the wallet), so it isn't in the LP/portfolio tiles.">gov · live</span></div>
+                <td><div class="font-medium">ampCAPA <span class="text-[8px] px-1 py-px rounded bg-cyan-500/20 text-cyan-300" title="Read live from the ampCAPA governance DAO on chain — your staked receipt converted at the ve3 exchange rate. Included in the LP tile and the banner (marked live-read).">gov · live</span></div>
                     <div class="text-[9px] text-gray-600">Single · staked in governance DAO</div></td>
-                <td class="text-right mono text-cyan-300">${usd != null ? `<span title="${fmtNum(ampCapa)} ampCAPA × catalog price — live chain read, not in the summary tiles.">${fmt$(usd)}<span class="text-[8px] text-gray-500 align-super">*</span></span>` : `<span class="text-gray-500" title="${fmtNum(ampCapa)} ampCAPA — no catalog price this load; amount shown, value honestly blank.">${fmtNum(ampCapa)} ampCAPA</span>`}</td>
+                <td class="text-right mono text-cyan-300">${usd != null ? `<span title="${fmtNum(ampCapa)} ampCAPA × org-catalog price — live chain read.">${fmt$(usd)}<span class="text-[8px] text-gray-500 align-super">*</span></span>` : `<span class="text-gray-500" title="${fmtNum(ampCapa)} ampCAPA — no catalog price this load; amount shown, value honestly blank.">${fmtNum(ampCapa)} ampCAPA</span>`}</td>
                 <td class="hidden sm:table-cell text-center"><span class="text-gray-800 text-[9px]" title="Live chain read — no daily archive for governance staking yet, so no trend.">·</span></td>
-                <td class="text-right mono text-gray-400">—</td>
-                <td class="text-right mono text-gray-500" title="Earns through the ampCAPA gauge vote, not pool APR">—</td>
-                <td class="text-right mono text-gray-500">—</td>`;
+                <td class="text-right mono text-gray-400">${share != null ? `<span title="Your ampCAPA value over ALL ampCAPA staked in TLA (${fmt$(pool.staked_in_tla_usd)}) — non-amplified + amplified; gov-staked receipts remain inside the amplified total, so this denominator is the whole pool.">${share.toFixed(2)}%</span>` : '—'}</td>
+                <td class="text-right mono ${base != null ? 'text-emerald-400' : 'text-gray-500'}">${base != null ? `<span title="TLA amplified ampCAPA reward APR — the same chain-distributions figure the other rows use (${base.toFixed(2)}% base; ≈${amp.toFixed(1)}% amplified auto-compound estimate). Your gov-staked receipt is an amplified position, so the amplified figure applies."><span class="text-gray-500">${base.toFixed(0)}%</span><span class="text-gray-600">/</span><span class="text-purple-300">≈${amp.toFixed(0)}%</span></span>` : '—'}</td>
+                <td class="text-right mono ${thr != null && thr < 0.5 ? 'text-amber-300' : 'text-gray-500'}" title="Pool-level distance above the 1% bucket-vote threshold (this is the whole pool's vote position, not just yours).">${thr != null ? (thr >= 0 ? '+' : '') + thr.toFixed(1) + 'pp' : '—'}</td>`;
             tbody.appendChild(tr);
+            // fold into totals (Camron 2026-08-03): LP tile + banner carry it,
+            // marked as live-read. Only when priced — never a guessed dollar.
+            if (usd != null) {
+                store._ampcapaGovUsd = usd;
+                const m = store.members.get(store.wallet);
+                const tl = $('tile-lp');
+                if (tl && m) {
+                    tl.innerHTML = `<span title="Positions-feed LP ${fmt$(m.summary?.total_lp_position_usd || 0)} + ampCAPA gov ${fmt$(usd)} (live chain read)">${fmt$((m.summary?.total_lp_position_usd || 0) + usd)}<span class="text-[8px] text-gray-500 align-super">*</span></span>`;
+                    const sub = $('tile-lp-sub'); if (sub) sub.innerHTML += ' · + gov';
+                }
+                try { renderBanner(m); } catch (e) {}
+            }
         } catch (e) { console.warn('ampCAPA gov read:', e.message); /* unknown ≠ zero — show nothing */ }
     }
 
@@ -1434,6 +1456,83 @@
                 <span class="font-medium">LUNA staked <span class="text-[8px] px-1 py-px rounded bg-cyan-500/20 text-cyan-300">native · live</span> <span class="text-[9px] text-gray-600">${dels.length} validator${dels.length === 1 ? '' : 's'}</span></span>
                 <span class="mono text-amber-300/90">${fmtNum(luna)}${cp ? ` · ${fmt$(luna * cp.usd)}` : ''}</span></div>`;
         } catch (e) { console.warn('native staking read:', e.message); }
+    }
+
+    // ---------- other Cosmos chains (sibling addresses, live reads) ----------
+    // Chainscope-style: a terra1 address's key-hash re-encoded with another
+    // chain's bech32 prefix. HONESTY CAVEAT (stated in the UI): this sibling
+    // address is only YOUR address on that chain if your wallet derives Terra
+    // and that chain from the same key path — wallets differ (Terra registers
+    // coin type 330; most Cosmos chains use 118). Balances FOUND here are real
+    // balances at that derived address; an EMPTY result is NOT proof you hold
+    // nothing on that chain. Injective is excluded — different key scheme
+    // (ethsecp), re-encoding is invalid there by construction.
+    const _B32 = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
+    function _b32Polymod(vals) {
+        const GEN = [0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3];
+        let chk = 1;
+        for (const v of vals) { const b = chk >> 25; chk = (chk & 0x1ffffff) << 5 ^ v; for (let i = 0; i < 5; i++) if ((b >> i) & 1) chk ^= GEN[i]; }
+        return chk;
+    }
+    function _b32Hrp(hrp) { const out = []; for (const c of hrp) out.push(c.charCodeAt(0) >> 5); out.push(0); for (const c of hrp) out.push(c.charCodeAt(0) & 31); return out; }
+    function bech32Decode(addr) {
+        const pos = addr.lastIndexOf('1');
+        if (pos < 1) return null;
+        const hrp = addr.slice(0, pos), data = [];
+        for (const c of addr.slice(pos + 1)) { const d = _B32.indexOf(c); if (d === -1) return null; data.push(d); }
+        if (_b32Polymod(_b32Hrp(hrp).concat(data)) !== 1) return null;
+        return { hrp, words: data.slice(0, -6) };
+    }
+    function bech32Encode(hrp, words) {
+        const vals = _b32Hrp(hrp).concat(words).concat([0, 0, 0, 0, 0, 0]);
+        const mod = _b32Polymod(vals) ^ 1;
+        let out = hrp + '1';
+        for (const w of words) out += _B32[w];
+        for (let i = 0; i < 6; i++) out += _B32[(mod >> 5 * (5 - i)) & 31];
+        return out;
+    }
+    function siblingAddress(terraAddr, prefix) {
+        const dec = bech32Decode(terraAddr);
+        return dec ? bech32Encode(prefix, dec.words) : null;
+    }
+    const SIBLING_CHAINS = [
+        { prefix: 'cosmos', name: 'Cosmos Hub', denom: 'uatom', sym: 'ATOM', rest: 'https://cosmos-rest.publicnode.com' },
+        { prefix: 'osmo', name: 'Osmosis', denom: 'uosmo', sym: 'OSMO', rest: 'https://osmosis-rest.publicnode.com' },
+        { prefix: 'neutron', name: 'Neutron', denom: 'untrn', sym: 'NTRN', rest: 'https://neutron-rest.publicnode.com' },
+    ];
+    async function renderSiblingChains(wallet) {
+        const host = $('sibling-chains'); if (!host) return;
+        const rows = await Promise.all(SIBLING_CHAINS.map(async (ch) => {
+            const addr = siblingAddress(wallet, ch.prefix);
+            if (!addr) return null;
+            try {
+                const [bal, del] = await Promise.all([
+                    fetch(`${ch.rest}/cosmos/bank/v1beta1/balances/${addr}?pagination.limit=200`).then(r => r.ok ? r.json() : null),
+                    fetch(`${ch.rest}/cosmos/staking/v1beta1/delegations/${addr}?pagination.limit=200`).then(r => r.ok ? r.json() : null),
+                ]);
+                if (!bal && !del) return null;
+                let liquid = 0, staked = 0, vals = 0;
+                for (const b of (bal?.balances || [])) if (b.denom === ch.denom) liquid += Number(b.amount) / 1e6;
+                for (const d of (del?.delegation_responses || [])) if (d.balance?.denom === ch.denom) { staked += Number(d.balance.amount) / 1e6; vals++; }
+                if (!(liquid > 0.000001 || staked > 0.000001)) return null;   // nothing found — nothing shown
+                return { ch, addr, liquid, staked, vals };
+            } catch (e) { return null; }
+        }));
+        if (store.wallet !== wallet) return;
+        const found = rows.filter(Boolean);
+        if (!found.length) { host.innerHTML = ''; return; }
+        host.innerHTML = `
+            <div class="mt-2 pt-2 border-t border-white/5">
+                <div class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-1 flex items-center gap-1.5">Other Cosmos chains
+                    <span class="text-[8px] px-1 py-px rounded bg-cyan-500/20 text-cyan-300 normal-case">live</span>
+                    <i class="fas fa-circle-info text-[8px] text-gray-600" title="Sibling addresses: your terra1 key-hash re-encoded with each chain's prefix — live chain reads. This is only YOUR address there if your wallet derives both chains from the same key path (wallets differ: Terra registers coin type 330, most Cosmos chains 118). Anything shown IS at that derived address; an empty chain is NOT proof you hold nothing there. Injective excluded — different key scheme, re-encoding invalid. Amounts unpriced: these tokens sit outside the TLA catalog, and we never guess a dollar."></i>
+                </div>
+                ${found.map(r => `
+                <div class="flex items-center justify-between text-[12px] py-1" title="${r.addr}">
+                    <span class="font-medium">${r.ch.sym} <span class="text-[9px] text-gray-600">${r.ch.name}</span></span>
+                    <span class="mono text-gray-300">${r.liquid > 0.000001 ? fmtNum(r.liquid) + ' liquid' : ''}${r.liquid > 0.000001 && r.staked > 0.000001 ? ' · ' : ''}${r.staked > 0.000001 ? `<span class="text-amber-300/90">${fmtNum(r.staked)} staked</span> <span class="text-[9px] text-gray-600">${r.vals} val${r.vals === 1 ? '' : 's'}</span>` : ''}</span>
+                </div>`).join('')}
+            </div>`;
     }
 
     // ---------- wallet balances v2: live bank scan + feed cw20 merge ----------
@@ -1491,9 +1590,10 @@
             </tbody></table>
             ${dust.length ? `<div class="text-[10px] text-gray-600 mt-1.5" title="${esc(dust.map(r => `${fmtNum(r.amount)} ${r.sym}`).join(' · '))}">+ ${dust.length} small balance${dust.length === 1 ? '' : 's'} (zLUNA receipts &amp; dust) · ${fmt$(dustUsd)}</div>` : ''}
             ${unpricedLive ? `<div class="text-[10px] text-gray-600 mt-0.5">${unpricedLive} on-chain denom${unpricedLive === 1 ? '' : 's'} with no catalog price — uncounted, not guessed.</div>` : ''}
-            <div id="native-staking-row"></div>`
-            : '<div class="text-gray-600 text-sm py-2">No meaningful liquid balances.</div><div id="native-staking-row"></div>';
+            <div id="native-staking-row"></div><div id="sibling-chains"></div>`
+            : '<div class="text-gray-600 text-sm py-2">No meaningful liquid balances.</div><div id="native-staking-row"></div><div id="sibling-chains"></div>';
         renderNativeStaking(wallet).catch(() => {});
+        renderSiblingChains(wallet).catch(() => {});
     }
 
     // ---------- wiring ----------
