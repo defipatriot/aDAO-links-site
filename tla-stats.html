@@ -5543,7 +5543,27 @@
     // T2.8b: the strip lives OUTSIDE the collapsed body and must render at
     // page load, wallet or not — a live divergence hidden behind a collapsed
     // card is a radar that doesn't radar.
-    function ensureArbStrip() { try { renderArbStrip(); } catch (e) {} }
+    function ensureArbStrip() { try { renderArbStrip(); } catch (e) { console.warn('arb-strip:', e.message); } }
+    // T2.8c: SELF-ARMING strip. renderOverviewTab runs several unguarded
+    // renderers before reaching the strip hook — any exception upstream
+    // silently killed it (observed live 2026-08-03: strip absent while the
+    // rest of the page rendered). The strip now arms itself on DOM ready and
+    // retries every 2s until the snapshot's pools exist and it has painted,
+    // then stops. Refreshes ride renderSlippageSim as before.
+    document.addEventListener('DOMContentLoaded', () => {
+        let tries = 0;
+        const t = setInterval(() => {
+            tries++;
+            try {
+                if (_zapPools().length) {
+                    renderArbStrip();
+                    const el = document.getElementById('arb-strip');
+                    if (el && el.innerHTML) { clearInterval(t); return; }
+                }
+            } catch (e) { console.warn('arb-strip arm:', e.message); }
+            if (tries > 45) clearInterval(t);   // ~90s, then give up quietly
+        }, 2000);
+    });
 
     // ---- Simulator card collapse (Camron 2026-08-02: tools shouldn't interrupt
     // the summary→table read). Collapsed by default; state lives for the session.
