@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Trade Cost Simulator | Alliance DAO</title>
-    <meta name="description" content="How much will your trade really cost? Live price-impact simulator for every Terra pool TLA tracks — pick a token, slide an amount, see the cheapest place to trade.">
+    <meta name="description" content="How much will your trade really cost? Live price-impact simulator for every Terra pool TLA tracks — pick a token, slide an amount, see the cheapest place to trade. Plus a per-wallet zap planner.">
     <link rel="icon" type="image/x-icon" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/favicon.ico">
     <link rel="icon" type="image/png" sizes="32x32" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/favicon-32x32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="https://raw.githubusercontent.com/defipatriot/aDAO-Image-Files/main/favicon-16x16.png">
@@ -33,6 +33,7 @@
         .desc-full.open { display: block; }
         .loading-pulse { animation: pulse 1.5s ease-in-out infinite; }
         @keyframes pulse { 0%,100% { opacity: .5; } 50% { opacity: 1; } }
+        .zap-mode-btn, .zap-frac-btn, .zap-mult-btn { transition: all .12s ease; }
     </style>
 </head>
 <body>
@@ -77,6 +78,23 @@
         <div class="flex justify-between text-[9px] text-gray-600 mono mt-1"><span>$10</span><span>$1K</span><span>$100K</span><span>$1M</span></div>
     </div>
 
+    <!-- zap planner (Rev 2.0: ported from tla-stats T2.7, routed over this page's
+         FULL captured-pool universe — wallet optional, feeds lazy-load on demand) -->
+    <div class="glass-card p-5 mb-5" id="zap-card">
+        <div class="flex items-center gap-2 flex-wrap">
+            <h3 class="font-semibold"><i class="fas fa-right-left text-cyan-400 mr-1.5"></i>Zap planner <span class="text-[10px] font-normal text-gray-500">— per-position exit &amp; entry costs</span></h3>
+            <span class="ml-auto flex items-center gap-1.5">
+                <input id="wallet-input" list="wallet-list" placeholder="name or terra1… (optional)" autocomplete="off"
+                       class="w-52 text-[11px] px-2.5 py-1 rounded-full bg-white/5 text-gray-300 border border-white/10 focus:border-cyan-500/50 outline-none">
+                <datalist id="wallet-list"></datalist>
+                <button id="wallet-clear" class="hidden text-[11px] px-2 py-1 rounded-full bg-white/5 text-gray-500 hover:text-red-300" title="Clear wallet">×</button>
+            </span>
+        </div>
+        <p class="text-[11px] text-gray-500 mt-1 mb-0">Pick a TLA wallet to see what leaving or growing each of its positions would cost right now. <span class="text-cyan-400 cursor-pointer hover:underline" onclick="document.getElementById('zap-note').classList.toggle('open')">how it's estimated</span> <span id="wallet-status" class="text-gray-600"></span></p>
+        <div id="zap-note" class="desc-full"><span class="text-gray-300 font-semibold">The model:</span> planning numbers from live reserves — the same constant-product math as the simulator below, extended with routing: best of a direct pool or two hops via LUNA, whichever is cheaper, with the winning route named on hover. Routes may use <i>any</i> captured pool (Astroport + SkeletonSwap, both sides priced, ≥$200 depth), not just TLA-incentivized ones. Withdrawals shrink the exited pool before any same-pool swap. Concentrated/stable legs carry "≤" — true impact is lower. Ignores swap fees, the Eris zapper's own routing, and same-block competition: a planning number, not a quote. Position sizes come from the TLA capture layer's prices; if a token's mark is off, the position size (not the impact %) is off with it.</div>
+        <div id="zap-panel" class="hidden mt-3"></div>
+    </div>
+
     <!-- arb radar -->
     <div class="glass-card p-5 mb-5" id="arb-card" style="display:none">
         <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
@@ -100,43 +118,57 @@
         <div class="text-[10px] text-gray-600 mt-4 pt-3 border-t border-white/5" id="freshness"></div>
     </div>
 
-    <div class="text-center text-[10px] text-gray-700 mt-6">Read-only · nothing to sign · data from the community-run TLA capture layer (<a class="text-gray-500 hover:text-cyan-400" href="https://github.com/thealliancedao/tla-core" target="_blank" rel="noopener">tla-core</a>) · not financial advice — verify before trading</div>
+    <div class="text-center text-[10px] text-gray-700 mt-6">Read-only · nothing to sign · data from the community-run TLA capture layer (<a class="text-gray-500 hover:text-cyan-400" href="https://github.com/thealliancedao/tla-core" target="_blank" rel="noopener">tla-core</a>) · not financial advice — verify before trading · <span class="mono" id="page-rev"></span></div>
 </main>
 
 <script>
 (() => {
     'use strict';
+    // Rev footer (Camron 2026-08-03): bump BOTH on every change; #page-rev renders
+    // from these constants so the footer can never drift from the code.
+    // Changelog: tla-core/docs/changelogs/slippage-log.md
+    const REV = '2.0', REV_DATE = '2026-08-03';
+
     const DEX_URLS = [
         ['astroport', 'https://raw.githubusercontent.com/thealliancedao/tla-core/main/dex-data/astroport/snapshots/current.json'],
         ['skeletonswap', 'https://raw.githubusercontent.com/thealliancedao/tla-core/main/dex-data/skeletonswap/snapshots/current.json'],
     ];
     const CATALOG_URL = 'https://raw.githubusercontent.com/thealliancedao/tla-core/main/token-catalog/snapshots/current.json';
+    // Member feeds (Rev 2.0): ~3.4 MB combined — lazy-loaded only when the wallet
+    // selector is touched or a ?wallet= deep link is present. Walletless page
+    // stays exactly as light as Rev 1.
+    const MEMBER_URLS = [
+        ['adao', 'https://raw.githubusercontent.com/defipatriot/adao-positions-data_2026/main/data/current.json'],
+        ['participants', 'https://raw.githubusercontent.com/defipatriot/tla-participants-data_2026/main/data/current.json'],
+    ];
     const MIN_TVL = 200;           // hide dust pools that would show absurd impacts
-    const $ = (id) => document.getElementById(id);
+    const $ = (id) => (typeof document !== 'undefined' ? document.getElementById(id) : null);
     const fmt$ = (v) => '$' + Number(v).toLocaleString(undefined, { maximumFractionDigits: v < 100 ? 2 : 0 });
     const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-    const store = { pools: [], prices: new Map(), token: null, amount: 1000, capturedAt: null, priceAt: null };
+    const store = {
+        pools: [], prices: new Map(), token: null, amount: 1000, capturedAt: null, priceAt: null,
+        // Rev 2.0 zap-planner state
+        members: null, membersLoading: false, membersAt: null, member: null,
+        zapMode: 'out', zapFrac: 0.25, zapExtra: null, zapSource: 'LUNA', zapMult: null, zapInExpanded: false,
+    };
 
     // log slider: 0..1000 → $10..$1,000,000
     const sliderToUsd = (v) => Math.round(10 * Math.pow(10, v / 200));
     const usdToSlider = (usd) => Math.max(0, Math.min(1000, Math.round(200 * Math.log10(Math.max(10, usd) / 10))));
 
-    async function load() {
-        const j = (u) => fetch(u + '?t=' + Date.now()).then(r => r.ok ? r.json() : null).catch(() => null);
-        const [cat, ...dex] = await Promise.all([j(CATALOG_URL), ...DEX_URLS.map(([, u]) => j(u))]);
-        if (!cat || dex.every(d => !d)) {
-            $('results').innerHTML = '<div class="text-red-400 text-sm text-center py-4">Live feeds unavailable — refresh to retry.</div>';
-            $('tok-chips').innerHTML = '<span class="text-red-400 text-sm">Feed unavailable.</span>';
-            return;
-        }
+    // ---- DATA INGEST --------------------------------------------------------
+    // Pure state-builders, separated from fetch so the delivery gate can feed
+    // them real fixture files and exercise the exact production code paths.
+    function ingestMarket(cat, dexPayloads) {
+        store.pools = []; store.prices = new Map(); store.capturedAt = null;
         for (const t of (cat.tokens || [])) {
             const p = t.prices?.tla?.usd ?? t.prices?.coingecko?.usd ?? t.prices?.astroport?.usd ?? null;
             if (t.denom && p > 0) store.prices.set(t.denom, p);
         }
         store.priceAt = cat.meta?.captured_at || cat.meta?.capturedAt || null;
-        for (let i = 0; i < dex.length; i++) {
-            const d = dex[i];
+        for (let i = 0; i < dexPayloads.length; i++) {
+            const d = dexPayloads[i];
             if (!d) continue;
             const dexName = DEX_URLS[i][0];
             store.capturedAt = store.capturedAt || d.meta?.captured_at || d.meta?.capturedAt || null;
@@ -155,6 +187,29 @@
                 });
             }
         }
+        return store.pools;
+    }
+    // Merged selectable roster, same law as tla-stats: aDAO members (rich
+    // objects) first, then every remaining TLA participant; dedupe by wallet,
+    // aDAO object wins. Both feeds share the capture-engine lp_positions shape.
+    function ingestMembers(adao, participants) {
+        const byWallet = new Map();
+        for (const m of (adao?.members || [])) if (m?.wallet) byWallet.set(m.wallet, m);
+        for (const m of (participants?.members || [])) if (m?.wallet && !byWallet.has(m.wallet)) byWallet.set(m.wallet, m);
+        store.members = [...byWallet.values()];
+        store.membersAt = adao?.capturedAt || participants?.capturedAt || null;
+        return store.members;
+    }
+
+    async function load() {
+        const j = (u) => fetch(u + '?t=' + Date.now()).then(r => r.ok ? r.json() : null).catch(() => null);
+        const [cat, ...dex] = await Promise.all([j(CATALOG_URL), ...DEX_URLS.map(([, u]) => j(u))]);
+        if (!cat || dex.every(d => !d)) {
+            $('results').innerHTML = '<div class="text-red-400 text-sm text-center py-4">Live feeds unavailable — refresh to retry.</div>';
+            $('tok-chips').innerHTML = '<span class="text-red-400 text-sm">Feed unavailable.</span>';
+            return;
+        }
+        ingestMarket(cat, dex);
         // token list ordered by total liquidity behind it — the natural "popular first"
         const liq = new Map();
         for (const p of store.pools) for (const s of p.sides) liq.set(s.sym, (liq.get(s.sym) || 0) + s.usd);
@@ -171,6 +226,297 @@
         const cap = String(store.capturedAt || '').replace('T', ' ').slice(0, 16);
         $('freshness').innerHTML = `<i class="fas fa-satellite-dish text-gray-500 mr-1"></i>Live reserves captured ${esc(cap || 'recently')} UTC · prices from the TLA token catalog · pools under ${fmt$(MIN_TVL)} hidden · refreshes on page load`;
         render();
+        renderZapPlanner();   // re-render if a deep-linked wallet resolved before pools arrived
+    }
+
+    // ---- MEMBER FEEDS (lazy) ------------------------------------------------
+    async function loadMembers() {
+        if (store.members || store.membersLoading) return store.members;
+        store.membersLoading = true;
+        const st = $('wallet-status'); if (st) st.textContent = '· loading wallets…';
+        const j = (u) => fetch(u + '?t=' + Date.now()).then(r => r.ok ? r.json() : null).catch(() => null);
+        const [adao, participants] = await Promise.all(MEMBER_URLS.map(([, u]) => j(u)));
+        store.membersLoading = false;
+        if (!adao && !participants) {
+            if (st) st.textContent = '· wallet feeds unavailable — refresh to retry';
+            return null;
+        }
+        ingestMembers(adao, participants);
+        const dl = $('wallet-list');
+        if (dl) dl.innerHTML = store.members.map(m =>
+            `<option value="${esc(m.name || m.wallet)}">${esc(m.name ? shortAddr(m.wallet) : '')}</option>`).join('');
+        if (st) st.textContent = `· ${store.members.length} wallets · positions captured ${String(store.membersAt || '').replace('T', ' ').slice(0, 16)} UTC`;
+        return store.members;
+    }
+    const shortAddr = (w) => w ? w.slice(0, 10) + '…' + w.slice(-4) : '';
+    const displayName = (m) => m ? (m.name || shortAddr(m.wallet)) : '';
+    function findMember(q) {
+        if (!store.members || !q) return null;
+        const s = String(q).trim().toLowerCase();
+        return store.members.find(m => (m.name || '').toLowerCase() === s)
+            || store.members.find(m => m.wallet === q)
+            || store.members.find(m => s.length >= 8 && m.wallet.toLowerCase().startsWith(s))
+            || store.members.find(m => (m.name || '').toLowerCase().includes(s) && s.length >= 3)
+            || null;
+    }
+    function selectMemberByWallet(qOrWallet) {
+        const m = findMember(qOrWallet);
+        store.member = m || null;
+        store.zapInExpanded = false;
+        const clr = $('wallet-clear'); if (clr) clr.classList.toggle('hidden', !m);
+        const inp = $('wallet-input'); if (inp && m) inp.value = displayName(m);
+        renderZapPlanner();
+        return m;
+    }
+    function clearMember() {
+        store.member = null;
+        const inp = $('wallet-input'); if (inp) inp.value = '';
+        const clr = $('wallet-clear'); if (clr) clr.classList.add('hidden');
+        renderZapPlanner();
+    }
+
+    // ---- ZAP PLANNER CORE (ported from tla-stats T2.7, Rev 2.0 adaptation:
+    // routes over this page's FULL captured-pool universe, store.pools shape) ---
+    function _sideUsd(p, sym) {
+        const s = p.sides.find(x => x.sym === sym);
+        return s ? (s.usd || 0) : 0;
+    }
+    // Impact of selling $v of sellSym INTO pool p. reserveScale shrinks the input
+    // side when the route passes through the same pool the user just withdrew from.
+    function _swapImpact(p, sellSym, v, reserveScale = 1) {
+        const s = _sideUsd(p, sellSym);
+        if (!(s > 0)) return null;
+        const curved = p.type === 'concentrated' || p.type === 'stable';
+        return { pct: v / (s * reserveScale + v) * 100, curved };
+    }
+    const dexShort = (p) => p.dex === 'astroport' ? 'Astro' : p.dex === 'skeletonswap' ? 'SS' : (p.dex || '');
+    // Cheapest route from fromSym to toSym for $v: best direct pool vs best
+    // two-hop via LUNA. Returns { pct, legs[], curvedAny } or null if unroutable.
+    function _bestRoute(fromSym, toSym, v, opts = {}) {
+        if (fromSym === toSym || !(v > 0)) return { pct: 0, legs: [], curvedAny: false };
+        const scaleFor = (p) => (opts.excludePool && p === opts.excludePool) ? Math.max(0.01, 1 - (opts.shrinkPct || 0)) : 1;
+        let best = null;
+        for (const p of store.pools) {
+            const syms = [p.sides[0].sym, p.sides[1].sym];
+            if (!(syms.includes(fromSym) && syms.includes(toSym))) continue;
+            const r = _swapImpact(p, fromSym, v, scaleFor(p));
+            if (r && (!best || r.pct < best.pct)) best = { pct: r.pct, legs: [`${fromSym}\u2192${toSym} via ${p.name} (${dexShort(p)})`], curvedAny: r.curved };
+        }
+        if (fromSym !== 'LUNA' && toSym !== 'LUNA') {
+            const l1 = _bestRoute(fromSym, 'LUNA', v, opts);
+            const l2 = _bestRoute('LUNA', toSym, v, opts);
+            if (l1 && l1.legs.length && l2 && l2.legs.length) {
+                const combined = (1 - (1 - l1.pct / 100) * (1 - l2.pct / 100)) * 100;
+                if (!best || combined < best.pct) best = { pct: combined, legs: [...l1.legs, ...l2.legs], curvedAny: l1.curvedAny || l2.curvedAny };
+            }
+        }
+        return best;
+    }
+    // Zap-OUT: withdraw fraction f of a $V position in pool p (or a
+    // single-asset position), swap every non-target side to the target.
+    function _zapOutCost(p, singleSym, V, f, target) {
+        const X = V * f;
+        if (!(X > 0)) return null;
+        if (!p) {   // single-asset position: one straight swap
+            const r = _bestRoute(singleSym, target, X);
+            if (!r || (singleSym !== target && !r.legs.length)) return { pct: null, legs: [], unroutable: singleSym, X };
+            return { pct: r.pct, legs: r.legs, curvedAny: r.curvedAny, X };
+        }
+        const tot = (p.sides[0].usd || 0) + (p.sides[1].usd || 0);
+        if (!(tot > 0)) return null;
+        const w0 = (p.sides[0].usd || 0) / tot;
+        const shrinkPct = Math.min(0.9, X / tot);   // withdrawing shrinks this pool before any same-pool swap
+        let acc = 0, curvedAny = false, unroutable = null; const legs = [];
+        for (const [sym, w] of [[p.sides[0].sym, w0], [p.sides[1].sym, 1 - w0]]) {
+            const v = X * w;
+            if (!(v > 0.01)) continue;
+            if (sym === target) { legs.push(`${fmt$(v)} ${sym} received directly`); continue; }
+            const r = _bestRoute(sym, target, v, { excludePool: p, shrinkPct });
+            if (!r || !r.legs.length) { unroutable = sym; continue; }
+            acc += v * (r.pct / 100); curvedAny = curvedAny || r.curvedAny;
+            legs.push(...r.legs.map(l => `${l} ${r.pct < 0.05 ? '<0.05' : (r.curvedAny ? '\u2264' : '') + r.pct.toFixed(2)}%`));
+        }
+        return { pct: acc / X * 100, legs, curvedAny, unroutable, X };
+    }
+    // Zap-IN: enter pool p with $amt of source asset — swap each needed side.
+    function _zapInCost(p, source, amt) {
+        const tot = (p.sides[0].usd || 0) + (p.sides[1].usd || 0);
+        if (!(tot > 0)) return null;
+        const w0 = (p.sides[0].usd || 0) / tot;
+        let acc = 0, curvedAny = false, unroutable = null; const legs = [];
+        for (const [sym, w] of [[p.sides[0].sym, w0], [p.sides[1].sym, 1 - w0]]) {
+            const v = amt * w;
+            if (!(v > 0.01) || sym === source) continue;
+            const r = _bestRoute(source, sym, v);
+            if (!r || !r.legs.length) { unroutable = sym; continue; }
+            acc += v * (r.pct / 100); curvedAny = curvedAny || r.curvedAny;
+            legs.push(...r.legs.map(l => `${l} ${r.pct < 0.05 ? '<0.05' : (r.curvedAny ? '\u2264' : '') + r.pct.toFixed(2)}%`));
+        }
+        return { pct: acc / amt * 100, legs, curvedAny, unroutable };
+    }
+    const ZAP_DEFAULT_TARGETS = ['LUNA', 'USDC', 'SOLID'];
+    function _zapAllSymbols() {
+        const s = new Set();
+        for (const p of store.pools) { s.add(p.sides[0].sym); s.add(p.sides[1].sym); }
+        return [...s].sort();
+    }
+    // Member positions aggregated by pool name+dex (a wallet can hold one pool
+    // under several stake configs). Single-asset positions keep dex 'Single'.
+    function aggregatePositions(member) {
+        const agg = new Map();
+        for (const lp of (member?.lp_positions || [])) {
+            const key = `${lp.pool_name}|${lp.dex || ''}`;
+            if (!agg.has(key)) agg.set(key, { name: lp.pool_name, dex: lp.dex || '', usd: 0 });
+            agg.get(key).usd += lp.estimated_position_usd || 0;
+        }
+        return [...agg.values()].filter(x => x.usd > 1).sort((a, b) => b.usd - a.usd);
+    }
+    // Position → captured pool. Name+dex match first, symbol-set fallback for
+    // reversed names; when duplicates share a name (live: two USDC-SOLID astro
+    // pools) prefer the DEEPEST — routing through the thin twin overstates cost.
+    const _dexMatch = (poolDex, posDex) => {
+        const d = String(posDex || '').toLowerCase();
+        return (poolDex === 'astroport' && d.includes('astro')) || (poolDex === 'skeletonswap' && d.includes('skeleton'));
+    };
+    function poolFor(pos) {
+        const posSet = new Set(String(pos.name || '').split('-'));
+        const cands = store.pools.filter(p => _dexMatch(p.dex, pos.dex) &&
+            (p.name === pos.name || (posSet.size === 2 && p.sides.every(s => posSet.has(s.sym)))));
+        if (!cands.length) return null;
+        return cands.reduce((a, b) => ((a.sides[0].usd + a.sides[1].usd) >= (b.sides[0].usd + b.sides[1].usd) ? a : b));
+    }
+
+    // ---- ZAP PLANNER RENDER -------------------------------------------------
+    window.setZapMode = (m) => { store.zapMode = m; renderZapPlanner(); };
+    window.setZapFrac = (f) => { store.zapFrac = f; renderZapPlanner(); };
+    window.setZapExtra = (sym) => { store.zapExtra = sym || null; renderZapPlanner(); };
+    window.setZapSource = (sym) => { store.zapSource = sym; renderZapPlanner(); };
+    window.setZapMult = (m) => { store.zapMult = m; renderZapPlanner(); };
+    window.zapShowAll = () => { store.zapInExpanded = true; renderZapPlanner(); };
+    const zGradeOf = (pct) => pct < 0.5 ? 'A' : pct < 1 ? 'B' : pct < 3 ? 'C' : pct < 8 ? 'D' : 'F';
+    const zGradeCls = (g) => g === 'A' ? 'bg-emerald-500/20 text-emerald-300' : g === 'B' ? 'bg-cyan-500/20 text-cyan-300' : g === 'C' ? 'bg-yellow-500/20 text-yellow-300' : g === 'D' ? 'bg-orange-500/20 text-orange-300' : 'bg-red-500/20 text-red-300';
+    const zDexTag = (d) => {
+        const s = String(d || '').toLowerCase();
+        if (s.includes('astro')) return '<span class="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-300">Astroport</span>';
+        if (s.includes('skeleton')) return '<span class="text-[9px] px-1.5 py-0.5 rounded bg-pink-500/15 text-pink-300">SkeletonSwap</span>';
+        if (s === 'single') return '<span class="text-[9px] px-1.5 py-0.5 rounded bg-white/5 text-gray-400">Single</span>';
+        return d ? `<span class="text-[9px] px-1.5 py-0.5 rounded bg-white/5 text-gray-400">${esc(d)}</span>` : '';
+    };
+    function renderZapPlanner() {
+        const panel = $('zap-panel');
+        if (!panel) return;
+        const member = store.member;
+        if (!member || !store.pools.length) { panel.classList.add('hidden'); panel.innerHTML = ''; return; }
+        panel.classList.remove('hidden');
+        const mode = store.zapMode, frac = store.zapFrac, extra = store.zapExtra;
+        const positions = aggregatePositions(member);
+        const targets = [...ZAP_DEFAULT_TARGETS, ...(extra && !ZAP_DEFAULT_TARGETS.includes(extra) ? [extra] : [])];
+        const allSyms = _zapAllSymbols();
+        const cell = (res) => {
+            if (!res) return `<span class="text-gray-700 text-[10px]">\u2014</span>`;
+            if (res.pct == null || res.unroutable) return `<span class="text-[10px] text-purple-300/70" title="No captured pool routes ${esc(res.unroutable || 'a leg')} — a zapper/aggregator may still route it via pools outside the capture.">no captured route</span>`;
+            const g = zGradeOf(res.pct);
+            const figStr = res.pct < 0.05 ? '<0.05' : (res.curvedAny ? '\u2264' : '') + res.pct.toFixed(2);
+            return `<span class="inline-flex items-center gap-1" title="${esc(res.legs.join(' \u00b7 ') || 'received directly')}"><span class="w-4 h-4 rounded flex items-center justify-center text-[9px] font-bold ${zGradeCls(g)}">${g}</span><span class="mono text-[10px] ${res.pct < 1 ? 'text-gray-300' : res.pct < 3 ? 'text-yellow-300' : 'text-red-400'}">${figStr}%</span></span>`;
+        };
+        const modeBtn = (m, label, tip) => `<button onclick="setZapMode('${m}')" title="${esc(tip)}" class="zap-mode-btn text-[10px] px-2 py-0.5 rounded ${mode === m ? 'bg-cyan-500/20 text-cyan-300' : 'bg-white/5 text-gray-400'} font-medium">${label}</button>`;
+        let body = '';
+        if (mode === 'out') {
+            if (!positions.length) {
+                body = `<div class="text-[11px] text-gray-500 py-2">${esc(displayName(member))} has no priced LP positions to zap out of.</div>`;
+            } else {
+                const fracBtn = (f) => `<button onclick="setZapFrac(${f})" class="zap-frac-btn text-[10px] px-2 py-0.5 rounded ${frac === f ? 'bg-amber-500/20 text-amber-300' : 'bg-white/5 text-gray-400'} font-medium mono">${f * 100}%</button>`;
+                const rows = positions.map(pos => {
+                    const p = poolFor(pos);
+                    const isSingle = String(pos.dex) === 'Single' || (!p && !pos.name.includes('-'));
+                    const outAmt = pos.usd * frac;
+                    const cells = targets.map(t => {
+                        const res = isSingle
+                            ? _zapOutCost(null, pos.name, pos.usd, frac, t)
+                            : (p ? _zapOutCost(p, null, pos.usd, frac, t) : null);
+                        const lost = (res && res.pct != null && !res.unroutable)
+                            ? `<div class="mono text-[9px] ${res.pct < 1 ? 'text-gray-600' : res.pct < 3 ? 'text-yellow-500/70' : 'text-red-400/80'}" title="estimated dollars lost to price impact zapping ${esc(fmt$(outAmt))} out to ${esc(t)}">${res.curvedAny ? '\u2264' : '~'}${fmt$(outAmt * res.pct / 100)} lost</div>` : '';
+                        return `<td class="text-right py-1 pl-3">${cell(res)}${lost}</td>`;
+                    }).join('');
+                    return `<tr class="border-b border-white/[0.03]">
+                        <td class="py-1 pr-2"><span class="text-xs font-medium">${esc(pos.name)}</span> ${zDexTag(pos.dex)}</td>
+                        <td class="text-right py-1 mono text-[10px] text-gray-400">${fmt$(pos.usd * frac)}<span class="text-gray-600"> of ${fmt$(pos.usd)}</span></td>
+                        ${cells}
+                    </tr>`;
+                }).join('');
+                body = `
+                  <div class="flex items-center gap-1.5 flex-wrap mb-2">
+                    <span class="text-[10px] text-gray-500">zap out</span>
+                    ${[0.25, 0.5, 0.75, 1].map(fracBtn).join('')}
+                    <span class="text-gray-700 text-[10px] mx-1">\u00b7</span>
+                    <span class="text-[10px] text-gray-500">extra target</span>
+                    <select onchange="setZapExtra(this.value)" class="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-gray-300 border border-white/10 outline-none">
+                      <option value="">\u2014</option>
+                      ${allSyms.filter(s => !ZAP_DEFAULT_TARGETS.includes(s)).map(s => `<option value="${esc(s)}" ${extra === s ? 'selected' : ''}>${esc(s)}</option>`).join('')}
+                    </select>
+                  </div>
+                  <div class="overflow-x-auto"><table class="w-full text-left"><thead><tr class="text-[9px] text-gray-600 uppercase tracking-wider">
+                    <th class="pb-1">position</th><th class="text-right pb-1">zapping</th>
+                    ${targets.map(t => `<th class="text-right pb-1 pl-3">\u2192 ${esc(t)}</th>`).join('')}
+                  </tr></thead><tbody>${rows}</tbody></table></div>`;
+            }
+        } else {
+            const source = store.zapSource || 'LUNA';
+            const amt = store.amount || 1000;
+            const mult = store.zapMult;   // grow-to-N× mode (T2.7b convention)
+            const posByKey = new Map();
+            for (const x of positions) { const p = poolFor(x); if (p) posByKey.set(p, x.usd); }
+            const entries = store.pools.map(p => {
+                    const mine = posByKey.has(p);
+                    if (mult) {
+                        if (!mine) return null;
+                        const addUsd = (posByKey.get(p) || 0) * (mult - 1);
+                        if (addUsd < 1) return null;
+                        return { p, res: _zapInCost(p, source, addUsd), mine, addUsd, amtUsd: addUsd };
+                    }
+                    return { p, res: _zapInCost(p, source, amt), mine, amtUsd: amt };
+                })
+                .filter(e => e && e.res)
+                .sort((a, b) => (b.mine - a.mine) || ((a.res.pct ?? 999) - (b.res.pct ?? 999)));
+            const shown = (store.zapInExpanded || mult) ? entries : entries.slice(0, Math.max(8, entries.filter(e => e.mine).length + 5));
+            const MULTS = [1.25, 1.5, 1.75, 2, 3, 4, 5];
+            const multBtn = (m) => `<button onclick="setZapMult(${m})" class="zap-mult-btn text-[10px] px-1.5 py-0.5 rounded ${mult === m ? 'bg-cyan-500/20 text-cyan-300' : 'bg-white/5 text-gray-400'} font-medium mono">${m}\u00d7</button>`;
+            const headline = mult
+                ? `<span class="text-[10px] text-gray-500">grow each position to <span class="mono text-cyan-300">${mult}\u00d7</span> using</span>`
+                : `<span class="text-[10px] text-gray-500">zap <span class="mono text-gray-300">${fmt$(amt)}</span> of</span>`;
+            body = `
+              <div class="flex items-center gap-1.5 flex-wrap mb-2">
+                ${headline}
+                <select onchange="setZapSource(this.value)" class="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-gray-300 border border-white/10 outline-none">
+                  ${allSyms.map(s => `<option value="${esc(s)}" ${source === s ? 'selected' : ''}>${esc(s)}</option>`).join('')}
+                </select>
+                <span class="text-[10px] text-gray-600">${mult ? 'per-pool add shown \u00b7 your held pools only' : 'into a pool \u00b7 amount follows the trade-size control above \u00b7 your pools first'}</span>
+                <span class="ml-auto flex items-center gap-1">
+                  <button onclick="setZapMult(null)" class="zap-mult-btn text-[10px] px-1.5 py-0.5 rounded ${!mult ? 'bg-cyan-500/20 text-cyan-300' : 'bg-white/5 text-gray-400'} font-medium">$</button>
+                  ${MULTS.map(multBtn).join('')}
+                </span>
+              </div>
+              ${mult && !entries.length ? `<div class="text-[11px] text-gray-500 py-2">no priced positions \u2265 $1 to multiply for ${esc(displayName(member))}.</div>` : `<div class="grid grid-cols-1 md:grid-cols-2 gap-x-4">
+                ${shown.map(e => `<div class="flex items-center gap-2 py-1 border-b border-white/[0.03]">
+                    ${e.mine ? '<i class="fas fa-star text-amber-400 text-[8px]"></i>' : '<span class="w-2"></span>'}
+                    <span class="text-xs font-medium truncate" style="min-width:110px">${esc(e.p.name)}</span>
+                    ${zDexTag(e.p.dex)}
+                    ${e.addUsd != null ? `<span class="mono text-[10px] text-gray-500">+${fmt$(e.addUsd)}</span>` : ''}
+                    <span class="ml-auto flex items-center gap-1.5">${cell(e.res)}${(e.res && e.res.pct != null && !e.res.unroutable) ? `<span class="mono text-[9px] ${e.res.pct < 1 ? 'text-gray-600' : e.res.pct < 3 ? 'text-yellow-500/70' : 'text-red-400/80'}" title="estimated dollars lost to price impact at this size \u2014 is the move worth the cost?">${e.res.curvedAny ? '\u2264' : '~'}${fmt$(e.amtUsd * e.res.pct / 100)} lost</span>` : ''}</span>
+                  </div>`).join('')}
+              </div>`}
+              ${entries.length > shown.length ? `<div class="text-center pt-1"><button onclick="zapShowAll()" class="text-[10px] px-3 py-1 rounded-full bg-white/5 text-gray-400 hover:text-cyan-300 font-medium">show all ${entries.length} pools</button></div>` : ''}`;
+        }
+        panel.innerHTML = `
+          <div class="rounded-lg bg-white/[0.015] border border-white/5 p-2.5">
+            <div class="flex items-center gap-2 flex-wrap mb-1">
+              <span class="text-[11px] font-semibold text-gray-300">${esc(displayName(member))}</span>
+              ${modeBtn('out', 'Zap out', 'Cost of converting a slice of each LP position into a single target asset \u2014 withdraw both sides, swap the rest via the cheapest captured route.')}
+              ${modeBtn('in', 'Zap in', 'Cost of entering a pool with a single asset \u2014 swap into the pool\u2019s sides via the cheapest captured route.')}
+            </div>
+            ${body}
+            <div class="text-[9px] text-gray-600 mt-1.5">Planning numbers from live reserves: best of direct pool or two-hop via LUNA (hover a figure for the route). Routes may use any captured pool, not just TLA-incentivized ones. Withdrawals shrink the exited pool before any same-pool swap. Ignores fees, the Eris zapper\u2019s own routing, and same-block competition. \u2264 = concentrated/stable legs, true impact lower. Position sizes use TLA catalog prices \u2014 a mispriced token skews its size, not its impact %.</div>
+          </div>`;
     }
 
     // ---- ARB RADAR ----------------------------------------------------------
@@ -308,16 +654,38 @@
         $('amt-display').textContent = fmt$(store.amount);
         if (!fromSlider) $('amt-slider').value = usdToSlider(store.amount);
         render();
+        // zap-in $ mode follows the trade-size control live
+        if (store.member && store.zapMode === 'in' && !store.zapMult) renderZapPlanner();
     }
 
     function init() {
+        const rev = $('page-rev'); if (rev) rev.textContent = `Rev ${REV} · ${REV_DATE}`;
         $('amt-slider').addEventListener('input', (e) => setAmount(sliderToUsd(Number(e.target.value)), true));
         document.querySelectorAll('.amt-btn').forEach(b => b.addEventListener('click', () => setAmount(Number(b.dataset.amt))));
         $('amt-custom').addEventListener('change', (e) => { const v = Number(e.target.value); if (v > 0) setAmount(v); });
+        // wallet selector: lazy member-feed load on first touch; commit on change
+        const wi = $('wallet-input');
+        if (wi) {
+            wi.addEventListener('focus', () => { loadMembers(); }, { once: true });
+            wi.addEventListener('change', async () => {
+                await loadMembers();
+                const m = selectMemberByWallet(wi.value);
+                if (!m && wi.value.trim()) { const st = $('wallet-status'); if (st) st.textContent = '· no wallet matched — try a name or paste a terra1 address'; }
+            });
+        }
+        const wc = $('wallet-clear'); if (wc) wc.addEventListener('click', clearMember);
         setAmount(1000);
         load();
+        // ?wallet= deep link (name or address) — from tla-stats / member-portfolio
+        const qp = new URLSearchParams(location.search).get('wallet');
+        if (qp) loadMembers().then(() => selectMemberByWallet(qp));
     }
-    document.addEventListener('DOMContentLoaded', init);
+    if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded', init);
+
+    // Delivery-gate hook (harmless in production): exposes the LIVE functions so
+    // the mock gate exercises this exact code on real fixtures — no third copy.
+    window.__zapTest = { store, ingestMarket, ingestMembers, findMember, selectMemberByWallet, displayName,
+        aggregatePositions, poolFor, _swapImpact, _bestRoute, _zapOutCost, _zapInCost, _zapAllSymbols, REV, REV_DATE };
 })();
 </script>
 <script defer src="/_vercel/insights/script.js"></script>
