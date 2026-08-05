@@ -712,7 +712,7 @@
             </div>`;
         $('tiles').innerHTML =
             dtile('vp', 'Voting power', fmtNum(s.display_voting_power_human || 0), (s.vp_gap_human || 0) > 500 ? `+${fmtNum(s.vp_gap_human)} reclaimable` : 'fully fresh', 'text-purple-300', 'v', 'Tap for this wallet&#39;s VP history') +
-            dtile('lk', 'Locked value', fmt$(rpT.live ? rpT.lk : s.total_locked_usd), `${fmtNum(s.total_locked_luna_equivalent || 0)} LUNA-equiv · ${s.lock_count || 0} locks${rpT.live ? ' · <span class="text-emerald-400/70">live px</span>' : ''}`, '', 'lk', 'Locked amounts from the daily 03:00 snapshot, valued at LIVE catalog prices. Tap for locked-value history') +
+            dtile('lk', 'Locked value', fmt$(rpT.live ? rpT.lk : s.total_locked_usd), `${fmtNum(s.fixed_amount_human || s.total_locked_luna_equivalent || 0)} LUNA underlying · ${s.lock_count || 0} locks${rpT.live ? ' · <span class="text-emerald-400/70">live px</span>' : ''}`, '', 'lk', 'Chain-stamped underlying LUNA across your locks — the number Eris shows (VP = 10\u00d7 this at max lock). USD is the lock amounts valued at LIVE catalog prices. Tap for locked-value history') +
             dtile('lp', 'LP positions', fmt$(rpT.live ? rpT.lp : s.total_lp_position_usd), `${s.active_lp_position_count || 0} active${(s.inactive_lp_position_count || 0) ? ` · <span class="text-red-400">${s.inactive_lp_position_count} inactive</span>` : ''}${rpT.live ? ' · <span class="text-emerald-400/70">live px</span>' : ''}`, '', 'lp', 'LP token amounts from the daily 03:00 snapshot, valued at LIVE catalog prices. Tap for LP-value history') +
             dtile('vot', 'Votion', '<span class="loading-pulse text-gray-500 text-sm">…</span>', 'vault positions', 'text-purple-300', null, 'Per-vault vault-share value from the ORG Votion feed (hub-rate LST pricing, corrected VP definition). Tap for history — the org daily archive runs since 2026-07-16.') +
             dtile('nft', 'NFTs', '<span class="loading-pulse text-gray-500 text-sm">…</span>', 'at recent sales floors', 'text-amber-300', null, 'aDAO NFTs valued at recent sales floors from the org NFT tracker. Pixel Lions have no captured floor and stay unpriced.') +
@@ -1418,7 +1418,17 @@
         const epochsIn = led ? (led.epoch_span[1] - led.epoch_span[0] + 1) : null;
         const lunaIn = w.zap_inputs?.LUNA?.amount_display || 0;
         const lunaOut = w.claimed_yield?.luna_display || 0;
-        const lockedLunaEq = m.summary?.total_locked_luna_equivalent || 0;
+        // P1.8 (2026-08-05, reconciliation pass — Camron feedback): the locked figure
+        // shown must be the CHAIN-STAMPED underlying (fixed_amount, matches Eris and
+        // VP = 10× at max lock), NOT the same locks re-valued at today's LST hub
+        // rates. The re-valued figure is a re-lock projection and is shown as such.
+        const lockedStamped = m.summary?.fixed_amount_human || 0;          // chain-stamped underlying — complete
+        const lockedNowEq = m.summary?.total_locked_luna_equivalent || 0;  // same locks at today's hub rates (projection)
+        const relockGain = Math.max(0, lockedNowEq - lockedStamped);
+        const relockVp = m.summary?.vp_gap_human || 0;
+        const depCount = w.counts?.deposit || 0;
+        const covPct = depCount > 0 ? (measuredDeps / depCount) * 100 : 0;
+        const covOk = covPct >= 80;   // below this, entry-cost ratios mislead and are suppressed
         const st = (label, val, sub, cls, tip) => `<div class="rounded-lg bg-white/[0.02] border border-white/5 p-3" title="${esc(tip)}">
             <div class="text-[9px] uppercase tracking-wider text-gray-500">${label}</div>
             <div class="mono text-lg font-bold ${cls}">${val}</div>
@@ -1426,12 +1436,13 @@
         el.innerHTML = `
           <div class="text-[12px] text-gray-400 mb-3">In TLA since <span class="mono text-gray-200">${esc(firstD || '?')}</span>${firstE != null ? ` (epoch e${firstE}${firstE === 96 ? ' — <span class="text-amber-300">TLA\u2019s very first epoch. You were there day one.</span>' : ''})` : ''}${epochsIn ? ` · <span class="mono text-gray-300">${epochsIn}</span> epochs and counting` : ''}.</div>
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
-            ${st('What went in (measured)', fmt$(inUsd), `${measuredDeps} of ${w.counts.deposit} deposits carry cost data — a lower bound`, 'text-gray-100', 'Zap-entry cost valued at each entry day. Direct (non-zap) deposits leave no measurable cost trail, so the true figure is HIGHER than this — stated, not hidden.')}
+            ${st('What went in (measured)', `<span class="text-gray-500 text-sm align-top mr-0.5">\u2265</span>${fmt$(inUsd)} <span class="text-[9px] font-normal text-amber-300/80 align-middle">${covPct.toFixed(0)}% priced</span>`, `${measuredDeps} of ${depCount} deposits carry cost data — the true figure is higher`, 'text-gray-100', 'Zap-entry cost valued at each entry day. Direct (non-zap) deposits leave no measurable cost trail, so the true figure is HIGHER than this — stated, not hidden. Full entry costs land with the historical walk + cost-basis engine.')}
             ${st('What you\u2019ve earned (measured)', fmt$(earned), `${fmt$(yieldUsd)} LP yield + ${fmt$(bribeUsd)} bribes · at claim-day value`, 'text-emerald-300', 'Every LP reward claim and every gauge-bribe claim, valued the day it happened. Lower bound: some claims carry no attributable user and newer claims settle after the next re-derive.')}
             ${st('What you hold now', fmt$(holding), 'live TLA position (locks + LP + wallet' + (store._ampcapaGovUsd ? ' + gov' : '') + ')', 'text-cyan-300', 'Live positions feed plus the ampCAPA governance read. Votion and NFTs are on their own cards — this is the TLA slice the flow history describes.')}
           </div>
-          <div class="text-[11px] text-gray-500 mb-2">In LUNA terms: <span class="mono text-gray-300">${fmtNum(lunaIn)}</span> LUNA in (measured entries) · <span class="mono text-emerald-300">${fmtNum(lunaOut)}</span> LUNA claimed back · <span class="mono text-purple-300">${fmtNum(lockedLunaEq)}</span> LUNA-equiv locked today.</div>
-          <div class="text-[10px] text-gray-600 pt-2 border-t border-white/5"><i class="fas fa-circle-info mr-1"></i>No single up/down number yet, honestly: that needs exit valuations (P&L Phase C) and full entry costs for direct deposits. What IS here: your measured earnings ${earned > 0 && inUsd > 0 ? `already stand at <span class="mono text-gray-400">${(earned / inUsd * 100).toFixed(0)}%</span> of your measured entry cost, ` : ''}and you still hold the position on top. Each side is a lower bound of a different thing — read them as pieces, not a net.</div>`;
+          <div class="text-[11px] text-gray-500 mb-1">Measured flows (<span class="mono">${covPct.toFixed(0)}%</span> of deposits priced): <span class="mono text-gray-300">${fmtNum(lunaIn)}</span> LUNA in via zaps · <span class="mono text-emerald-300">${fmtNum(lunaOut)}</span> LUNA claimed back.</div>
+          <div class="text-[11px] text-gray-500 mb-2">Chain-complete: <span class="mono text-purple-300">${fmtNum(lockedStamped)}</span> LUNA underlying locked today${relockGain > 1 ? ` · re-locking at today\u2019s LST rates would add <span class="mono text-purple-300/80">+${fmtNum(relockGain)}</span> underlying (<span class="mono text-purple-300/80">+${fmtNum(relockVp)}</span> VP)` : ''}. <span class="text-gray-600">These rows measure different things — locked is complete chain truth; flows are partial until the historical walk lands.</span></div>
+          <div class="text-[10px] text-gray-600 pt-2 border-t border-white/5"><i class="fas fa-circle-info mr-1"></i>No single up/down number yet, honestly: that needs exit valuations (P&L Phase C) and full entry costs for direct deposits. What IS here: your measured earnings ${covOk && earned > 0 && inUsd > 0 ? `already stand at <span class="mono text-gray-400">${(earned / inUsd * 100).toFixed(0)}%</span> of your measured entry cost, ` : `total <span class="mono text-gray-400">${fmt$(earned)}</span> at claim-day value — no ratio against entry cost is shown at ${covPct.toFixed(0)}% pricing coverage, because a ratio built on a partial denominator would mislead — `}and you still hold the position on top. Each side is a lower bound of a different thing — read them as pieces, not a net.</div>`;
     }
 
     // ---------- income center ----------
