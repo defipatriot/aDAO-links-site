@@ -1242,11 +1242,33 @@
             .pulse-metric-btn.active { background: rgba(34,211,238,0.18); color: #22d3ee; }
         </style>
         <div class="pulse-card p-4 sm:p-5 mb-6 sm:mb-8" id="pulse-card">
-            <div id="pulse-alerts" class="hidden mb-3"></div>
             <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
-                <h2 class="text-lg font-bold text-white"><i class="fas fa-heart-pulse text-cyan-400 mr-2"></i>Ecosystem Pulse</h2>
-                <span class="text-[10px] text-gray-600">live from committed on-chain captures · no estimates</span>
+                <div class="flex items-center gap-1">
+                    <button id="ptab-news" class="pulse-metric-btn text-sm font-bold" style="padding:4px 12px"><i class="fas fa-bullhorn text-amber-300 mr-1.5"></i>Ecosystem News</button>
+                    <button id="ptab-pulse" class="pulse-metric-btn text-sm font-bold" style="padding:4px 12px"><i class="fas fa-heart-pulse text-cyan-400 mr-1.5"></i>Ecosystem Pulse</button>
+                </div>
+                <span class="text-[10px] text-gray-600">live from on-chain captures &amp; governance · no estimates</span>
             </div>
+            <div id="news-body" class="hidden">
+                <div class="flex items-center justify-between gap-2 mb-1">
+                    <span class="text-[10px] text-gray-500" id="news-count"></span>
+                    <span class="flex items-center gap-1.5">
+                        <button class="pulse-pill" id="news-prev">&lsaquo;</button>
+                        <span class="text-[10px] text-gray-500 font-mono" id="news-pos"></span>
+                        <button class="pulse-pill" id="news-next">&rsaquo;</button>
+                    </span>
+                </div>
+                <div id="news-card" class="text-sm"><span class="text-gray-500 text-xs">Checking governance…</span></div>
+                <div class="mt-3 pt-2 border-t border-white/5">
+                    <div class="flex items-center gap-1.5 flex-wrap mb-1.5">
+                        <span class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold"><i class="fab fa-x-twitter mr-1"></i>Latest posts</span>
+                        <span id="x-accounts" class="flex items-center gap-1 flex-wrap"></span>
+                    </div>
+                    <div id="x-feed" style="max-height:340px;overflow-y:auto"></div>
+                    <div class="text-[9px] text-gray-600 mt-1">Embedded from X — if X declines to render timelines for logged-out visitors, accounts show as direct links instead.</div>
+                </div>
+            </div>
+            <div id="pulse-body">
             <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mb-3" id="pulse-stats">
                 <div class="pulse-stat"><div class="l">TLA Liquidity</div><div class="v" id="ps-tvl">…</div><div class="s" id="ps-tvl-s"></div></div>
                 <div class="pulse-stat"><div class="l">Voting Power Locked</div><div class="v" id="ps-vp">…</div><div class="s" id="ps-vp-s"></div></div>
@@ -1269,6 +1291,7 @@
                 </div>
                 <div id="pulse-chart" class="w-full" style="min-height:120px"></div>
                 <div class="text-[10px] text-gray-600 mt-1" id="pulse-chart-note"></div>
+            </div>
             </div>
         </div>
 
@@ -3148,7 +3171,7 @@
             </div>
             <div class="mt-4 text-xs text-gray-500">
                 <button id="changelog-trigger" class="hover:text-cyan-400 transition-colors cursor-pointer">
-                    <span class="font-mono" id="page-rev">Rev 3.63 · 2026-08-04</span>
+                    <span class="font-mono" id="page-rev">Rev 3.67 · 2026-08-04</span>
                     <span class="opacity-60 mx-1">·</span>
                     <span>Changelog</span>
                 </button>
@@ -15350,7 +15373,7 @@
     // ═══ ECOSYSTEM PULSE MODULE (Rev 3.61) ══════════════════════════════════
     (() => {
         'use strict';
-        const REV = '3.63', REV_DATE = '2026-08-04';   // rev-footer law: bump BOTH every change
+        const REV = '3.67', REV_DATE = '2026-08-04';   // rev-footer law: bump BOTH every change
         const BASE = 'https://raw.githubusercontent.com/thealliancedao/tla-core/main';
         const $ = (id) => document.getElementById(id);
         const fmt$ = (v) => '$' + Number(v).toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -15374,6 +15397,14 @@
             let s = 0, n = 0;
             for (const w of d.wallets) { s += (w.total_vp_held_human || 0); n++; }
             return { vp: s, wallets: n };
+        };
+        // Max-potential VP if every lock sat at 104wk (10x): Σ fixed_amount × 10.
+        // Charted WITH the locked line — the gap is the ecosystem's headroom.
+        const vpPotentialOf = (d) => {
+            if (!d || !Array.isArray(d.wallets)) return null;
+            let s = 0;
+            for (const w of d.wallets) s += (w.fixed_amount_human || 0) * 10;
+            return s;
         };
         // All-time incentives from monthly bribe-event files.
         const allTimeBribes = (files) => {
@@ -15453,18 +15484,43 @@
             }
             return null;
         };
-        // Live-proposal alerts: open proposals across watched DAOs. Pure filter
-        // (gate-tested); fetch side does dao-core -> proposal modules -> reverse list.
-        const openProposalsOf = (daoName, modulePayloads) => {
-            const out = [];
-            for (const pl of modulePayloads) {
-                for (const pr of ((pl && pl.proposals) || [])) {
-                    const st = pr && pr.proposal && pr.proposal.status;
-                    if (st === 'open') out.push({ dao: daoName, id: pr.id, title: (pr.proposal.title || 'Proposal ' + pr.id) });
-                }
-            }
-            return out;
+        // Governance card model (pure, gate-tested): maps a DAODAO proposal entry
+        // to the display card — id, status, live flag, days left, vote % of cast.
+        const propCard = (daoName, daoAddr, entry, nowMs) => {
+            if (!entry || !entry.proposal) return null;
+            const p = entry.proposal;
+            const live = p.status === 'open';
+            let daysLeft = null;
+            const at = p.expiration && p.expiration.at_time;
+            if (at) daysLeft = Math.max(0, (Number(at) / 1e6 - nowMs) / 86400000);
+            const v = p.votes || {};
+            const yes = Number(v.yes || 0), no = Number(v.no || 0), ab = Number(v.abstain || 0);
+            const cast = yes + no + ab;
+            return {
+                dao: daoName, id: entry.id, title: p.title || ('Proposal ' + entry.id),
+                desc: String(p.description || '').slice(0, 220),
+                status: p.status, live, daysLeft,
+                yesPct: cast ? yes / cast * 100 : null, noPct: cast ? no / cast * 100 : null,
+                link: 'https://daodao.zone/dao/' + daoAddr + '/proposals',
+            };
         };
+        // Astroport Assembly card (HAR-verified shape 2026-08-04): status 'active'
+        // = live; power-weighted Yes/No; endTimestamp may be absent → no countdown.
+        const astroCard = (p, nowMs) => {
+            if (!p || p.proposalId == null) return null;
+            const live = p.status === 'active';
+            const fw = Number(p.votesForPower || 0), ag = Number(p.votesAgainstPower || 0);
+            const cast = fw + ag;
+            let daysLeft = null;
+            if (p.endTimestamp) daysLeft = Math.max(0, (new Date(p.endTimestamp).getTime() - nowMs) / 86400000);
+            return { dao: 'Astroport Assembly', id: p.proposalId, title: p.title || ('Proposal ' + p.proposalId),
+                desc: String(p.description || '').slice(0, 220), status: p.status, live, daysLeft,
+                yesPct: cast ? fw / cast * 100 : null, noPct: cast ? ag / cast * 100 : null,
+                link: 'https://app.astroport.fi/governance' };
+        };
+        // News default-tab law (Camron 2026-08-04): any LIVE proposal anywhere →
+        // News tab opens by default; otherwise Pulse. Live cards sort first.
+        const defaultTab = (cards) => cards.some(c => c && c.live) ? 'news' : 'pulse';
         const solidPegOf = (phDay) => (phDay && phDay.SOLID && phDay.SOLID.usd) || null;
         // 24h volume series for the bar subchart (decision-grade context):
         // tvl → TLA-relevant pool volume; fuel → LUNA-FUEL; solid → both SOLID pools.
@@ -15505,12 +15561,20 @@
         // ---- live proposal alerts (DAODAO) ------------------------------------
         // Fill in dao-core addresses (from the daodao.zone/dao/<ADDRESS>/… URL).
         // Empty address = slot skipped. Dismissals persist in localStorage.
+        // kind 'daodao' = live via LCD; kind 'har-pending' = non-DAODAO governance
+        // (Astroport Assembly, CAPA native gov) — adapters land once Camron
+        // supplies HAR captures of those gov pages. Empty addr = slot skipped.
+        // All seven DAODAO addresses HAR-verified (Camron captures, 2026-08-04).
         const WATCHED_DAOS = [
-            ['aDAO', 'terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm'],
-            ['aDAO Council', 'terra1yqv0af22675wlcmgflxk4ve07vt8qlm999gk0cuw5l64r5xxgadsyg8ywv'],
-            ['Phoenix Directive', ''],      // paste PD dao-core address here
-            ['Lion DAO', ''],               // paste Lion DAO dao-core address here
-            ['Capapult', ''],               // paste ampCAPA/Capapult dao-core address here
+            { name: 'aDAO', kind: 'daodao', addr: 'terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm' },
+            { name: 'aDAO Council', kind: 'daodao', addr: 'terra1yqv0af22675wlcmgflxk4ve07vt8qlm999gk0cuw5l64r5xxgadsyg8ywv' },
+            { name: 'Phoenix Directive', kind: 'daodao', addr: 'terra1k8ug6dkzntczfzn76wsh24tdjmx944yj6mk063wum7n20cwd7lxq4lppjg' },
+            { name: 'ampCAPA', kind: 'daodao', addr: 'terra1x0vekyx6wltu8qe26nqzkyur4hf7xqatvdelre4p2vqcnwc83k9q9j7ka8' },
+            { name: 'Lion DAO', kind: 'daodao', addr: 'terra1tkersa2mqwy2h8exj799qx2xrhdu0dkymk9psp6v0k4kz4tkxucssgluec' },
+            { name: 'Pixellions', kind: 'daodao', addr: 'terra1c690mdrwdetnr09zfk3tf9xz9jhrgd9wpjyf3tuccj74ql09eqmq6sh7en' },
+            { name: 'Pixellions Council', kind: 'daodao', addr: 'terra1xgg9cf94ws2mawr6lyrdvmyxt48xkwgp8gvtsrcg2yktqvk8w2rqxflq06' },
+            // Astroport Assembly: live via tRPC adapter in loadNews (HAR-verified)
+            { name: 'CAPA governance', kind: 'har-pending', addr: '' },     // non-DAODAO — still needs its gov-page HAR
         ];
         const LCD = 'https://terra-lcd.publicnode.com';
         async function smartQuery(addr, q) {
@@ -15520,32 +15584,100 @@
                 return (await r.json()).data;
             } catch { return null; }
         }
-        const dismissedKey = 'adao_pulse_dismissed';
-        const getDismissed = () => { try { return new Set(JSON.parse(localStorage.getItem(dismissedKey) || '[]')); } catch { return new Set(); } };
-        async function renderAlerts() {
-            const el = $('pulse-alerts'); if (!el) return;
-            const all = [];
-            await Promise.all(WATCHED_DAOS.filter(([, a]) => a).map(async ([name, addr]) => {
-                const mods = await smartQuery(addr, { proposal_modules: {} });
+        // X/Twitter feed (Rev 3.67). X's read API is paid-only, so v1 uses X's own
+        // embedded-timeline widget — free, but X sometimes refuses logged-out
+        // renders; a fallback link-card shows per account when the widget stays
+        // empty. Upgrade path (no page change needed): point renderXFeed at a
+        // cron-fed tla-core/social/current.json if an X API key is ever funded.
+        const X_ACCOUNTS = ['The_AllianceDAO', 'phoenix_dir', 'eris_protocol', 'TheLionDAO', 'PixeLionsDAO'];
+        const xState = { handle: X_ACCOUNTS[0], scriptLoaded: false };
+        function renderXFeed() {
+            const feed = $('x-feed'); if (!feed) return;
+            const h = xState.handle;
+            feed.innerHTML = '<a class="twitter-timeline" data-theme="dark" data-chrome="noheader nofooter noborders transparent" data-tweet-limit="7" href="https://twitter.com/' + h + '">' +
+                '<span class="block text-[11px] text-gray-500 py-3">Loading @' + h + '… if nothing appears, <span class="text-cyan-400 underline">open @' + h + ' on X</span></span></a>';
+            const load = () => { if (window.twttr && window.twttr.widgets) window.twttr.widgets.load(feed); };
+            if (!xState.scriptLoaded) {
+                xState.scriptLoaded = true;
+                const sc = document.createElement('script');
+                sc.src = 'https://platform.twitter.com/widgets.js'; sc.async = true;
+                sc.onload = load; document.head.appendChild(sc);
+            } else load();
+            // fallback: if the widget produced no iframe after 6s, show link cards
+            setTimeout(() => {
+                if (!feed.querySelector('iframe')) {
+                    feed.innerHTML = X_ACCOUNTS.map(a =>
+                        '<a class="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-1.5 mb-1 text-xs text-gray-300 hover:text-cyan-300" target="_blank" rel="noopener" href="https://x.com/' + a + '">' +
+                        '<i class="fab fa-x-twitter text-gray-500"></i>@' + a + '<span class="ml-auto text-[10px] text-gray-600">open on X →</span></a>').join('');
+                }
+            }, 6000);
+        }
+        function renderXAccounts() {
+            const el = $('x-accounts'); if (!el) return;
+            el.innerHTML = X_ACCOUNTS.map(a => '<button class="pulse-pill' + (a === xState.handle ? ' active' : '') + '" data-xa="' + a + '">@' + a + '</button>').join('');
+            el.querySelectorAll('[data-xa]').forEach(b => b.addEventListener('click', () => { xState.handle = b.dataset.xa; renderXAccounts(); renderXFeed(); }));
+        }
+        const newsState = { cards: [], idx: 0 };
+        function setTab(which) {
+            $('ptab-news').classList.toggle('active', which === 'news');
+            $('ptab-pulse').classList.toggle('active', which === 'pulse');
+            $('news-body').classList.toggle('hidden', which !== 'news');
+            $('pulse-body').classList.toggle('hidden', which !== 'pulse');
+        }
+        function renderNewsCard() {
+            const cards = newsState.cards;
+            const el = $('news-card');
+            if (!cards.length) { el.innerHTML = '<span class="text-gray-500 text-xs">No governance activity found (or providers unreachable).</span>'; $('news-pos').textContent = ''; return; }
+            newsState.idx = ((newsState.idx % cards.length) + cards.length) % cards.length;
+            const c = cards[newsState.idx];
+            const liveN = cards.filter(x => x.live).length;
+            $('news-count').textContent = liveN ? (liveN + ' LIVE proposal' + (liveN === 1 ? '' : 's') + ' — vote now') : 'no live proposals · latest per governance';
+            $('news-pos').textContent = (newsState.idx + 1) + '/' + cards.length;
+            const esc = (t) => String(t).replace(/</g, '&lt;');
+            el.innerHTML =
+                '<div class="rounded-lg border ' + (c.live ? 'border-amber-500/30 bg-amber-500/[0.05]' : 'border-white/10 bg-white/[0.02]') + ' p-3">' +
+                '<div class="flex items-center gap-2 flex-wrap">' +
+                (c.live ? '<span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/25 text-amber-300">LIVE</span>' : '<span class="text-[9px] px-1.5 py-0.5 rounded bg-white/5 text-gray-500 font-mono">' + esc(c.status) + '</span>') +
+                '<span class="text-xs font-bold text-white">' + esc(c.dao) + ' · #' + c.id + '</span>' +
+                (c.daysLeft != null && c.live ? '<span class="text-[10px] text-amber-200 font-mono">' + c.daysLeft.toFixed(1) + 'd left</span>' : '') +
+                (c.yesPct != null ? '<span class="text-[10px] font-mono ml-auto"><span class="text-emerald-400">Yes ' + c.yesPct.toFixed(0) + '%</span> · <span class="text-red-400">No ' + c.noPct.toFixed(0) + '%</span> <span class="text-gray-600">of cast</span></span>' : '') +
+                '</div>' +
+                '<div class="text-sm text-gray-200 mt-1 font-semibold">' + esc(c.title) + '</div>' +
+                (c.desc ? '<div class="text-[11px] text-gray-500 mt-0.5">' + esc(c.desc) + '…</div>' : '') +
+                '<a class="inline-block mt-1.5 text-[11px] text-cyan-400 hover:underline" target="_blank" rel="noopener" href="' + c.link + '"><i class="fas fa-arrow-up-right-from-square mr-1"></i>Open governance' + (c.live ? ' &amp; vote' : '') + '</a></div>';
+        }
+        async function loadNews() {
+            const cards = [];
+            await Promise.all(WATCHED_DAOS.filter(g => g.kind === 'daodao' && g.addr).map(async (g) => {
+                const mods = await smartQuery(g.addr, { proposal_modules: {} });
                 if (!Array.isArray(mods)) return;
-                const payloads = await Promise.all(mods.map(m => smartQuery(m.address || m, { reverse_proposals: { limit: 5 } })));
-                all.push(...openProposalsOf(name, payloads.filter(Boolean)).map(p => ({ ...p, daoAddr: addr })));
+                for (const mod of mods) {
+                    const pl = await smartQuery(mod.address || mod, { reverse_proposals: { limit: 2 } });
+                    for (const e of ((pl && pl.proposals) || [])) {
+                        const c = propCard(g.name, g.addr, e, Date.now());
+                        if (c) cards.push(c);
+                    }
+                }
             }));
-            const dismissed = getDismissed();
-            const live = all.filter(p => !dismissed.has(p.daoAddr + ':' + p.id));
-            if (!live.length) { el.classList.add('hidden'); el.innerHTML = ''; return; }
-            el.classList.remove('hidden');
-            el.innerHTML = live.map(p =>
-                '<div class="flex items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-1.5 mb-1.5">' +
-                '<i class="fas fa-vote-yea text-amber-300 text-xs"></i>' +
-                '<a class="text-xs text-amber-200 hover:underline flex-1" target="_blank" rel="noopener" href="https://daodao.zone/dao/' + p.daoAddr + '/proposals">' +
-                '<span class="font-semibold">' + p.dao + '</span> · live proposal #' + p.id + ': ' + String(p.title).replace(/</g, '&lt;').slice(0, 90) + '</a>' +
-                '<button class="text-gray-500 hover:text-gray-300 text-xs px-1" data-dismiss="' + p.daoAddr + ':' + p.id + '" title="Dismiss until it closes">×</button></div>').join('');
-            el.querySelectorAll('[data-dismiss]').forEach(b => b.addEventListener('click', () => {
-                const d = getDismissed(); d.add(b.dataset.dismiss);
-                try { localStorage.setItem(dismissedKey, JSON.stringify([...d])); } catch {}
-                renderAlerts();
-            }));
+            // Astroport Assembly (tRPC; graceful on CORS/outage — card simply absent)
+            try {
+                const r = await fetch('https://app.astroport.fi/api/trpc/governance.getAllProposals?input=%7B%22json%22%3A%7B%22chainId%22%3A%5B%22neutron-1%22%2C%22phoenix-1%22%5D%7D%7D');
+                if (r.ok) {
+                    const arr = (((await r.json()).result || {}).data || {}).json || [];
+                    for (const p of arr.slice(0, 6)) { const c = astroCard(p, Date.now()); if (c) cards.push(c); }
+                }
+            } catch {}
+            // one card per governance unless live: live cards all show; else keep newest per DAO
+            const live = cards.filter(c => c.live);
+            const rest = [];
+            for (const c of cards.filter(c => !c.live)) {
+                const i = rest.findIndex(r => r.dao === c.dao);
+                if (i < 0) rest.push(c); else if (c.id > rest[i].id) rest[i] = c;
+            }
+            newsState.cards = [...live.sort((a, b) => b.id - a.id), ...rest.sort((a, b) => a.dao.localeCompare(b.dao))];
+            newsState.idx = 0;
+            renderNewsCard();
+            setTab(defaultTab(newsState.cards));
         }
         const daily = {
             astro: (d) => jf('dex-data/astroport/snapshots/daily/' + d + '.json', 999999),
@@ -15678,12 +15810,12 @@
             const rows = await Promise.all(dates.map(async (d) => {
                 if (metric === 'tvl') { const [a, s] = await Promise.all([daily.astro(d), daily.ss(d)]); return [tvlOf(a, s), volTla(a, s)]; }
                 if (metric === 'votion') return [votionOf(await daily.votion(d)), null];
-                if (metric === 'vplocked') { const v = vpLockedOf(await daily.member(d)); return [v && v.vp, null]; }
+                if (metric === 'vplocked') { const md = await daily.member(d); const v = vpLockedOf(md); return [v && v.vp, null, vpPotentialOf(md)]; }
                 if (metric === 'fuel') { const [a, lu] = await Promise.all([daily.astro(d), phLunaUsd(d)]); return [fuelImpliedOf(a, lu), volPools([a], ['LUNA-FUEL'])]; }
                 if (metric === 'solid') { const [dayP, a, s] = await Promise.all([phDay(d), daily.astro(d), daily.ss(d)]); return [solidPegOf(dayP), volPools([a, s], ['USDC-SOLID', 'LUNA-SOLID', 'SOLID-USDC', 'SOLID-LUNA'])]; }
                 return [null, null];
             }));
-            return dates.map((d, i) => [d, rows[i][0], rows[i][1]]);
+            return dates.map((d, i) => [d, rows[i][0], rows[i][1], rows[i][2] != null ? rows[i][2] : null]);
         }
         function drawChart(series, unit, opts) {
             opts = opts || {};
@@ -15694,7 +15826,7 @@
             const pH = H - volH;                         // price pane height
             const pts = series.filter(r => r[1] != null);
             if (!pts.length) { el.innerHTML = '<div class="text-[11px] text-gray-600 py-8 text-center">No captures in this range yet.</div>'; return; }
-            const vs = pts.map(r => r[1]);
+            const vs = pts.map(r => r[1]).concat(series.filter(r => r[3] != null).map(r => r[3]));
             let lo = Math.min(...vs), hi = Math.max(...vs);
             if (opts.baseline != null) { lo = Math.min(lo, opts.baseline); hi = Math.max(hi, opts.baseline); }
             const span = (hi - lo) || (Math.abs(hi) * 0.02) || 1;
@@ -15706,6 +15838,13 @@
             if (cur.length) segs.push(cur);
             const paths = segs.map(s => '<polyline fill="none" stroke="#22d3ee" stroke-width="2" points="' + s.map(p => p.map(n => n.toFixed(1)).join(',')).join(' ') + '"/>').join('');
             const gapDots = series.map((r, i) => r[1] == null ? '<circle cx="' + x(i).toFixed(1) + '" cy="' + (pH - PAD) + '" r="1.5" fill="#4b5563"><title>no capture</title></circle>' : '').join('');
+            let line2 = '';
+            if (series.some(r => r[3] != null)) {
+                let s2 = [], c2 = [];
+                series.forEach((r, i) => { if (r[3] == null) { if (c2.length) s2.push(c2); c2 = []; } else c2.push([x(i), y(r[3])]); });
+                if (c2.length) s2.push(c2);
+                line2 = s2.map(sg => '<polyline fill="none" stroke="#a78bfa" stroke-width="1.5" stroke-dasharray="5 3" points="' + sg.map(p => p.map(n => n.toFixed(1)).join(',')).join(' ') + '"><title>max potential (all locks at 104wk)</title></polyline>').join('');
+            }
             const base = (opts.baseline != null)
                 ? '<line x1="' + PAD + '" x2="' + (W - PAD) + '" y1="' + y(opts.baseline).toFixed(1) + '" y2="' + y(opts.baseline).toFixed(1) + '" stroke="#a78bfa" stroke-width="1" stroke-dasharray="4 4"><title>' + opts.baselineLabel + '</title></line>'
                 : '';
@@ -15721,7 +15860,7 @@
                 }).join('');
             }
             const fmt = unit === '$' ? (v) => (Math.abs(v) < 1 ? '$' + v.toFixed(v < 0.01 ? 5 : 4) : fmt$(v)) : (unit === 'vAMP' ? (v) => fmtM(v) + ' vAMP' : (v) => fmtN(v) + ' ' + unit);
-            el.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="' + H + '">' + bars + base + paths + gapDots + '</svg>' +
+            el.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="' + H + '">' + bars + base + line2 + paths + gapDots + '</svg>' +
                 '<div class="flex justify-between text-[9px] text-gray-600 font-mono"><span>' + series[0][0] + '</span><span>' + fmt(lo) + ' – ' + fmt(hi) + (hasVol ? ' · bars = 24h volume' : '') + '</span><span>' + series[series.length - 1][0] + '</span></div>';
         }
         async function renderChart() {
@@ -15755,8 +15894,14 @@
             }));
             $('pulse-prev').addEventListener('click', () => { state.page++; renderChart(); });
             $('pulse-next').addEventListener('click', () => { if (state.page > 0) { state.page--; renderChart(); } });
+            $('ptab-news').addEventListener('click', () => setTab('news'));
+            $('ptab-pulse').addEventListener('click', () => setTab('pulse'));
+            $('news-prev').addEventListener('click', () => { newsState.idx--; renderNewsCard(); });
+            $('news-next').addEventListener('click', () => { newsState.idx++; renderNewsCard(); });
+            setTab('pulse');            // pulse until governance answers; defaultTab may flip to news
             state.latest = await findLatestDaily();
-            renderAlerts();
+            renderXAccounts(); renderXFeed();
+            loadNews();
             await renderStats();
             await renderRows();
             renderChart();
@@ -15767,7 +15912,7 @@
         // fixtures (no third copy). Harmless in production.
         window.__pulseTest = { tvlOf, votionOf, vpLockedOf, allTimeBribes, activePoolsOf,
             buildDenomPriceMap, bribesUsdInWindow, cumulativeLunaByMonth, monthsBetween,
-            fuelImpliedOf, openProposalsOf, WATCHED_DAOS, solidPegOf, volTla, volPools, REV, REV_DATE };
+            fuelImpliedOf, propCard, astroCard, defaultTab, WATCHED_DAOS, X_ACCOUNTS, vpPotentialOf, solidPegOf, volTla, volPools, REV, REV_DATE };
     })();
     </script>
     <script>
