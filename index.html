@@ -3171,7 +3171,7 @@
             </div>
             <div class="mt-4 text-xs text-gray-500">
                 <button id="changelog-trigger" class="hover:text-cyan-400 transition-colors cursor-pointer">
-                    <span class="font-mono" id="page-rev">Rev 3.67 · 2026-08-04</span>
+                    <span class="font-mono" id="page-rev">Rev 3.69 · 2026-08-04</span>
                     <span class="opacity-60 mx-1">·</span>
                     <span>Changelog</span>
                 </button>
@@ -15373,7 +15373,7 @@
     // ═══ ECOSYSTEM PULSE MODULE (Rev 3.61) ══════════════════════════════════
     (() => {
         'use strict';
-        const REV = '3.67', REV_DATE = '2026-08-04';   // rev-footer law: bump BOTH every change
+        const REV = '3.69', REV_DATE = '2026-08-04';   // rev-footer law: bump BOTH every change
         const BASE = 'https://raw.githubusercontent.com/thealliancedao/tla-core/main';
         const $ = (id) => document.getElementById(id);
         const fmt$ = (v) => '$' + Number(v).toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -15496,27 +15496,67 @@
             const v = p.votes || {};
             const yes = Number(v.yes || 0), no = Number(v.no || 0), ab = Number(v.abstain || 0);
             const cast = yes + no + ab;
-            return {
+            const tp = Number(p.total_power || 0);
+            const c = {
                 dao: daoName, id: entry.id, title: p.title || ('Proposal ' + entry.id),
                 desc: String(p.description || '').slice(0, 220),
                 status: p.status, live, daysLeft,
                 yesPct: cast ? yes / cast * 100 : null, noPct: cast ? no / cast * 100 : null,
+                turnoutPct: tp > 0 ? cast / tp * 100 : null,
+                movesFunds: scanMovesFunds(JSON.stringify(p.msgs || '')),
+                lowEffort: scanLowEffort(p.title, p.description),
                 link: 'https://daodao.zone/dao/' + daoAddr + '/proposals',
             };
+            c.risk = riskOf(c);
+            return c;
         };
         // Astroport Assembly card (HAR-verified shape 2026-08-04): status 'active'
         // = live; power-weighted Yes/No; endTimestamp may be absent → no countdown.
         const astroCard = (p, nowMs) => {
             if (!p || p.proposalId == null) return null;
-            const live = p.status === 'active';
+            // Astroport quirk (site-verified 2026-08-04): 'active' persists after
+            // the vote ends until finalization. Live = active AND end in future.
+            const endMs = p.endTimestamp ? new Date(p.endTimestamp).getTime() : null;
+            const voteEnded = endMs != null && endMs <= nowMs;
+            const live = p.status === 'active' && !voteEnded;
             const fw = Number(p.votesForPower || 0), ag = Number(p.votesAgainstPower || 0);
             const cast = fw + ag;
             let daysLeft = null;
             if (p.endTimestamp) daysLeft = Math.max(0, (new Date(p.endTimestamp).getTime() - nowMs) / 86400000);
-            return { dao: 'Astroport Assembly', id: p.proposalId, title: p.title || ('Proposal ' + p.proposalId),
-                desc: String(p.description || '').slice(0, 220), status: p.status, live, daysLeft,
+            const tp = Number(p.totalVotingPower || 0);
+            const c = { dao: 'Astroport Assembly', id: p.proposalId, title: p.title || ('Proposal ' + p.proposalId),
+                desc: String(p.description || '').slice(0, 220),
+                status: (p.status === 'active' && voteEnded) ? 'vote ended — awaiting finalization' : p.status, live, daysLeft,
                 yesPct: cast ? fw / cast * 100 : null, noPct: cast ? ag / cast * 100 : null,
+                turnoutPct: tp > 0 ? cast / tp * 100 : null,
+                movesFunds: scanMovesFunds(p.messages),
+                lowEffort: scanLowEffort(p.title, p.description),
                 link: 'https://app.astroport.fi/governance' };
+            c.risk = riskOf(c);
+            return c;
+        };
+        // ---- governance safety heuristics (Camron 2026-08-04) ------------------
+        // Motivated by a real attack pattern: buy tokens → push a fund-transfer
+        // prop → pass it on tiny turnout before anyone looks. These are HEURISTIC
+        // AUTO-FLAGS to make casual visitors look twice — never accusations.
+        const riskOf = (c) => {
+            const flags = [];
+            if (c.movesFunds) flags.push('moves funds');
+            if (c.lowEffort) flags.push('minimal description');
+            if (c.turnoutPct != null && c.turnoutPct < 1) flags.push('tiny turnout ' + (c.turnoutPct < 0.1 ? c.turnoutPct.toFixed(3) : c.turnoutPct.toFixed(1)) + '%');
+            const review = c.live && c.movesFunds && (c.lowEffort || (c.turnoutPct != null && c.turnoutPct < 1));
+            return { flags, review };
+        };
+        const scanMovesFunds = (msgsText) => /"(bank|send|transfer|spend|to_address|recipient)"/.test(String(msgsText || ''));
+        const scanLowEffort = (title, desc) => /^Proposal d+$/i.test(String(title || '').trim()) || !desc || String(desc).trim() === String(title || '').trim();
+        const statusBadge = (c) => {
+            if (c.live) return ['LIVE', 'bg-amber-500/25 text-amber-300'];
+            const st = String(c.status || '').toLowerCase();
+            if (st === 'passed' || st === 'executed' || st === 'execution_failed') return ['PASSED', 'bg-emerald-500/20 text-emerald-300'];
+            if (st === 'rejected' || st === 'failed') return ['REJECTED', 'bg-red-500/20 text-red-300'];
+            if (st === 'expired' || st === 'stale') return ['EXPIRED', 'bg-white/5 text-gray-500'];
+            if (st.indexOf('vote ended') === 0) return ['VOTE ENDED', 'bg-orange-500/15 text-orange-300'];
+            return [st.toUpperCase() || '—', 'bg-white/5 text-gray-500'];
         };
         // News default-tab law (Camron 2026-08-04): any LIVE proposal anywhere →
         // News tab opens by default; otherwise Pulse. Live cards sort first.
@@ -15574,7 +15614,7 @@
             { name: 'Pixellions', kind: 'daodao', addr: 'terra1c690mdrwdetnr09zfk3tf9xz9jhrgd9wpjyf3tuccj74ql09eqmq6sh7en' },
             { name: 'Pixellions Council', kind: 'daodao', addr: 'terra1xgg9cf94ws2mawr6lyrdvmyxt48xkwgp8gvtsrcg2yktqvk8w2rqxflq06' },
             // Astroport Assembly: live via tRPC adapter in loadNews (HAR-verified)
-            { name: 'CAPA governance', kind: 'har-pending', addr: '' },     // non-DAODAO — still needs its gov-page HAR
+            // CAPA governance: none exists separately — ampCAPA (above) IS it.
         ];
         const LCD = 'https://terra-lcd.publicnode.com';
         async function smartQuery(addr, q) {
@@ -15637,13 +15677,15 @@
             el.innerHTML =
                 '<div class="rounded-lg border ' + (c.live ? 'border-amber-500/30 bg-amber-500/[0.05]' : 'border-white/10 bg-white/[0.02]') + ' p-3">' +
                 '<div class="flex items-center gap-2 flex-wrap">' +
-                (c.live ? '<span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/25 text-amber-300">LIVE</span>' : '<span class="text-[9px] px-1.5 py-0.5 rounded bg-white/5 text-gray-500 font-mono">' + esc(c.status) + '</span>') +
+                (() => { const [t, cls] = statusBadge(c); return '<span class="text-[9px] font-bold px-1.5 py-0.5 rounded ' + cls + '">' + t + '</span>'; })() +
                 '<span class="text-xs font-bold text-white">' + esc(c.dao) + ' · #' + c.id + '</span>' +
                 (c.daysLeft != null && c.live ? '<span class="text-[10px] text-amber-200 font-mono">' + c.daysLeft.toFixed(1) + 'd left</span>' : '') +
                 (c.yesPct != null ? '<span class="text-[10px] font-mono ml-auto"><span class="text-emerald-400">Yes ' + c.yesPct.toFixed(0) + '%</span> · <span class="text-red-400">No ' + c.noPct.toFixed(0) + '%</span> <span class="text-gray-600">of cast</span></span>' : '') +
                 '</div>' +
                 '<div class="text-sm text-gray-200 mt-1 font-semibold">' + esc(c.title) + '</div>' +
                 (c.desc ? '<div class="text-[11px] text-gray-500 mt-0.5">' + esc(c.desc) + '…</div>' : '') +
+                (c.risk && c.risk.flags.length ? '<div class="flex items-center gap-1 flex-wrap mt-1">' + c.risk.flags.map(f => '<span class="text-[9px] px-1.5 py-0.5 rounded bg-orange-500/15 text-orange-300 font-mono">' + esc(f) + '</span>').join('') + '</div>' : '') +
+                (c.risk && c.risk.review ? '<div class="mt-1.5 rounded border border-red-500/40 bg-red-500/[0.08] px-2 py-1 text-[11px] text-red-300"><i class="fas fa-triangle-exclamation mr-1"></i><b>Auto-flag:</b> this LIVE proposal moves funds with ' + (c.lowEffort ? 'minimal description' : '') + (c.lowEffort && c.turnoutPct != null && c.turnoutPct < 1 ? ' and ' : '') + (c.turnoutPct != null && c.turnoutPct < 1 ? 'tiny turnout' : '') + ' — a pattern used in treasury-drain attacks. Heuristic, not an accusation: verify independently and vote.</div>' : '') +
                 '<a class="inline-block mt-1.5 text-[11px] text-cyan-400 hover:underline" target="_blank" rel="noopener" href="' + c.link + '"><i class="fas fa-arrow-up-right-from-square mr-1"></i>Open governance' + (c.live ? ' &amp; vote' : '') + '</a></div>';
         }
         async function loadNews() {
@@ -15674,7 +15716,7 @@
                 const i = rest.findIndex(r => r.dao === c.dao);
                 if (i < 0) rest.push(c); else if (c.id > rest[i].id) rest[i] = c;
             }
-            newsState.cards = [...live.sort((a, b) => b.id - a.id), ...rest.sort((a, b) => a.dao.localeCompare(b.dao))];
+            newsState.cards = [...live.sort((a, b) => ((b.risk && b.risk.review) - (a.risk && a.risk.review)) || (b.id - a.id)), ...rest.sort((a, b) => a.dao.localeCompare(b.dao))];
             newsState.idx = 0;
             renderNewsCard();
             setTab(defaultTab(newsState.cards));
@@ -15912,7 +15954,8 @@
         // fixtures (no third copy). Harmless in production.
         window.__pulseTest = { tvlOf, votionOf, vpLockedOf, allTimeBribes, activePoolsOf,
             buildDenomPriceMap, bribesUsdInWindow, cumulativeLunaByMonth, monthsBetween,
-            fuelImpliedOf, propCard, astroCard, defaultTab, WATCHED_DAOS, X_ACCOUNTS, vpPotentialOf, solidPegOf, volTla, volPools, REV, REV_DATE };
+            fuelImpliedOf, propCard, astroCard, defaultTab, riskOf, scanMovesFunds, scanLowEffort, statusBadge,
+            WATCHED_DAOS, X_ACCOUNTS, vpPotentialOf, solidPegOf, volTla, volPools, REV, REV_DATE };
     })();
     </script>
     <script>
