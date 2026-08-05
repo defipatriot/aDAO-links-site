@@ -3171,7 +3171,7 @@
             </div>
             <div class="mt-4 text-xs text-gray-500">
                 <button id="changelog-trigger" class="hover:text-cyan-400 transition-colors cursor-pointer">
-                    <span class="font-mono" id="page-rev">Rev 3.69 · 2026-08-04</span>
+                    <span class="font-mono" id="page-rev">Rev 3.70 · 2026-08-04</span>
                     <span class="opacity-60 mx-1">·</span>
                     <span>Changelog</span>
                 </button>
@@ -15373,7 +15373,7 @@
     // ═══ ECOSYSTEM PULSE MODULE (Rev 3.61) ══════════════════════════════════
     (() => {
         'use strict';
-        const REV = '3.69', REV_DATE = '2026-08-04';   // rev-footer law: bump BOTH every change
+        const REV = '3.70', REV_DATE = '2026-08-04';   // rev-footer law: bump BOTH every change
         const BASE = 'https://raw.githubusercontent.com/thealliancedao/tla-core/main';
         const $ = (id) => document.getElementById(id);
         const fmt$ = (v) => '$' + Number(v).toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -15457,6 +15457,22 @@
             return { usd, legs, unpriced };
         };
         // Cumulative LUNA incentives by month (for the always-up chart).
+        // Bribes SITTING in the latest epoch's buckets (bribe-state harvest),
+        // valued at current prices. PD's governance bribes route via the ve3
+        // manager and are NOT in bribe-state — disclosed in-row; full-total
+        // upgrade lands with pd-bribes integration.
+        const epochBribesOf = (bsMonth, priceMap) => {
+            if (!Array.isArray(bsMonth) || !bsMonth.length) return null;
+            const latest = bsMonth.reduce((a, b) => ((b.period || 0) > (a.period || 0) ? b : a));
+            let usd = 0, legs = 0, unpriced = 0;
+            for (const b of (latest.buckets || [])) for (const a of (b.assets || [])) {
+                const d = (a.info && (a.info.native || a.info.cw20)) || '';
+                const p = priceMap && priceMap.get(d);
+                if (p) { usd += Number(a.amount || 0) / Math.pow(10, p.dec) * p.usd; legs++; }
+                else unpriced++;
+            }
+            return { period: latest.period, usd, legs, unpriced, pools: (latest.buckets || []).length };
+        };
         const cumulativeLunaByMonth = (byMonth) => {
             const months = Object.keys(byMonth).sort();
             let run = 0; const out = [];
@@ -15830,7 +15846,13 @@
                 ['TLA TVL', delta(tvlOf(aL, sL), tvlOf(aF, sF), fmt$, spanNote(aFd)), 'daily', 'Sum of TLA-relevant pool TVL across both dexes.'],
                 ['VP Locked', delta(vpL && vpL.vp, vpF && vpF.vp, (v) => fmtM(v) + ' vAMP', spanNote(mFd)), 'daily', 'Total vAMP held across all wallets — locks grow it, decay shrinks it.'],
                 ['Votion vault TVL', delta(votionOf(vL), votionOf(vF), fmt$, spanNote(vFd)), 'daily', 'Optimizer vault TVL (field exists since 2026-08-03 — earlier windows honestly show Δ n/a).'],
-                ['Bribes in window', bribeVal + ' <span class="text-[10px] text-gray-500">at current prices · ' + (bw.legs + bw.unpriced) + ' legs</span>', 'events', 'bribe_add value inside the window, valued at CURRENT token prices (historical-price valuation is a future upgrade).'],
+                ['Bribes added in window', bribeVal + ' <span class="text-[10px] text-gray-500">at current prices · ' + (bw.legs + bw.unpriced) + ' legs</span>', 'events', 'NEW bribe_add value posted inside the window at current prices — recent flow, often small.'],
+                await (async () => {
+                    const m = new Date().toISOString().slice(0, 7);
+                    const bs = await jf('tla-voting/bribe-state/' + m.replace('-', '/') + '.json', 60);
+                    const eb = epochBribesOf(bs, pmap);
+                    return ['Bribes this epoch', eb ? (fmt$(eb.usd) + ' <span class="text-[10px] text-gray-500">epoch ' + eb.period + ' buckets · ' + eb.pools + ' pools · + PD manager bribes not incl.</span>') : '<span class="text-gray-600">—</span>', 'events', 'Everything sitting in the current epoch bribe buckets awaiting voters, at current prices. Phoenix Directive routes its bribes via the ve3 manager (separate stream) — its amounts are additional.'];
+                })(),
             ];
             rowsEl.innerHTML = rows.map(([name, val, chip, tip]) =>
                 '<div class="pulse-row flex items-center justify-between py-1.5" title="' + tip.replace(/"/g, '&quot;') + '">' +
@@ -15954,7 +15976,7 @@
         // fixtures (no third copy). Harmless in production.
         window.__pulseTest = { tvlOf, votionOf, vpLockedOf, allTimeBribes, activePoolsOf,
             buildDenomPriceMap, bribesUsdInWindow, cumulativeLunaByMonth, monthsBetween,
-            fuelImpliedOf, propCard, astroCard, defaultTab, riskOf, scanMovesFunds, scanLowEffort, statusBadge,
+            fuelImpliedOf, propCard, astroCard, defaultTab, riskOf, scanMovesFunds, scanLowEffort, statusBadge, epochBribesOf,
             WATCHED_DAOS, X_ACCOUNTS, vpPotentialOf, solidPegOf, volTla, volPools, REV, REV_DATE };
     })();
     </script>
