@@ -1216,6 +1216,62 @@
 
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
+
+        <!-- ═══ ECOSYSTEM PULSE (Rev 3.61 — SPEC-landing-pulse v1.1, Camron 2026-08-04) ═══
+             Community redesign after 3.60 review: hero stat band (state of the
+             alliance) leads; windowed deltas support. Honesty rules BINDING:
+             native-granularity labels, no interpolation, gaps stay gaps; missing
+             window endpoints resolve to the NEAREST REAL capture with the actual
+             measured span disclosed (never a fabricated point). VP-Locked units
+             RESOLVED 2026-08-04: member-data wallet sum 29.38M vs gauge 30.40M
+             (ratio 0.967, cross-product consistent) — vAMP-human scale is real.
+             Data: committed tla-core products only. -->
+        <style>
+            .pulse-card { background: rgba(17,24,39,0.6); border: 1px solid rgba(55,65,81,0.6); border-radius: 0.75rem; }
+            .pulse-stat { background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.06); border-radius: 0.6rem; padding: 10px 12px; }
+            .pulse-stat .v { font-size: 1.35rem; font-weight: 700; color: #fff; font-family: monospace; line-height: 1.2; }
+            .pulse-stat .l { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: #6b7280; font-weight: 600; }
+            .pulse-stat .s { font-size: 10px; color: #6b7280; margin-top: 2px; }
+            .pulse-pill { font-size: 11px; padding: 2px 10px; border-radius: 9999px; background: rgba(255,255,255,0.05); color: #9ca3af; cursor: pointer; transition: all .12s; font-family: monospace; }
+            .pulse-pill.active { background: rgba(34,211,238,0.18); color: #22d3ee; }
+            .pulse-chip { font-size: 9px; padding: 1px 6px; border-radius: 4px; font-family: monospace; }
+            .pulse-chip.daily { background: rgba(255,255,255,0.06); color: #9ca3af; }
+            .pulse-chip.events { background: rgba(251,191,36,0.12); color: #fbbf24; }
+            .pulse-row { border-bottom: 1px solid rgba(255,255,255,0.04); }
+            .pulse-metric-btn { font-size: 11px; padding: 2px 8px; border-radius: 6px; background: rgba(255,255,255,0.05); color: #9ca3af; cursor: pointer; }
+            .pulse-metric-btn.active { background: rgba(34,211,238,0.18); color: #22d3ee; }
+        </style>
+        <div class="pulse-card p-4 sm:p-5 mb-6 sm:mb-8" id="pulse-card">
+            <div id="pulse-alerts" class="hidden mb-3"></div>
+            <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+                <h2 class="text-lg font-bold text-white"><i class="fas fa-heart-pulse text-cyan-400 mr-2"></i>Ecosystem Pulse</h2>
+                <span class="text-[10px] text-gray-600">live from committed on-chain captures · no estimates</span>
+            </div>
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mb-3" id="pulse-stats">
+                <div class="pulse-stat"><div class="l">TLA Liquidity</div><div class="v" id="ps-tvl">…</div><div class="s" id="ps-tvl-s"></div></div>
+                <div class="pulse-stat"><div class="l">Voting Power Locked</div><div class="v" id="ps-vp">…</div><div class="s" id="ps-vp-s"></div></div>
+                <div class="pulse-stat"><div class="l">Voter Incentives · All-Time</div><div class="v" id="ps-bribes">…</div><div class="s" id="ps-bribes-s"></div></div>
+                <div class="pulse-stat"><div class="l">Gauge Epoch</div><div class="v" id="ps-epoch">…</div><div class="s" id="ps-epoch-s"></div></div>
+            </div>
+            <div class="flex items-center justify-between flex-wrap gap-2">
+                <span class="text-[10px] uppercase tracking-wider text-gray-500 font-semibold">Change over</span>
+                <div class="flex items-center gap-1.5" id="pulse-windows"></div>
+            </div>
+            <div id="pulse-rows" class="text-sm mt-1"><span class="text-gray-500 text-xs">Loading…</span></div>
+            <div class="mt-3 pt-3 border-t border-white/5">
+                <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
+                    <div class="flex items-center gap-1.5 flex-wrap" id="pulse-metrics"></div>
+                    <div class="flex items-center gap-1.5">
+                        <button class="pulse-pill" id="pulse-prev" title="Older">&lsaquo;</button>
+                        <span class="text-[10px] text-gray-500 font-mono" id="pulse-range"></span>
+                        <button class="pulse-pill" id="pulse-next" title="Newer">&rsaquo;</button>
+                    </div>
+                </div>
+                <div id="pulse-chart" class="w-full" style="min-height:120px"></div>
+                <div class="text-[10px] text-gray-600 mt-1" id="pulse-chart-note"></div>
+            </div>
+        </div>
+
         <div class="top-info-grid grid grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 mb-6 sm:mb-8">
             <!-- ALLY Rewards: large tile, spans 2 rows on desktop, single tile on mobile -->
             <a href="ally.html" class="stat-card info-card info-card-tall rounded-xl group">
@@ -1260,45 +1316,6 @@
             </button>
         </div>
         
-
-        <!-- ═══ ECOSYSTEM PULSE (Rev 3.60 — SPEC-landing-pulse v1, Camron 2026-08-04) ═══
-             Recent-changes tile + 30-point chart. Honesty rules are BINDING (see spec):
-             native-granularity labels, no interpolation, gaps render as gaps, capture
-             jitter disclosed not repaired. Total-VP row DEFERRED until the queued VP
-             units audit resolves the vAMP-vs-banner scale question — do not add it
-             back without that audit. Data: committed tla-core products only. -->
-        <style>
-            .pulse-card { background: rgba(17,24,39,0.6); border: 1px solid rgba(55,65,81,0.6); border-radius: 0.75rem; }
-            .pulse-pill { font-size: 11px; padding: 2px 10px; border-radius: 9999px; background: rgba(255,255,255,0.05); color: #9ca3af; cursor: pointer; transition: all .12s; font-family: monospace; }
-            .pulse-pill.active { background: rgba(34,211,238,0.18); color: #22d3ee; }
-            .pulse-chip { font-size: 9px; padding: 1px 6px; border-radius: 4px; font-family: monospace; }
-            .pulse-chip.daily { background: rgba(255,255,255,0.06); color: #9ca3af; }
-            .pulse-chip.window { background: rgba(251,191,36,0.12); color: #fbbf24; }
-            .pulse-row { border-bottom: 1px solid rgba(255,255,255,0.04); }
-            .pulse-metric-btn { font-size: 11px; padding: 2px 8px; border-radius: 6px; background: rgba(255,255,255,0.05); color: #9ca3af; cursor: pointer; }
-            .pulse-metric-btn.active { background: rgba(34,211,238,0.18); color: #22d3ee; }
-        </style>
-        <div class="pulse-card p-4 sm:p-5 mb-6 sm:mb-8" id="pulse-card">
-            <div class="flex items-center justify-between flex-wrap gap-2">
-                <h2 class="text-lg font-bold text-white"><i class="fas fa-heart-pulse text-cyan-400 mr-2"></i>Ecosystem Pulse</h2>
-                <div class="flex items-center gap-1.5" id="pulse-windows"></div>
-            </div>
-            <p class="text-[11px] text-gray-500 mt-1 mb-2">What changed across the TLA ecosystem — measured from committed on-chain captures, labeled by how often each metric is truly measured. No estimates, no interpolation.</p>
-            <div id="pulse-rows" class="text-sm"><span class="text-gray-500 text-xs">Loading pulse…</span></div>
-            <div class="mt-3 pt-3 border-t border-white/5">
-                <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
-                    <div class="flex items-center gap-1.5 flex-wrap" id="pulse-metrics"></div>
-                    <div class="flex items-center gap-1.5">
-                        <button class="pulse-pill" id="pulse-prev" title="Older">&lsaquo;</button>
-                        <span class="text-[10px] text-gray-500 font-mono" id="pulse-range"></span>
-                        <button class="pulse-pill" id="pulse-next" title="Newer">&rsaquo;</button>
-                    </div>
-                </div>
-                <div id="pulse-chart" class="w-full" style="min-height:120px"></div>
-                <div class="text-[10px] text-gray-600 mt-1" id="pulse-chart-note"></div>
-            </div>
-        </div>
-
         <!-- DAO Links dropdown menu (hidden by default, opened by tile click) -->
         <div id="dao-links-menu" class="info-dropdown-menu hidden">
             <div class="info-dropdown-content">
@@ -3131,7 +3148,7 @@
             </div>
             <div class="mt-4 text-xs text-gray-500">
                 <button id="changelog-trigger" class="hover:text-cyan-400 transition-colors cursor-pointer">
-                    <span class="font-mono" id="page-rev">Rev 3.60 · 2026-08-04</span>
+                    <span class="font-mono" id="page-rev">Rev 3.63 · 2026-08-04</span>
                     <span class="opacity-60 mx-1">·</span>
                     <span>Changelog</span>
                 </button>
@@ -15330,59 +15347,142 @@
         </a>
     </nav>
     <script>
-    // ═══ ECOSYSTEM PULSE MODULE (Rev 3.60) ══════════════════════════════════
+    // ═══ ECOSYSTEM PULSE MODULE (Rev 3.61) ══════════════════════════════════
     (() => {
         'use strict';
-        const REV = '3.60', REV_DATE = '2026-08-04';   // rev-footer law: bump BOTH every change
+        const REV = '3.63', REV_DATE = '2026-08-04';   // rev-footer law: bump BOTH every change
         const BASE = 'https://raw.githubusercontent.com/thealliancedao/tla-core/main';
         const $ = (id) => document.getElementById(id);
         const fmt$ = (v) => '$' + Number(v).toLocaleString(undefined, { maximumFractionDigits: 0 });
         const fmtN = (v) => Number(v).toLocaleString(undefined, { maximumFractionDigits: 0 });
+        const fmtM = (v) => v >= 1e6 ? (v / 1e6).toFixed(2) + 'M' : fmtN(v);
 
         // ---- pure accessors (exercised by the delivery gate on real fixtures) ----
-        // TLA TVL: sum of TLA-relevant pool TVL across both dex daily captures.
         const tvlOf = (astro, ss) => {
             let t = 0;
             for (const d of [astro, ss]) {
-                if (!d) return null;                       // missing capture => no number (no partial sums)
+                if (!d) return null;
                 for (const p of (d.pools || [])) if (p.tla_relevant || p.bucket) t += (p.tvl_usd || 0);
             }
             return t;
         };
-        // Votion vault TVL: field exists only from votion-positions v1.1 (2026-08-03).
-        // total_tvl_usd is a DIFFERENT metric (member-swept subset) — never substitute.
         const votionOf = (d) => (d && d.totals && typeof d.totals.total_vault_tvl_usd === 'number')
             ? d.totals.total_vault_tvl_usd : null;
-        // VP renewed between two member-data dailies: sum of positive per-wallet
-        // deltas of total_vp_held_human (captures creates/extends; ignores decay).
-        const vpRenewed = (prev, cur) => {
-            if (!prev || !cur) return null;
-            const p = new Map((prev.wallets || []).map(w => [w.address, w.total_vp_held_human || 0]));
-            let s = 0;
-            for (const w of (cur.wallets || [])) {
-                const d = (w.total_vp_held_human || 0) - (p.get(w.address) || 0);
-                if (d > 0) s += d;
-            }
-            return s;
+        // Total VP locked: wallet-sum of vAMP (units cross-verified vs gauge VP 2026-08-04).
+        const vpLockedOf = (d) => {
+            if (!d || !Array.isArray(d.wallets)) return null;
+            let s = 0, n = 0;
+            for (const w of d.wallets) { s += (w.total_vp_held_human || 0); n++; }
+            return { vp: s, wallets: n };
         };
-        // Bribes posted in [fromDate, toDate] (inclusive, UTC date strings) from
-        // monthly bribe-event files. Count-based (multi-denom legs are common).
-        const bribesInWindow = (monthFiles, fromDate, toDate) => {
-            let count = 0;
-            for (const f of monthFiles) {
+        // All-time incentives from monthly bribe-event files.
+        const allTimeBribes = (files) => {
+            let adds = 0, uluna = 0, nonLuna = 0; const bribers = new Set();
+            for (const f of files) {
+                const arr = Array.isArray(f) ? f : ((f && f.events) || []);
+                for (const e of arr) {
+                    if (e.type !== 'bribe_add') continue;
+                    adds++; if (e.briber) bribers.add(e.briber);
+                    for (const c of (e.coins || [])) {
+                        if ((c.denom || '').endsWith('uluna')) uluna += Number(c.amount || 0);
+                        else nonLuna++;
+                    }
+                }
+            }
+            return { adds, luna: uluna / 1e6, bribers: bribers.size, nonLunaLegs: nonLuna };
+        };
+        // Distinct incentivized pools in the latest distributions entry set.
+        const activePoolsOf = (entries) => {
+            const s = new Set();
+            for (const e of entries) for (const g of (e.gauges || [])) for (const a of (g.assets || [])) s.add(JSON.stringify(a.asset));
+            return s.size;
+        };
+        const buildDenomPriceMap = (cat) => {
+            const m = new Map();
+            for (const t of ((cat && cat.tokens) || [])) {
+                const pr = t.prices || {};
+                const p = (pr.tla && pr.tla.usd) || (pr.coingecko && pr.coingecko.usd) || (pr.astroport && pr.astroport.usd);
+                if (t.denom && p > 0) m.set(t.denom, { usd: p, dec: (t.decimals == null ? 6 : t.decimals) });
+            }
+            return m;
+        };
+        // USD value (at CURRENT prices — labeled) of bribes inside [from,to].
+        const bribesUsdInWindow = (files, fromDate, toDate, priceMap) => {
+            let usd = 0, legs = 0, unpriced = 0;
+            for (const f of files) {
                 const arr = Array.isArray(f) ? f : ((f && f.events) || []);
                 for (const e of arr) {
                     if (e.type !== 'bribe_add') continue;
                     const d = (e.timestamp || '').slice(0, 10);
-                    if (d >= fromDate && d <= toDate) count++;
+                    if (d < fromDate || d > toDate) continue;
+                    for (const c of (e.coins || [])) {
+                        const dn = (c.denom || '').replace('native:', '').replace('cw20:', '');
+                        const p = priceMap && priceMap.get(dn);
+                        if (p) { usd += Number(c.amount || 0) / Math.pow(10, p.dec) * p.usd; legs++; }
+                        else unpriced++;
+                    }
                 }
             }
-            return count;
+            return { usd, legs, unpriced };
+        };
+        // Cumulative LUNA incentives by month (for the always-up chart).
+        const cumulativeLunaByMonth = (byMonth) => {
+            const months = Object.keys(byMonth).sort();
+            let run = 0; const out = [];
+            for (const m of months) {
+                run += allTimeBribes([byMonth[m]]).luna;
+                out.push([m, run]);
+            }
+            return out;
+        };
+        // FUEL trades in exactly ONE pool (LUNA-FUEL, concentrated) and lives in
+        // NO price product — the landing pulse is the only place it is shown.
+        // Reserve-implied price, LABELED approximate (concentrated reserves are
+        // imbalanced by design; fine as a display mark, never for arb math).
+        const fuelImpliedOf = (astroDaily, lunaUsd) => {
+            if (!astroDaily || !(lunaUsd > 0)) return null;
+            for (const p of (astroDaily.pools || [])) {
+                if (p.pool_name !== 'LUNA-FUEL') continue;
+                const f = (p.assets || []).find(x => x.symbol === 'FUEL');
+                const l = (p.assets || []).find(x => x.symbol === 'LUNA');
+                if (!f || !l) return null;
+                const fa = Number(f.amount_raw) / Math.pow(10, f.decimals == null ? 6 : f.decimals);
+                const la = Number(l.amount_raw) / Math.pow(10, l.decimals == null ? 6 : l.decimals);
+                if (!(fa > 0 && la > 0)) return null;
+                return la * lunaUsd / fa;
+            }
+            return null;
+        };
+        // Live-proposal alerts: open proposals across watched DAOs. Pure filter
+        // (gate-tested); fetch side does dao-core -> proposal modules -> reverse list.
+        const openProposalsOf = (daoName, modulePayloads) => {
+            const out = [];
+            for (const pl of modulePayloads) {
+                for (const pr of ((pl && pl.proposals) || [])) {
+                    const st = pr && pr.proposal && pr.proposal.status;
+                    if (st === 'open') out.push({ dao: daoName, id: pr.id, title: (pr.proposal.title || 'Proposal ' + pr.id) });
+                }
+            }
+            return out;
+        };
+        const solidPegOf = (phDay) => (phDay && phDay.SOLID && phDay.SOLID.usd) || null;
+        // 24h volume series for the bar subchart (decision-grade context):
+        // tvl → TLA-relevant pool volume; fuel → LUNA-FUEL; solid → both SOLID pools.
+        const volTla = (astro, ss) => {
+            if (!astro || !ss) return null;
+            let v = 0;
+            for (const d of [astro, ss]) for (const p of (d.pools || [])) if (p.tla_relevant || p.bucket) v += (p.volume_24h_usd || 0);
+            return v;
+        };
+        const volPools = (feeds, names) => {
+            let v = 0, seen = false;
+            for (const d of feeds) { if (!d) continue; seen = true;
+                for (const p of (d.pools || [])) if (names.includes(p.pool_name)) v += (p.volume_24h_usd || 0); }
+            return seen ? v : null;
         };
         const dstr = (d) => d.toISOString().slice(0, 10);
         const addDays = (d, n) => new Date(d.getTime() + n * 86400000);
 
-        // ---- cached fetch (immutable dated files cache hard; latest probes soft) ----
         async function jf(path, ttlMin) {
             const key = 'adao_live:pulse:' + path;
             try {
@@ -15397,23 +15497,105 @@
                 return v;
             } catch { return null; }
         }
+        async function phLunaUsd(date) {   // LUNA USD for a date from price-history monthly
+            const m = await jf('price-history/' + date.slice(0, 4) + '/' + date.slice(5, 7) + '.json', date.slice(0, 7) === new Date().toISOString().slice(0, 7) ? 60 : 999999);
+            const day = m && m.days && m.days[date];
+            return (day && day.LUNA && day.LUNA.usd) || null;
+        }
+        // ---- live proposal alerts (DAODAO) ------------------------------------
+        // Fill in dao-core addresses (from the daodao.zone/dao/<ADDRESS>/… URL).
+        // Empty address = slot skipped. Dismissals persist in localStorage.
+        const WATCHED_DAOS = [
+            ['aDAO', 'terra1sffd4efk2jpdt894r04qwmtjqrrjfc52tmj6vkzjxqhd8qqu2drs3m5vzm'],
+            ['aDAO Council', 'terra1yqv0af22675wlcmgflxk4ve07vt8qlm999gk0cuw5l64r5xxgadsyg8ywv'],
+            ['Phoenix Directive', ''],      // paste PD dao-core address here
+            ['Lion DAO', ''],               // paste Lion DAO dao-core address here
+            ['Capapult', ''],               // paste ampCAPA/Capapult dao-core address here
+        ];
+        const LCD = 'https://terra-lcd.publicnode.com';
+        async function smartQuery(addr, q) {
+            try {
+                const r = await fetch(LCD + '/cosmwasm/wasm/v1/contract/' + addr + '/smart/' + btoa(JSON.stringify(q)));
+                if (!r.ok) return null;
+                return (await r.json()).data;
+            } catch { return null; }
+        }
+        const dismissedKey = 'adao_pulse_dismissed';
+        const getDismissed = () => { try { return new Set(JSON.parse(localStorage.getItem(dismissedKey) || '[]')); } catch { return new Set(); } };
+        async function renderAlerts() {
+            const el = $('pulse-alerts'); if (!el) return;
+            const all = [];
+            await Promise.all(WATCHED_DAOS.filter(([, a]) => a).map(async ([name, addr]) => {
+                const mods = await smartQuery(addr, { proposal_modules: {} });
+                if (!Array.isArray(mods)) return;
+                const payloads = await Promise.all(mods.map(m => smartQuery(m.address || m, { reverse_proposals: { limit: 5 } })));
+                all.push(...openProposalsOf(name, payloads.filter(Boolean)).map(p => ({ ...p, daoAddr: addr })));
+            }));
+            const dismissed = getDismissed();
+            const live = all.filter(p => !dismissed.has(p.daoAddr + ':' + p.id));
+            if (!live.length) { el.classList.add('hidden'); el.innerHTML = ''; return; }
+            el.classList.remove('hidden');
+            el.innerHTML = live.map(p =>
+                '<div class="flex items-center gap-2 rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-1.5 mb-1.5">' +
+                '<i class="fas fa-vote-yea text-amber-300 text-xs"></i>' +
+                '<a class="text-xs text-amber-200 hover:underline flex-1" target="_blank" rel="noopener" href="https://daodao.zone/dao/' + p.daoAddr + '/proposals">' +
+                '<span class="font-semibold">' + p.dao + '</span> · live proposal #' + p.id + ': ' + String(p.title).replace(/</g, '&lt;').slice(0, 90) + '</a>' +
+                '<button class="text-gray-500 hover:text-gray-300 text-xs px-1" data-dismiss="' + p.daoAddr + ':' + p.id + '" title="Dismiss until it closes">×</button></div>').join('');
+            el.querySelectorAll('[data-dismiss]').forEach(b => b.addEventListener('click', () => {
+                const d = getDismissed(); d.add(b.dataset.dismiss);
+                try { localStorage.setItem(dismissedKey, JSON.stringify([...d])); } catch {}
+                renderAlerts();
+            }));
+        }
         const daily = {
             astro: (d) => jf('dex-data/astroport/snapshots/daily/' + d + '.json', 999999),
             ss:    (d) => jf('dex-data/skeletonswap/snapshots/daily/' + d + '.json', 999999),
             votion:(d) => jf('votion/snapshots/daily/' + d + '.json', 999999),
             member:(d) => jf('member-data/snapshots/daily/' + d + '.json', 999999),
         };
+        // Nearest REAL capture at-or-before date (walk back <= maxBack days).
+        // Returns [dateUsed, data] — real endpoints only, span disclosed by caller.
+        async function nearest(fn, date, maxBack) {
+            for (let i = 0; i <= maxBack; i++) {
+                const d = dstr(addDays(new Date(date + 'T00:00:00Z'), -i));
+                const v = await fn(d);
+                if (v) return [d, v];
+            }
+            return [null, null];
+        }
+        function monthsBetween(fromDate, toDate) {
+            const out = []; let [y, m] = fromDate.slice(0, 7).split('-').map(Number);
+            const end = toDate.slice(0, 7);
+            for (;;) {
+                const key = y + '-' + String(m).padStart(2, '0');
+                out.push(key);
+                if (key >= end) break;
+                m++; if (m > 12) { m = 1; y++; }
+            }
+            return out;
+        }
+        const BRIBES_START = '2024-08';
+        async function bribeMonthFiles(fromMonth, toMonth) {
+            const keys = monthsBetween(fromMonth + '-01', toMonth + '-28');
+            const cur = new Date().toISOString().slice(0, 7);
+            const files = await Promise.all(keys.map(k => jf('tla-voting/events/bribes/' + k.replace('-', '/') + '.json', k === cur ? 30 : 999999)));
+            const byMonth = {};
+            keys.forEach((k, i) => { if (files[i]) byMonth[k] = files[i]; });
+            return byMonth;
+        }
 
-        const state = { windowDays: 2, latest: null, metric: 'tvl', page: 0, chartCache: {} };
+        const state = { windowDays: 2, latest: null, metric: 'tvl', page: 0, chartCache: {}, catalog: null, byMonth: null };
         const WINDOWS = [[1,'24h'],[2,'48h'],[7,'7d'],[14,'14d'],[30,'30d']];
         const METRICS = [
-            ['tvl', 'TLA TVL', 'daily', '$'],
-            ['votion', 'Votion TVL', 'daily', '$'],
-            ['vp', 'VP renewed', 'daily', 'vAMP'],
+            ['tvl', 'TLA TVL', '$'],
+            ['vplocked', 'VP Locked', 'vAMP'],
+            ['votion', 'Votion TVL', '$'],
+            ['incentives', 'Incentives (cumulative)', 'LUNA'],
+            ['fuel', 'FUEL price', '$'],
+            ['solid', 'SOLID peg', '$'],
         ];
 
         async function findLatestDaily() {
-            // newest dex daily that exists: today, else walk back (max 3)
             for (let i = 0; i < 4; i++) {
                 const d = dstr(addDays(new Date(), -i));
                 if (await daily.astro(d)) return d;
@@ -15421,72 +15603,138 @@
             return null;
         }
 
-        async function renderTile() {
+        async function renderStats() {
+            const latest = state.latest;
+            const [aL, sL, mL] = await Promise.all([daily.astro(latest), daily.ss(latest), daily.member(latest)]);
+            const tvl = tvlOf(aL, sL);
+            $('ps-tvl').textContent = tvl == null ? '—' : fmt$(tvl);
+            $('ps-tvl-s').textContent = 'Astroport + SkeletonSwap · daily captures';
+            const vp = vpLockedOf(mL) || (await (async () => { const [, v] = await nearest(daily.member, latest, 3); return vpLockedOf(v); })());
+            $('ps-vp').textContent = vp ? fmtM(vp.vp) + ' vAMP' : '—';
+            $('ps-vp-s').textContent = vp ? vp.wallets + ' wallets · units cross-verified vs gauge state' : '';
+            state.byMonth = await bribeMonthFiles(BRIBES_START, new Date().toISOString().slice(0, 7));
+            const at = allTimeBribes(Object.values(state.byMonth));
+            $('ps-bribes').textContent = fmtN(at.luna) + ' LUNA';
+            $('ps-bribes-s').textContent = fmtN(at.adds) + ' bribes · ' + at.bribers + ' bribers · since Aug 2024' + (at.nonLunaLegs ? ' · +' + fmtN(at.nonLunaLegs) + ' other-asset legs' : '');
+            const hist = await jf('tla-voting/distributions/history.json', 60);
+            if (hist && Array.isArray(hist.entries) && hist.entries.length) {
+                const pmax = Math.max(...hist.entries.map(e => e.period || 0));
+                const latestEntries = hist.entries.filter(e => e.period === pmax);
+                $('ps-epoch').textContent = '#' + pmax;
+                $('ps-epoch-s').textContent = activePoolsOf(latestEntries) + ' incentivized pools';
+            } else { $('ps-epoch').textContent = '—'; }
+        }
+
+        async function renderRows() {
             const rowsEl = $('pulse-rows');
             const latest = state.latest;
             if (!latest) { rowsEl.innerHTML = '<span class="text-red-400 text-xs">Pulse feeds unavailable — refresh to retry.</span>'; return; }
-            const from = dstr(addDays(new Date(latest + 'T00:00:00Z'), -state.windowDays));
-            const [aL, sL, aF, sF, vL, vF, mL, mF] = await Promise.all([
-                daily.astro(latest), daily.ss(latest), daily.astro(from), daily.ss(from),
-                daily.votion(latest), daily.votion(from), daily.member(latest), daily.member(from),
-            ]);
-            // bribe months covering the window
-            const months = [...new Set([from.slice(0, 7), latest.slice(0, 7)])];
-            const monthFiles = (await Promise.all(months.map(m => jf('tla-voting/events/bribes/' + m.replace('-', '/') + '.json', 30)))).filter(Boolean);
-
-            const rows = [];
-            const delta = (cur, prev, fmt, unit) => {
-                if (cur == null) return '<span class="text-gray-600" title="capture missing">—</span>';
-                if (prev == null) return fmt(cur) + ' <span class="text-[10px] text-gray-600" title="Series starts later than the window start — no honest delta exists.">Δ n/a</span>';
-                const d = cur - prev, up = d >= 0;
-                return fmt(cur) + ' <span class="text-[11px] font-mono ' + (up ? 'text-emerald-400' : 'text-red-400') + '" title="' + fmt(prev) + ' → ' + fmt(cur) + '">' + (up ? '▲' : '▼') + (unit === '$' ? fmt$(Math.abs(d)) : fmtN(Math.abs(d))) + '</span>';
+            const targetFrom = dstr(addDays(new Date(latest + 'T00:00:00Z'), -state.windowDays));
+            const spanNote = (usedFrom) => {
+                if (!usedFrom) return null;
+                const days = Math.round((new Date(latest) - new Date(usedFrom)) / 86400000);
+                return days === state.windowDays ? '' : ' <span class="text-[9px] text-amber-400/80" title="Window start had no capture; nearest real capture used — actual measured span shown. Never interpolated.">Δ' + days + 'd</span>';
             };
-            rows.push(['TLA TVL', delta(tvlOf(aL, sL), tvlOf(aF, sF), fmt$, '$'), '<span class="pulse-chip daily">daily</span>', 'Sum of TLA-relevant pool TVL, Astroport + SkeletonSwap daily captures (' + from + ' → ' + latest + ').']);
-            rows.push(['Votion vault TVL', delta(votionOf(vL), votionOf(vF), fmt$, '$'), '<span class="pulse-chip daily">daily</span>', 'Optimizer vault TVL. Field exists since 2026-08-03 (votion-positions v1.1) — earlier days honestly have no value.']);
-            rows.push(['VP renewed', (() => { const v = vpRenewed(mF, mL); return v == null ? '<span class="text-gray-600">—</span>' : fmtN(v) + ' <span class="text-[10px] text-gray-500">vAMP</span>'; })(), '<span class="pulse-chip daily">daily</span>', 'Sum of positive per-wallet VP changes (lock creates + extends) between window endpoints. vAMP units.']);
-            rows.push(['Bribes posted', bribesInWindow(monthFiles, from, latest) + ' <span class="text-[10px] text-gray-500">adds</span>', '<span class="pulse-chip window">events</span>', 'bribe_add events timestamped inside the window (assorted denoms — count is the honest primary).']);
+            const [aL, sL, vL, mL] = await Promise.all([daily.astro(latest), daily.ss(latest), daily.votion(latest), daily.member(latest)]);
+            const [[aFd, aF], [vFd, vF], [mFd, mF]] = await Promise.all([
+                nearest(daily.astro, targetFrom, 5), nearest(daily.votion, targetFrom, 5), nearest(daily.member, targetFrom, 5),
+            ]);
+            const sF = aFd ? await daily.ss(aFd) : null;
+            const delta = (cur, prev, fmt, note) => {
+                if (cur == null) return '<span class="text-gray-600" title="capture missing">—</span>';
+                if (prev == null) return fmt(cur) + ' <span class="text-[10px] text-gray-600" title="Series starts inside the window — no honest delta exists yet.">Δ n/a</span>';
+                const d = cur - prev, up = d >= 0;
+                return fmt(cur) + ' <span class="text-[11px] font-mono ' + (up ? 'text-emerald-400' : 'text-red-400') + '" title="' + fmt(prev) + ' → ' + fmt(cur) + '">' + (up ? '▲' : '▼') + fmt(Math.abs(d)).replace('$', '$') + '</span>' + (note || '');
+            };
+            if (!state.catalog) state.catalog = await jf('token-catalog/snapshots/current.json', 60);
+            const pmap = buildDenomPriceMap(state.catalog);
+            const wFiles = Object.entries(state.byMonth || {}).filter(([k]) => k >= targetFrom.slice(0, 7)).map(([, v]) => v);
+            const bw = bribesUsdInWindow(wFiles, targetFrom, latest, pmap);
+            const bribeVal = bw.usd >= 1 ? fmt$(bw.usd) : (bw.legs ? '<$1' : '$0');
+            const vpL = vpLockedOf(mL), vpF = vpLockedOf(mF);
+            const rows = [
+                ['TLA TVL', delta(tvlOf(aL, sL), tvlOf(aF, sF), fmt$, spanNote(aFd)), 'daily', 'Sum of TLA-relevant pool TVL across both dexes.'],
+                ['VP Locked', delta(vpL && vpL.vp, vpF && vpF.vp, (v) => fmtM(v) + ' vAMP', spanNote(mFd)), 'daily', 'Total vAMP held across all wallets — locks grow it, decay shrinks it.'],
+                ['Votion vault TVL', delta(votionOf(vL), votionOf(vF), fmt$, spanNote(vFd)), 'daily', 'Optimizer vault TVL (field exists since 2026-08-03 — earlier windows honestly show Δ n/a).'],
+                ['Bribes in window', bribeVal + ' <span class="text-[10px] text-gray-500">at current prices · ' + (bw.legs + bw.unpriced) + ' legs</span>', 'events', 'bribe_add value inside the window, valued at CURRENT token prices (historical-price valuation is a future upgrade).'],
+            ];
             rowsEl.innerHTML = rows.map(([name, val, chip, tip]) =>
                 '<div class="pulse-row flex items-center justify-between py-1.5" title="' + tip.replace(/"/g, '&quot;') + '">' +
-                '<span class="text-gray-300 text-xs sm:text-sm">' + name + ' ' + chip + '</span>' +
+                '<span class="text-gray-300 text-xs sm:text-sm">' + name + ' <span class="pulse-chip ' + chip + '">' + chip + '</span></span>' +
                 '<span class="text-white text-xs sm:text-sm text-right">' + val + '</span></div>').join('');
         }
 
-        // ---- chart: 30 points/page, gaps stay gaps ----
-        async function seriesFor(metric, endDate, days) {
-            const dates = []; for (let i = days - 1; i >= 0; i--) dates.push(dstr(addDays(new Date(endDate + 'T00:00:00Z'), -i)));
-            const vals = await Promise.all(dates.map(async (d) => {
-                if (metric === 'tvl') { const [a, s] = await Promise.all([daily.astro(d), daily.ss(d)]); return tvlOf(a, s); }
-                if (metric === 'votion') return votionOf(await daily.votion(d));
-                if (metric === 'vp') { const [p, c] = await Promise.all([daily.member(dstr(addDays(new Date(d + 'T00:00:00Z'), -1))), daily.member(d)]); return vpRenewed(p, c); }
-                return null;
-            }));
-            return dates.map((d, i) => [d, vals[i]]);
+        async function phDay(date) {
+            const m = await jf('price-history/' + date.slice(0, 4) + '/' + date.slice(5, 7) + '.json', date.slice(0, 7) === new Date().toISOString().slice(0, 7) ? 60 : 999999);
+            return (m && m.days && m.days[date]) || null;
         }
-        function drawChart(series, unit) {
+        async function seriesFor(metric, endDate, days) {
+            if (metric === 'incentives') {
+                // cumulative line + per-month LUNA added as the bar series
+                const cum = cumulativeLunaByMonth(state.byMonth || {});
+                return cum.map(([mo, v], i) => [mo, v, i ? v - cum[i - 1][1] : v]);
+            }
+            const dates = []; for (let i = days - 1; i >= 0; i--) dates.push(dstr(addDays(new Date(endDate + 'T00:00:00Z'), -i)));
+            const rows = await Promise.all(dates.map(async (d) => {
+                if (metric === 'tvl') { const [a, s] = await Promise.all([daily.astro(d), daily.ss(d)]); return [tvlOf(a, s), volTla(a, s)]; }
+                if (metric === 'votion') return [votionOf(await daily.votion(d)), null];
+                if (metric === 'vplocked') { const v = vpLockedOf(await daily.member(d)); return [v && v.vp, null]; }
+                if (metric === 'fuel') { const [a, lu] = await Promise.all([daily.astro(d), phLunaUsd(d)]); return [fuelImpliedOf(a, lu), volPools([a], ['LUNA-FUEL'])]; }
+                if (metric === 'solid') { const [dayP, a, s] = await Promise.all([phDay(d), daily.astro(d), daily.ss(d)]); return [solidPegOf(dayP), volPools([a, s], ['USDC-SOLID', 'LUNA-SOLID', 'SOLID-USDC', 'SOLID-LUNA'])]; }
+                return [null, null];
+            }));
+            return dates.map((d, i) => [d, rows[i][0], rows[i][1]]);
+        }
+        function drawChart(series, unit, opts) {
+            opts = opts || {};
             const el = $('pulse-chart');
-            const W = el.clientWidth || 600, H = 120, PAD = 6;
-            const pts = series.filter(([, v]) => v != null);
+            const W = el.clientWidth || 600, H = 160, PAD = 6;
+            const hasVol = series.some(r => r[2] != null && r[2] > 0);
+            const volH = hasVol ? 36 : 0;               // stock-style volume bars under the price pane
+            const pH = H - volH;                         // price pane height
+            const pts = series.filter(r => r[1] != null);
             if (!pts.length) { el.innerHTML = '<div class="text-[11px] text-gray-600 py-8 text-center">No captures in this range yet.</div>'; return; }
-            const vs = pts.map(([, v]) => v), lo = Math.min(...vs), hi = Math.max(...vs), span = (hi - lo) || 1;
+            const vs = pts.map(r => r[1]);
+            let lo = Math.min(...vs), hi = Math.max(...vs);
+            if (opts.baseline != null) { lo = Math.min(lo, opts.baseline); hi = Math.max(hi, opts.baseline); }
+            const span = (hi - lo) || (Math.abs(hi) * 0.02) || 1;
+            lo -= span * 0.05; hi += span * 0.05;
             const x = (i) => PAD + i * (W - 2 * PAD) / Math.max(1, series.length - 1);
-            const y = (v) => H - PAD - (v - lo) / span * (H - 2 * PAD);
-            // segments break at gaps — the honesty rule made visible
+            const y = (v) => pH - PAD - (v - lo) / (hi - lo) * (pH - 2 * PAD);
             let segs = [], cur = [];
-            series.forEach(([, v], i) => { if (v == null) { if (cur.length) segs.push(cur); cur = []; } else cur.push([x(i), y(v)]); });
+            series.forEach((r, i) => { if (r[1] == null) { if (cur.length) segs.push(cur); cur = []; } else cur.push([x(i), y(r[1])]); });
             if (cur.length) segs.push(cur);
             const paths = segs.map(s => '<polyline fill="none" stroke="#22d3ee" stroke-width="2" points="' + s.map(p => p.map(n => n.toFixed(1)).join(',')).join(' ') + '"/>').join('');
-            const gapDots = series.map(([, v], i) => v == null ? '<circle cx="' + x(i).toFixed(1) + '" cy="' + (H - PAD) + '" r="1.5" fill="#4b5563"><title>no capture</title></circle>' : '').join('');
-            el.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="' + H + '">' + paths + gapDots + '</svg>' +
-                '<div class="flex justify-between text-[9px] text-gray-600 font-mono"><span>' + series[0][0] + '</span><span>' + (unit === '$' ? fmt$(hi) : fmtN(hi)) + ' max</span><span>' + series[series.length - 1][0] + '</span></div>';
+            const gapDots = series.map((r, i) => r[1] == null ? '<circle cx="' + x(i).toFixed(1) + '" cy="' + (pH - PAD) + '" r="1.5" fill="#4b5563"><title>no capture</title></circle>' : '').join('');
+            const base = (opts.baseline != null)
+                ? '<line x1="' + PAD + '" x2="' + (W - PAD) + '" y1="' + y(opts.baseline).toFixed(1) + '" y2="' + y(opts.baseline).toFixed(1) + '" stroke="#a78bfa" stroke-width="1" stroke-dasharray="4 4"><title>' + opts.baselineLabel + '</title></line>'
+                : '';
+            let bars = '';
+            if (hasVol) {
+                const vols = series.map(r => r[2] || 0);
+                const vmax = Math.max(...vols) || 1;
+                const bw = Math.max(1.5, (W - 2 * PAD) / series.length * 0.6);
+                bars = series.map((r, i) => {
+                    if (!(r[2] > 0)) return '';
+                    const bh = Math.max(1, r[2] / vmax * (volH - 6));
+                    return '<rect x="' + (x(i) - bw / 2).toFixed(1) + '" y="' + (H - PAD - bh).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + bh.toFixed(1) + '" fill="rgba(34,211,238,0.28)"><title>' + r[0] + ' · vol ' + fmt$(r[2]) + '</title></rect>';
+                }).join('');
+            }
+            const fmt = unit === '$' ? (v) => (Math.abs(v) < 1 ? '$' + v.toFixed(v < 0.01 ? 5 : 4) : fmt$(v)) : (unit === 'vAMP' ? (v) => fmtM(v) + ' vAMP' : (v) => fmtN(v) + ' ' + unit);
+            el.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="' + H + '">' + bars + base + paths + gapDots + '</svg>' +
+                '<div class="flex justify-between text-[9px] text-gray-600 font-mono"><span>' + series[0][0] + '</span><span>' + fmt(lo) + ' – ' + fmt(hi) + (hasVol ? ' · bars = 24h volume' : '') + '</span><span>' + series[series.length - 1][0] + '</span></div>';
         }
         async function renderChart() {
-            const [, label, , unit] = METRICS.find(m => m[0] === state.metric);
+            const [, label, unit] = METRICS.find(m => m[0] === state.metric);
             const end = dstr(addDays(new Date(state.latest + 'T00:00:00Z'), -30 * state.page));
-            $('pulse-range').textContent = label + ' · 30d page ' + (state.page + 1);
+            const paged = state.metric !== 'incentives';
+            $('pulse-range').textContent = label + (paged ? ' · 30d page ' + (state.page + 1) : ' · all-time');
+            $('pulse-prev').style.visibility = paged ? 'visible' : 'hidden';
+            $('pulse-next').style.visibility = paged ? 'visible' : 'hidden';
             $('pulse-chart').innerHTML = '<div class="text-[11px] text-gray-600 py-8 text-center">Fetching ' + label + ' captures…</div>';
-            const key = state.metric + ':' + end;
+            const key = state.metric + ':' + (paged ? end : 'all');
             const series = state.chartCache[key] || (state.chartCache[key] = await seriesFor(state.metric, end, 30));
-            drawChart(series, unit);
+            drawChart(series, unit, state.metric === 'solid' ? { baseline: 1, baselineLabel: 'the $1.00 peg' } : {});
             $('pulse-chart-note').textContent = 'Committed captures only · gaps are real gaps (no interpolation) · dates UTC · capture-time jitter possible (e.g. 2026-08-02 astro daily captured 06:01)';
         }
 
@@ -15497,7 +15745,7 @@
             $('pulse-windows').querySelectorAll('.pulse-pill').forEach(b => b.addEventListener('click', () => {
                 state.windowDays = Number(b.dataset.w);
                 $('pulse-windows').querySelectorAll('.pulse-pill').forEach(x => x.classList.toggle('active', x === b));
-                renderTile();
+                renderRows();
             }));
             $('pulse-metrics').innerHTML = METRICS.map(([k, l]) => '<button class="pulse-metric-btn' + (k === state.metric ? ' active' : '') + '" data-m="' + k + '">' + l + '</button>').join('');
             $('pulse-metrics').querySelectorAll('.pulse-metric-btn').forEach(b => b.addEventListener('click', () => {
@@ -15508,14 +15756,18 @@
             $('pulse-prev').addEventListener('click', () => { state.page++; renderChart(); });
             $('pulse-next').addEventListener('click', () => { if (state.page > 0) { state.page--; renderChart(); } });
             state.latest = await findLatestDaily();
-            await renderTile();
+            renderAlerts();
+            await renderStats();
+            await renderRows();
             renderChart();
         }
         if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 
         // Delivery-gate hook — the gate exercises THESE live functions on real
         // fixtures (no third copy). Harmless in production.
-        window.__pulseTest = { tvlOf, votionOf, vpRenewed, bribesInWindow, REV, REV_DATE };
+        window.__pulseTest = { tvlOf, votionOf, vpLockedOf, allTimeBribes, activePoolsOf,
+            buildDenomPriceMap, bribesUsdInWindow, cumulativeLunaByMonth, monthsBetween,
+            fuelImpliedOf, openProposalsOf, WATCHED_DAOS, solidPegOf, volTla, volPools, REV, REV_DATE };
     })();
     </script>
     <script>
